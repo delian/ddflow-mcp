@@ -196,12 +196,13 @@ def _current(repo: Path, art: dict[str, str]) -> str | None:
 def read(log: Any, repo: Path, agent: str,
          current: Callable[[dict[str, str]], str | None] | None = None) -> Report:  # fmt: skip
     """The agent's artifacts and which digests changed. ``current(artifact)`` is a writer's
-    resolver for the digest now (None: gone; `UNKNOWN`: it cannot say, and whole-file kinds
-    are then checked here). Whatever stays unknown is never reported as changed."""
+    resolver for the digest now of a block, key, hook or env line (None: gone; `UNKNOWN`: it
+    cannot say); whole-file kinds are always checked here, never by the resolver. Whatever stays unknown is never reported as changed."""
     rows = artifacts(log, agent, repo=repo)
     changed: list[dict[str, Any]] = []
     for a in rows:
-        now = current(a) if current is not None else UNKNOWN
+        # Whole-file kinds are this module's to check; a resolver speaks for the rest only.
+        now = current(a) if current is not None and a["kind"] not in FILE_KINDS else UNKNOWN
         if now is UNKNOWN:
             now = _current(repo, a)
         if now is UNKNOWN:

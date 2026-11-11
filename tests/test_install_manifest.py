@@ -150,3 +150,9 @@ def test_an_unreadable_file_is_unknown_not_gone(repo, log, monkeypatch):
 
     monkeypatch.setattr(Path, "read_bytes", deny)
     assert IM.read(log, repo, "claude").changed == []
+
+
+def test_a_resolver_returning_none_cannot_report_a_present_file_gone(repo, log):
+    (repo / "p.md").write_text("one\n")
+    IM.record(log, repo, "claude", "p.md", "plugin", "", IM.file_digest(repo / "p.md"), descriptor="c", version="1")
+    assert IM.read(log, repo, "claude", current=lambda a: None).changed == []
