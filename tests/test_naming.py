@@ -42,7 +42,7 @@ def test_the_default_template_makes_role_family_host_rand() -> None:
 def test_every_shipped_default_passes_its_own_rules() -> None:
     n = Config().naming
     assert naming.template_problem(n.template, n.scope) == ""
-    for knob in ("template", "scope", "on_collision", "max_length", "rand_length", "host_label"):
+    for knob in ("template", "scope", "on_collision", "max_length", "rand_length", "max_tries", "host_length", "host_label"):
         assert f"naming.{knob}" in C.KNOB_DOCS
 
 
@@ -56,6 +56,13 @@ def test_an_empty_part_drops_out_with_its_dash() -> None:
     got = naming.generate(Config(), role="lane3", family="", host="", draw=_seq_draw())
     assert got.name == "lane3-bcdf"
     assert naming.generate(Config(), role="  ").name.startswith("agent-")
+
+
+def test_max_tries_bounds_the_redraws() -> None:
+    cfg = _cfg(max_tries=2)
+    taken = [naming.generate(cfg, role="r", family="k", host="h", draw=_fixed).name]
+    with pytest.raises(naming.NameRefused, match="2 tries"):
+        naming.generate(cfg, role="r", family="k", host="h", taken=taken, draw=_fixed)
 
 
 def test_the_rand_alphabet_has_no_vowels_or_lookalikes() -> None:
@@ -125,7 +132,7 @@ def test_a_current_name_that_is_not_generated_shaped_is_not_kept() -> None:
 
 def test_a_name_that_never_ends_in_a_free_one_is_refused_not_looped() -> None:
     taken = [naming.generate(Config(), role="r", family="k", host="h", draw=_fixed).name]
-    with pytest.raises(naming.NameRefused, match=f"{naming.MAX_TRIES} tries"):
+    with pytest.raises(naming.NameRefused, match=f"{Config().naming.max_tries} tries"):
         naming.generate(Config(), role="r", family="k", host="h", taken=taken, draw=_fixed)
 
 
@@ -194,7 +201,7 @@ def test_a_declared_name_must_still_be_a_usable_agent_name(bad: str) -> None:
 def test_host_part_uses_the_label_then_the_short_hostname() -> None:
     assert naming.host_part(Config(), "Build-Box.example.org") == "build-box"
     assert naming.host_part(_cfg(host_label="ci-7"), "whatever.local") == "ci-7"
-    assert len(naming.host_part(Config(), "a" * 40)) == naming.HOST_MAX
+    assert len(naming.host_part(Config(), "a" * 40)) == Config().naming.host_length
 
 
 @pytest.mark.parametrize(

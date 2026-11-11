@@ -1125,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 659 knobs.
+cadences, and the rest of the 665 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5439,7 +5439,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 659): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 665): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6029,7 +6029,7 @@ declared once and persists — see
 
 ## Configuration
 
-659 knobs across 61 sections, every one documented in place and listed, with its default
+665 knobs across 61 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6096,8 +6096,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2f9e8b9cf3f6 -->
-<details><summary>All 659 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=9af0309ae907 -->
+<details><summary>All 665 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6509,6 +6509,8 @@ long default is left to `ddflow config --explain`.
 | `naming.on_collision` | `"suffix"` | `suffix` \| `refuse` |
 | `naming.max_length` | `48` |  |
 | `naming.rand_length` | `4` |  |
+| `naming.max_tries` | `32` |  |
+| `naming.host_length` | `12` |  |
 | `naming.host_label` | `""` |  |
 | `notify.channel` | `"terminal"` | `terminal` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
 | `notify.ask_channel` | `"harness"` | `harness` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
@@ -6551,6 +6553,10 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.prop_marginal_gain` | `0.25` |  |
 | `perf_metrics.prop_batch_dominance` | `2.0` |  |
 | `perf_metrics.prop_retire_payback` | `2.0` |  |
+| `perf_metrics.prop_split_share` | `0.5` |  |
+| `perf_metrics.prop_shard_skew` | `0.9` |  |
+| `perf_metrics.prop_select_miss_min` | `2` |  |
+| `perf_metrics.prop_select_min_runs` | `3` |  |
 | `perf_metrics.report_default_window` | `"28d"` |  |
 | `perf_metrics.report_max_rows` | `20` |  |
 | `perf_metrics.report_width` | `76` |  |

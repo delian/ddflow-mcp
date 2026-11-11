@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.max_tries"
+new = "32"
+why = "How many names a collision may draw before the launch is refused (default 32)."
+impact = "additive"

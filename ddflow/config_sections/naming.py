@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 #: The tokens a name template may use.
 NAME_TOKENS = ("role", "family", "host", "rand", "seq")
@@ -22,10 +22,6 @@ NAME_TOKENS = ("role", "family", "host", "rand", "seq")
 NAME_LITERAL = re.compile(r"[a-z0-9-]*")
 NAME_SCOPES = ("global", "host", "family")
 NAME_COLLISIONS = ("suffix", "refuse")
-#: Longest name a template may be asked to make: a DNS label (RFC 1123) and the agent-name
-#: cap, so one name fits a branch, a shard, a tmux session and a hostname-like field.
-NAME_HARD_MAX = 63
-NAME_MIN_MAX = 16
 
 
 def name_template_problem(template: Any) -> str:
@@ -56,9 +52,10 @@ def name_template_problem(template: Any) -> str:
 
 
 def _max_length_problem(v: Any) -> str:
-    if isinstance(v, int) and not isinstance(v, bool) and NAME_MIN_MAX <= v <= NAME_HARD_MAX:
+    # 63 is a DNS label (RFC 1123), so a name fits a branch, a shard and a tmux session.
+    if isinstance(v, int) and not isinstance(v, bool) and 16 <= v <= 63:
         return ""
-    return f"must be an integer from {NAME_MIN_MAX} to {NAME_HARD_MAX} (a DNS label is at most 63)"
+    return "must be an integer from 16 to 63 (a DNS label is at most 63)"
 
 
 def _rand_length_problem(v: Any) -> str:
@@ -144,6 +141,20 @@ class NamingConfig:
             "of them equal. Raise it for projects with very many offline clones."
         ),
         check=_rand_length_problem,
+    )
+    max_tries: int = knob(
+        32,
+        doc=(
+            "How many names a collision may draw before the launch is refused (the bound of "
+            "`on_collision = suffix`). With a 4-character {rand} a clash is rare, so more than "
+            "a few tries means the template or `rand_length` is too narrow."
+        ),
+        check=int_at_least(1),
+    )
+    host_length: int = knob(
+        12,
+        doc="Longest {host} label in a generated name, cut from the end; 4 to 24.",
+        check=lambda v: "" if isinstance(v, int) and not isinstance(v, bool) and 4 <= v <= 24 else "must be an integer from 4 to 24",
     )
     host_label: str = knob(
         "",

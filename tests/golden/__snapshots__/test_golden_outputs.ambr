@@ -3256,6 +3256,12 @@
           are about 19 bits: with {role}, {family} and {host} in the name, a clash
           needs all of them equal. Raise it for projects with very many offline
           clones.
+      naming.max_tries = 32   [default]
+          How many names a collision may draw before the launch is refused (the bound
+          of `on_collision = suffix`). With a 4-character {rand} a clash is rare, so
+          more than a few tries means the template or `rand_length` is too narrow.
+      naming.host_length = 12   [default]
+          Longest {host} label in a generated name, cut from the end; 4 to 24.
       naming.host_label = ''   [default]
           This machine's short host label for {host}. Empty (default) derives the
           lower-cased first label of the hostname, cut to 12 characters. Machine-
@@ -3427,6 +3433,23 @@
       perf_metrics.prop_retire_payback = 2.0   [default]
           The multiple of what a stage buys back that its wait must reach before a
           retire-stage proposal fires (PM-prop-flow).
+      perf_metrics.prop_split_share = 0.5   [default]
+          The fraction of the critical-path floor one test file's serial run must
+          exceed before it is a split candidate, WHEN the file is also over the size
+          rule (PM-prop-tests). The floor only tightens; raising it is a recorded
+          decision.
+      perf_metrics.prop_shard_skew = 0.9   [default]
+          The slowest file's share of the critical-path floor at or above which the
+          test suite is skewed enough that the proposal is to SHARD the slowest file,
+          not to raise the worker count (PM-prop-tests).
+      perf_metrics.prop_select_miss_min = 2   [default]
+          Fewest full-run failures a selection would not have run, in a set of
+          selection runs, before the report proposes widening the selection (PM-prop-
+          tests).
+      perf_metrics.prop_select_min_runs = 3   [default]
+          Fewest selection runs over which misses are counted before a selection new
+          claim is honest (PM-prop-tests); below it the claim is not-enough-data,
+          never a zero.
       perf_metrics.report_default_window = '28d'   [default]
           The time window a perf report measures when none is given: a duration back
           (7d, 12h) or a date YYYY-MM-DD (parse_since).

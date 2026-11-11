@@ -28,10 +28,6 @@ from . import agentname
 #: Vowel-free and without 0, 1, 3 (the Kubernetes alphabet), as Kubernetes' generated names:
 #: nothing read aloud or typed on a phone is mistaken for another character or for a word.
 RAND_ALPHABET = "bcdfghjklmnpqrstvwxz2456789"
-#: How many new draws a collision gets before the launch is refused (r-bounded-everything).
-MAX_TRIES = 32
-#: A host label is cut to this many characters.
-HOST_MAX = 12
 #: What an empty role becomes.
 DEFAULT_ROLE = "agent"
 
@@ -70,7 +66,7 @@ def clean(part: str, limit: int | None = None) -> str:
 
 def host_part(cfg: Config, hostname: str) -> str:
     """This machine's label: `[naming].host_label`, else the first label of ``hostname``."""
-    return clean(cfg.naming.host_label or hostname.split(".")[0], HOST_MAX)
+    return clean(cfg.naming.host_label or hostname.split(".")[0], cfg.naming.host_length)
 
 
 def template_problem(template: str, scope: str) -> str:
@@ -121,7 +117,7 @@ def render(cfg: Config, *, role: str, family: str, host: str, rand: str = "", se
     values = {
         "role": clean(role) or DEFAULT_ROLE,
         "family": clean(family),
-        "host": clean(host, HOST_MAX),
+        "host": clean(host, n.host_length),
         "rand": rand,
         "seq": str(seq) if seq else "",
     }
@@ -157,7 +153,7 @@ def generate(
     ``taken`` is every name in use (shard files, lease holders). ``current`` is the name
     this same agent already holds: a valid one is kept (resume, restart and re-claim
     change nothing). Otherwise the template is rendered; a taken result is re-drawn
-    (`on_collision = suffix`) up to `MAX_TRIES` times, or refused (`refuse`)."""
+    (`on_collision = suffix`) up to `[naming].max_tries` times, or refused (`refuse`)."""
     n = cfg.naming
     if problem := template_problem(n.template, n.scope):
         raise NameRefused(f"[naming].template {n.template!r} {problem}")
@@ -165,7 +161,7 @@ def generate(
         return Resolved(current, RESUMED)
     used = {fold(t) for t in taken}
     uses_rand = "{rand}" in n.template
-    for attempt in range(1, MAX_TRIES + 1):
+    for attempt in range(1, n.max_tries + 1):
         name = render(
             cfg,
             role=role,
@@ -183,7 +179,7 @@ def generate(
                 "on_collision = suffix"
             )
     raise NameRefused(
-        f"no free name after {MAX_TRIES} tries for {name!r}: widen the template with "
+        f"no free name after {n.max_tries} tries for {name!r}: widen the template with "
         "{rand} or a longer [naming].rand_length"
     )
 
