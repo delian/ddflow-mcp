@@ -339,6 +339,12 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     already reads.
     """
     root = Path(root) if root is not None else _paths.package_parent()
+    # ddflow's own throwaway scratch worktrees (scratch_tree: `ddflow-*` in the system temp
+    # dir, and the `.merge-*`/`.version-*` trees under the worktree root) hold ddflow's own
+    # code under test, not another lane's unmerged branch — a ci/pre-push run lives in one, so
+    # importing from it is legitimate and must not read as foreign (B267ff88849).
+    if root.name.startswith(("ddflow-", ".merge-", ".version-")):
+        return None
     primary = _paths.primary_checkout(root)
     if primary is None:
         return None
