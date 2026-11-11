@@ -16,6 +16,8 @@ def test_record_update_has_no_bandit_finding():
         pytest.skip("uv not available")
     p = subprocess.run(
         [uv, "run", "--no-project", "--with", "bandit", "bandit", "-q", "-ll", str(MODULE)],
-        capture_output=True, text=True, timeout=300,
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
     assert p.returncode == 0, p.stdout[-1500:] + p.stderr[-500:]
