@@ -120,7 +120,9 @@ class LocalTransport:
         code = run.popen.poll()
         if code is None:
             return LaneStatus("running", pid=run.popen.pid)
-        state = "stopped" if run.stopped else "exited" if code == 0 else "failed"
+        # stopped = we asked to stop AND the child died BY a signal (a trapped term that then
+        # exits nonzero failed on its own, so it is not silenced as a stop).
+        state = "stopped" if run.stopped and code < 0 else "exited" if code == 0 else "failed"
         return LaneStatus(state, pid=run.popen.pid, exit_code=code)
 
     def copy_in(self, lane: str, local: Path, name: str) -> Result:

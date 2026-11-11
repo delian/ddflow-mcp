@@ -134,6 +134,20 @@ def test_a_failed_restart_keeps_the_prior_output(tmp_path):
     assert t.copy_out("a", "lane.log", got, 512).ok and "hello" in got.read_text()
 
 
+def test_a_trapped_term_that_then_fails_is_failed_not_stopped(tmp_path):
+    t = LocalTransport(root=tmp_path)
+    argv = (
+        sys.executable,
+        "-c",
+        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(1); exit(1)",
+    )
+    assert t.start("a", argv).ok
+    time.sleep(0.2)  # after the child has registered SIG_IGN: the TERM is now ignored, not fatal
+    assert t.signal("a", "TERM").ok
+    st = ended(t, "a")
+    assert st.state == "failed" and st.exit_code == 1
+
+
 def test_a_bad_lane_name_is_refused_not_taken_as_a_path():
     with pytest.raises(ValueError):
         LocalTransport().start("../x", (sys.executable, "-c", "pass"))
