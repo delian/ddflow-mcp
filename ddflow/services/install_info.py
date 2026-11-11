@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import tomllib
 from dataclasses import asdict, dataclass
 from importlib import metadata
@@ -339,11 +340,12 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     already reads.
     """
     root = Path(root) if root is not None else _paths.package_parent()
-    # ddflow's own throwaway scratch worktrees (scratch_tree: `ddflow-*` in the system temp
-    # dir, and the `.merge-*`/`.version-*` trees under the worktree root) hold ddflow's own
-    # code under test, not another lane's unmerged branch — a ci/pre-push run lives in one, so
-    # importing from it is legitimate and must not read as foreign (B267ff88849).
-    if root.name.startswith(("ddflow-", ".merge-", ".version-")):
+    # ddflow's own throwaway scratch worktrees live directly in the system temp dir, under a
+    # `ddflow-` name (`scratch_tree` makes them with `tempfile.mkdtemp(prefix, dir=None)`); they
+    # hold ddflow's own code under test, not another lane's unmerged branch — a ci/pre-push run
+    # lives in one, so importing from it is legitimate and must not read as foreign (B267ff88849).
+    # A lane's worktree is under `.ddflow/worktrees/`, never a sibling of the temp root.
+    if root.resolve().parent == Path(tempfile.gettempdir()).resolve() and root.name.startswith("ddflow-"):
         return None
     primary = _paths.primary_checkout(root)
     if primary is None:
