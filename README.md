@@ -553,7 +553,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=2256599cd648 -->
+<!-- ddflow:begin README/commands sha=9ba0e9db54a0 -->
 <details><summary>All 101 commands</summary>
 
 | Command | What it does |
@@ -563,7 +563,7 @@ needs a line written by hand here.
 | `ddflow task` | add a task |
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
-| `ddflow update` | change an item's fields |
+| `ddflow update` | change the fields of any record (task, phase, bug, lesson, research, decision, memory, session, rule… |
 | `ddflow batch` | apply many item edits in one all-or-nothing transaction |
 | `ddflow rename` | move an item to a new id (and phase), re-pointing every needs edge |
 | `ddflow chore` | commit or approve chore files (no reviewer) |
@@ -5713,7 +5713,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=b614e785b788 -->
+<!-- ddflow:begin README/tools sha=89e66603e2f6 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5778,7 +5778,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
 | Shaping the work | `ddflow_task_add` | core | Add a task to a phase. |
 | Shaping the work | `ddflow_task_fold` | all | Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's body is appended to keep's, its… |
-| Shaping the work | `ddflow_update` | core | Change an item's fields. |
+| Shaping the work | `ddflow_update` | core | Change a record's fields; id may be kind:id. |
 | Shaping the work | `ddflow_batch` | all | Apply many field edits in ONE locked transaction: a JSON array of {id, needs, add_needs, remove_needs, tags… |
 | Shaping the work | `ddflow_rename` | all | Re-file the unclaimed task `old` as `new` (under `parent` when given): title, body, globs, resources, tags… |
 | Doing the work | `ddflow_abandon` | standard | Stop work on an item without completing it, with a reason. |
@@ -5898,7 +5898,7 @@ ddflow init                     create .ddflow/ only
 
 ddflow phase add <id> [...]     add a phase
 ddflow task add <id> --phase .. add a task
-ddflow update <id> [...]        change title/body/needs/globs/tags/priority (--globs REPLACES)
+ddflow update <id> [...]        change title/body/--append-body/needs/globs/tags/priority of any record kind (--globs REPLACES; --set field=value)
 ddflow update <id> --worktree P rebind the item and its lease to the linked worktree at P
 ddflow resolve <id> --keep X    settle a contested item: keep one definition or one claim
 

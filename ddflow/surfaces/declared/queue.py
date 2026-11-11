@@ -60,6 +60,7 @@ def item_edit(a: dict):
         landed_paths=_raw_globs(a, "landed_paths"),
         parent=_parent_of(a),
         kind=a.get("kind"),
+        set=_list_or_none(a, "set"),
     )
 
 
@@ -380,9 +381,9 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("update",),
-        summary="change an item's fields",
+        summary="change the fields of any record (task, phase, bug, lesson, research, decision, memory, session, rule, schedule, trigger ...)",
         tool="ddflow_update",
-        description="Change an item's fields. MOST IMPORTANT USE: widening `globs` when your "
+        description="Change a record's fields; id may be kind:id. MOST IMPORTANT USE: widening `globs` when your "
         "work turns out to touch files outside what you claimed. Do that BEFORE "
         "writing them: the conflict detector and commit hook work from the declared "
         "globs, so an undeclared file is unprotected and the commit is refused.",
@@ -516,6 +517,13 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="change the work kind: task, doc, research or job (the gate pipeline [gates].kind_pipelines gives it)",
             ),
             Param(
+                "set",
+                type="array",
+                repeat=True,
+                help="field=value items for a record that is not a task: its own fields (lesson why, bug severity, ...) and add_tags / remove_tags / add_globs / remove_globs / add_needs / remove_needs. `id` may be kind:id.",
+                cli_help="field=value, repeatable: the record's own fields (lesson why, bug severity ...); `ddflow help update` lists each kind's",
+            ),
+            Param(
                 "worktree",
                 help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding.",
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
@@ -547,6 +555,7 @@ COMMANDS: tuple[Command, ...] = (
             "landed_paths",
             "parent",
             "kind",
+            "set",
             "worktree",
         ),
     ),

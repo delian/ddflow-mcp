@@ -47,6 +47,7 @@ TOPICS: dict[str, str] = {
     "lanes": "which agents are working, their state, their brief, and what to do next",
     "metrics": "cycle time, review rounds, waits, forecast and retro, derived from the log",
     "viewers": "list and show: tasks, phases, bugs, research, sessions and the log, on CLI and MCP",
+    "update": "ddflow update: the same edit operations on every record kind, from one catalogue",
     "upgrade": "newer releases, upgrading it and the project, watching and resuming an upgrade",
 }
 
@@ -255,5 +256,20 @@ def render_index(repo: Path | None = None, *, tools: Iterable[str] = ()) -> str:
     return render(_page("index", repo), topics=topics, inventory=inventory, tool_count=len(tools))
 
 
+def update_kinds() -> str:
+    """What `ddflow update` accepts per kind, read from the catalogue (`core.record_fields`): the
+    help text, the CLI and the MCP parameters cannot disagree about it."""
+    from ..core import record_fields as RF
+
+    rows = [f"  {kd.kind:<9} {kd.accepts()}" for kd in RF.KINDS.values()]
+    rows += [
+        f"  {n:<9} (declared as a data kind: its own declaration lists the fields)"
+        for n in RF.DATA_KIND_NAMES
+    ]
+    return "\n".join(rows)
+
+
 def render_topic(name: str, repo: Path | None = None) -> str:
+    if name == "update":
+        return render(resolve_topic(name, repo), update_kinds=update_kinds())
     return render(resolve_topic(name, repo))

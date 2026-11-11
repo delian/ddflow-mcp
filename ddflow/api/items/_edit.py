@@ -78,6 +78,9 @@ class ItemEdit:
     #: inside ``--landed``'s changed files, then recorded; `changed_paths` reports only
     #: those. May be recorded alone later, against the range already on record.
     landed_paths: list[str] | None = None
+    #: ``field=value`` items: a record of another kind's own fields (a lesson's ``why``, a
+    #: bug's ``severity``) and, over MCP, ``add_tags=a,b`` style list edits (DX-update-universal).
+    set: list[str] | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -96,6 +99,12 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     with log.transaction():
         st = L._fold(log)
         it = st.items.get(item)
+        if it is None:
+            from ..record_update import update_record
+
+            other = update_record(repo, item, edit, agent=agent)
+            if other is not None:
+                return other
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
             return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)

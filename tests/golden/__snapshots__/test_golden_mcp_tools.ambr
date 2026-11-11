@@ -1090,6 +1090,13 @@
           "type": "string",
           "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work ..."
          },
+         "set": {
+          "type": "array",
+          "description": "field=value items for a record that is not a task: its own fields (lesson why, bug severity, ...) and add_tags / ...",
+          "items": {
+           "type": "string"
+          }
+         },
          "worktree": {
           "type": "string",
           "description": "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way ..."
