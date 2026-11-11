@@ -283,3 +283,47 @@ def test_an_explicit_pythonpath_does_not_excuse_a_launch_from_the_checkouts_own_
     _git(primary, "worktree", "add", "-q", str(other), "-b", "other")
     monkeypatch.chdir(other)
     assert guard_foreign_launch() == FAIL
+
+
+def test_a_ddflow_named_tree_on_a_branch_in_the_temp_dir_is_still_foreign(
+    checkout, monkeypatch, tmp_path
+):
+    """A lane's tree checked out on its branch is not scratch however it is named or placed:
+    scratch trees are detached (`git worktree add /tmp/ddflow-x <lane-branch>` is not one)."""
+    primary, _tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    lane = systmp / "ddflow-lane-b"
+    _git(primary, "worktree", "add", "-q", str(lane), "-b", "lane-b")
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lane.resolve)
+    assert I.foreign_launch_root() is not None
+
+
+def test_a_symlink_named_like_a_scratch_tree_is_still_foreign(checkout, monkeypatch, tmp_path):
+    primary, tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    cover = systmp / "ddflow-cover"
+    cover.symlink_to(tree)
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lambda: cover)
+    assert I.foreign_launch_root() is not None
+
+
+def test_a_forged_git_directory_inside_a_lane_does_not_leave_the_family(
+    checkout, monkeypatch, capsys
+):
+    """A directory with an empty `.git` made inside the primary (or a lane) is not a sandbox
+    repository: standing in it with PYTHONPATH naming a lane is still a foreign launch."""
+    from ddflow.api.guard_launch import guard_foreign_launch
+    from ddflow.core.outcome import FAIL
+
+    primary, tree = checkout
+    nest = primary / "nest"
+    (nest / ".git").mkdir(parents=True)
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setenv("PYTHONPATH", str(tree))
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: False)
+    monkeypatch.chdir(nest)
+    assert guard_foreign_launch() == FAIL

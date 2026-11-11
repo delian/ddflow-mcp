@@ -347,6 +347,16 @@ def _scratch_parents() -> set[Path]:
     return {fsio.temp_root().resolve(), *(d.resolve() for d in SYSTEM_TEMP_DIRS)}
 
 
+def _is_scratch_tree(root: Path) -> bool:
+    """ddflow's own throwaway tree: a ``ddflow-*`` directory directly in a temp dir, checked
+    out DETACHED (`scratch_tree` always detaches; a lane's tree sits on its branch). Name and
+    parent are read from the RESOLVED path, so a symlink named like a scratch tree is not one."""
+    real = root.resolve()
+    if not real.name.startswith("ddflow-") or real.parent not in _scratch_parents():
+        return False
+    return _paths.detached_worktree(real)
+
+
 def named_on_pythonpath(root: Path, env: Env = ENV) -> bool:
     """Whether ``root`` is an entry of ``PYTHONPATH``: the launcher put this tree's code on the
     import path ON PURPOSE, which a shared editable install redirected behind its back is not."""
@@ -363,18 +373,18 @@ def named_on_pythonpath(root: Path, env: Env = ENV) -> bool:
 def in_checkout_family(start: Path, primary: Path) -> bool:
     """Whether ``start`` lies in the ``primary`` checkout or one of its linked worktrees.
 
-    The nearest enclosing git tree decides (a ``.git`` file or directory), read from the files
-    git keeps. A caller standing in a repository that is neither (a test's sandbox, another
-    project) has no lane of this checkout whose code could be foreign to it. A start with no
-    enclosing tree answers False; a path that cannot be read answers True (refuse, never
-    excuse, on a doubt).
+    EVERY enclosing directory is asked, not just the nearest git tree: a directory (even a
+    forged empty ``.git``) made inside a lane does not take the caller out of that lane. A
+    start with no enclosing tree of the family answers False; a path that cannot be read
+    answers True (refuse, never excuse, on a doubt).
     """
     try:
+        want = primary.resolve()
         here = Path(start).resolve()
-        top = next((d for d in (here, *here.parents) if (d / ".git").exists()), None)
-        if top is None:
-            return False
-        return top == primary.resolve() or _paths.primary_checkout(top) == primary.resolve()
+        for d in (here, *here.parents):
+            if d == want or ((d / ".git").exists() and _paths.primary_checkout(d) == want):
+                return True
+        return False
     except (OSError, ValueError):
         return True
 
@@ -400,7 +410,7 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     # that runs under its own TMPDIR (the swarm pilot's sandbox) is not looking at the temp dir
     # the scratch tree was made in, and that must not turn ci's own tree into a foreign one
     # (Bbaaaba1364).
-    if root.name.startswith("ddflow-") and root.resolve().parent in _scratch_parents():
+    if _is_scratch_tree(root):
         return None
     primary = _paths.primary_checkout(root)
     if primary is None:

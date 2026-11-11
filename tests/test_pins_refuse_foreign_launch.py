@@ -56,3 +56,17 @@ def test_a_regeneration_that_records_ordinary_output_is_kept(tree):
     )
     assert not rep.failed or "foreign-launch" not in rep.failed[0].error
     assert (tree / "pin.json").read_text() == '{"ok": 2}\n'
+
+
+def test_text_the_pin_already_quoted_is_not_a_recorded_refusal(tree):
+    """Only a refusal this run WROTE counts: a pin that legitimately quotes the message (or a
+    file the run left alone) must not be rolled back."""
+    quoted = f"docs: the guard says {I.FOREIGN_LAUNCH_REFUSAL} X\n"
+    (tree / "pin.json").write_text(quoted)
+    rep = PN.regenerate(
+        tree,
+        Config.load(tree),
+        recipes=[_recipe(f"open('pin.json','w').write({quoted + 'more'!r})")],
+    )
+    assert not rep.failed or "foreign-launch" not in rep.failed[0].error
+    assert (tree / "pin.json").read_text().endswith("more")

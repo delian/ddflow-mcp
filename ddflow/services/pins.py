@@ -363,7 +363,7 @@ def _run_all(
         began = time.monotonic()
         kept = _snapshot(repo, r)
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        poisoned = _recorded_a_refusal(repo, r, done)
+        poisoned = _recorded_a_refusal(repo, r, done, kept)
         broke = done.error is not None or done.returncode != 0 or poisoned
         # A killed or failed regeneration leaves its files as it dropped them (README.md with
         # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
@@ -404,19 +404,26 @@ _REFUSED_RECORDING = (
 )
 
 
-def _recorded_a_refusal(repo: Path, r: Recipe, done: P.Captured) -> bool:
+def _recorded_a_refusal(
+    repo: Path, r: Recipe, done: P.Captured, kept: dict[Path, bytes | None] | None
+) -> bool:
     """A regeneration that "succeeded" by writing the foreign-launch refusal into the pin."""
-    return done.error is None and done.returncode == 0 and _records_refusal(repo, r)
+    return done.error is None and done.returncode == 0 and _records_refusal(repo, r, kept)
 
 
-def _records_refusal(repo: Path, r: Recipe) -> bool:
-    """Whether a file the recipe owns now holds the foreign-launch refusal message."""
+def _records_refusal(repo: Path, r: Recipe, kept: dict[Path, bytes | None] | None) -> bool:
+    """Whether a file the recipe owns now holds the foreign-launch refusal message that it did
+    not hold before the run (``kept``): text a pin already quotes, or a file this run did not
+    touch, is not a recorded refusal."""
+    needle = FOREIGN_LAUNCH_REFUSAL.encode()
     for p in _owned(repo, r):
         try:
-            if FOREIGN_LAUNCH_REFUSAL in p.read_text("utf-8", errors="replace"):
-                return True
+            now = p.read_bytes()
         except OSError:
             continue
+        before = (kept or {}).get(p)
+        if needle in now and not (before is not None and needle in before):
+            return True
     return False
 
 
