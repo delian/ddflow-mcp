@@ -178,8 +178,3 @@ def looks_like_id(name: str, *, metavar: str | None = None) -> bool:
     if name in ("id", "ids") or name.endswith("_id"):
         return True
     return name in _id_kinds
-
-
-def looks_like_path(name: str) -> bool:
-    """A path-/directory-like parameter name."""
-    return name in DIR_NAMES or name in PATH_NAMES

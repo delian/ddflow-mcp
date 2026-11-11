@@ -80,6 +80,8 @@ def test_inference_resolves_every_choices_argument_to_enum():
     parser = build_parser()
     resolved = [(path, a) for path, a in _walk(parser)]
     assert resolved  # the walk reaches the real parser, at scale
+    with_choices = [a for _path, a in resolved if a.choices is not None]
+    assert with_choices  # the choices -> enum path is exercised (non-vacuous)
     for path, action in resolved:
         if action.choices is not None and not getattr(action, "complete", ""):
             assert _resolve(path, action) == "enum", (path, action.dest)
