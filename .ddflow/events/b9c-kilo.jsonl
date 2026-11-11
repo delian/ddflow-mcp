@@ -160,3 +160,4 @@
 {"agent":"b9c-kilo","data":{"gate":"ci"},"id":"e1b179e587bded47518fb3096","kind":"gate.started","lamport":171705,"schema":1,"subject":"fix-B9c597d9579","ts":"2026-11-11T07:51:54.400357Z"}
 {"agent":"b9c-kilo","data":{"gate":"ci"},"id":"edaf93b0c017e8f8b94667857","kind":"gate.started","lamport":171765,"schema":1,"subject":"fix-B9c597d9579","ts":"2026-11-11T07:57:36.768606Z"}
 {"agent":"b9c-kilo","data":{"at":1794384762.5034044,"holder":"b9c-kilo"},"id":"e25100b348950b2c489d47bea","kind":"lease.renewed","lamport":171908,"schema":1,"subject":"fix-B9c597d9579","ts":"2026-11-11T08:12:42.624920Z"}
+{"agent":"b9c-kilo","data":{"by":"b9c-kilo","event":"eca00c635ed772068b09af646","holder":"b9c-kilo","note":""},"id":"e7e857c0ee293165489047236","kind":"lease.released","lamport":172164,"schema":1,"subject":"fix-B9c597d9579","ts":"2026-11-11T08:48:09.216146Z"}
