@@ -177,10 +177,10 @@ def test_refresh_docs_plan_reports_without_writing(repo):
     fresh = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
     assert fresh.returncode == 0, fresh.stderr
     assert "is current" in fresh.stdout, "a current doc must read as a no-op, not a rewrite"
-    before = {rel: (repo / rel).read_bytes() for rel in (DRIVER, DELTA)}
     _lag(repo)
+    lagged = {rel: (repo / rel).read_bytes() for rel in (DRIVER, DELTA)}
     p = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
     assert p.returncode == 0, p.stderr
     assert "would" in p.stdout, "the plan names what it would change"
-    for rel, data in before.items():
+    for rel, data in lagged.items():
         assert (repo / rel).read_bytes() == data, f"{rel} must not be written by --plan"
