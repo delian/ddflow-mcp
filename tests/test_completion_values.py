@@ -52,13 +52,11 @@ def test_none_offers_nothing():
     assert V.complete("none", "x") == []
 
 
-def test_path_and_dir_complete_paths(tmp_path):
+def test_path_and_dir_complete_paths(tmp_path, monkeypatch):
     (tmp_path / "a.txt").write_text("")
     (tmp_path / "b.txt").write_text("")
     (tmp_path / "proj").mkdir()
-    import os
-
-    os.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)
     assert V.complete("path", "a") == ["a.txt"]
     assert V.complete("dir", "proj") == ["proj"]
     assert V.complete("dir", "zzz") == []

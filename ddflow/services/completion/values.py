@@ -74,9 +74,9 @@ def _paths(prefix: str, *, dirs: bool) -> list[str]:
 
     if any(c in prefix for c in ("\x00", "\n", "\r")):
         return []
-    pat = prefix + "*"
+    pat = _g.escape(prefix) + "*"
     try:
-        return sorted(f for f in _g.glob(pat) if _os.path.isdir(f) == dirs)[:_PATH_MAX]
+        return sorted(f for f in _g.glob(pat) if _os.path.isdir(f) == dirs)[: _PATH_MAX]
     except (OSError, ValueError):
         return []
 
