@@ -319,9 +319,12 @@ def _file_fix_task(
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it) and `no-deps` (no needs of its own, so none is a
-    decision and not an omission, r-task-phase-needs-wave), under the standing `[bugs] phase`
-    (made on first use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first
-    open or absent one, by id convention only) -- carrying ``globs`` (verbatim) or the bug's
+    decision and not an omission, r-task-phase-needs-wave), under the item's own OPEN phase
+    -- the nearest open phase at or above the found item, which the fix blocks (Be8ca1270a5,
+    r-task-phase-needs-wave) -- else (a stray bug, a removed source, a finished phase) the
+    standing `[bugs] phase` (made on first use; once it is done, its follow-up `<phase>-2`,
+    `-3`, ... -- the first open or absent one, by id convention only) -- carrying ``globs``
+    (verbatim) or the bug's
     own found scope (the files its text
     names plus the tests pinning them; past `[bugs].named_scope_at` named files, the item's
     that exist in the tree; a ddflow-scoped bug never takes the found scope), the item's
@@ -336,13 +339,16 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": "", "glob_warnings": []}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase,
-    # else its follow-up -- never the item's own phase, which the fix would hold open
-    # (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb); `--item` says where the bug was
-    # found, not which phase carries the fix. That is the rule's "say why not": a bug blocks
-    # no feature phase.
+    # globs are what makes a feature on them wait. The parent is the item's own OPEN phase
+    # (`_open_phase_of`): a bug found while working an item blocks that item's phase, so its
+    # fix belongs there (r-task-phase-needs-wave), and `carry no hold` keeps it from stalling
+    # the phase (D-old-work-behind-core-docs-accepted). A finished phase, a removed source or
+    # a stray bug (no `--item`) has no such phase and falls back to the standing bugs phase.
     src = st.items.get(item) if item else None
-    parent, phase_made = _bugs_parent(log, cfg, st)
+    parent = _open_phase_of(st, item) if item else ""
+    phase_made = ""
+    if not parent:
+        parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
