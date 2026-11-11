@@ -153,3 +153,46 @@ def test_the_board_does_not_count_abandoned_tasks_as_outstanding(repo):
     assert "1 abandoned" in board, "the abandoned task should still be visible, as such"
     row = next(ln for ln in board.splitlines() if "**P1.T3**" in ln)
     assert row.strip().startswith("| [-]"), f"abandoned should mark as [-]: {row}"
+
+
+def test_abandoning_a_needed_item_without_a_flag_is_refused(repo):
+    """A dependent can never satisfy an edge to something decided not done: dropping that
+    edge is a decision, so the abandon refuses and names the two ways to make it."""
+    _queue(repo)
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+    )
+    code, _, err = run_cli(repo, "abandon", "P1.T1", "--reason", "superseded")
+    assert code == REFUSED, err
+    assert "--repoint-to" in err and "--drop-edges" in err, err
+
+
+def test_abandon_with_drop_edges_drops_the_edges(repo):
+    _queue(repo)
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+    )
+    code, _, err = run_cli(
+        repo, "abandon", "P1.T1", "--reason", "superseded", "--drop-edges"
+    )
+    assert code == OK, err
+    shown = json.loads(run_cli(repo, "--json", "show", "P1.T3")[1])
+    assert "P1.T1" not in shown["needs"], shown["needs"]
