@@ -225,4 +225,5 @@ def test_a_note_with_a_junk_time_is_skipped_and_the_rest_listed(tmp_path, monkey
 
 def test_a_note_with_no_time_is_listed_without_an_age(tmp_path, monkeypatch):
     rows = {r["holder"]: r for r in _notes(tmp_path, monkeypatch, '{"holder": "b"}')}
-    assert "at" not in rows["b"] and rows["b"]["age_s"] == 0
+    assert "at" not in rows["b"] and rows["b"]["age_s"] is None
+    assert "age unknown" in CV.render(_view(_seeded(), suites=[rows["b"]]))

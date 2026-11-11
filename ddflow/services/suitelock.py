@@ -113,7 +113,7 @@ def running(
             if not isinstance(note, dict):
                 continue
             if "at" not in note:  # no start time on record: listed, with no age claimed
-                rows.append({**note, "slot": i, "age_s": 0})
+                rows.append({**note, "slot": i, "age_s": None})
                 continue
             began = float(note["at"])  # a non-number raises: the slot is skipped
             rows.append({**note, "at": began, "slot": i, "age_s": max(0, int(at - began))})
