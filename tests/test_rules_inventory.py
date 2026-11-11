@@ -149,3 +149,24 @@ def test_directory_entry_files_are_rules_not_cross_agent(tmp_path):
     inv = RI.inventory(tmp_path)
     assert _row(inv, ".clinerules/style.md")["kind"] == "rule"
     assert _row(inv, "AGENTS.md")["kind"] == "cross-agent"
+
+
+def test_glob_entries_skip_other_checkouts_too(tmp_path):
+    _w(tmp_path, ".cursor/rules/mine.md", "mine\n")
+    _w(tmp_path, "worktrees/other/.cursor/rules/theirs.md", "theirs\n")
+    _w(tmp_path, "node_modules/p/AGENTS.md", "vendored\n")
+    paths = {r["path"] for r in RI.inventory(tmp_path)["rows"]}
+    assert ".cursor/rules/mine.md" in paths
+    assert not any(p.startswith(("worktrees", "node_modules")) for p in paths)
+
+
+def test_rule_entry_beats_command_dir_whichever_is_listed_first(tmp_path, monkeypatch):
+    _w(tmp_path, ".x/ship.md", "---\nalwaysApply: true\n---\n" + "z" * 40)
+    monkeypatch.setattr(
+        RI,
+        "_surfaces",
+        lambda: [("cmdagent", "command", ".x/"), ("ruleagent", "rule", ".x/*.md")],
+    )
+    row = _row({"rows": RI.scan_rule_files(tmp_path)}, ".x/ship.md")
+    assert row["kind"] == "rule" and row["load"] == "always"
+    assert row["loaded_by"] == ["cmdagent", "ruleagent"]

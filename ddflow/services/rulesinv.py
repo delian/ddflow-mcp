@@ -141,23 +141,19 @@ def native_rule_paths() -> set[str]:
 
 def _expand(repo: Path, pattern: str) -> list[Path]:
     """The files one `reads`/`dir` entry names under the repo; entries outside it ($VAR, ~)
-    are not project files."""
+    are not project files, and neither is anything inside another checkout (`_SKIP_DIRS`)."""
     if not pattern or pattern[0] in "$~/":
         return []
     if pattern.endswith("/"):
         base = repo / pattern.rstrip("/")
-        files = base.rglob("*") if base.is_dir() else ()
-        return sorted(
-            p
-            for p in files
-            if p.is_file()
-            and p.suffix in _DIR_SUFFIXES
-            and not _SKIP_DIRS.intersection(p.relative_to(base).parts)
-        )
-    if any(c in pattern for c in "*?["):
-        return sorted(p for p in repo.glob(pattern) if p.is_file())
-    p = repo / pattern
-    return [p] if p.is_file() else []
+        found = [p for p in base.rglob("*") if p.suffix in _DIR_SUFFIXES] if base.is_dir() else []
+    elif any(c in pattern for c in "*?["):
+        found = list(repo.glob(pattern))
+    else:
+        found = [repo / pattern]
+    return sorted(
+        p for p in found if p.is_file() and not _SKIP_DIRS.intersection(p.relative_to(repo).parts)
+    )
 
 
 def _surfaces() -> list[tuple[str, str, str]]:
@@ -204,8 +200,11 @@ def scan_rule_files(repo: Path) -> list[dict[str, Any]]:
                     ),
                     "text": text,
                 }
-            if kind == KIND_COMMAND and row["kind"] != KIND_COMMAND:
-                continue  # one directory serves one purpose; a rule glob wins
+            if row["kind"] == KIND_COMMAND and kind != KIND_COMMAND:
+                # a rule entry that also names the file wins over a command directory,
+                # whichever agent was listed first
+                row["kind"] = kind
+                row["load"] = _load_mode(row["frontmatter"], kind)
             if agent not in row["loaded_by"]:
                 row["loaded_by"].append(agent)
     return sorted(rows.values(), key=lambda r: r["path"])
