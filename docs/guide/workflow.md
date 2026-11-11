@@ -846,7 +846,8 @@ in `new_failures`) instead of hiding it behind `still_failing`.
 Some files are not code: rules, `.mailmap`, `DDFLOW.md`, decision records, generated views. Taking
 each through claim, ten gates and a reviewer is ceremony. `ddflow chore commit FILE... -m "message"`
 runs the whole arc in one step: it files a task tagged `chore`, claims it, copies the files into
-its worktree and commits them, records every skipped gate with its reason, merges and completes. It
+its worktree and commits them, records every skipped gate with its reason, merges and completes (when
+every gate of the item's pipeline is skipped or left to the merge: see `skip_gates` below). It
 takes no reviewer because two things hold: every file matches `[chore].globs`, and a person approved
 that list. A file outside the list is refused before any task exists and takes the normal pipeline.
 

@@ -24,4 +24,4 @@ def test_the_chore_class_is_explained():
 def test_merge_queue_flag_sits_beside_the_queue_commands():
     text = readme_corpus()
     assert "ddflow merge <id> --queue" in text
-    assert text.index("ddflow merge <id> --queue") - text.index("ddflow queue add") < 1500
+    assert 0 < text.index("ddflow merge <id> --queue") - text.index("ddflow queue add") < 1500
