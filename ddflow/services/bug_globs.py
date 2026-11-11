@@ -11,8 +11,17 @@ from ..config import Config
 from ..core import globspec as GS
 from ..core.model import State
 from ..infra import git as GIT
+from . import testreach as TR
 from .completion import fixes_of
-from .testselect import RANK_DECLARED, _by_name, _data_readers, _Picks, governed, is_test_file
+from .testselect import (
+    RANK_DECLARED,
+    _by_name,
+    _data_readers,
+    _governs,
+    _Picks,
+    governed,
+    is_test_file,
+)
 
 
 def bug_globs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
@@ -112,6 +121,38 @@ def found_scope(root: Path, text: str) -> tuple[list[str], list[str]] | None:
     pick.many(_data_readers(root, kept, tests), RANK_DECLARED)
     pick.many(governed(root, kept, tests), RANK_DECLARED)
     return kept + [t for t in sorted(pick.by) if t not in kept], dropped
+
+
+def exercised_scope(root: Path, ids: list[str]) -> list[str]:
+    """The SOURCE files a set of pytest node ids exercises: source files the ids themselves
+    name (a parametrized id names its file -- `[proc_server.py]`), the library modules each
+    failing test file imports directly, and its declared ``GOVERNS`` files -- the files a
+    fix task must carry instead of inheriting the finding item's own (test) globs, which is
+    what left main-red fix tasks ineditable (B83543b98f4). Cheap per test file, no full
+    import graph (``found_scope`` refuses it for every `bug found`)."""
+    listed = GIT.files(root, "all")
+    if listed is None:
+        return []
+    py = [p for p in listed if p.endswith(".py")]
+    by_module = {TR.module_name(p): p for p in py}
+    known = set(by_module)
+    lib = [p for p in py if not is_test_file(p)]
+    out: set[str] = set()
+    # Files the ids name, the source half (a test path is a test file, not source).
+    named, _drop = existing_globs(root, _named_files(_PATHISH.findall("\n".join(ids)), listed))
+    out.update(p for p in named if not is_test_file(p))
+    for t in sorted({i.partition("::")[0] for i in ids}):
+        if t.endswith(".py") and (root / t).is_file():
+            try:
+                source = (root / t).read_text("utf-8", errors="replace")
+            except OSError:
+                continue
+            for mod in TR.imports(t, source):
+                p = by_module.get(TR.resolve(mod, known))
+                if p and not is_test_file(p):
+                    out.add(p)
+            out.update(p for p in lib if any(fnmatch(p, g) for g in _governs(source)))
+    return sorted(out)
 
 
 def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:

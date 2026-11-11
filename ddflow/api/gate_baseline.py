@@ -11,6 +11,7 @@ from typing import Any
 from ..infra import worktree as W
 from ..services import testscope as TSC
 from ..services import testselect as TS
+from ..services.bug_globs import exercised_scope
 from ..services.gates import baseline as BL
 from ..services.gates import baseline_red as BR
 from ..services.gates.defs import load_gates
@@ -168,6 +169,7 @@ def _file(
         agent=agent,
         severity="high",
         tags="baseline-red",
+        globs=_fix_globs(repo, ids),
         summary=(
             f"{found['base']} ({sha[:8]}) is red: {', '.join(ids)} fail on it as well as in "
             f"{item}'s {gate} gate (baseline-red)"
@@ -179,6 +181,14 @@ def _file(
     # "" that reads as "bug not filed" with nothing to act on (B-baseline-bug-not-filed-silently).
     found["not_filed"] = out.reason
     return ""
+
+
+def _fix_globs(repo: Path, ids: list[str]) -> list[str]:
+    """The fix task's globs: the source files the failing tests exercise plus the failing
+    test files themselves (where the regression test lands) -- not the finding item's own
+    globs, which are the test files only and left main-red fix tasks ineditable (B83543b98f4)."""
+    tests = sorted({i.partition("::")[0] for i in ids})
+    return sorted(set(exercised_scope(repo, ids)) | {t for t in tests if t})
 
 
 def _linked(repo: Path, agent: str, ids: list[str]) -> str:
