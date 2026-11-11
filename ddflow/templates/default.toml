@@ -693,6 +693,7 @@ burn_rate_exhaust_s = 3600.0
 
 [store]
 stale_index_days = 7.0
+index_touch_s = 86400.0
 
 [swarm]
 w_critical = 3.0
