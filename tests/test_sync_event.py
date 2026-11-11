@@ -60,8 +60,19 @@ def test_sync_records_a_branch_synced_event_with_the_merge_and_gate_outcomes(rep
     (wt / "src" / "mine.py").write_text("x = 1\n")
     _git(wt, "add", "src/mine.py")
     _git(wt, "commit", "-qm", "mine")
-    r = run_cli(wt, "gate", "record", "T1", "standards", "--outcome", "passed", "--evidence", "ran",
-                "--agent", ME)
+    r = run_cli(
+        wt,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "ran",
+        "--agent",
+        ME,
+    )
     assert r[0] == 0, r
     c1 = _land(repo, "docs/b.md")  # outside the globs, so the judged gate stays valid
     out = sync(repo, item="T1", agent=ME)
