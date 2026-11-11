@@ -271,9 +271,10 @@ class _ReplyFile:
     def plan_meta(self) -> dict[str, Any]:
         """The ``plan`` line this run checkpointed, or ``{}`` when it never got one."""
         try:
-            lines = self.path.read_text("utf-8").splitlines()
+            text = self.path.read_text("utf-8", errors="replace")
         except OSError:
             return {}
+        lines = text.splitlines()
         for line in reversed(lines):
             try:
                 row = json.loads(line)
@@ -298,10 +299,13 @@ class _ReplyFile:
         """The (chunk, reply) pairs this run has checkpointed so far, in arrival order.
 
         Line-by-line, not whole-file: a kill can leave a truncated trailing line, and one
-        torn line must not discard the earlier checkpointed chunks it follows."""
+        torn line must not discard the earlier checkpointed chunks it follows. ``errors=
+        "replace"`` keeps a torn trailing multi-byte character from raising ``UnicodeDecodeError``
+        (a ``ValueError``, not an ``OSError``), which would otherwise lose every earlier
+        complete line."""
         rows: list[tuple[int, str]] = []
         try:
-            lines = self.path.read_text("utf-8").splitlines()
+            lines = self.path.read_text("utf-8", errors="replace").splitlines()
         except OSError:
             return []
         for line in lines:
