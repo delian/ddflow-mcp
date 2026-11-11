@@ -212,7 +212,7 @@ the same implementation, so neither drifts from the other.
 | **find records filed twice** | `ddflow dupes [--kind bug,task,...] [--open-only] [--floor F] [--limit N] [--json]` -- exit 0 with pairs, 2 with none | `ddflow_dupes` |
 | **settle a near-duplicate pair** | `ddflow link <a> --duplicate-of\|--extends\|--related\|--distinct <b> [--reason ...]` | `ddflow_link` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
-| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--offset N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `offset`, `all`) |
+| **list tasks / phases / bugs / research / sessions** (`ddflow help viewers`) | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--offset N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all`; `ddflow session list\|show` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `offset`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find which earlier test file makes a test fail only in full-suite order** | `ddflow bisect VICTIM --cmd 'pytest -q {tests}' [--candidates a,b] [--glob G] [--timeout S] [--repeat N] [--max-runs N]` -- delta-debugs the files before the victim, running your command many times (exit 0 = found, 2 = nothing to report); see [Finding a test polluter](#finding-a-test-polluter) | `ddflow_bisect` (`glob`, `repeat` and `max_runs` are CLI-only) |
@@ -1125,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 647 knobs.
+cadences, and the rest of the 652 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5429,7 +5429,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 647): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 652): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6019,7 +6019,7 @@ declared once and persists — see
 
 ## Configuration
 
-647 knobs across 60 sections, every one documented in place and listed, with its default
+652 knobs across 60 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6086,8 +6086,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=f8e032bd7758 -->
-<details><summary>All 647 knobs across 60 sections</summary>
+<!-- ddflow:begin README/knobs sha=36a97302da2f -->
+<details><summary>All 652 knobs across 60 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6320,12 +6320,14 @@ long default is left to `ddflow config --explain`.
 | `health.check_budget_s` | `60` |  |
 | `health.reply_s` | `600` |  |
 | `health.crash_s` | `300` |  |
+| `health.orphan_s` | `300` |  |
 | `health.mode_idle` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_stalled` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_unresponsive` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_orphan_wait` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `hooks.fixture_max_age_months` | `6` |  |
@@ -6645,6 +6647,9 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.agent_rotate_tokens` | `250000` |  |
+| `session.claude_autocompact_window` | `0` |  |
+| `session.claude_autocompact_pct_override` | `0` |  |
 | `session.agent_brief_max_chars` | `9000` |  |
 | `session.agent_brief_budget_share` | `0.1` |  |
 | `session.agent_brief_min_chars` | `4000` |  |

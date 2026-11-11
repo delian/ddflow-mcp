@@ -60,6 +60,11 @@ class HealthConfig:
         doc="A lane whose holder's process is gone (the harness that declared its identity has exited; `ddflow_identify` records it) and whose lease has not been renewed for this many seconds is CRASHED, minutes before the lease TTL lapses. Only a holder that declared its identity can be seen to die; others fall back to the lease TTL. 0 turns the check off.",
         check=int_at_least(0),
     )
+    orphan_s: int = knob(
+        300,
+        doc="A lane that has shown no progress for this many seconds while its newest live-run registry entry (a gate, review, ci or pins run) is already finished -- the outcome recorded -- or whose process is gone with no recorded outcome, is ORPHAN_WAIT: it is 'waiting on nothing' and the finding names the log and the command to rerun. 0 turns the check off.",
+        check=int_at_least(0),
+    )
     mode_idle: str = knob(
         "inherit",
         doc="The mode for an idle lane (nudge): 'inherit' (default) takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind alone.",
@@ -93,6 +98,12 @@ class HealthConfig:
     mode_runaway: str = knob(
         "inherit",
         doc="The mode for a runaway job (report only): 'inherit' (default) takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind alone.",
+        choices=("inherit", "off", "propose", "apply"),
+        strictest=("propose", "a finding is reported, never acted on, by a typo"),
+    )
+    mode_orphan_wait: str = knob(
+        "inherit",
+        doc="The mode for a lane waiting on nothing (a run that ended or died with no outcome): 'inherit' (default) takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind alone.",
         choices=("inherit", "off", "propose", "apply"),
         strictest=("propose", "a finding is reported, never acted on, by a typo"),
     )

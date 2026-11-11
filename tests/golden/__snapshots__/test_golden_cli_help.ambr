@@ -1405,7 +1405,8 @@
   
   positional arguments:
     topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, parallel, recovery, upgrade, verify, workflow. Omit for the overview.
+                metrics, parallel, recovery, upgrade, verify, viewers, workflow. Omit for the
+                overview.
   
   options:
     -h, --help  show this help message and exit

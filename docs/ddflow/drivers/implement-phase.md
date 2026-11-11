@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=22a1e3969b70 -->
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=ee3ae6e8945f -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -366,6 +366,15 @@ disposable on purpose.
   and covers this session only. Never add the flag on your own initiative.
 - **Prefer `ddflow brief` over reading the rule and lesson files.** That is what it is
   for, and what keeps a session's opening cost roughly constant as the project grows.
+- **Read the project with the viewers, never by scraping `.ddflow/events`.**
+  `ddflow task list`, `ddflow phase list`, `ddflow bug list`,
+  `ddflow research list` [`ddflow_list` `kind=...`] filter by `--state`,
+  `--since` and, where the kind has them, `--phase`, `--tag`, `--owner`, and page with
+  `--limit`/`--offset`; `ddflow session list|show`
+  [`ddflow_list` `kind=session`] read sessions; `ddflow show <id>` [`ddflow_show`] is one
+  whole record; `ddflow history --tail N` [`ddflow_history`] is the event log;
+  `ddflow search '<text>'` [`ddflow_list` `kind=search`] looks across everything. They are
+  read-only, fold the log for you and take `--json`. `ddflow help viewers` has each one.
 - **Before compressing or rewording an instruction file**, run `ddflow pins <file>`
   [ddflow_pins]. A sentence that reads like rationale is often a rule a test asserts; it
   names the suites to re-run afterwards and the text no test holds.
