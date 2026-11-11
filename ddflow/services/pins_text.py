@@ -82,7 +82,21 @@ def merge_pin_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, bool
     if code > 0:
         text = _HUNK.sub(_counts_only, text)
         code = text.count("<<<<<<< ours\n")
-    kept = {**_blocks(b), **_blocks(t), **_blocks(o)}
+    b_blocks, t_blocks, o_blocks = _blocks(b), _blocks(t), _blocks(o)
+    # A block OUR side still holds at its base content while the INCOMING side changed it is
+    # carried over from the incoming side: a `git merge main` in a linked worktree must not
+    # silently drop main's regenerated region (B8bb24fad16). Every other block keeps our side,
+    # which the recipe re-records right after the merge.
+    kept: dict[str, str] = {}
+    for name in set(b_blocks) | set(t_blocks) | set(o_blocks):
+        if o_blocks.get(name) == b_blocks.get(name) and t_blocks.get(name) != b_blocks.get(name):
+            kept[name] = t_blocks[name]
+        elif name in o_blocks:
+            kept[name] = o_blocks[name]
+        elif name in t_blocks:
+            kept[name] = t_blocks[name]
+        else:
+            kept[name] = b_blocks[name]
     for name, block in kept.items():
         text = text.replace(_hole(name), block)
     return text.encode(), code > 0

@@ -38,3 +38,12 @@ def test_a_hand_edited_number_after_of_the_still_conflicts() -> None:
         base.replace(b"3 modes", b"5 modes"), base, base.replace(b"3 modes", b"9 modes")
     )
     assert conflicted
+
+
+def test_a_block_only_the_incoming_side_changed_keeps_the_incoming() -> None:
+    base = BASE.replace(b"x\n", b"old\n")
+    theirs = BASE.replace(b"x\n", b"new main region\n")
+    out, conflicted = merge_pin_text(base, base, theirs)
+    assert not conflicted
+    assert b"<<<<<<<" not in out
+    assert b"new main region" in out
