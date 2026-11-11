@@ -232,6 +232,23 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
     return result
 
 
+def _lock_event_due(st: State, doc: str, by_agent: str) -> bool:
+    """A lock is recorded when none stands, or when a person's replaces an agent's."""
+    e = st.exports.get(doc) or {}
+    if not e.get("locked"):
+        return True
+    return not by_agent and not (e.get("lock") or {}).get("human", True)
+
+
+def _lock_note(doc: str, agent_id: str, by_agent: bool) -> str:
+    if not by_agent:
+        return "; locked: an agent cannot enable it again"
+    return (
+        f"; locked by agent {agent_id}: other agents cannot enable it, "
+        f"the operator can always unlock it (ddflow export enable {doc})"
+    )
+
+
 def disable(
     repo: Path,
     log: Any,
@@ -270,9 +287,7 @@ def disable(
             f"(try {'without' if local else 'with'} --local)"
         )
     already_locked = bool((st.exports.get(doc) or {}).get("locked"))
-    prior = (st.exports.get(doc) or {}).get("lock") or {}
-    upgrades = lock and already_locked and not prior.get("human", True) and not why_agent
-    if was or (lock and (not already_locked or upgrades)):
+    if was or (lock and _lock_event_due(st, doc, why_agent)):
         log.append(
             "export.disabled",
             doc,
@@ -286,12 +301,7 @@ def disable(
         )
     msg = f"disabled {doc}" if was else f"{doc} is not selected"
     if lock:
-        msg += (
-            "; locked: an agent cannot enable it again"
-            if not why_agent
-            else f"; locked by agent {log.agent_id}: other agents cannot enable it, "
-            f"the operator can always unlock it (ddflow export enable {doc})"
-        )
+        msg += _lock_note(doc, log.agent_id, bool(why_agent))
     return {
         "doc": doc,
         "changed": was or lock,
