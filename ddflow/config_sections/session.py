@@ -160,6 +160,21 @@ class SessionConfig:
         2000,
         doc="Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session note of at most this many characters, and the SessionStart hook hands it back after compaction. The hook gets no summary from Claude Code, so this digest is the record of what the session was doing. 0 turns it off.",
     )
+    agent_rotate_tokens: int = knob(
+        250000,
+        doc="Context tokens past which a lane agent should rotate instead of growing: `ddflow doctor`, `ddflow health` and the wake brief name it and the steep climb in cache-rewrite and reread cost each heartbeat then. An agent past it finishes its item, writes the hand-off note into the item's evidence and stops; the lead starts a fresh agent whose first call is `ddflow brief`. 0 turns the hint off. The advisory number, not the mechanism: DDflow never stops an agent on its own (only the harness/operator does); the auto-compact window below is the alternative a running session can still honour.",
+        check=int_at_least(0),
+    )
+    claude_autocompact_window: int = knob(
+        0,
+        doc="The Claude Code auto-compact window, in tokens, as the alternative to lane rotation: set it to put `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the harness's environment so a long lane agent compacts instead of rotating (D-TE-Q2). 100000-1000000, as the Claude Code docs spell the range; 0 leaves the harness default untouched (DDflow cannot flip a harness's environment, so this is the value the lead puts there; `ddflow doctor` names it).",
+        check=int_at_least(0),
+    )
+    claude_autocompact_pct_override: int = knob(
+        0,
+        doc="`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, in percent, alongside `claude_autocompact_window`: it LOWS the window only (Claude Code honours it as a percentage override, never a raise). 0 leaves the harness default untouched.",
+        check=int_at_least(0),
+    )
     agent_brief_max_chars: int = knob(
         9000,
         doc="Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",

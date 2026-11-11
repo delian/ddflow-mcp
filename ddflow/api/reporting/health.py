@@ -29,6 +29,7 @@ from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import lanerelease as LR
+from ...services import lanerotate as LROT
 from ...services import launchers as LA
 from ...services import leasebreak as LBR
 from ...services import leases as L
@@ -397,6 +398,10 @@ def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per find
     # (TE-subagent-ttl): a host that launches Claude Code with the 1-hour knob already set is
     # not warned; a host on the 5-minute default is told the one-line remedy.
     notes.extend(CTL.doctor_notes(repo, cfg))
+    # The lane-rotation hint (TE-context-caps): when an agent's context passes
+    # [session].agent_rotate_tokens, and the auto-compact window alternative when the
+    # operator chose it. Silent while the context is unmeasured (B-gap-spend is the feed).
+    notes.extend(LROT.doctor_notes(cfg))
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
