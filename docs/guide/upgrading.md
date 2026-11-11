@@ -1,6 +1,6 @@
 # Reading the log, upgrading and recovery
 
-The event log, its compatibility contract, upgrades, repairs, crash recovery and reconstruction. Part of the ddflow [README](../../README.md); the reference moved out of it by D-readme-split. Every heading here keeps the anchor it had in the README.
+The event log, its [compatibility contract](../../docs/ddflow/compatibility.md), upgrades, repairs, crash recovery and reconstruction. Part of the ddflow [README](../../README.md); the reference moved out of it by D-readme-split. Every heading here keeps the anchor it had in the README.
 
 ## Crash recovery
 

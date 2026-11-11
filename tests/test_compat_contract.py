@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from readme_corpus import readme_corpus
-
 import ddflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +52,7 @@ def test_format_level_is_a_plain_positive_integer_the_doc_states():
 
 
 def test_the_readme_points_to_the_contract():
-    assert "docs/ddflow/compatibility.md)" in readme_corpus()
+    assert "(docs/ddflow/compatibility.md)" in (ROOT / "README.md").read_text("utf-8")
 
 
 #: Where each part of the contract is enforced (the doc's Enforcement table).

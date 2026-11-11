@@ -32,7 +32,7 @@ def test_every_guide_exists_with_a_title_and_links_back():
         p = GUIDE / f"{name}.md"
         assert p.is_file(), f"docs/guide/{name}.md is missing"
         assert _text(p).startswith("# "), f"{p} has no title"
-        assert "../../README.md" in _text(p), f"{p} does not link back to the front door"
+        assert "](../../README.md" in _text(p), f"{p} does not link back to the front door"
 
 
 def test_the_readme_is_the_front_door_and_points_at_every_guide():

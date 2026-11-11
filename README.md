@@ -482,7 +482,7 @@ The README is the front door. The reference lives in `docs/guide/`, one file per
 - [Lessons that check themselves](docs/guide/knowledge.md#lessons-that-check-themselves)
 - [Lessons, research and bugs](docs/guide/knowledge.md#lessons-research-and-bugs)
 
-**[Reading the log, upgrading and recovery](docs/guide/upgrading.md)**: The event log, its compatibility contract, upgrades, repairs, crash recovery and reconstruction.
+**[Reading the log, upgrading and recovery](docs/guide/upgrading.md)**: The event log, its [compatibility contract](docs/ddflow/compatibility.md), upgrades, repairs, crash recovery and reconstruction.
 
 - [Crash recovery](docs/guide/upgrading.md#crash-recovery)
 - [Reconstruction from logs alone](docs/guide/upgrading.md#reconstruction-from-logs-alone)
