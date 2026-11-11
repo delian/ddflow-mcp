@@ -65,7 +65,9 @@ def test_an_unknown_feature_class_is_named_not_guessed():
 
 def test_a_task_declaring_a_new_knob_is_auto_given_the_knob_wiring_globs(repo):
     log, st = _log(repo), State()
-    IT.add_task(log, st, Config.load(repo), IT.TaskDraft("T-knob", title="one", adds=["knob"]), dedupe=WHY)
+    IT.add_task(
+        log, st, Config.load(repo), IT.TaskDraft("T-knob", title="one", adds=["knob"]), dedupe=WHY
+    )
     assert st.items["T-knob"].globs == [
         "ddflow/config_sections/*.py",
         "ddflow/templates/default.toml",
@@ -112,7 +114,9 @@ def test_declared_globs_are_kept_beside_the_wiring_globs(repo):
 
 def test_an_added_knob_keeps_the_event_carrying_the_adds_declaration(repo):
     log, st = _log(repo), State()
-    IT.add_task(log, st, Config.load(repo), IT.TaskDraft("T", title="one", adds=["knob"]), dedupe=WHY)
+    IT.add_task(
+        log, st, Config.load(repo), IT.TaskDraft("T", title="one", adds=["knob"]), dedupe=WHY
+    )
     [ev] = [e.data for e in log.read_all() if e.subject == "T" and e.kind == "task.added"]
     assert ev["adds"] == ["knob"]
     assert ev["globs"] == ["ddflow/config_sections/*.py", "ddflow/templates/default.toml"]
@@ -121,4 +125,3 @@ def test_an_added_knob_keeps_the_event_carrying_the_adds_declaration(repo):
 def test_an_unknown_adds_is_refused_like_an_unknown_kind(repo):
     out = _add(IT.TaskDraft("T", title="one", adds=["page"]), repo)
     assert not out.ok and "unknown feature class" in out.problem
-
