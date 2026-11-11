@@ -195,11 +195,25 @@ From D-agent-compat. Put the agent in the lowest tier you can honestly support.
 | 4 event sources only | Dependabot, Renovate, CodeRabbit, Qodo | none; their events are read |
 
 Credentials come from the environment or the git-ignored local config, never from a commit. A
-missing key, CLI or rate limit is `unavailable`, never a pass. A tier-1 agent also needs the
-`[test]` section for the smoke harness (B-ac-smoke): the headless command, its prompt and what
-the run must show. That section is reserved by the descriptor schema work
-(P-agent-parity.descriptor-v2); until it lands a tier-1 agent is tested by the conformance run
-only, and the guide above is the whole contract.
+missing key, CLI or rate limit is `unavailable`, never a pass. A tier-1 agent also needs a headless command for the smoke harness (B-ac-smoke): `[headless]`
+`argv`, `max_turns_flag` and an `autonomy` profile are enough. A reserved `[test]` section
+overrides or adds to it; every value is a string:
+
+```toml
+[test]
+detect = "acmecli --version"   # run to prove the CLI works (exit 0)
+argv = "acmecli run"            # replaces [headless].argv
+env_keys = "ACME_API_KEY"       # comma list; an unset key makes the run unavailable
+turn_flag = "--max-turns"       # the turn cap flag
+exit_codes = "0"                # comma list of accepted exit codes
+```
+
+`scripts/ci/agent-smoke plan` lists the commands and runs nothing; `agent-smoke run <agent>
+--live` starts the REAL agent in a throwaway project (`agent.smoke` records the verdict). It
+asserts only on the event log: the MCP tool was called, a claim exists under a distinct
+identity, the item completed or was released, no stray lease. A missing session.started,
+session.prompt (the "no native prompt hook, first-call fallback" level) or uncommitted shard is
+listed as a gap in the report. Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
 
 ## Overriding a value
 

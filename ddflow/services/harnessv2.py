@@ -259,10 +259,24 @@ def _membership(name: str, value: Any, field: str, vocab: frozenset, where: str)
         raise DescriptorError(f"{where}: {field} must be one of {sorted(vocab)}")
 
 
+#: The keys of `[test]` (B-ac-smoke): how the live smoke harness detects and drives the agent.
+TEST_KEYS = frozenset({"detect", "argv", "env_keys", "turn_flag", "exit_codes"})
+
+
+def _validate_test(sec: Reserved, where: str) -> None:
+    for k in sorted(set(sec.values) - TEST_KEYS):
+        raise DescriptorError(f"{where}: unknown key test.{k} (one of {sorted(TEST_KEYS)})")
+    codes = sec.values.get("exit_codes", "")
+    if any(not c.strip().isdigit() for c in codes.split(",") if codes):
+        raise DescriptorError(f"{where}: test.exit_codes is a comma list of integers")
+
+
 def validate_reserved(reserved: dict[str, Reserved], where: str) -> None:
     for name, sec in reserved.items():
         if sec.none == bool(sec.values):  # both set, or neither
             raise DescriptorError(f"{where}: [{name}] needs exactly one of none = true or values")
+    if "test" in reserved:
+        _validate_test(reserved["test"], where)
 
 
 def validate(sections: dict[str, Any], where: str) -> None:
