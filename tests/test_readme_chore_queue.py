@@ -32,6 +32,8 @@ def test_the_documented_default_skip_gates_are_the_configured_ones():
 
     text = readme_corpus()
     start = text.index("`[chore].skip_gates` is the gates a chore skips")
-    section = text[start : text.index("\n- ", start + 5)]
+    # the bullet runs to the next one, `ddflow chore approve`; both anchors are asserted to exist
+    end = text.index("- `ddflow chore approve", start)
+    section = text[start:end]
     for gate in ChoreConfig().skip_gates:
         assert gate in section, f"the default skipped gate {gate!r} is not in the documented list"
