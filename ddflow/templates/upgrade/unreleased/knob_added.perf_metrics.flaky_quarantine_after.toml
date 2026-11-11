@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.flaky_quarantine_after"
+new = "3"
+why = "Flake count of one test within flaky_window_s at which the rate view proposes a quarantine (B-sched-flaky owns the lane; PM-flaky only measures and proposes)."
+impact = "additive"

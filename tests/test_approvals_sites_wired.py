@@ -289,6 +289,30 @@ def test_an_agents_claim_force_is_not_a_bypass(proj, monkeypatch):
     assert calls and not any(calls)
 
 
+def test_an_agents_claim_approval_over_a_foreign_expired_lease_files(proj):
+    """Be62e44611e: an agent's `--approval request` over ANOTHER agent's EXPIRED lease was
+    swallowed. `claim()` only reached `_claim_by_approval` when the refusal named `--force`,
+    but the expired-lease refusal names the agent's take-over route `--approval request`
+    (`_take_over`), so the request came back with exit 3 and NOTHING filed. The request must
+    file (verb claim.force) so the operator can answer it."""
+    from ddflow.api import claim as CL
+    from ddflow.infra.log import EventLog
+
+    EventLog(proj, "seed").append(
+        "lease.acquired",
+        "T1",
+        {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
+    )
+    out = CL(proj, "T1", no_worktree=True, agent="bot", approval="request")
+    assert out.exit == 3, out.reason
+    assert "approval Q" in out.reason, out.reason
+    ask_id = _ask_id(out.reason)
+    assert asks_of(_state(proj)).get(ask_id, {}).get("verb") == "claim.force"
+    # The refusal is unchanged about the takeover it is about to ask for: the operator is
+    # approving the claim of a foreign EXPIRED lease, not a silent steal.
+    assert "EXPIRED lease from gone" in out.reason, out.reason
+
+
 def test_config_and_phase_approval_refusals_name_one_refusal(proj):
     """B-config-phase-doubled-refusing-prefix: `config --approval request` and
     `phase complete --approval request` each stacked a second 'refusing: ' onto

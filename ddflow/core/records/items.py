@@ -49,6 +49,12 @@ class Lease:
     #: claiming under ONE name are rivals only when both say which clone they are
     #: (B36aa4c8ee5).
     clone: str = ""
+    #: Globs granted OPTIMISTICALLY (DX-lease-hunk-optimistic): a live holder already
+    #: overlaps them but a clean `git merge-tree` probe said the two branches merge
+    #: cleanly, so this lease and that holder's stand together and the merge rebases the
+    #: second instead of waiting. Generated/pinned (shared) files and real conflicts are
+    #: never here.
+    optimistic: list[str] = field(default_factory=list)
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         """Past its TTL plus grace, by the clock alone. Ask `live` to decide anything: a
@@ -223,6 +229,12 @@ class Item:
     #: code does not force the full task pipeline on a docs-only item. Each glob was
     #: verified inside the item's declared globs and inside the range's changed files.
     landed_paths: list[str] = field(default_factory=list, metadata={"omit_empty": True})
+    #: `merge.reconciled`: this item's landing touched files another item changed since
+    #: this one branched, so complete is refused until the affected tests pass on the
+    #: reconciled tree (D-lease-hold-limit-r2). {} when the merge landed clean over nothing.
+    #: Holds {files, base, main, at}: `at` is the reconcile event's timestamp, so a test pass
+    #: recorded before the reconcile (a stale pre-merge run) never clears the guard.
+    reconciled: dict[str, Any] = field(default_factory=dict, metadata={"omit_empty": True})
 
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.

@@ -64,6 +64,10 @@ baseline = 0
 "ddflow/services/driverpacks.py:model_overlay_paths" = "DRV-migrate"
 "ddflow/services/driverpacks.py:load_descriptors" = "DRV-migrate"
 "ddflow/services/driverpacks.py:load_pack" = "DRV-migrate"
-# The junit-duration rollup for a gate run (PM-test-durations): the runner's pytest/junit
-# report feeds it, which the gate pipeline wires when it folds per-test durations into evidence.
-"ddflow/services/gates/runner.py:capture_test_durations" = "PM-test-durations"
+# The swarm section figures (SW-digest): pure, read-only builders a caller feeds values it
+# already read; P-operator-digest renders the section, their first consumer.
+"ddflow/services/swarm/digest.py:hedges_from" = "P-operator-digest"
+"ddflow/services/swarm/digest.py:spend_usd" = "P-operator-digest"
+# The freed-lane next-move text (LC-reuse): `ddflow lanes state` renders it for a released
+# lane; the lanes view is its first caller and lands with LC-reuse's consumer task.
+"ddflow/services/lanes/reuse.py:next_for" = "LC-reuse"

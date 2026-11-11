@@ -49,14 +49,18 @@ class TomlError(tomllib.TOMLDecodeError):
         return self.msg
 
     def __reduce__(self) -> tuple[Any, ...]:  # `args` is tomllib's (msg, doc, pos)
-        return (_rebuild_error, (self.msg, self.doc, self.pos, self.lineno, self.colno))
+        # `type(self)` -> a subclass round-trips as itself. `args` is a BaseException slot (not
+        # in `__dict__`), so it is carried to `_rebuild_error` as a plain value; `add_note` notes
+        # DO live in `__dict__` (PEP 678), so `self.__dict__.items()` carries them (not `self`).
+        return (_rebuild_error, (type(self), self.msg, tuple(self.__dict__.items()), self.args))
 
 
-def _rebuild_error(msg: str, doc: str, pos: Any, lineno: int, colno: int) -> TomlError:
-    """Unpickle a `TomlError` with everything it carried (`args` is derived from these)."""
-    err = TomlError(msg)
-    err.doc, err.pos, err.lineno, err.colno = doc, pos, lineno, colno
-    err.args = (msg, doc, pos)
+def _rebuild_error(
+    cls: type[TomlError], msg: str, items: tuple[Any, ...], args: tuple[Any, ...]
+) -> TomlError:
+    err = cls(msg)
+    err.__dict__.update(dict(items))
+    err.args = args
     return err
 
 
@@ -108,3 +112,9 @@ class TomlLibIo:
             return tomlkit.parse(text)
         except tomlkit.exceptions.ParseError as exc:  # one error family, as `loads` has
             raise TomlError(str(exc), exc) from exc  # keeps the position tomlkit found
+
+
+#: The one default adapter callers look up instead of importing `TomlLibIo` at the call
+#: site (r-swap-seam): a caller takes the port as an argument, or reads `DEFAULT` here, never
+#: reaches the adapter directly; in a test pass `FakeTomlIo`.
+DEFAULT: TomlIo = TomlLibIo()

@@ -161,6 +161,8 @@ from .operations import (
     precommit,
     relevant_tests,
 )
+from .perf import run_perf_env, run_perf_ingest, run_perf_run
+from .perfreport import run_perf_report
 from .plan import plan_apply, plan_check, plan_confirm, plan_lint
 from .probe import probe as conflict_probe
 from .records import record_resource_listing, record_resource_read
@@ -380,6 +382,10 @@ __all__ = [
     "rule_update",
     "run_docs",
     "run_metrics",
+    "run_perf_env",
+    "run_perf_ingest",
+    "run_perf_report",
+    "run_perf_run",
     "run_review",
     "session_adopt_orphans",
     "session_end",

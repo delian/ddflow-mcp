@@ -187,6 +187,12 @@ WAIT = Command(
         ),
         Param("token", default="", help="resume token from an earlier wait"),
         Param(
+            "notify",
+            default="",
+            help="how to reach this waiter when its wake fires: empty (poll ddflow wait), "
+            "`send_message:<session-id>` (harness session to resume) or `watch:<url>` (inbound URL to post to)",
+        ),
+        Param(
             "timeout",
             type="number",
             default=None,

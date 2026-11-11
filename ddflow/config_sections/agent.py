@@ -224,6 +224,7 @@ class AgentConfig:
             "agent": ["read", "claim", "note"],
             "observer": ["read"],
         },
+        operator_only=True,
         doc='Role name to the capabilities it holds: the one table every auth and approval path is to ask (serve auth, hub and scoped tokens, the approvals engine, waiver approvers: each lands as its own item and reads it through `services/actors`). A capability is any name a consumer asks for; the shipped ones are read, claim, note, start_lane (start a lane within the caps the operator sets), approve (answer any approval), approve_marked (answer only approvals marked bot-answerable), adopt, waive. "*" holds every capability. A role missing from the table, or a capability missing from its list, is refused: the table fails closed. Default: operator = ["*"], bot = read, claim, note, start_lane, approve_marked; agent = read, claim, note; observer = read. Widening a role is an operator act. Change it for the project (`ddflow config --set agent.roles ...`), for this machine (add --local), per run (DDFLOW_AGENT_ROLES, JSON only), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
         check=lambda v: (
             ""
@@ -287,6 +288,7 @@ class AgentConfig:
     )
     capability_verbs: dict[str, list[str]] = knob(
         factory=_capability_verbs,
+        operator_only=True,
         doc="Capability name (`[agent].roles`) to the verbs it allows a token holder: `gate status`, or a glob like `gate *`. Read with [agent].roles this is the per-role verb list, and it is deny by default: a verb no capability names is the operator's, whose role holds `*` (or the capability `operator`). A token is checked against it on every call; a person at a terminal with no token is not.",
         check=_verb_table,
     )

@@ -118,3 +118,12 @@ useDefault = true
   # Unmistakably filler; named per value, so a real key captured the same way still fires.
   description = "Sequential-filler example key quoted in a committed event-log critic finding"
   regexes = ['''^1234567890Abcdefghij$''']
+
+[[allowlists]]
+  # tests/test_perf_remote.py names a container fingerprint fixture `key="abcdef012345"`
+  # (sequential hex -- a machine-class digest shape, obviously filler, recycled across the
+  # four .container/.bare/.vm/.unavailable assertions). The generic-api-key rule read it as
+  # the key after the `key` keyword and failed CI on the PM-remote push. Named by value,
+  # not by digest shape or path, so a key-shaped value in the same `key=` slot still fires.
+  description = "Container fingerprint fixture in the perf-remote tests"
+  regexes = ['''^abcdef012345$''']

@@ -704,11 +704,11 @@
           person's approval.
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
-          `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
-          (never the found item's own phase, which it would hold open), carrying the
-          bug's own found scope (the files its summary names plus the tests pinning
-          them) unless `--globs` says otherwise -- and the item's inherited globs when
-          the bug names more than `named_scope_at` files -- and linked to the bug.
+          `fix-<bug id>`, tagged as a bug fix, under the found item's own OPEN phase
+          (Be8ca1270a5) instead of the standing `[bugs] phase`, carrying the bug's own
+          found scope (the files its summary names plus the tests pinning them) unless
+          `--globs` says otherwise -- and the item's inherited globs when the bug
+          names more than `named_scope_at` files -- and linked to the bug.
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
@@ -718,8 +718,9 @@
           fix task that fixes no other bug, that task is the fix and nothing new is
           filed. `false`: bugs are flat records, as before.
       bugs.phase = 'bugs'   [default]
-          The standing phase (default `bugs`) every fix task is filed under, whatever
-          item the bug names. Made on first use, with the title `Bugs`.
+          The standing phase (default `bugs`) every fix task is filed under when the
+          found item has no open phase of its own. Made on first use, with the title
+          `Bugs`.
       bugs.lint_checks = ['ruff', '(CI: Lint)', 'format', 'bandit', '(CI: Static security scan)']   [default]
           Substrings (case-insensitive) that make a CI-filed bug one with no test to
           write (a lint or static-scan check): `ddflow bug fixed <Bci-...> --lint-
@@ -2497,6 +2498,17 @@
           waiter must say so (`ddflow claim --break`), so breaking another agent's
           lease is always a deliberate, attributed act. On: any plain claim of a
           contended, idle lease breaks it.
+      lease.reconcile_tests = 'affected'   [default]
+          When this item's merge reconciled files another item changed since this one
+          branched (recorded as merge.reconciled), complete is refused until the tests
+          have passed on the reconciled tree: 'affected' runs the tests the reconciled
+          files select, 'full' the whole suite, 'off' turns the reconcile guard off.
+          D-lease-hold-limit-r2, D-gate-economy-r3. An unrecognised value in a config
+          file is warned about, reported by `doctor` and falls back to 'full', the
+          strictest (run the whole suite, never the narrower affected set); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       lease.inbox_max_chars = 2000   [default]
           Longest message a lane's inbox (`ddflow session message`) keeps, in
           characters; the rest is cut and marked. Messages are untrusted text shown to
@@ -2562,9 +2574,11 @@
       lease.scan_view_trees_max = 16   [default]
           The most worktrees a read-only view (`status`, `brief`) measures for the
           recovery report. Each measured tree is a `git status` process, so a log with
-          126 stale leases made `status` spawn hundreds; a tree beyond the cap is
-          reported as NOT MEASURED -- treated as holding work, never as clean -- and
-          `ddflow recover` always measures every one. 0 measures none in a view.
+          126 stale leases made `status` spawn hundreds; the trees are ranked by their
+          unmerged-commit signal first, and a tree beyond the cap is still treated as
+          holding work by `recover` and `status` (never as clean) while the brief
+          counts it quietly -- `ddflow recover` always measures every one. 0 measures
+          none in a view.
       lease.scan_view_verdicts_max = 0   [default]
           The most merged-but-unfinished items for which a read-only view (`status`,
           `brief`) weighs the full completion (what `complete` would still want),
@@ -2710,6 +2724,19 @@
           (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe
           fall back to a scratch merge in a throwaway worktree, slower and the same
           answer.
+      locks.optimistic = False   [default]
+          Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's
+          globs overlap a live holder's on a non-generated file, run the `git merge-
+          tree` conflict probe between the holder's branch and the claimant's branch.
+          A clean merge conflates the two branches' disjoint hunks, so the claim is
+          GRANTED and the overlapping files are recorded `optimistic` on the lease
+          (the merge then rebases, re-running pin regeneration, instead of waiting); a
+          real conflict or a probe that could not run keeps the exclusive-lease
+          refusal (D-lease-overlap-only-by-break). Generated/pinned files
+          ([lease].shared_globs, append-only and export targets) stay exclusive. Off
+          (default) keeps the plain refusal. Change it for the project (`ddflow config
+          locks.optimistic ...`), for this machine (add --local), per run
+          (DDFLOW_LOCKS_OPTIMISTIC), or over MCP with `ddflow_configure`.
       locks.review_reuse = 'off'   [default]
           Whether a recorded review may be REUSED after the tree it covered moved
           (main merged in or a rebase) instead of running it whole (LK-review-reuse).
@@ -3328,6 +3355,16 @@
       perf_metrics.prop_retire_payback = 2.0   [default]
           The multiple of what a stage buys back that its wait must reach before a
           retire-stage proposal fires (PM-prop-flow).
+      perf_metrics.report_default_window = '28d'   [default]
+          The time window a perf report measures when none is given: a duration back
+          (7d, 12h) or a date YYYY-MM-DD (parse_since).
+      perf_metrics.report_max_rows = 20   [default]
+          Most rows the perf report's text/markdown renderer shows per section; the
+          cut line names the omitted count and says the json holds every row (PM-
+          report-surfaces).
+      perf_metrics.report_width = 76   [default]
+          The width in characters the perf report's text/markdown renderer keeps every
+          line within (terminal and chat alike).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
@@ -4201,6 +4238,11 @@
           The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is
           flagged `burning`: the budget is on track to be spent within this horizon.
           The report only flags; it never refuses (r-safe-by-default).
+      store.stale_index_days = 7.0   [default]
+          How long an index built by OTHER code (a different fingerprint, or the pre-
+          fingerprint `index.db`) is kept after its last write before a rebuild
+          garbage-collects it. Worktrees on different ddflow versions each keep their
+          own index meanwhile (D-compat).
       swarm.w_critical = 3.0   [default]
           Weight of the critical-path term in the dispatch score: an item on the
           longest dependency chain is offered before one with slack. Zero ignores the
@@ -4498,6 +4540,19 @@
           installing to the operator); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      upstream_gh.error_max = 400   [default]
+          Characters of a `gh` error message kept when an `Unavailable`/`GhError` is
+          raised (`str(exc)[:error_max]`), so a failure report never outgrows a log
+          line before the caller redacts it.
+      wait.max_call_seconds = 240   [default]
+          Longest ONE `ddflow wait` (or `watch`) call blocks before it returns a
+          still-waiting result the caller re-invokes, so a single call never outlives
+          this bound and the caller's heartbeat rides on the next call (D-TE-Q3: the
+          240 s cap applies always, not only as fallback). A 5-minute subagent prompt
+          cache stays warm under it, and ten minutes waited as one call costs ~4x
+          three short calls. `[lease].wait_cap_s` is the hard ceiling that sits below
+          the client's idle abort; whichever is shorter wins, and a caller's own
+          `--max-s` can still shorten a call (never lengthen it past this cap).
       waves.auto_stamp = True   [default]
           Keep the derived `wave:N` tags (wave 0 = no open prerequisite, task-level or
           inherited; wave N = 1 + the highest wave among open prerequisites) current
@@ -4561,6 +4616,16 @@
           The time of the last sweep is a local stamp (`.ddflow/local/sweep-
           finished.last`); losing it only brings the next sweep forward. 0 sweeps on
           every brief, as before.
+      worktree.stash_retries = 4   [default]
+          How many times a real merge into a tree with uncommitted tracked work is
+          retried when git reports a transient pre-merge failure that merged nothing
+          (`fatal: stash failed`, or a lost `MERGE_MSG` read -- B-merge-stash-failed-
+          transient). Each retry is the identical command; a merge already begun is
+          never repeated.
+      worktree.stash_retry_pause_s = 0.25   [default]
+          The first pause (seconds) before retrying a transient pre-merge failure that
+          merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read); the nth
+          retry pauses `stash_retry_pause_s * 2**n` (B-merge-stash-failed-transient).
       worktree.max_parallel = 0   [default]
           Ceiling on simultaneously active task worktrees. Guards disk and CPU; the
           scheduler queues beyond it rather than refusing. 0 (the default) means

@@ -681,13 +681,17 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'. With `--phase`, ready upstream blocking-dependencies are included by default (labelled); `--phase-only` restores the in-phase-only slice.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "phase": {
           "type": "string",
-          "description": "Restrict to one phase (the 'implement phase X' entry point)."
+          "description": "Restrict to one phase (the 'implement phase X' entry point). By default the phase's ready blocking-dependencies are also returned, each labelled `blocking_dependency`; `phase_only=true` hides them."
+         },
+         "phase_only": {
+          "type": "boolean",
+          "description": "With `--phase`: return the phase's own ready items only, hiding the ready upstream blocking-dependencies shown by default."
          },
          "kind": {
           "type": "string",
@@ -1163,13 +1167,13 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, digest, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, paths, perf, digest, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "op": {
           "type": "string",
-          "description": "queue: add|run|status (default)|remove."
+          "description": "queue: add|run|status (default)|remove. perf: env (the fingerprint), run (measure a command), ingest (accept a sample line) or report (the performance report)."
          },
          "id": {
           "type": "string",
@@ -1213,7 +1217,7 @@
          },
          "out": {
           "type": "string",
-          "description": "Directory for the generated views (default: docs/ddflow)."
+          "description": "with action=report and format svg/html: the file to write (default .ddflow/local/perf/reports/)."
          },
          "show": {
           "type": "string",
@@ -1325,7 +1329,7 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch."
          },
          "lane": {
           "type": "string",
@@ -1355,6 +1359,26 @@
           "type": "boolean",
           "description": "With interfaces: print the ratchet baseline text instead of the report."
          },
+         "cmd": {
+          "type": "string",
+          "description": "with action=run: the command to measure. CLI: `ddflow perf run --cmd 'pytest -q'`."
+         },
+         "line": {
+          "type": "string",
+          "description": "with action=ingest: the wrapper's one JSON line to accept."
+         },
+         "window": {
+          "type": "string",
+          "description": "with action=report: the time window, a duration back (7d, 12h) or a date YYYY-MM-DD."
+         },
+         "filters": {
+          "type": "string",
+          "description": "with action=report: comma-separated report filters; only phase=<id>."
+         },
+         "format": {
+          "type": "string",
+          "description": "with action=report: text (default), md, json, svg or html."
+         },
          "ask": {
           "type": "string",
           "description": "One entry id (kind:key) to render alone, as the ask to put to the person."
@@ -1382,6 +1406,8 @@
            "docs",
            "archdeps",
            "vigil",
+           "paths",
+           "perf",
            "digest",
            "waves"
           ],

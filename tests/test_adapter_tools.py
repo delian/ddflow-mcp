@@ -224,6 +224,13 @@ def test_precommit_parser_names_each_failed_hook():
     assert all(f.tool == "pre-commit" and f.severity == "error" for f in got)
 
 
+def test_precommit_names_a_failed_hook_whose_name_leaves_only_two_pad_dots():
+    # A long hook name eats the pad to the terminal width, so only two dots separate it from
+    # the state; two dots must still read as a result (B-ADP-tools-checks).
+    line = "x" * 72 + "..Failed"
+    assert [f.rule for f in TP.PARSERS["pre-commit"]("pre-commit", line)] == ["x" * 72]
+
+
 def test_the_normalized_parser_reads_its_own_shape_and_refuses_others():
     rows = [{"rule": "r1", "severity": "low", "file": "f", "line": 2, "advisory": "CVE-1"}]
     got = TP.PARSERS["normalized"]("t", json.dumps(rows))
@@ -401,6 +408,33 @@ def test_a_pin_that_could_not_be_checked_is_not_usable():
 
     assert not ToolProbe("t", True, "", "1.0", None).usable
     assert ToolProbe("t", True, "", "", None).usable
+
+
+def test_a_pinned_tool_retries_a_probe_that_did_not_succeed():
+    # A transient probe (timeout) is not cached: the next pinned run probes again instead of
+    # freezing `unavailable` across runs (B-ADP-tools-checks).
+    sc = Script(gone(TIMEOUT, "probe timed out"), ok("8.30.1"), ok("[]"))
+    t = T.tool("gitleaks", sc, pin="8.30.1")
+    assert t.run().status == UNAVAILABLE  # probes once, times out
+    assert len(sc.calls) == 1
+    assert t.run().status == CLEAN  # probes AGAIN, now good, then scans
+    assert len(sc.calls) == 3  # probe + scan of the second run
+
+
+def test_a_pinned_tool_reprobes_so_a_downgraded_binary_is_caught():
+    # A probe that once succeeded is not cached against a pin a later binary no longer meets:
+    # the next pinned run probes again and reads the now-out-of-date version (B-ADP-tools-checks).
+    sc = Script(ok("8.30.1"), ok("[]"), ok("8.1.0"))
+    t = T.tool("gitleaks", sc, pin="8.30.1")
+    assert t.run().status == CLEAN  # probes 8.30.1, scans clean
+    assert len(sc.calls) == 2
+    down = t.run()  # probes 8.1.0, refuses the scan
+    assert down.status == UNAVAILABLE
+    assert len(sc.calls) == 3  # probe only, no scan
+    # the third call is a PROBE of the version, not the scan: under the old cache it is the
+    # scan argv and this assertion fails (the run is then refused for a parse error, not the pin)
+    assert sc.calls[2][0] == list(T.SPECS["gitleaks"].version_argv)
+    assert "older than the pinned" in down.reason
 
 
 def test_a_bad_version_regex_is_refused_when_the_row_is_read():

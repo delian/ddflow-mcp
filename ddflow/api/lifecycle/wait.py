@@ -32,7 +32,15 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
+from .wait_approval import (
+    _bounded,
+    _call_cap,
+    _keep_alive,
+    _note_cap,
+    _poll,
+    _wait_approval,
+    _wait_job,
+)
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -53,6 +61,32 @@ def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) ->
         "waiting_on": [other_id],
         "blocked": [plain(Blocked(it.id, "conflict", detail, [other_id]))],
     }
+
+
+def _overlap_note(st, cfg, me: str, it, kind: str, now: float, repo: Path | None) -> str:
+    """The `globs overlap X offered in this plan` detail `next --phase <its phase>` reports
+    for ``it``, or "". `claim` of a named item ignores the offered-overlap, so
+    `_claim_blocker` alone calls it claimable; the plan scoped to the item's own phase is
+    the part of `next`'s answer a named claim does not reflect."""
+    if repo is None:
+        return ""
+    p = plan_for(
+        repo,
+        EventLog(repo, me, log_cfg=cfg.log),
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=it.parent or "",
+        agent=me,
+        now=now,
+    )
+    if it.id not in p.overlapped:
+        return ""
+    for b in p.blocked:
+        if b.item == it.id and b.reason == "conflict" and "offered in this plan" in b.detail:
+            return b.detail
+    return ""
 
 
 def _judge_wait(
@@ -95,6 +129,11 @@ def _judge_wait(
         return _judge_held(st, cfg, it, me, now, globs, out)
     b = _claim_blocker(st, cfg, it, me, live, now, globs=globs, repo=repo)
     if b is None:
+        # A NAMED claim of the item ignores the plan's offered-overlap, so the claim will
+        # succeed and READY stays truthful; `next` withholds it when it overlaps an item
+        # offered in the same plan. Name both (B-wait-ready-contradicts-next-blocked):
+        # READY, plus the plan-level conflict `next` would report.
+        out["note"] = _overlap_note(st, cfg, me, it, kind, now, repo)
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
     if b.reason == "expired":
@@ -196,7 +235,17 @@ def _ready_advice(v: dict[str, Any], lease: str) -> str:
     """What to do on waking: claim the item, or (waiting on a lease) go on."""
     if lease:
         return f"{lease} is free of other agents' leases: claim what you need now."
-    return f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same release woke too."
+    ready = v["ready"][0]
+    if v.get("note"):
+        # A named claim of an offer-overlapped item still succeeds (it ignores the plan's
+        # overlap), so READY holds; `next` would call it blocked. Lead with that, or the
+        # wake still reads as an order to claim what `next` withholds (B-wait-ready-
+        # contradicts-next-blocked).
+        return (
+            f"`ddflow claim {ready}` would now succeed, but `next` withholds {ready} as "
+            f"{v['note']}; claim it only if you intend to take that item's place."
+        )
+    return f"`ddflow claim {ready}` now: anyone else waiting on the same release woke too."
 
 
 def _judge_any(
@@ -496,7 +545,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
         return args
     item, phase, kind, lease, want, notify, resume, poll, empty = args
     log, cfg, st = _load(repo, agent)
-    timeout, capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
+    timeout, capped = _bounded(timeout_s, max_s, _call_cap(cfg))
     found = (
         _require(st, item, "wait", cfg.lease.grace_s, log.clone_id(create=False)) if item else None
     )
@@ -527,7 +576,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     ):
         return result(v, 0.0, [])
 
-    _note_cap(say, capped, resume, cfg.lease.wait_cap_s)
+    _note_cap(say, capped, resume, _call_cap(cfg))
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`

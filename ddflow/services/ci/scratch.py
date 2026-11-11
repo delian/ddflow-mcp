@@ -8,7 +8,6 @@ merged in, removed on exit.
 from __future__ import annotations
 
 import os
-import shutil
 import signal
 import sys
 import time
@@ -71,7 +70,7 @@ def _remove_scratch(repo: Path, tree: Path) -> None:
     this handler is the only cleanup there is. Never raises: a removal that fails leaves
     the tree for `cleanup` to name and prune."""
     W.git(repo, "worktree", "remove", "--force", str(tree))
-    shutil.rmtree(tree, ignore_errors=True)
+    fsio.rmtree_owned(tree)
     W.git(repo, "worktree", "prune")
 
 

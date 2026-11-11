@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_gate_p90_s"
+new = "300.0"
+why = "The gate-latency target: the p90 wall seconds one gate run may take"
+impact = "additive"

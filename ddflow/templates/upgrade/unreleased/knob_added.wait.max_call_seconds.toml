@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "wait.max_call_seconds"
+new = "240"
+why = "Longest ONE `ddflow wait`/`watch` call blocks before returning a still-waiting result the caller re-invokes (D-TE-Q3), so a 5-minute subagent prompt cache stays warm and the waiter's heartbeat rides on the next call."
+impact = "additive"

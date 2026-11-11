@@ -19,7 +19,7 @@ def sync(wt: Worktree, cfg: Config) -> G.GitResult:
     performs a checkout. The reverse (checking out base to update it) is what kills
     live sessions.
     """
-    return _merge_retrying_stash(wt.path, ["merge", "--no-edit", wt.base])
+    return _merge_retrying_stash(wt.path, ["merge", "--no-edit", wt.base], cfg)
 
 
 def behind(wt: Worktree) -> int:

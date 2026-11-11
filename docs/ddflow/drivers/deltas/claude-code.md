@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.10 fmt=1 sha=58addbb00420 -->
+<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.10 fmt=1 sha=0be24948b488 -->
 # Delta: Claude Code
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -42,6 +42,10 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    every dispatch — a reviewer must never inherit the author's model. Map the
    `tier:fast|balanced|deep` hint `ddflow next --json` emits to the dispatched model;
    route reviews to a *different family*, and the merge decision to a frontier model.
+   Launch with `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h` in the environment (or
+   `subagentPromptCacheTtl` in `.claude/settings.json`) so a subagent that waits past the
+   5-minute default reuses its prompt cache instead of re-writing it (TE-subagent-ttl);
+   `ddflow doctor` warns while it is still 5m.
 4. **Asking the operator.** `AskUserQuestion`.
 5. **File references.** `@path`.
 6. **Rules files.** Keep `CLAUDE.md` pointing at the canonical driver rather than

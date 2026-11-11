@@ -95,6 +95,16 @@
    },
    "v": 1
   },
+  "branch.synced": {
+   "fields": {
+    "base_sha": ["str"],
+    "commits": ["list"],
+    "gates_stale": ["list"],
+    "gates_valid": ["list"],
+    "relevant": ["int"]
+   },
+   "v": 1
+  },
   "bug.fixed": {
    "fields": {
     "changelog": ["dict"],

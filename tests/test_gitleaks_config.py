@@ -78,7 +78,7 @@ def test_a_decision_id_after_a_token_named_id_is_not_a_secret(tmp_path):
     # name holds the word "auth-token"; the generic-api-key rule reads _DECISION_ID as the
     # secret after that keyword. The allowlist names that exact value.
     token_named = "D-auth" + "-token" + "-defaults"
-    body = '{"body":"decisions ' + token_named + ', ' + _DECISION_ID + '"}\n'
+    body = '{"body":"decisions ' + token_named + ", " + _DECISION_ID + '"}\n'
     assert _scan(tmp_path, body) == 0
 
 
@@ -89,7 +89,7 @@ def test_a_credential_lookalike_after_a_token_named_id_still_fires(tmp_path):
     # Only that one decision id is allowlisted, not a dash shape: a credential-shaped value
     # in its place still fires, so a broad shape allowlist cannot regress in unnoticed.
     token_named = "D-auth" + "-token" + "-defaults"
-    body = '{"body":"decisions ' + token_named + ', ' + _LOOKALIKE + '"}\n'
+    body = '{"body":"decisions ' + token_named + ", " + _LOOKALIKE + '"}\n'
     assert _scan_committed(tmp_path, ".ddflow/events/padapt2.jsonl", body) != 0
 
 
@@ -208,3 +208,21 @@ def test_a_fake_sk_fixture_is_allowlisted_only_by_value(tmp_path):
     assert _scan(tmp_path, 'SECRET = "sk-test-0123456789abcdef"\n') == 0
     variant = "sk-test-" + "0123456789abcdeX"
     assert _scan(tmp_path, 'SECRET = "' + variant + '"\n') != 0
+
+
+# Built from pieces so the repository's own scan does not read the fixture literal out of
+# this file: the value is allowlisted by its exact value, not a digest shape, so a real
+# key-shaped value in the same `key=` slot must still fire.
+_FINGERPRINT = "ab" + "cdef" + "012345"
+
+
+def test_a_container_fingerprint_fixture_is_allowlisted_only_by_value(tmp_path):
+    # Bug Bci-gitleaks-over-the-pushed-commi-858efc87b3: tests/test_perf_remote.py names a
+    # container fingerprint fixture `key="abcdef012345"` (sequential hex, a machine-class
+    # digest shape, obviously filler); the generic-api-key rule read it as the key after the
+    # `key` keyword and failed CI on the PM-remote push. The allowlist names exactly that
+    # value, so the fixture scans clean while another key-shaped value in the same slot
+    # still fires.
+    assert _scan(tmp_path, 'key = "' + _FINGERPRINT + '"\n') == 0
+    variant = "0123456789" + "abcdef"
+    assert _scan(tmp_path, 'key = "' + variant + '"\n') != 0

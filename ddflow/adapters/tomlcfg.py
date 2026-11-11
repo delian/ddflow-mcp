@@ -16,7 +16,8 @@ class Toml(Protocol):
     """The one TOML overlay loader and the one write-back that keeps comments and layout.
 
     Home: `ddflow.adapters.tomlcfg` (compat re-export `ddflow.infra.tomlcfg`). Single
-    adapter; the `tomlkit` extra is imported here alone.
+    adapter; the raw `tomllib`/`tomlkit` I/O it builds on is `ddflow.adapters.toml.TomlIo`
+    (the one place those modules are imported).
     """
 
     def overlay_table(self, *args: Any, **kwargs: Any) -> Any:

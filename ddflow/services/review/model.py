@@ -176,6 +176,11 @@ class Finding:
     #: peer-findings).
     reviewer: str = ""
     family: str = ""
+    #: Non-empty when this is not a finding at all -- a location field holding the reviewer
+    #: thinking aloud instead of a citation -- so the gate records it for the operator but
+    #: does not count it against the outcome (B-review-finding-is-unfinished-reasoning). The
+    #: paragraph is not classified (that half of the bug is deliberately out of scope).
+    malformed: str = ""
 
 
 #: A reply or transport error that says the REVIEWER's own quota/exhaustion wall was hit --
@@ -318,6 +323,10 @@ def blocking_findings(
     -- an earlier below-floor finding the author neither fixed nor answered keeps blocking
     (bug B-floor-passes-repeated-untriaged-nit).
     """
+    # A malformed finding (marked at parse time) is recorded but never counts: it is the
+    # reviewer's reasoning, not a defect, so no round blocks on it and no later delta is
+    # held open by it (B-review-finding-is-unfinished-reasoning).
+    findings = [f for f in findings if not getattr(f, "malformed", "")]
     if not converged:
         return list(findings)
     limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
@@ -414,6 +423,7 @@ class ReviewResult:
                     "detail": f.detail[:FINDING_DETAIL_KEPT],
                     "reviewer": f.reviewer,
                     "family": f.family,
+                    "malformed": f.malformed,
                 }
                 for f in self.findings
             ],

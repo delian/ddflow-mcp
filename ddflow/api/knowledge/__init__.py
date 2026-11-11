@@ -39,6 +39,7 @@ from .bugs import (  # noqa: F401
     bug_file_tasks,
     bug_found,
     finish_bug_list,
+    missing_loud,
     severity_rank,
     upstream_offer,
 )

@@ -13,6 +13,9 @@ from ...core import clock
 from ...core.events import Event
 from ...core.metrics import VIEWS
 from ...core.model import State
+from .batch import build as batch_build
+from .batch import has_figures as batch_ok
+from .batch import text as batch_text
 from .facts import collect
 from .forecast import forecast as forecast_view
 from .grid import sample as grid_sample
@@ -21,6 +24,9 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .path_variants import build as variants_build
+from .path_variants import has_figures as variants_ok
+from .path_variants import text as variants_text
 from .paths import build as paths_build
 from .paths import has_figures as paths_ok
 from .paths import text as paths_text
@@ -112,6 +118,10 @@ def _paths(ctx: Context) -> Answer:
     return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
 
 
+def _variants(ctx: Context) -> Answer:
+    return _figure(ctx, variants_build, variants_ok, variants_text, "figure")
+
+
 def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
     """The ``retro`` view: one item's timeline, refused without an id or a known item."""
     if not item:
@@ -131,7 +141,7 @@ def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None
     return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
-def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
+def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
     events: Sequence[Event],
     state: State,
     cfg: Config,
@@ -170,6 +180,8 @@ def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Ser
         return _tiny(ctx)
     if view == "paths":
         return _paths(ctx)
+    if view == "variants":
+        return _variants(ctx)
     if view == "slo":
         return _figure(ctx, slo_assess, slo_ok, slo_text, "service-level indicator")
     if view == "skips":
@@ -177,6 +189,8 @@ def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Ser
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
         return _lanes(events, cfg, now, floor)
+    if view == "batch":
+        return _figure(ctx, batch_build, batch_ok, batch_text, "size bucket")
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

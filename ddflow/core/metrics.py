@@ -18,6 +18,8 @@ VIEWS: tuple[str, ...] = (
     "locks",
     "tiny",
     "paths",
+    "variants",
     "swarm",
     "slo",
+    "batch",
 )
