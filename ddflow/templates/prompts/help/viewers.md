@@ -2,7 +2,7 @@
 
 Read the project through these commands, not by opening `.ddflow/events/*.jsonl`: the log is
 many shards in Lamport order and only ddflow folds it correctly. Every viewer is read-only,
-prints one line per record, and takes `--json`.
+prints one line per record (`show` prints the whole record) and takes `--json`.
 
     ddflow task list --phase P2 --state open     tasks (id, state, title, owner, date), newest change first
     ddflow phase list                            phases with done/total task counts
@@ -19,7 +19,7 @@ is who you are), `--since` (ISO date), `--limit` (default 50; 0 is the 1000 maxi
 `--offset` (paging). A kind offers only the filters it has data for, so `bug list --tag x` is
 an error, not "everything". A cut list says how many matched and the `--offset` of the next page.
 
-Exit codes: 0 rows, 2 nothing matched (the message names the filters), 3 a refused value such
+Exit codes: 0 = at least one row was listed, 2 = nothing matched (the message names the filters), 3 a refused value such
 as an unknown `--phase`.
 
 Over MCP these are one tool, `ddflow_list`, with `kind` = `task | phase | bug | research |
