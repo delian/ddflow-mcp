@@ -9,6 +9,7 @@ must read ONE note back by id.
 from __future__ import annotations
 
 import argparse
+import json
 
 from ddflow.surfaces.cli import build_parser
 from tests._cli_helpers import run_cli
@@ -85,3 +86,26 @@ def test_research_list_refuses_a_stray_positional_id(repo):
     code, _, err = run_cli(repo, "research", "list", "R1")
     assert code != 0, err
     assert "research show" in err
+
+
+def test_research_list_json_tags_its_schema_as_list(repo):
+    """B33b1871f7b: `research list --json` tagged `research_add@1` (the verb-less form);
+    it must tag `list@1`, the schema of `ddflow_list`, like `task list`."""
+    run_cli(repo, "init")
+    run_cli(
+        repo, "research", "add", "--id", "R1", "--question", "q one", "--verdict", "THEORETICAL"
+    )
+    code, out, err = run_cli(repo, "research", "list", "--json")
+    assert code == 0, err
+    assert json.loads(out)["schema"] == "list@1"
+
+
+def test_research_show_json_tags_its_schema_as_show(repo):
+    """B33b1871f7b: `research show --json` must tag `show@1`, the schema of `ddflow_show`."""
+    run_cli(repo, "init")
+    run_cli(
+        repo, "research", "add", "--id", "R1", "--question", "q one", "--verdict", "THEORETICAL"
+    )
+    code, out, err = run_cli(repo, "research", "show", "R1", "--json")
+    assert code == 0, err
+    assert json.loads(out)["schema"] == "show@1"
