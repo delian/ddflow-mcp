@@ -4736,6 +4736,16 @@ nothing. `ddflow doctor` notes the rule files that disagree with the log; the pr
 (`[enforce].generated_views`, with the other generated views) refuses a staged rule file the log does not say,
 naming `ddflow rule sync`; and `ddflow replay --out DIR` writes `rules/<id>.toml` rebuilt from the log alone.
 
+`ddflow rule inventory` (MCP `ddflow_view` with `action=rules_inventory`, tool name `ddflow_rule_inventory`) is a
+read-only census of every agent's own rule, cross-agent (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, ...) and slash-command
+files, read from the harness descriptors and `adopt.NATIVE_RULES`. A project's own rules bind only the agent whose
+surface they live in, so per file it says which agents load it and when (`always`, `by path` from `globs`/`paths`/
+`applyTo` frontmatter, or `on request`); per agent, the always-loaded bytes and an approximate token count (bytes / 4,
+labelled approximate); and, as notes naming the file, rules that restate a workflow ddflow owns (a todo list, issue
+logging, a branch lifecycle, a lessons file). ddflow never edits those files: resolving a conflict is the operator's.
+A doctor note (`services.rulesinv.doctor_note`) is due only when an adopted agent sees none of the project rule files
+another adopted agent sees. `services.rulesinv.parse_frontmatter` and `scan_rule_files` are the shared readers.
+
 ### Applying an upgrade
 
 `ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists

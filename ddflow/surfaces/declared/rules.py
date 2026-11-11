@@ -161,6 +161,31 @@ def _rule_edit(repo, a, agent):
     )
 
 
+def _inventory(out, a) -> str:
+    d = out.data
+    lines = [
+        f"{r['path']}  [{r['kind']}] {r['load']}  {r['bytes']}B  <- {', '.join(r['loaded_by'])}"
+        for r in d.get("rows", [])
+    ]
+    for agent, v in d.get("agents", {}).items():
+        lines.append(
+            f"{agent}{' (adopted)' if v['adopted'] else ''}: always-loaded {v['always_bytes']}B "
+            f"(~{v['always_tokens_approx']} tokens)"
+        )
+    if d.get("agents"):
+        lines.append(f"tokens are {d.get('tokens_note', 'approximate')}")
+    lines += [f"note: {n['text']}" for n in d.get("notes", [])]
+    if d.get("doctor_note"):
+        lines.append(f"note: {d['doctor_note']}")
+    return "\n".join(lines) or "no rule files found"
+
+
+def _rule_inventory(repo, a, agent):
+    from ...api.rulesinv import rule_inventory
+
+    return rule_inventory(repo, agent=agent)
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "add"),
@@ -381,6 +406,23 @@ COMMANDS: tuple[Command, ...] = (
             Param("id", help="Rule id to remove.", cli_help="", positional=True),
             Param("reason", help="", mcp_only=True),
         ),
+    ),
+    Command(
+        path=("rule", "inventory"),
+        summary="every agent's rule and command files: who loads what, always-loaded cost, restated workflow",
+        tool="ddflow_rule_inventory",
+        family="ddflow_view",
+        action="rules_inventory",
+        tier="all",
+        help_group="view",
+        render=_inventory,
+        description="Read-only inventory of the native rule, cross-agent and command files: per "
+        "file which agents load it and when (always / by path / on request), per agent the "
+        "always-loaded bytes and approximate tokens, and rules restating ddflow-owned workflow "
+        "as notes. Nothing is edited.",
+        call=_rule_inventory,
+        payload=("rows", "count", "agents", "adopted", "notes", "doctor_note", "tokens_note"),
+        params=(),
     ),
     Command(
         path=("rule", "sync"),
