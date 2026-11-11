@@ -9,18 +9,15 @@ never refuses a commit. radon is a dev dependency; without it nothing is said (a
 is claimed clean).
 
 radon is imported only in `ddflow.adapters.complexity` (the `extras-one-adapter` contract);
-`complexities` there is re-exported here so `risen` reads through one function.
-
-Accepted limitation (operator-reviewed): a function name defined more than once in one file
-(under `if`/`else`) is paired with HEAD by order (`f`, `f#2`). When a definition is added or
-removed the pairing can be wrong, so the note may miss a rise or add a warning. Advisory only.
+``cc_visit`` and ``_complexities`` are re-exported here, so ``complexities`` reads one
+function. A test that must stand in for radon re-points ``cc_visit`` on THIS module.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from ..adapters.complexity import complexities
+from ..adapters.complexity import _complexities, cc_visit
 
 __all__ = ["GRADE_D_FROM", "GUARD", "SHOWN", "advice", "complexities", "risen"]
 
@@ -28,6 +25,11 @@ __all__ = ["GRADE_D_FROM", "GUARD", "SHOWN", "advice", "complexities", "risen"]
 GRADE_D_FROM = 21
 SHOWN = 5
 GUARD = "tests/test_architecture_guards.py"
+
+
+def complexities(source: bytes | None) -> dict[str, tuple[int, int]]:
+    """``{qualified function name: (line, complexity)}``; empty when radon is missing."""
+    return _complexities(source, cc_visit)
 
 
 def risen(

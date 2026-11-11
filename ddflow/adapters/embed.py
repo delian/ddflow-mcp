@@ -1,4 +1,4 @@
-"""The `Embedder` port and its default adapter: texts to vectors via model2vec.
+"""The `Embed` port and its default adapter: texts to vectors via model2vec.
 
 The ONE home for model2vec (the ``extras-one-adapter`` contract): nothing else imports
 ``model2vec``; ``ddflow/services/embed.py`` (the semantic port, D-unify 2) reads through this
@@ -15,7 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from .ports import port
 
-__all__ = ["DEFAULT", "Embedder", "Model2VecEmbedder", "default_embedder", "static_model"]
+__all__ = ["DEFAULT", "Embed", "Model2VecEmbedder", "default_embedder", "static_model"]
 
 
 def static_model() -> type | None:
@@ -33,8 +33,8 @@ def static_model() -> type | None:
 
 @port
 @runtime_checkable
-class Embedder(Protocol):
-    """Text to vectors. Home: `ddflow.adapters.embed` (`Model2VecEmbedder`); fake `FakeEmbedder`."""
+class Embed(Protocol):
+    """Text to vectors. Home: `ddflow.adapters.embed` (`Model2VecEmbedder`); fake `FakeEmbed`."""
 
     def embed(self, model_dir: str, texts: Sequence[str]) -> tuple[tuple[float, ...], ...]:
         """One vector per text, in order, from the model2vec model at ``model_dir``."""
@@ -51,7 +51,7 @@ class Model2VecEmbedder:
         return tuple(tuple(float(x) for x in row) for row in encoded)
 
 
-#: The one stateless instance callers default to; a test passes `FakeEmbedder` instead.
+#: The one stateless instance callers default to; a test passes `FakeEmbed` instead.
 DEFAULT = Model2VecEmbedder()
 
 
