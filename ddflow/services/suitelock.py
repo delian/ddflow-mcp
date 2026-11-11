@@ -96,6 +96,29 @@ def _holders(directory: Path, limit: int) -> dict[str, Any]:
     return min(notes, key=lambda n: n.get("at", 0), default={})
 
 
+def running(
+    cfg: Any, directory: Path | str | None = None, now: float | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    """(the suites running now, the waiters queued), read-only: one dict per held slot (holder,
+    pid, at, slot, age_s), oldest first, and the count of tickets that beat within
+    ``[ci].suite_queue_stale_s``. Nothing is created or removed (a dead ticket is not swept)."""
+    directory = Path(directory) if directory else state_dir()
+    at = CLOCK.wall() if now is None else now
+    rows: list[dict[str, Any]] = []
+    for i in range(max(1, int(cfg.ci.max_concurrent_suites))):
+        if not _held(directory, i):
+            continue
+        with contextlib.suppress(OSError, ValueError):
+            note = json.loads(_note(directory, i).read_text())
+            rows.append({**note, "slot": i, "age_s": max(0, int(at - float(note.get("at", at))))})
+    queued = 0
+    stale = float(cfg.ci.suite_queue_stale_s)
+    for path in (directory / QUEUE).glob("*.ticket"):
+        with contextlib.suppress(OSError):
+            queued += at - path.stat().st_mtime <= stale
+    return sorted(rows, key=lambda n: n.get("at", 0)), queued
+
+
 # -- the queue --------------------------------------------------------------------------
 
 

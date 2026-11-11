@@ -31,7 +31,11 @@ COMMANDS: tuple[Command, ...] = (
             "asks. Never starts or stops an agent. Exit 2: nothing to show."
         ),
         call=lambda repo, a, agent: _api().lanes(
-            repo, view=a.get("view") or "state", lane=a.get("lane") or "", agent=agent
+            repo,
+            view="coordinator" if a.get("coordinator") else (a.get("view") or "state"),
+            lane=a.get("lane") or "",
+            item=a.get("item") or "",
+            agent=agent,
         ),
         payload=(
             "view",
@@ -45,6 +49,7 @@ COMMANDS: tuple[Command, ...] = (
             "fleet",
             "fleet_total",
             "resume",
+            "coordinator",
         ),
         render=_text,
         params=(
@@ -54,7 +59,7 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="state (default), brief <lane>, advise, lead, fleet, resume <lane> or approve <template>",
                 positional=True,
                 nargs="?",
-                choices=("state", "brief", "advise", "fleet", "resume", "lead", "approve"),
+                choices=("state", "brief", "advise", "fleet", "resume", "lead", "approve", "coordinator"),
                 default=None,
             ),
             Param(
@@ -64,6 +69,18 @@ COMMANDS: tuple[Command, ...] = (
                 positional=True,
                 nargs="?",
                 default=None,
+            ),
+            Param(
+                "coordinator",
+                type="boolean",
+                help="The coordinator's screen: running suites, lease holders (idle ones flagged), pending approvals, ready work per phase and, with item, a blocked-by chain.",
+                cli_help="the coordinator's screen: suites, lease holders, pending approvals, ready work per phase",
+            ),
+            Param(
+                "item",
+                help="With coordinator: an item whose blocked-by chain to show.",
+                cli_help="with --coordinator: an item whose blocked-by chain to show",
+                default="",
             ),
             Param(
                 "watch",
