@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import run_cli
 from helpers import git_raw as _git
 
 from ddflow.services import review as R
@@ -99,3 +100,29 @@ def test_known_gap_a_stash_drop_alone_is_not_seen(tmp_path):
     before = git_state(repo)
     _git(repo, "stash", "drop", "-q")
     assert git_state(repo) == before
+
+
+def test_api_review_runs_the_command_reviewer_in_the_items_worktree(repo, tmp_path):
+    """The api threads the item's tree to the reviewer (run.py passes tree=), so a command
+    reviewer's cwd is the claimed item's own worktree, not the primary checkout the review
+    was started from (B708761957b wired at the service layer, not the call site)."""
+    seen = tmp_path / "reviewer-cwd.txt"
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        f'[[reviewer]]\nname = "r"\nkind = "command"\n'
+        f'command = "pwd > {seen}; printf \'STATUS: NO FINDINGS\\n\'"\n'
+        'model = "cmd-model"\ngates = ["critic"]\n',
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == 0, out + err
+    wt = (repo / ".ddflow" / "worktrees" / "T1").resolve()
+    (wt / "a.py").write_text("THE ITEM'S OWN CHANGE = 1\n")
+    _git(wt, "add", "a.py")
+    _git(wt, "commit", "-qm", "add a")
+    code, out, err = run_cli(repo, "review", "T1")
+    assert code == 0, out + err  # OK: reviewed, 0 findings, recorded passed
+    assert seen.exists(), out + err
+    assert Path(seen.read_text().strip()).resolve() == wt, out + err

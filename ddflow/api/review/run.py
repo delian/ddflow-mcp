@@ -19,6 +19,7 @@ from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
+from ..gates import item_tree
 from ..lifecycle.author import _author_model
 from ..review_supersede import round_evidence
 from .context import (
@@ -657,6 +658,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     _log_started(log, it, item, gate)
     results = []
     say(_BACKGROUND_HINT)
+    # The tree the reviewer is run in and watched in is the item's own worktree when it
+    # has one (B708761957b): a command reviewer must leave it as it found it, and only it
+    # is watched -- the primary (repo) is the honest fallback for a review with no item.
+    tree = (item_tree(repo, cfg, st, it, called_from)[0] if it else None) or repo
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
@@ -666,6 +671,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             intent,
             context=context,
             repo=repo,
+            tree=tree,
             prompt_overrides=overrides,
             on_progress=say,
             on_tick=keep_lease,
