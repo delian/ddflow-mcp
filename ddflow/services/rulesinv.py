@@ -236,7 +236,9 @@ def _agents(rows: list[dict[str, Any]], adopted: list[str]) -> dict[str, dict[st
     for h in HR.load():
         mine = [r for r in rows if h.id in r["loaded_by"]]
         always = sum(
-            r["bytes"] for r in mine if r["load_by"].get(h.id) == ALWAYS and r["kind"] != KIND_COMMAND
+            r["bytes"]
+            for r in mine
+            if r["load_by"].get(h.id) == ALWAYS and r["kind"] != KIND_COMMAND
         )
         if not mine and h.id not in adopted:
             continue
