@@ -95,6 +95,30 @@ _PROCESS_CALLS = frozenset(
 )
 
 
+#: pathlib CALLS whose result is a `Path` -- the constructor and the methods that return
+#: one, deterministically, so `_resolve` types them `pathlib.Path` and a `.replace` on the
+#: result (``Path("a").replace(dst)``, or a chain ``p.replace(a).replace(b)``) is counted as
+#: an atomic rename, not just `os.replace`. The set is only the pathlib API by name; a
+#: `Path` held in a variable whose type an AST visit cannot resolve (a parameter, `self.path`)
+#: is out of reach, and is enforced by routing the rename through `replace_path` instead.
+_PATH_RESULT = frozenset(
+    {
+        "pathlib.Path",
+        "pathlib.Path.with_name",
+        "pathlib.Path.with_suffix",
+        "pathlib.Path.with_stem",
+        "pathlib.Path.rename",
+        "pathlib.Path.replace",
+        "pathlib.Path.resolve",
+        "pathlib.Path.absolute",
+        "pathlib.Path.expanduser",
+        "pathlib.Path.joinpath",
+        "pathlib.Path.cwd",
+        "pathlib.Path.home",
+    }
+)
+
+
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
 _TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
 
@@ -146,6 +170,8 @@ class _Sites(ast.NodeVisitor):
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
             return f"{base}.{node.attr}" if base else None
+        if isinstance(node, ast.Call):
+            return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
         return None
 
     # -- imports --------------------------------------------------------------------
@@ -197,7 +223,7 @@ class _Sites(ast.NodeVisitor):
         name = self._resolve(node.func)
         if name in _PROCESS_CALLS:
             self.sites["subprocess_calls"].append(node.lineno)
-        if name == "os.replace":
+        if name in ("os.replace", "pathlib.Path.replace"):
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
