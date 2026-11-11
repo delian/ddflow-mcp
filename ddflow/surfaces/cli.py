@@ -35,6 +35,7 @@ from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
 from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
+from ..services import cmdlog
 from .cli_pipe import PIPE_CLOSED, run_quietly  # noqa: F401
 from .context import (
     FAIL,
@@ -331,6 +332,26 @@ provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names
 CONFLICT_SAFE = {("doctor",), ("help",)}
 
 
+def _cli_vocabulary(parser: argparse.ArgumentParser) -> tuple[set[str], set[str]]:
+    """The CLI's verb words and flag names, for `cmdlog`'s argv shape (`redact_argv` keeps
+    exactly those and placeholders everything else). Walked from the parser tree once."""
+    verbs: set[str] = set()
+    flags: set[str] = set()
+    seen: set[int] = set()
+    stack = [parser]
+    while stack:
+        p = stack.pop()
+        if id(p) in seen:
+            continue
+        seen.add(id(p))
+        for action in p._actions:
+            flags.update(action.option_strings)
+            if isinstance(getattr(action, "choices", None), dict):  # a _SubParsersAction
+                verbs.update(action.choices)
+                stack.extend(action.choices.values())
+    return verbs, flags
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
     shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
@@ -395,6 +416,7 @@ def _main(argv: list[str] | None = None) -> int:
         return guarded
     parser = build_parser()
     typed = list(sys.argv[1:] if argv is None else argv)
+    verbs, flags = _cli_vocabulary(parser)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
@@ -429,6 +451,17 @@ def _main(argv: list[str] | None = None) -> int:
         # nothing to do without printing one still answers the reason (Bac9d773a44).
         if getattr(args, "json", False) and code != 0 and not out.wrote:
             emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
+        # DX-command-log: remember this command (argv shape + exit code + stderr tail) in the
+        # git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N.
+        try:
+            from ..infra import worktree as _W
+
+            _root = _W.repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+        except Exception:
+            _root = Path.cwd()
+        cmdlog.record(
+            _root, getattr(args, "agent", "") or "", typed, code, said.text, verbs=verbs, flags=flags
+        )
         reset_command(tagged)
         return code
 

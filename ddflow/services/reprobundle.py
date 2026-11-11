@@ -24,11 +24,25 @@ from ..infra.blobstore import BlobStore
 from . import logblobs
 from . import repro_facts as F
 from . import reprocheck as RC
+from . import cmdlog
 from .redact_report import redactor
 
 _MIN_LEAF = 64
 _GUARD = 4000
 MODES = ("off", "basic", "full")
+
+
+def _commands(repo: Path, bugs, mode: str) -> dict[str, Any]:
+    """The last N commands this session ran (DX-command-log): the git-ignored local ring log
+    when it has records (each already shape- and output-redacted at write time), else the note
+    that none are kept."""
+    records = cmdlog.recent(repo, bugs.repro_events)
+    if records:
+        return {"last": records}
+    return {
+        "unavailable": "ddflow keeps no log of the commands a session ran (no session or "
+        "hook command log exists)" + ("; see recent_events" if mode == "full" else "")
+    }
 
 
 def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
@@ -64,10 +78,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         "agent": F.identity(cfg, agent),
         "env": F.environment(cfg),
         "config_deltas": F.config_deltas(cfg),
-        "commands": {
-            "unavailable": "ddflow keeps no log of the commands a session ran (no session or "
-            "hook command log exists)" + ("; see recent_events" if mode == "full" else "")
-        },
+        "commands": _commands(repo, b, mode),
     }
     if repro_cmd:
         # The filed command wins any key the check dict might carry: what the operator
