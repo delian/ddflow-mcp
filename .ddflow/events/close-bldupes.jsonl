@@ -111,3 +111,4 @@
 {"agent":"close-bldupes","data":{"at":1794405405.0273168,"holder":"close-bldupes"},"id":"e20aac3571bb34d35fcf73aff","kind":"lease.renewed","lamport":174773,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T13:56:45.249348Z"}
 {"agent":"close-bldupes","data":{"at":1794405634.6250172,"holder":"close-bldupes"},"id":"ee308981f59896310498972ad","kind":"lease.renewed","lamport":174804,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T14:00:34.716404Z"}
 {"agent":"close-bldupes","data":{"gate":"ci"},"id":"e3170658afdc4069232fce070","kind":"gate.started","lamport":174805,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T14:00:51.878681Z"}
+{"agent":"close-bldupes","data":{"at":1794405976.543584,"holder":"close-bldupes"},"id":"e3e8750fa4dae6890ae17c564","kind":"lease.renewed","lamport":174838,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T14:06:17.916254Z"}
