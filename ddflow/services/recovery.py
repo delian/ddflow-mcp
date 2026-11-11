@@ -182,7 +182,11 @@ def _repair_base_ref(repo: Path, a) -> dict:
     worktree = a.evidence.get("worktree", "")
     path = (W.load_path(repo, worktree) / ".ddflow" / "config.toml") if worktree else None
     if not path or not path.exists():
-        return {"item": a.item, "applied": False, "note": "its worktree has no local config to repair"}
+        return {
+            "item": a.item,
+            "applied": False,
+            "note": "its worktree has no local config to repair",
+        }
     try:
         text = path.read_text("utf-8")
         new, n = re.subn(
