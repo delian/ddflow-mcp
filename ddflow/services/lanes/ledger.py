@@ -133,22 +133,27 @@ def _scan(events: Iterable[Event]) -> dict[str, _Facts]:
 
 
 def _mid_gates(events: Iterable[Event]) -> dict[str, str]:
-    """item -> the gate that was mid-run at its last ``gate.started`` (no later outcome for
-    that gate), else "". The one step a stopped lane names as the thing that killed it."""
+    """agent -> the gate that was mid-run at its last ``gate.started`` (no later outcome for
+    that gate), else "". The one step a stopped lane names as the thing that killed it.
+
+    Keyed by the agent (the lane), not the item: a corpse lane A that started gate G1 on
+    item I, whose item recover_auto then re-leases to lane B (which starts G2), must each
+    keep the gate THEY started -- an item key would map I->G2 and attribute B's gate to
+    A's corpse."""
     started: dict[str, tuple[str, str]] = {}
     ended: dict[tuple[str, str], str] = {}
     for e in events:
         gate = str(e.data.get("gate") or "")
         if e.kind == "gate.started":
-            if e.ts >= started.get(e.subject, ("", ""))[0]:
-                started[e.subject] = (e.ts, gate)
+            if e.ts >= started.get(e.agent, ("", ""))[0]:
+                started[e.agent] = (e.ts, gate)
         elif e.kind in _GATE_OUTCOMES:
-            key = (e.subject, gate)
+            key = (e.agent, gate)
             ended[key] = max(ended.get(key, ""), e.ts)
     return {
-        item: gate
-        for item, (ts, gate) in started.items()
-        if gate and ts > ended.get((item, gate), "")
+        agent: gate
+        for agent, (ts, gate) in started.items()
+        if gate and ts > ended.get((agent, gate), "")
     }
 
 
@@ -263,7 +268,7 @@ def _lane(
             worktree=ls.worktree or held.worktree,
             detail=ls.note if state == S.WORKING else "",
         )
-    return _with_session(lane, f, st, mid_gates.get(lane.item, ""))
+    return _with_session(lane, f, st, mid_gates.get(lane.name, ""))
 
 
 def _with_session(lane: Lane, f: _Facts, st: State, mid_gate: str) -> Lane:
