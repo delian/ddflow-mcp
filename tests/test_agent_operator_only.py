@@ -13,7 +13,7 @@ a write target, while the local layer, the environment and `ddflow_configure` ke
 
 from __future__ import annotations
 
-import tomllib
+import re
 
 import pytest
 
@@ -33,7 +33,7 @@ def test_a_committed_config_cannot_widen_a_role(repo):
     `read, claim, note, start_lane, approve_marked`) becomes `*` -- this test fails there.
     """
     _committed_cfg(repo, '[agent]\nroles = { bot = ["*"] }\n')
-    with pytest.raises(InvalidValue, match="agent.roles"):
+    with pytest.raises(InvalidValue, match=re.escape("agent.roles")):
         Config.load(repo)
 
 
@@ -41,14 +41,14 @@ def test_a_committed_config_may_tighten_a_role(repo):
     """The committed layer may set neither table at all (fail-closed), even to tighten: a
     tightening belongs in the local layer. Refused, never silently applied."""
     _committed_cfg(repo, '[agent]\nroles = { bot = ["read"] }\n')
-    with pytest.raises(InvalidValue, match="agent.roles"):
+    with pytest.raises(InvalidValue, match=re.escape("agent.roles")):
         Config.load(repo)
 
 
 def test_a_committed_config_cannot_widen_a_capability_verb_table(repo):
     """`[agent].capability_verbs` is the same operator table; widening it is refused too."""
     _committed_cfg(repo, '[agent]\ncapability_verbs = { read = ["*"] }\n')
-    with pytest.raises(InvalidValue, match="agent.capability_verbs"):
+    with pytest.raises(InvalidValue, match=re.escape("agent.capability_verbs")):
         Config.load(repo)
 
 

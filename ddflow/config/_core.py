@@ -16,7 +16,14 @@ from ..config_sections.export import _export_table_problem, export_table_keys
 from ..config_sections.schedule import SIGNALS, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
-from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _OPERATOR_ONLY, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
+from ._decls import (
+    _KNOB_CHECKS,
+    _MEMBER_FILTERS,
+    _OPERATOR_ONLY,
+    _STRICT_FALLBACK,
+    _TOLERANT_VALUES,
+    strictest,
+)
 from ._errors import InvalidValue
 from ._packaged import apply_packaged
 from ._tree import _is_code_tree
