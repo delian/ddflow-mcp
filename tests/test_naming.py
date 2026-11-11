@@ -112,7 +112,7 @@ def test_refuse_names_the_taken_name_and_the_remedy() -> None:
 
 
 def test_a_seq_template_takes_the_next_free_number() -> None:
-    cfg = _cfg(template="{role}-{host}-{seq}")
+    cfg = _cfg(template="{role}-{host}-{seq}", scope="host")
     taken = ["lane-box-1", "Lane-Box-2"]
     assert naming.generate(cfg, role="lane", host="box", taken=taken).name == "lane-box-3"
 
@@ -140,7 +140,8 @@ def test_a_name_that_never_ends_in_a_free_one_is_refused_not_looped() -> None:
     ("template", "scope", "why"),
     [
         ("{role}-{family}", "global", "needs"),
-        ("{role}-{seq}", "global", "{seq} together with {host}"),
+        ("{role}-{seq}", "global", "needs {rand}"),
+        ("{role}-{host}-{seq}", "global", "needs {rand}"),
         ("{role}-{host}", "host", "{rand} or {seq}"),
         ("{role}-{rand}", "family", "{family}"),
         ("{family}-{rand}", "global", "{role}"),
@@ -161,7 +162,8 @@ def test_an_invalid_template_is_refused(template: str, scope: str, why: str) -> 
     ("template", "scope"),
     [
         ("{role}-{family}-{host}-{rand}", "global"),
-        ("{role}-{host}-{seq}", "global"),
+        ("{role}-{host}-{rand}", "global"),
+        ("{role}-{host}-{seq}", "host"),
         ("{role}-{rand}", "host"),
         ("{role}-{family}-{seq}", "family"),
         ("x-{role}-{rand}", "global"),
@@ -172,7 +174,7 @@ def test_a_valid_template_is_accepted(template: str, scope: str) -> None:
 
 
 def test_generate_refuses_a_template_its_scope_cannot_trust() -> None:
-    cfg = _cfg(template="{role}-{family}-{seq}")  # global needs {rand}, or {seq} with {host}
+    cfg = _cfg(template="{role}-{family}-{host}-{seq}")  # global needs {rand}
     with pytest.raises(naming.NameRefused, match="across hosts"):
         naming.generate(cfg, role="r", family="k", host="h")
 

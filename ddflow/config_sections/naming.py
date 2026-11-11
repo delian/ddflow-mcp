@@ -103,8 +103,8 @@ class NamingConfig:
         doc=(
             "How far a generated name must be unique BY CONSTRUCTION, because clones and hosts "
             "that work offline cannot coordinate. 'global' (default): across every host and "
-            "clone of the project, so the template must hold {rand}, or {seq} together with "
-            "{host}. 'host': among the lanes of one machine, so {rand} or {seq}. 'family': "
+            "clone of the project, so the template must hold {rand}: {seq} counts only the names "
+            "this clone sees and host labels can alias. 'host': among the lanes of one machine, so {rand} or {seq}. 'family': "
             "among the lanes of one agent family, so {family} with {rand} or {seq}. A name is "
             "always also checked against every taken name (case-folded) before it is used."
         ),

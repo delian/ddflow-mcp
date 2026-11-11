@@ -75,10 +75,13 @@ def template_problem(template: str, scope: str) -> str:
         return problem
     tokens = set(re.findall(r"\{([^{}]*)\}", template))
     unique = bool({"rand", "seq"} & tokens)
-    if scope == "global" and not ("rand" in tokens or {"seq", "host"} <= tokens):
+    if scope == "global" and "rand" not in tokens:
+        # {seq} is the next free number among the names THIS clone can see, and {host} is a
+        # lower-cased, cut label two hosts can share: neither makes two offline clones
+        # differ, only a random suffix does.
         return (
             "is not unique across hosts and clones ([naming].scope = global): it needs "
-            "{rand}, or {seq} together with {host}"
+            "{rand}; {seq} counts only the names this clone sees, and {host} labels can alias"
         )
     if scope == "family" and not ("family" in tokens and unique):
         return "is not unique within a family ([naming].scope = family): it needs {family} and {rand} or {seq}"

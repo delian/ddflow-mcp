@@ -3224,16 +3224,16 @@
       naming.scope = 'global'   [default]
           How far a generated name must be unique BY CONSTRUCTION, because clones and
           hosts that work offline cannot coordinate. 'global' (default): across every
-          host and clone of the project, so the template must hold {rand}, or {seq}
-          together with {host}. 'host': among the lanes of one machine, so {rand} or
-          {seq}. 'family': among the lanes of one agent family, so {family} with
-          {rand} or {seq}. A name is always also checked against every taken name
-          (case-folded) before it is used. An unrecognised value in a config file is
-          warned about, reported by `doctor` and falls back to 'global', the strictest
-          (a name unique in every scope cannot clash in a narrower one); `config
-          --set`, `ddflow_configure` and the environment refuse it, and so does
-          loading ddflow's own source tree, where the file and the code are one
-          commit.
+          host and clone of the project, so the template must hold {rand}: {seq}
+          counts only the names this clone sees and host labels can alias. 'host':
+          among the lanes of one machine, so {rand} or {seq}. 'family': among the
+          lanes of one agent family, so {family} with {rand} or {seq}. A name is
+          always also checked against every taken name (case-folded) before it is
+          used. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'global', the strictest (a name unique in every
+          scope cannot clash in a narrower one); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       naming.on_collision = 'suffix'   [default]
           What happens when a generated name is already taken by another agent.
           'suffix' (default): draw a new {rand} (or take the next {seq}) until it is
