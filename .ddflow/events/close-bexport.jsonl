@@ -192,3 +192,4 @@
 {"agent":"close-bexport","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ea21bc7676fef4dece8c4dd47","kind":"cadence.ran","lamport":171347,"schema":1,"subject":"recall_recheck:B-export-agent-lock","ts":"2026-11-11T07:10:05.957754Z"}
 {"agent":"close-bexport","data":{"at":1794381111.9517767,"holder":"close-bexport"},"id":"e8bbb497a1ed238e4b04233f6","kind":"lease.renewed","lamport":171361,"schema":1,"subject":"B-export-agent-lock","ts":"2026-11-11T07:11:52.542301Z"}
 {"agent":"close-bexport","data":{"at":1794381316.470763,"holder":"close-bexport"},"id":"e93f101f2447a066b54cd7789","kind":"lease.renewed","lamport":171375,"schema":1,"subject":"B-export-agent-lock","ts":"2026-11-11T07:15:17.073377Z"}
+{"agent":"close-bexport","data":{"at":1794381616.708274,"holder":"close-bexport"},"id":"ea7c0fb1db54537354b4fd019","kind":"lease.renewed","lamport":171412,"schema":1,"subject":"B-export-agent-lock","ts":"2026-11-11T07:20:17.359763Z"}
