@@ -46,8 +46,11 @@ def name_template_problem(template: Any) -> str:
         return "uses a token twice"
     if "role" not in tokens:
         return "needs {role}: the human-readable part"
-    if not {"rand", "seq"} & set(tokens):
-        return "needs {rand} or {seq}: without one, two lanes of one role are one name"
+    if "rand" not in tokens:
+        return (
+            "needs {rand}: {seq} counts only the names one clone sees and a host label can "
+            "alias, so only a random suffix keeps offline clones apart"
+        )
     return ""
 
 
@@ -84,7 +87,7 @@ class NamingConfig:
             "label: chosen, else derived from the item or tree), {family} (the harness or "
             "model family, such as kilo), {host} (a short, stable host label; see "
             "`host_label`), {rand} (a short random suffix) and {seq} (the next free number). "
-            "A template needs {role} and one of {rand} or {seq}; outside the tokens only "
+            "A template needs {role} and {rand} ({seq} is an optional readable counter, never the uniqueness); outside the tokens only "
             "lower-case ASCII letters, digits and '-' may appear, so a name is safe as a git "
             "branch part, a shard file on a case-insensitive file system, a tmux session and "
             "a DNS label. An empty token drops out with its '-'. A name a person or harness "
@@ -92,7 +95,7 @@ class NamingConfig:
             "never rewritten: this applies to names ddflow makes. A recorded name is never "
             "renamed. `config --set` refuses an invalid template (exit 3); a file holding one "
             "is warned about and the default stays in effect. Change it for the project "
-            "(`ddflow config --set naming.template '{role}-{host}-{seq}'`), for this machine "
+            "(`ddflow config --set naming.template 'x-{role}-{host}-{rand}'`), for this machine "
             "(add --local), per run (DDFLOW_NAMING_TEMPLATE), or over MCP with "
             "`ddflow_configure`."
         ),
@@ -101,12 +104,11 @@ class NamingConfig:
     scope: str = knob(
         "global",
         doc=(
-            "How far a generated name must be unique BY CONSTRUCTION, because clones and hosts "
-            "that work offline cannot coordinate. 'global' (default): across every host and "
-            "clone of the project, so the template must hold {rand}: {seq} counts only the names "
-            "this clone sees and host labels can alias. 'host': among the lanes of one machine, so {rand} or {seq}. 'family': "
-            "among the lanes of one agent family, so {family} with {rand} or {seq}. A name is "
-            "always also checked against every taken name (case-folded) before it is used."
+            "What a template must guarantee, because clones and hosts that work offline cannot "
+            "coordinate. 'global' (default) and 'host': the template must hold {rand}, since "
+            "{seq} counts only the names one clone sees and host labels can alias. 'family': "
+            "{family} as well, so a name always says which agent family it belongs to. A name "
+            "is always also checked against every taken name (case-folded) before it is used."
         ),
         choices=NAME_SCOPES,
         strictest=("global", "a name unique in every scope cannot clash in a narrower one"),

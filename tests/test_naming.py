@@ -111,10 +111,12 @@ def test_refuse_names_the_taken_name_and_the_remedy() -> None:
     assert "on_collision" in str(err.value)
 
 
-def test_a_seq_template_takes_the_next_free_number() -> None:
-    cfg = _cfg(template="{role}-{host}-{seq}", scope="host")
-    taken = ["lane-box-1", "Lane-Box-2"]
-    assert naming.generate(cfg, role="lane", host="box", taken=taken).name == "lane-box-3"
+def test_seq_is_a_readable_attempt_counter_beside_rand() -> None:
+    cfg = _cfg(template="{role}-{seq}-{rand}")
+    first = naming.generate(cfg, role="lane", draw=_fixed)
+    assert first.name == "lane-1-bbbb"
+    again = naming.generate(cfg, role="lane", taken=[first.name], draw=_fixed)
+    assert again.name == "lane-2-bbbb"  # the number moved on, so the same draw is a free name
 
 
 def test_the_same_agent_resuming_keeps_its_name() -> None:
@@ -139,11 +141,11 @@ def test_a_name_that_never_ends_in_a_free_one_is_refused_not_looped() -> None:
 @pytest.mark.parametrize(
     ("template", "scope", "why"),
     [
-        ("{role}-{family}", "global", "needs"),
+        ("{role}-{family}", "global", "needs {rand}"),
         ("{role}-{seq}", "global", "needs {rand}"),
-        ("{role}-{host}-{seq}", "global", "needs {rand}"),
-        ("{role}-{host}", "host", "{rand} or {seq}"),
-        ("{role}-{rand}", "family", "{family}"),
+        ("{role}-{host}-{seq}", "host", "needs {rand}"),
+        ("{role}-{host}", "host", "needs {rand}"),
+        ("{role}-{rand}", "family", "needs {family}"),
         ("{family}-{rand}", "global", "{role}"),
         ("Lane-{role}-{rand}", "global", "lower-case"),
         ("{role}_{rand}", "global", "'_'"),
@@ -163,9 +165,8 @@ def test_an_invalid_template_is_refused(template: str, scope: str, why: str) -> 
     [
         ("{role}-{family}-{host}-{rand}", "global"),
         ("{role}-{host}-{rand}", "global"),
-        ("{role}-{host}-{seq}", "host"),
         ("{role}-{rand}", "host"),
-        ("{role}-{family}-{seq}", "family"),
+        ("{role}-{family}-{rand}-{seq}", "family"),
         ("x-{role}-{rand}", "global"),
     ],
 )
@@ -175,7 +176,7 @@ def test_a_valid_template_is_accepted(template: str, scope: str) -> None:
 
 def test_generate_refuses_a_template_its_scope_cannot_trust() -> None:
     cfg = _cfg(template="{role}-{family}-{host}-{seq}")  # global needs {rand}
-    with pytest.raises(naming.NameRefused, match="across hosts"):
+    with pytest.raises(naming.NameRefused, match="needs {rand}"):
         naming.generate(cfg, role="r", family="k", host="h")
 
 
@@ -226,8 +227,8 @@ def test_config_set_refuses_an_invalid_value(repo: Path, key: str, value: str, w
 
 def test_config_set_accepts_a_valid_template_and_host_label_goes_local(repo: Path) -> None:
     assert run_cli(repo, "init")[0] == OK
-    assert run_cli(repo, "config", "--set", "naming.template", "x-{role}-{host}-{seq}")[0] == OK
-    assert Config.load(repo).naming.template == "x-{role}-{host}-{seq}"
+    assert run_cli(repo, "config", "--set", "naming.template", "x-{role}-{host}-{rand}")[0] == OK
+    assert Config.load(repo).naming.template == "x-{role}-{host}-{rand}"
     assert run_cli(repo, "config", "--set", "naming.host_label", "ci-7")[0] == OK
     local = (repo / ".ddflow" / "local" / "config.toml").read_text("utf-8")
     assert "ci-7" in local
