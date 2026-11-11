@@ -5734,7 +5734,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=204ca0eb76c3 -->
+<!-- ddflow:begin README/tools sha=492ee842f897 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5745,7 +5745,7 @@ drift. The groups are the ones `ddflow help` prints.
 **Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
 
 - `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
-- `ddflow_view` (21 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `dispatch` (was `ddflow_dispatch`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `waves` (was `ddflow_waves`)
+- `ddflow_view` (22 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `dispatch` (was `ddflow_dispatch`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `rules_inventory` (was `ddflow_rule_inventory`), `waves` (was `ddflow_waves`)
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
@@ -5760,7 +5760,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 141 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 55 more in `all`</summary>
+<details><summary>All 142 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 56 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5775,6 +5775,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_prompts` | all | Inspect the prompt templates this project uses and where each comes from (shipped, project override, or… |
 | Setting up | `ddflow_rule_add` | standard | Add a project rule; duplicate-checked like every add (answer new \| extends:ID \| duplicate_of:ID \| related:ID). |
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
+| Setting up | `ddflow_rule_inventory` | all | Read-only inventory of the native rule, cross-agent and command files: per file which agents load it and… |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
 | Setting up | `ddflow_rule_search` | core | Search rules by title or content, ranked by relevance, for an area or topic. |
