@@ -60,16 +60,7 @@ def next_(
         if promoted:
             log, cfg, st = _load(repo, agent)
     synced: dict[str, Any] = {}
-    if (
-        cfg.flow.integration == "pr"
-        and cfg.flow.sync_on_next
-        and (
-            any(i.state == REVIEW for i in st.items.values())
-            # A hotfix's back-merge request outlives its item (B171): the item completes
-            # the moment it is opened, so "something in review" alone never re-asks.
-            or any(r["state"] == "open" for r in st.back_merges.values())
-        )
-    ):
+    if _wants_pr_sync(cfg, st):
         # Reviewers act between an agent's turns. Asking here is what lets a merged
         # request complete, and a requested change come back as work, without anyone
         # remembering to run `pr sync` -- the loop stays `next`, `claim`, work, `merge`.
@@ -96,11 +87,7 @@ def next_(
         agent=me,
         phase_only=phase_only,
     )
-    excluded: list[Blocked] = []
-    if exclude_leased:
-        p.ready, excluded = _drop_leased_overlap(p.ready, st, cfg, me)
-    if not flat:
-        p.ready.sort(key=_group_key(bug_items(st, cfg)))
+    excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
@@ -132,6 +119,31 @@ def _actionable(p) -> bool:
     """Is there something for a caller to START right now: an in-phase ready item, or a
     ready upstream blocking-dependency (offered to a lane asked to drive that phase)."""
     return bool(p.ready or p.blocking_deps)
+
+
+def _wants_pr_sync(cfg, st) -> bool:
+    """Should `next` sync the forge first: pr integration with sync-on-next, and an item in
+    review (or a hotfix back-merge open) whose settle re-asks here."""
+    return (
+        cfg.flow.integration == "pr"
+        and cfg.flow.sync_on_next
+        and (
+            any(i.state == REVIEW for i in st.items.values())
+            or any(r["state"] == "open" for r in st.back_merges.values())
+        )
+    )
+
+
+def _offer_ready(p, st, cfg, agent, *, flat: bool, exclude_leased: bool) -> list[Blocked]:
+    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``)
+    and group the rest by wave (``flat`` keeps the flat optimizer order). Returns the
+    dropped items, so `next_` reports them distinctly from ``blocked``."""
+    dropped: list[Blocked] = []
+    if exclude_leased:
+        p.ready, dropped = _drop_leased_overlap(p.ready, st, cfg, agent)
+    if not flat:
+        p.ready.sort(key=_group_key(bug_items(st, cfg)))
+    return dropped
 
 
 def _drop_leased_overlap(items, st, cfg, agent):

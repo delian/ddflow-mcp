@@ -278,83 +278,16 @@ def next_text(out, a, ctx) -> str | None:
     p = out.data["_render"]["plan"]
     bdeps = p.blocking_deps
     flat = bool(a.get("flat", False))
+    clusters = out.data.get("co_location_hints") or []
+    excluded = out.data.get("excluded_leased") or []
     if not p.ready and not bdeps:
-        more = (
-            [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
-            if len(p.blocked) > _BLOCKED_SHOWN_NO_READY
-            else []
-        )
-        return "\n".join(
-            [
-                out.reason,
-                *(
-                    f"  {b.item}: {b.reason} — {b.detail}"
-                    for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]
-                ),
-                *more,
-                *(
-                    f"  {b['item']}: {b['reason']} — {b['detail']}"
-                    for b in out.data.get("excluded_leased") or []
-                ),
-                *([note] if (note := out.data.get("_footer")) else []),
-            ]
-        )
-    lines = []
-
-    def ready_line(it):
-        tier = tier_of(it.tags)
-        return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
-
-    def deps_line(it):
-        needs = [n for n in it.needs if n]
-        if not needs:
-            return None
-        return f"      needs: {', '.join(needs)}"
-
-    if p.ready:
-        lines.append(f"Ready ({p.summary()}):")
-        last_k = None  # the previous row's wave bucket, so a header prints only on a change
-        for it in p.ready:
-            k = None if flat else wave_of(it.tags)
-            if not flat and (last_k is None or last_k != k):
-                label = f"wave:{k}" if k is not None else "wave:unstamped"
-                lines.append(f"  [{label}]")
-                last_k = k
-            lines.append(ready_line(it))
-            if it.globs:
-                lines.append(f"      writes: {', '.join(it.globs)}")
-            if needs := deps_line(it):
-                lines.append(needs)
-        if len(p.ready) > 1 and not flat:
-            lines.append(
-                "\nThese are independent — run them in parallel worktrees; items that share "
-                "a dependency or globs are one co-locate cluster (below)."
-            )
-        elif len(p.ready) > 1:
-            lines.append("\nThese are independent — run them in parallel worktrees.")
-    if (clusters := out.data.get("co_location_hints") or []):
-        lines.append("\nCo-locate (place in ONE lane to minimize locking):")
-        for c in clusters:
-            if c["shared_deps"]:
-                why = f"share dep(s): {', '.join(c['shared_deps'])}"
-            else:
-                why = "overlapping globs"
-            lines.append(f"  {', '.join(c['items'])}  ({why})")
-    exc = out.data.get("excluded_leased") or []
-    if exc:
-        lines.append("\nExcluded (globs overlap another agent's live lease):")
-        for b in exc:
-            lines.append(f"  {b['item']}: {b['detail']}")
+        return _blocked_text(out, p, excluded)
+    lines = _next_ready_lines(p, flat) if p.ready else []
+    if clusters:
+        lines += _co_locate_lines(clusters)
+    lines += _excluded_lines(excluded)
     if bdeps:
-        lines.append(
-            f"Blocking dependencies ({len(bdeps)} ready to start — do these to unblock the phase):"
-        )
-        for it in bdeps:
-            lines.append(ready_line(it) + "  [blocking-dependency]")
-            if it.globs:
-                lines.append(f"      writes: {', '.join(it.globs)}")
-            if needs := deps_line(it):
-                lines.append(needs)
+        lines += _blocking_dep_lines(bdeps)
     lines += [
         f"  (blocked) {b.item}: {b.reason} — {b.detail}"
         for b in p.blocked[:_BLOCKED_SHOWN_WITH_READY]
@@ -368,6 +301,90 @@ def next_text(out, a, ctx) -> str | None:
     if note := out.data.get("_footer"):
         lines.append(note)
     return "\n".join(lines)
+
+
+def _blocked_text(out, p, excluded) -> str:
+    """The "nothing to do" answer: the reason, the cut blocked list and any excluded items."""
+    more = (
+        [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
+        if len(p.blocked) > _BLOCKED_SHOWN_NO_READY
+        else []
+    )
+    return "\n".join(
+        [
+            out.reason,
+            *(
+                f"  {b.item}: {b.reason} — {b.detail}"
+                for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]
+            ),
+            *more,
+            *_excluded_lines(excluded),
+            *([note] if (note := out.data.get("_footer")) else []),
+        ]
+    )
+
+
+def _ready_line(it) -> str:
+    tier = tier_of(it.tags)
+    return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
+
+
+def _needs_line(it) -> str | None:
+    needs = [n for n in it.needs if n]
+    return f"      needs: {', '.join(needs)}" if needs else None
+
+
+def _next_ready_lines(p, flat) -> list[str]:
+    """The ready-list section: wave headers (unless ``flat``), each item with globs + needs."""
+    lines = [f"Ready ({p.summary()}):"]
+    last_k = None  # the previous row's wave bucket, so a header prints only on a change
+    for it in p.ready:
+        k = None if flat else wave_of(it.tags)
+        if not flat and (last_k is None or last_k != k):
+            label = f"wave:{k}" if k is not None else "wave:unstamped"
+            lines.append(f"  [{label}]")
+            last_k = k
+        lines.append(_ready_line(it))
+        if it.globs:
+            lines.append(f"      writes: {', '.join(it.globs)}")
+        if needs := _needs_line(it):
+            lines.append(needs)
+    if len(p.ready) > 1:
+        lines.append("\nThese are independent — run them in parallel worktrees.")
+    return lines
+
+
+def _co_locate_lines(clusters) -> list[str]:
+    lines = ["\nCo-locate (place in ONE lane to minimize locking):"]
+    for c in clusters:
+        why = f"share dep(s): {', '.join(c['shared_deps'])}" if c["shared_deps"] else "overlapping globs"
+        lines.append(f"  {', '.join(c['items'])}  ({why})")
+    return lines
+
+
+def _excluded_lines(excluded) -> list[str]:
+    if not excluded:
+        return []
+    lines = ["\nExcluded (globs overlap another agent's live lease):"]
+    for b in excluded:
+        lines.append(f"  {b['item']}: {b['detail']}")
+    return lines
+
+
+def _blocking_dep_lines(bdeps) -> list[str]:
+    lines = [
+        f"Blocking dependencies ({len(bdeps)} ready to start — do these to unblock the phase):"
+    ]
+    for it in bdeps:
+        lines.append(_ready_line(it) + "  [blocking-dependency]")
+        if it.globs:
+            lines.append(f"      writes: {', '.join(it.globs)}")
+        if needs := _needs_line(it):
+            lines.append(needs)
+    return lines
+
+
+# -- claim -----------------------------------------------------------------------------
 
 
 # -- claim -----------------------------------------------------------------------------
