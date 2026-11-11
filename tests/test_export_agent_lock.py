@@ -73,7 +73,8 @@ def test_an_agent_enable_after_the_operator_unlock_is_not_blocked_by_the_old_loc
 def test_an_agent_still_cannot_acknowledge_or_unlock_an_operator_lock(proj):
     assert run_human(proj, "export", "disable", "roadmap", "--lock")[0] == 0
     assert run_cli(proj, "export", "enable", "roadmap", agent="bot")[0] == 3
-    assert run_cli(proj, "export", "ack", agent="bot")[0] in (0, 3)
+    assert run_cli(proj, "export", "ack", agent="bot")[0] == 3
+    assert run_human(proj, "export", "ack")[0] == 0
 
 
 def _fold(*events):
@@ -107,3 +108,15 @@ def test_the_fold_keeps_the_first_lock_and_a_forged_enable_lifts_nothing():
         _ev("export.enabled", "roadmap", 2, by="op", human=True),
     )
     assert not e["locked"]
+
+
+def test_a_second_lock_says_who_holds_it_and_records_nothing(proj):
+    assert _lock(proj, "bot")[0] == 0
+    code, out, err = _lock(proj, "other")
+    assert code == 0 and "already locked by agent bot" in out + err
+    assert "locked by agent other" not in out + err
+    assert len(_events(proj, "export.disabled")) == 1
+    assert run_human(proj, "export", "disable", "roadmap", "--lock")[0] == 0
+    code, out, err = _lock(proj, "bot")
+    assert code == 0 and "already locked by the operator" in out + err
+    assert len(_events(proj, "export.disabled")) == 2

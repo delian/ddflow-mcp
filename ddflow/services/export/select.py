@@ -62,6 +62,11 @@ def _locked(st: State, doc: str) -> dict[str, Any] | None:
     return e.get("lock") or {"by": e.get("by", ""), "human": True, "at": e.get("at", "")}
 
 
+def _locked_entry(st: State, doc: str) -> dict[str, Any]:
+    e = st.exports.get(doc) or {}
+    return e.get("lock") or {"by": e.get("by", ""), "human": True}
+
+
 def lock_label(lock: dict[str, Any]) -> str:
     """How a refusal or a listing names who holds a lock."""
     if lock.get("human", True):
@@ -287,7 +292,8 @@ def disable(
             f"(try {'without' if local else 'with'} --local)"
         )
     already_locked = bool((st.exports.get(doc) or {}).get("locked"))
-    if was or (lock and _lock_event_due(st, doc, why_agent)):
+    due = lock and _lock_event_due(st, doc, why_agent)
+    if was or due:
         log.append(
             "export.disabled",
             doc,
@@ -300,11 +306,13 @@ def disable(
             },
         )
     msg = f"disabled {doc}" if was else f"{doc} is not selected"
-    if lock:
+    if due:
         msg += _lock_note(doc, log.agent_id, bool(why_agent))
+    elif lock:
+        msg += f"; already {lock_label(_locked_entry(st, doc))}"
     return {
         "doc": doc,
-        "changed": was or lock,
+        "changed": was or due,
         "locked": lock or already_locked,
         "by": log.agent_id,
         "local": local,
