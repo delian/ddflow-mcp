@@ -76,23 +76,15 @@ def message(d: Delta) -> str:
     return f"ddflow was upgraded ({', '.join(parts)}): restart your agent to see {'them' if many else 'it'}"
 
 
-def _safe(name: str, limit: int) -> str:
-    """A tool name as one printable token of at most `limit` characters (a name comes from a
-    tool list and is never trusted raw)."""
-    limit = max(4, int(limit))
-    text = "".join(c if c.isprintable() and c not in "\r\n" else "?" for c in name)
-    return text if len(text) <= limit else text[: limit - 3] + "..."
-
-
-def removed_tool(name: Any, served: Any, live: Any, *, name_chars: int) -> str | None:
+def removed_tool(name: Any, served: Any, live: Any) -> str | None:
     """The message for a call to `name` when the upgrade removed it (the client's `served` list
-    has it, the worker's `live` one does not), else None (an ordinary unknown tool). The name is
-    echoed at most `name_chars` characters long."""
+    has it, the worker's `live` one does not): exactly `message` of the change, the line every
+    surface says. None for an ordinary unknown tool. The name is never echoed."""
     if not (isinstance(served, list) and isinstance(live, list) and isinstance(name, str)):
         return None
     if name not in _by_name(served) or name in _by_name(live):
         return None
-    return f"tool '{_safe(name, name_chars)}' was removed. {message(delta(served, live))}"
+    return message(delta(served, live))
 
 
 class RestartNotice:
