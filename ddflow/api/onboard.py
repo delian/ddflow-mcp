@@ -244,14 +244,18 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
 
 
 def _not_a_repository(repo: Path) -> bool:
-    """True when no ``.git`` exists at or above ``repo``.
+    """True when neither a ``.git`` nor a bare repository's ``HEAD`` + ``objects`` exists at
+    or above ``repo``.
 
     The filesystem, not a `git` call: a call would be one more program invocation to
     guard, git's message changes with the locale, and a repository git merely refuses to
     open (dubious ownership, a permissions error) HAS a ``.git``, so it is not told to
     `git init`: the stage runs and reports what its probes find."""
     here = repo.resolve()
-    return not any((d / ".git").exists() for d in (here, *here.parents))
+    return not any(
+        (d / ".git").exists() or ((d / "HEAD").is_file() and (d / "objects").is_dir())
+        for d in (here, *here.parents)
+    )
 
 
 def onboard(

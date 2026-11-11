@@ -50,3 +50,11 @@ def test_a_directory_without_a_dot_git_above_it_is_not_a_repository(tmp_path):
     from ddflow.api import onboard as OB
 
     assert OB._not_a_repository(tmp_path) is True
+
+
+def test_a_bare_repository_is_a_repository(tmp_path):
+    from ddflow.api import onboard as OB
+
+    (tmp_path / "HEAD").write_text("ref: refs/heads/main\n")
+    (tmp_path / "objects").mkdir()
+    assert OB._not_a_repository(tmp_path) is False
