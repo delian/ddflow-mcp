@@ -35,6 +35,15 @@ CLI_FLAG_COMMANDS: dict[tuple[tuple[str, ...], str], str] = {
     (("import",), "verify"): "import_verify",
     (("doctor",), "upgrade"): "upgrade",
 }
+#: A verb (a positional word inside one noun, not a subcommand) that makes the command
+#: another tool's: ``(path, verb) -> name``. `research` is the one noun whose verbs are
+#: not subcommands, so its schema must follow the verb (``research list`` reads like
+#: ``task list`` -> ``ddflow_list``; ``research show`` like ``show`` -> ``ddflow_show``),
+#: not the verb-less ``research_add`` (B33b1871f7b).
+CLI_VERB_COMMANDS: dict[tuple[tuple[str, ...], str], str] = {
+    (("research",), "list"): "list",
+    (("research",), "show"): "show",
+}
 
 
 def command_for_path(
@@ -51,6 +60,9 @@ def command_for_path(
     for (where, dest), name in CLI_FLAG_COMMANDS.items():
         if where == path and args is not None and getattr(args, dest, False) is True:
             return name
+    verb = getattr(args, "verb", None) if args is not None else None
+    if verb and (path, verb) in CLI_VERB_COMMANDS:
+        return CLI_VERB_COMMANDS[(path, verb)]
     if path in CLI_COMMAND_NAMES:
         return CLI_COMMAND_NAMES[path]
     if path in routed:
