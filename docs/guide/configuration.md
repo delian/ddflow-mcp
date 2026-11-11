@@ -66,13 +66,18 @@ stderr.
 
 ### The README and these guides are managed documents
 
-`README.md` and `docs/guide/*.md` are registered as evergreen document types by
+`README.md` and `docs/guide/*.md` are registered as evergreen document types (the contract the docs check validates, not a lock
+on the file) by
 `.ddflow/doctypes/readme.toml` and `guide.toml` (the glob-to-contract map of D-readme-split-r2:
 README.md and each guide are `evergreen`; the five tables between `ddflow:begin README/...`
 markers are generated and stay in the README). `ddflow docs check` validates them like any typed
 document: the README must keep its front-door sections in order, and a guide may not skip a
-heading level. A hand edit inside a generated region is merged or refused, never kept; rewrite a
-region with `ddflow pins regenerate --only <recipe>`.
+heading level. What keeps the generated tables true is not this registration but the checks that
+already exist: the five staleness tests (`tests/test_readme_toc.py`, `test_readme_command_table.py`,
+`test_readme_agents_table.py`, `test_readme_tool_table.py`, `test_readme_knob_table.py`) fail when a
+region differs from what its generator renders, the generators refuse to rewrite a region edited
+by hand unless told to discard the edit, and the commit hook refuses a staged region whose body was
+edited (`[enforce].generated_views`). Rewrite a region with `ddflow pins regenerate --only <recipe>`.
 
 ## Id schemes
 

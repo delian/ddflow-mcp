@@ -50,3 +50,15 @@ def test_the_real_readme_and_guides_pass_their_types():
 def test_the_configuration_guide_says_the_docs_are_managed():
     text = (ROOT / "docs" / "guide" / "configuration.md").read_text("utf-8")
     assert "managed documents" in text and ".ddflow/doctypes/readme.toml" in text
+
+
+def test_the_enforcement_the_guide_names_exists():
+    text = (ROOT / "docs" / "guide" / "configuration.md").read_text("utf-8")
+    for name in (
+        "test_readme_toc.py",
+        "test_readme_command_table.py",
+        "test_readme_agents_table.py",
+        "test_readme_tool_table.py",
+        "test_readme_knob_table.py",
+    ):
+        assert name in text and (ROOT / "tests" / name).is_file(), name
