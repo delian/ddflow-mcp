@@ -190,6 +190,7 @@ def scan_rule_files(repo: Path) -> list[dict[str, Any]]:
                     "description": str(fm.get("description", "") or ""),
                     "bytes": size,
                     "loaded_by": [],
+                    "load_by": {},
                     "ddflow_owned": any(
                         r.path == rel and r.form == FORM_WHOLE for r in NATIVE_RULES.values()
                     ),
@@ -202,6 +203,11 @@ def scan_rule_files(repo: Path) -> list[dict[str, Any]]:
                 row["load"] = _load_mode(row["frontmatter"], kind)
             if agent not in row["loaded_by"]:
                 row["loaded_by"].append(agent)
+            # per agent: a command-directory agent reads the file only when invoked,
+            # even where another agent's rule entry makes it an always-loaded rule
+            mode = _load_mode(row["frontmatter"], kind)
+            if agent not in row["load_by"] or kind != KIND_COMMAND:
+                row["load_by"][agent] = mode
     return sorted(rows.values(), key=lambda r: r["path"])
 
 
@@ -229,7 +235,9 @@ def _agents(rows: list[dict[str, Any]], adopted: list[str]) -> dict[str, dict[st
     out: dict[str, dict[str, Any]] = {}
     for h in HR.load():
         mine = [r for r in rows if h.id in r["loaded_by"]]
-        always = sum(r["bytes"] for r in mine if r["load"] == ALWAYS and r["kind"] != KIND_COMMAND)
+        always = sum(
+            r["bytes"] for r in mine if r["load_by"].get(h.id) == ALWAYS and r["kind"] != KIND_COMMAND
+        )
         if not mine and h.id not in adopted:
             continue
         out[h.id] = {
@@ -246,14 +254,23 @@ def _adopted_ids(repo: Path) -> list[str]:
 
 
 def doctor_note(repo: Path) -> str | None:
-    """A note only when one adopted agent sees none of the project's rule files while
-    another adopted agent sees some: the rules then bind only part of the fleet."""
+    """A note only when one adopted agent sees none of the project rule files another
+    adopted agent sees (it may see others, or none): the rules then bind only part of the fleet."""
     repo = Path(repo)
     adopted = _adopted_ids(repo)
     rows = [r for r in scan_rule_files(repo) if r["kind"] != KIND_COMMAND and not r["ddflow_owned"]]
     seen = {a: [r["path"] for r in rows if a in r["loaded_by"]] for a in adopted}
-    blind = sorted(a for a, files in seen.items() if not files)
-    sighted = sorted(a for a, files in seen.items() if files)
+    # an agent is cut off from another's rules when the two share none of them
+    blind = sorted(
+        a
+        for a, files in seen.items()
+        if any(b != a and seen[b] and not set(files) & set(seen[b]) for b in seen)
+    )
+    sighted = sorted(
+        b
+        for b, files in seen.items()
+        if files and any(a != b and not set(seen[a]) & set(files) for a in seen)
+    )
     if not blind or not sighted:
         return None
     return (

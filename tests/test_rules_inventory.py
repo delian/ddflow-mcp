@@ -174,3 +174,35 @@ def test_rule_entry_beats_command_dir_whichever_is_listed_first(tmp_path, monkey
     row = _row({"rows": RI.scan_rule_files(tmp_path)}, ".x/ship.md")
     assert row["kind"] == "rule" and row["load"] == "always"
     assert row["loaded_by"] == ["cmdagent", "ruleagent"]
+
+
+def test_doctor_note_fires_when_each_agent_sees_only_its_own_rule_files(tmp_path):
+    _w(tmp_path, ".cursor/rules/a.mdc", "---\nalwaysApply: true\n---\nrule a\n")
+    _w(tmp_path, "CLAUDE.md", "# only claude\n")
+    deltas = tmp_path / "docs/ddflow/drivers/deltas"
+    deltas.mkdir(parents=True)
+    for name in ("claude-code.md", "cursor.md"):
+        (deltas / name).write_text("x", encoding="utf-8")
+    note = RI.doctor_note(tmp_path)
+    assert note and "cursor" in note and "claude" in note
+
+
+def test_a_command_dir_agent_does_not_always_load_a_file_a_rule_agent_does(tmp_path, monkeypatch):
+    _w(tmp_path, ".x/ship.md", "---\nalwaysApply: true\n---\n" + "z" * 40)
+    monkeypatch.setattr(
+        RI,
+        "_surfaces",
+        lambda: [("cmdagent", "command", ".x/"), ("ruleagent", "rule", ".x/*.md")],
+    )
+    row = _row({"rows": RI.scan_rule_files(tmp_path)}, ".x/ship.md")
+    assert row["load_by"] == {"cmdagent": "on request", "ruleagent": "always"}
+    monkeypatch.setattr(RI, "_adopted_ids", lambda repo: ["cmdagent", "ruleagent"])
+    monkeypatch.setattr(RI.HR, "load", lambda: [_H("cmdagent"), _H("ruleagent")])
+    agents = RI.inventory(tmp_path)["agents"]
+    assert agents["cmdagent"]["always_bytes"] == 0
+    assert agents["ruleagent"]["always_bytes"] > 0
+
+
+class _H:
+    def __init__(self, id):
+        self.id = id
