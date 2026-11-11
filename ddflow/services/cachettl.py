@@ -96,7 +96,6 @@ def supports_1h(version: str | None) -> bool | None:
     parsed = parse_version(version)
     return None if parsed is None else parsed >= MIN_1H_VERSION
 
-
 def read_settings(repo: Path) -> Mapping[str, Any]:
     """The Claude Code settings relevant to the cache TTL, best-effort: user
     ``~/.claude/settings.json``, the project ``.claude/settings.json`` and the project-local
