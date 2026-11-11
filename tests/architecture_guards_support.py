@@ -206,11 +206,7 @@ class _Sites(ast.NodeVisitor):
             *getattr(node.args, "args", ()),
             *getattr(node.args, "kwonlyargs", ()),
         ):
-            if (
-                isinstance(arg, ast.arg)
-                and isinstance(arg.annotation, ast.Name)
-                and self._resolve(arg.annotation) == "pathlib.Path"
-            ):
+            if isinstance(arg, ast.arg) and self._resolve(arg.annotation) == "pathlib.Path":
                 self._bind(arg.arg, "pathlib.Path")
         self.depth += 1
         self.generic_visit(node)
@@ -218,11 +214,7 @@ class _Sites(ast.NodeVisitor):
         self.scopes.pop()
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if (
-            isinstance(node.target, ast.Name)
-            and isinstance(node.annotation, ast.Name)
-            and self._resolve(node.annotation) == "pathlib.Path"
-        ):
+        if isinstance(node.target, ast.Name) and self._resolve(node.annotation) == "pathlib.Path":
             self._bind(node.target.id, "pathlib.Path")
         self.generic_visit(node)
 
