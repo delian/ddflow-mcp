@@ -17,9 +17,9 @@ _CODE_TREE = Path(__file__).resolve().parents[2]
 #: `ddflow/__init__.py` keeps the version as a plain `__version__ = "X.Y.Z"` literal (the
 #: whole line); this matches that one declaration. Read from the FILE, never the imported
 #: module: a long-lived process (the MCP server) froze `ddflow.__version__` at import time,
-#: and the whole point is to notice the tree on disk outran it. `\r?` before `$` accepts a
-#: CRLF checkout the same as an LF one (a `$` in MULTILINE matches before `\n`, not `\r`).
-_VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"\r?$', re.MULTILINE)
+#: and the whole point is to notice the tree on disk outran it. `read_text` opens in
+#: universal-newline mode, so a CRLF checkout's line endings are normalized to `\n` on read.
+_VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 
 
 def declared_version(tree: Path) -> str:
