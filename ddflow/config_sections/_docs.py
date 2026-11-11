@@ -75,7 +75,10 @@ class Knob:
     #: An operator-only knob may not be set by the committed `file` layer: a cloned
     #: project's config cannot widen what a paired token may do (B-token-role-widened). It
     #: is still settable from the local layer, the environment and `ddflow_configure`.
-    operator_only: bool = False#: Every knob declared through `knob()`, by "section.knob", in declaration order.
+    operator_only: bool = False
+
+
+#: Every knob declared through `knob()`, by "section.knob", in declaration order.
 DECLARED: dict[str, Knob] = {}
 #: The module whose `declare()` registered each of them (a section declares only its own).
 DECLARED_IN: dict[str, str] = {}
