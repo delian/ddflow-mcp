@@ -593,6 +593,57 @@ def _why_outcome(log, cfg, it, gate: str, how: str, why: str, sargs: dict[str, A
     )
 
 
+def _release_settled(log, cfg, it, gate: str, how: str, why: str, counts: dict[str, int]) -> O.Outcome:
+    """Record ``gate`` passed from settled triage (the ''held pass'' or ''confirmed-finding'' shape
+    `_unchanged_delta` re-evaluates): no round was counted for the unchanged delta, and every
+    recorded finding has a verdict with its probe."""
+    rec = it.gates.get(gate) if it is not None else None
+    mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
+    GD.record(
+        log,
+        cfg,
+        it.id,
+        gate,
+        "passed",
+        reason="",
+        evidence={**((rec.evidence or {}) if rec is not None else {}), **mark},
+        by=rec.by if rec is not None else "",
+    )
+    flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
+    tag = f"{it.id}.{gate}" if it is not None else gate
+    text = (
+        f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
+        f"{counts['findings']} finding(s) has a verdict with its probe "
+        f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
+    )
+    return O.ok(
+        "review",
+        id=getattr(it, "id", ""),
+        gate=gate,
+        outcome="passed",
+        findings=[],
+        how=how,
+        text=text,
+    )
+
+
+def _dropped_unrechecked(it, gate: str) -> list[tuple[str, str]]:
+    """Unrechecked confirmed findings (`_unrechecked_confirmed`) the gate's LATEST record no
+    longer carries -- a later round reviewed the tree and did not raise them again. Only a
+    delta asked for over a tree unchanged since the reviewed head gets here (their fix IS that
+    head), and a finding the latest record still carries raises no fix at all, so it is left
+    out: releasing it would merge an unfixed defect."""
+    unrechecked, unreadable = _unrechecked_confirmed(it, gate)
+    if unreadable:
+        return []
+    rec = it.gates.get(gate)
+    carried: set[str] = set()
+    found = LB.full((rec.evidence or {}) if rec is not None else {}).get("chunk_findings")
+    if GD.is_triageable(found):
+        carried = {f["digest"] for f in found}
+    return [(d, fam) for d, fam in unrechecked if d not in carried]
+
+
 def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     """A delta over a tree unchanged since the reviewed head (B10ad449deb): no reviewer
     has anything new to see, so no round runs and none counts. The gate re-evaluates
@@ -600,70 +651,21 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     over a CONFIRMED finding whose fix is at that reviewed head is released too, because
     the delta that would re-check the fix is empty (B-tk-delta-round-empty); anything else
     stays as recorded, and the answer says which."""
-    tag = f"{it.id}.{gate}" if it is not None else gate
-
-    def release(counts: dict[str, int]) -> O.Outcome:
-        rec = it.gates.get(gate) if it is not None else None
-        mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
-        GD.record(
-            log,
-            cfg,
-            it.id,
-            gate,
-            "passed",
-            reason="",
-            evidence={**((rec.evidence or {}) if rec is not None else {}), **mark},
-            by=rec.by if rec is not None else "",
-        )
-        flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
-        text = (
-            f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
-            f"{counts['findings']} finding(s) has a verdict with its probe "
-            f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
-        )
-        return O.ok(
-            "review",
-            id=getattr(it, "id", ""),
-            gate=gate,
-            outcome="passed",
-            findings=[],
-            how=how,
-            text=text,
-        )
-
     counts = _held_and_settled(it, gate)
     if counts is not None:
-        return release(counts)
-    # B-tk-delta-round-empty: a FAILED gate over a CONFIRMED finding whose fix is now AT
-    # the reviewed head. `_delta_scope` already said nothing changed since the reviewed
-    # head, so the reviewed head answers every finding it ever recorded; a delta round
-    # that re-checks the fix is impossible because the fix IS the reviewed head (a
-    # `--delta` re-checks only what changed since it). Release the gate like the held-pass
-    # shape, except that untriaged findings still need `ddflow review triage`, not a round
-    # this path can settle.
+        return _release_settled(log, cfg, it, gate, how, why, counts)
     rec = it.gates.get(gate) if it is not None else None
     stays = rec.outcome if rec is not None else "unreviewed"
     counts = GD.triage_counts(it, gate) or {} if it is not None else {}
-    unrechecked, unreadable = _unrechecked_confirmed(it, gate) if it is not None else ([], False)
-    released_digests: set[str] = set()
-    if it is not None:
-        found = LB.full((rec.evidence or {}) if rec is not None else {}).get("chunk_findings")
-        if GD.is_triageable(found):
-            released_digests = {f["digest"] for f in found}
-    if (
-        rec is not None
-        and rec.outcome == "failed"
-        and unrechecked
-        and not unreadable
-        and not counts.get("untriaged")
-        # Only when a LATER round reviewed the tree and did NOT re-raise the confirmed
-        # finding (the fix IS that tree: `_delta_scope` said nothing changed since the
-        # reviewed head). A confirmed finding the latest record still carries was raised
-        # by the round that set the reviewed head with no fix at all -- released by this
-        # path, merge would land an unfixed defect (the reviewer's regression scenario).
-        and all(digest not in released_digests for digest, _ in unrechecked)
-    ):
-        return release(counts)
+    dropped = _dropped_unrechecked(it, gate) if it is not None else []
+    # B-tk-delta-round-empty: a FAILED gate over a CONFIRMED finding whose fix is now AT the
+    # reviewed head. `_delta_scope` already said nothing changed since the reviewed head, so
+    # the reviewed head answers it; a delta round that re-checks the fix is impossible because
+    # the fix IS that head (a `--delta` re-checks only what changed since it). Untriaged
+    # findings still need `ddflow review triage`, not a round this path can settle.
+    if rec is not None and rec.outcome == "failed" and dropped and not counts.get("untriaged"):
+        return _release_settled(log, cfg, it, gate, how, why, counts)
+    tag = f"{it.id}.{gate}" if it is not None else gate
     reason = f"{why} No round was counted; {tag} stays {stays}."
     untriaged = counts.get("untriaged", 0)
     if untriaged:
