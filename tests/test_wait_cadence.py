@@ -48,13 +48,14 @@ def test_a_wait_with_a_held_file_returns_within_max_call_seconds(proj, monkeypat
     assert "Still blocked" in out.reason
 
 
-def test_an_explicit_long_max_s_is_still_capped(proj, monkeypatch):
-    """D-TE-Q3: the 240 s cap applies always -- `--max-s 600` cannot lengthen one call."""
+def test_a_default_timeout_is_capped_to_max_call_seconds(proj, monkeypatch):
+    """D-TE-Q3: a wait that names no --max-s returns STILL-WAITING within the call cap,
+    whatever timeout it asked for, so the agent re-calls with its heartbeat on the next call."""
     monkeypatch.setenv("DDFLOW_WAIT_MAX_CALL_SECONDS", "1")
     started = time.monotonic()
-    out = A.wait(proj, item="T2", timeout_s=600, max_s=600, poll_s=0.05, agent=WAITER)
+    out = A.wait(proj, item="T2", timeout_s=600, poll_s=0.05, agent=WAITER)
     elapsed = time.monotonic() - started
-    assert elapsed < 10, f"slept {elapsed:.1f}s: --max-s 600 must still stop at the cap"
+    assert elapsed < 10, f"slept {elapsed:.1f}s: the 600 s timeout must stop at the cap"
     assert out.exit == 2 and not out.data["woke"]
 
 

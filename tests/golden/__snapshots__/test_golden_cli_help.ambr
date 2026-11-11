@@ -1,7 +1,7 @@
 # serializer version: 1
 # name: test_help[ddflow abandon]
   '''
-  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] id
+  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] [--drop-edges] id
   
   positional arguments:
     id
@@ -12,6 +12,7 @@
     --force
     --repoint-to REPOINT_TO
                           re-point the items that need this one to need ID instead
+    --drop-edges          drop the items that need this one from its needs
   
   '''
 # ---

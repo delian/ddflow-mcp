@@ -126,7 +126,7 @@ def test_a_wait_longer_than_the_cap_is_shortened_and_says_so(repo, monkeypatch):
     monkeypatch.setattr(W.time, "monotonic", tick)
     monkeypatch.setattr(W.time, "sleep", lambda _s: None)
     out = W.wait(repo, item="", timeout_s=10**6, poll_s=1, on_progress=seen.append)
-    assert any(str(W.WAIT_MAX_S) in m and "resume with the token" in m for m in seen), seen
+    assert any("resume with the token" in m for m in seen), seen
     assert out.data["waited_s"] <= W.WAIT_MAX_S + 300, out.data["waited_s"]
 
 

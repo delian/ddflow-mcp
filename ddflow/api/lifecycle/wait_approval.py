@@ -44,19 +44,18 @@ def _call_cap(cfg) -> float:
 def _bounded(
     timeout_s: float | None, max_s: float | None, cap: float = WAIT_MAX_S
 ) -> tuple[float, bool]:
-    """(seconds to wait, whether a text-mode caller is told it was cut to the cap).
-
-    ``max_s`` is the caller's own bound: it is the wait's length when no ``timeout_s`` is
-    given (B-wait-lease-max-s-ignored), and it can SHORTEN the wait below ``cap`` but never
-    lengthen it past ``cap`` -- the one-call ceiling applies always (D-TE-Q3), so an agent
-    asking for 600 s still returns at ``cap``, still-waiting, and re-calls with its
-    heartbeat riding on the next call."""
+    """(seconds to wait, which a text-mode caller reads cutting the cap). ``max_s`` is the
+    caller's own bound and is honoured whole: it is the wait's length when no ``timeout_s``
+    is given (B-wait-lease-max-s-ignored), and it can lengthen or shorten the call. ``cap``
+    is the DEFAULT one-call bound (`[wait].max_call_seconds`, D-TE-Q3) applied only when the
+    caller does not name ``max_s``: a default wait never outlives it, so a 5-minute
+    subagent prompt cache stays warm and the waiter's heartbeat rides on the next call."""
     if timeout_s is None:
         timeout = DEFAULT_WAIT_TIMEOUT_S if max_s is None else float(max_s)
     else:
         timeout = float(timeout_s)
     if max_s is not None:
-        return min(timeout, float(max_s), float(cap)), min(timeout, float(max_s)) > cap
+        return min(timeout, float(max_s)), False  # negative: refused by the caller
     return min(timeout, float(cap)), timeout > cap
 
 
