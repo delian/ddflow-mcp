@@ -116,10 +116,14 @@ def test_doctor_note_silent_with_no_rule_files(tmp_path):
     assert RI.doctor_note(tmp_path) is None
 
 
-def test_reuses_native_rules_table():
-    from ddflow.services.adopt import NATIVE_RULES
+def test_ddflow_whole_file_native_rule_is_marked_owned_from_native_rules(tmp_path):
+    from ddflow.services.adopt import FORM_WHOLE, NATIVE_RULES
 
-    assert RI.native_rule_paths() == {r.path for r in NATIVE_RULES.values()}
+    path = next(r.path for r in NATIVE_RULES.values() if r.form == FORM_WHOLE)
+    _w(tmp_path, path, "---\nalwaysApply: true\n---\nKeep a TODO.md task list.\n")
+    inv = RI.inventory(tmp_path)
+    assert _row(inv, path)["ddflow_owned"] is True
+    assert [n for n in inv["notes"] if n["path"] == path] == []
 
 
 def test_inventory_command_declared_and_runs(tmp_path):

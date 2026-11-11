@@ -134,11 +134,6 @@ def _load_mode(fm: dict[str, Any], kind: str) -> str:
     return ALWAYS
 
 
-def native_rule_paths() -> set[str]:
-    """The paths ddflow itself writes as an agent's native surface (`adopt.NATIVE_RULES`)."""
-    return {r.path for r in NATIVE_RULES.values()}
-
-
 def _expand(repo: Path, pattern: str) -> list[Path]:
     """The files one `reads`/`dir` entry names under the repo; entries outside it ($VAR, ~)
     are not project files, and neither is anything inside another checkout (`_SKIP_DIRS`)."""

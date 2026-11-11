@@ -180,12 +180,6 @@ def _inventory(out, a) -> str:
     return "\n".join(lines) or "no rule files found"
 
 
-def _rule_inventory(repo, a, agent):
-    from ...api.rulesinv import rule_inventory
-
-    return rule_inventory(repo, agent=agent)
-
-
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "add"),
@@ -420,7 +414,7 @@ COMMANDS: tuple[Command, ...] = (
         "file which agents load it and when (always / by path / on request), per agent the "
         "always-loaded bytes and approximate tokens, and rules restating ddflow-owned workflow "
         "as notes. Nothing is edited.",
-        call=_rule_inventory,
+        call=lambda repo, a, agent: _api().rules.rule_inventory(repo, agent=agent),
         payload=("rows", "count", "agents", "adopted", "notes", "doctor_note", "tokens_note"),
         params=(),
     ),
