@@ -72,15 +72,17 @@ def handoff_note(item_id: str, summary: str) -> str:
     """The hand-off note the rotated agent writes into the item's evidence: the item id, a
     one-line summary, and the next step. The WHOLE note is capped at ``HANDOFF_NOTE_CHARS``
     so it round-trips through `ddflow brief` (the lead pastes it to the fresh agent) without
-    dragging the whole transcript along."""
+    dragging the whole transcript along. The resume step (``suffix``) is the part the next
+    agent acts on, so the cut takes from the head (the body, then the id's tail) and never
+    from it: the note ends on the resume step however long the id is."""
     suffix = "; resume with `ddflow brief`."
     prefix = f"rotated: {item_id} — "
     body = " ".join(summary.split()) or "(no summary)"
     note = prefix + body + suffix
+    keep = HANDOFF_NOTE_CHARS - len(suffix)
     if len(note) > HANDOFF_NOTE_CHARS:
-        room = max(HANDOFF_NOTE_CHARS - len(prefix) - len(suffix), 0)
-        body = body[: max(room - 1, 0)] + "…"
-        note = prefix + body + suffix
+        head = prefix + body
+        note = head[: max(keep - 1, 0)] + "…" + suffix
     return note[:HANDOFF_NOTE_CHARS]
 
 

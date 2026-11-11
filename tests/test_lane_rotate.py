@@ -80,6 +80,9 @@ def test_handoff_note_stays_under_the_cap_even_with_a_long_item_id():
     # laid on AFTER the budget, pushing the note past the cap. The whole note is capped.
     note = LR.handoff_note("x" * 400, "summary")
     assert len(note) <= LR.HANDOFF_NOTE_CHARS
+    # Finding #1 (grok critic): the cut must preserve the resume step the lead pastes on,
+    # not carve it off with the id's own tail.
+    assert note.endswith("`ddflow brief`.")
 
 
 # -- the auto-compact window knobs -------------------------------------------
