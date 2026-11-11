@@ -64,6 +64,16 @@ directory install reinstalls from its source. `ddflow doctor` also lists the fie
 ddflow skipped in `[gate.*]`, `[[reviewer]]`, `[[companion]]` and `[[macro]]`, not only on
 stderr.
 
+### The README and these guides are managed documents
+
+`README.md` and `docs/guide/*.md` are registered as evergreen document types by
+`.ddflow/doctypes/readme.toml` and `guide.toml` (the glob-to-contract map of D-readme-split-r2:
+README.md and each guide are `evergreen`; the five tables between `ddflow:begin README/...`
+markers are generated and stay in the README). `ddflow docs check` validates them like any typed
+document: the README must keep its front-door sections in order, and a guide may not skip a
+heading level. A hand edit inside a generated region is merged or refused, never kept; rewrite a
+region with `ddflow pins regenerate --only <recipe>`.
+
 ## Id schemes
 
 Every id ddflow mints comes from a template in `[ids]`, one per record kind (decision
