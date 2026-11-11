@@ -66,3 +66,4 @@
 {"agent":"close-blgitflow","data":{"at":1794401021.8290975,"holder":"close-blgitflow"},"id":"e71be57f0ff9afc29658b9d3d","kind":"lease.renewed","lamport":173959,"schema":1,"subject":"B181","ts":"2026-11-11T12:43:42.857997Z"}
 {"agent":"close-blgitflow","data":{"at":1794401642.4774027,"holder":"close-blgitflow"},"id":"e8605d33ecc1f58e506dbb3c2","kind":"lease.renewed","lamport":174029,"schema":1,"subject":"B181","ts":"2026-11-11T12:54:03.046473Z"}
 {"agent":"close-blgitflow","data":{"at":1794402263.5610237,"holder":"close-blgitflow"},"id":"e2c0291aa2500150304ff0fb6","kind":"lease.renewed","lamport":174123,"schema":1,"subject":"B181","ts":"2026-11-11T13:04:24.354387Z"}
+{"agent":"close-blgitflow","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e44f74f9adfa24ef1263d9452","kind":"cadence.ran","lamport":174124,"schema":1,"subject":"recall_recheck:B181","ts":"2026-11-11T13:04:33.635469Z"}
