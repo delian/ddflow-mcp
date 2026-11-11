@@ -20,10 +20,16 @@ from typing import Any
 
 
 def _rules_line(v: dict[str, Any]) -> str:
-    for r in v.get("rules_drift") or []:
-        if isinstance(r, dict) and r.get("detail"):
-            return f"{r['detail']} Ask the operator before fixing it; keep it."
-    return ""
+    details = " ".join(
+        str(r["detail"])
+        for r in v.get("rules_drift") or []
+        if isinstance(r, dict) and r.get("detail")
+    )
+    return (
+        f"This project's rules file needs the operator: {details} Ask the operator before "
+        "fixing it; if they agree, `ddflow_setup` replaces only the managed block and "
+        "leaves everything else untouched."
+    )
 
 
 def _companions_line(v: dict[str, Any]) -> str:
@@ -47,7 +53,8 @@ def _gaps_line(v: dict[str, Any]) -> str:
 def _import_line(v: dict[str, Any]) -> str:
     return (
         f"The import was never finished ({v.get('imported_no_globs', 0)} task(s) "
-        "without globs, ... ): `ddflow_import_verify` before handing out imported work."
+        f"without globs, {v.get('imported_shipped_drift', 0)} phase(s) claiming shipped "
+        "over open work): `ddflow_import_verify` before handing out imported work."
     )
 
 
