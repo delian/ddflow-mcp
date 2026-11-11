@@ -59,6 +59,9 @@ base_ref = ""
 # covers — the only layer of this workflow that does not rely on the agent agreeing.
 # Starts at "warn" so adopting ddflow never breaks an existing repo on day one.
 commit_without_lease = "warn"
+# D-readme-split: the README is the front door; the reference it used to hold lives in
+# docs/guide/, so editing a guide counts as updating the README (readme_with_code).
+readme_files = ["README.md", "docs/guide/*.md"]
 # Operator 2026-09-29 (decision D-strip-coauthor-history): no commit in this
 # repository credits a tool. The commit-msg hook refuses it for every agent.
 forbidden_trailers = ["Co-Authored-By"]
