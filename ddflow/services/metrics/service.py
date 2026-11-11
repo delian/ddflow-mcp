@@ -13,6 +13,9 @@ from ...core import clock
 from ...core.events import Event
 from ...core.metrics import VIEWS
 from ...core.model import State
+from .batch import build as batch_build
+from .batch import has_figures as batch_ok
+from .batch import text as batch_text
 from .facts import collect
 from .forecast import forecast as forecast_view
 from .grid import sample as grid_sample
@@ -186,6 +189,8 @@ def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Ser
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
         return _lanes(events, cfg, now, floor)
+    if view == "batch":
+        return _figure(ctx, batch_build, batch_ok, batch_text, "size bucket")
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:
