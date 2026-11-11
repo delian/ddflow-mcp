@@ -152,6 +152,26 @@ def test_swarm_falls_back_to_the_greedy_terms_without_facts():
     assert [p.id for p in O.get_optimizer("swarm-v1").order({}, items)] == ["b", "d", "a", "c"]
 
 
+def test_swarm_shares_the_greedy_overlap_cut():
+    # `order` ranks (never filters); the ONE overlap check is `cut`, inherited unchanged --
+    # a swarm order still refuses overlapping work at the cut, exactly like greedy-v1.
+    lap = [_c("p", False, 1, "src/*"), _c("q", False, 1, "src/*"), _c("r", False, 1, "doc/*")]
+    r = O.get_optimizer("swarm-v1").cut(
+        {"facts": {"p": {"critical": True}, "q": {"critical": True}}},
+        lap,
+        Slots(3, 3),
+        clash=_overlap,
+    )
+    assert r.ids("taken") == ["p", "r"]
+    # both critical, overlapping items are still ordered (order ranks all) ...
+    ordered = O.get_optimizer("swarm-v1").order(
+        {"facts": {"p": {"critical": True}, "q": {"critical": True}}}, lap[:2]
+    )
+    assert [p.id for p in ordered] == ["p", "q"]
+    # ... but the inherited cut drops q for overlapping p, so no double-booking is offered.
+    assert [(v.id, v.other) for v in r.verdicts if v.what == "clash"] == [("q", "p")]
+
+
 def test_swarm_treats_an_unmeasured_fact_as_neutral_not_an_error():
     # a present-but-None (or non-numeric/non-finite) fact is an open-ctx miss, not a
     # TypeError: it orders neutrally (0.0) rather than aborting the whole plan.

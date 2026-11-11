@@ -235,8 +235,11 @@ class GreedyV1:
 
 
 class SwarmV1(GreedyV1):
-    """The swarm scheduler's own item order (critical-path items first, then the
-    longest-waiting), over the SAME greedy cut: one overlap check, not a parallel design.
+    """The swarm scheduler's own item RANK (critical-path items first, then the
+    longest-waiting), sharing ``GreedyV1.cut`` unchanged. ``order`` only ranks -- every
+    candidate once, per the port contract, nothing is dropped there -- and the ONE overlap
+    check stays ``GreedyV1.cut`` (inherited, not reimplemented), so a swarm order still
+    refuses overlapping work when it reaches the cut.
 
     Reads the per-candidate facts the caller fills into ``ctx["facts"]`` (``critical``: on the
     critical path, ``waited_s``: seconds since filed). A fact it does not find is neutral --
