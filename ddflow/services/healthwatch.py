@@ -34,6 +34,7 @@ from typing import Any
 from ..core import clock
 from ..core import health as H
 from ..core import leasewait as LW
+from ..core.progress import loops as LPS
 from ..infra import harness_identity as HI
 from ..infra.log import EventLog
 from . import autoorder as AOS
@@ -49,6 +50,46 @@ MODES = ("off", "propose", "apply")
 STEPS = ("nudge", "stop", "park")
 #: `(agent) -> (alive? or None when unknown, pids)`: is the harness that declared it running
 Alive = Callable[[str], "tuple[bool | None, list[int]]"]
+#: Loop kinds the unattended pass reports as RUNAWAY: a gate loop never converges on its
+#: own (the same failure repeating, a gate flapping, a claim-and-give-up round), so it is
+#: not only a `doctor`/`loops` note for a reader, but a runaway for the pass.
+LOOP_RUNAWAY_KINDS = ("repeat_claims", "gate_flapping", "repeated_failure")
+
+
+def _loop_runaways(events, st, cfg) -> list[H.Finding]:
+    """`core.progress.loops` findings as RUNAWAY: `??loops` reads `[loops].max_repeated_failures`
+    and friends, but `doctor` and `ddflow loops` are read by a person; the cadenced pass is
+    not. Each such finding rides the watchdog so a lane re-applying the same failing patch
+    forever resurfaces even with no reader looking."""
+    out: list[H.Finding] = []
+    for f in LPS.detect(events, st, cfg):
+        if f.kind not in LOOP_RUNAWAY_KINDS:
+            continue
+        it = st.items.get(f.item)
+        lease_holder = it.lease.holder if it is not None and it.lease is not None else ""
+        # The RUNAWAY "holder" is what is running away (a job's is its job id); a loop's
+        # is the loop kind and its gate -- "kind:gate", or just the kind when no one gate
+        # is the loop. `LPS.detect` may return more than one loop for one item, and each
+        # is a distinct problem that must not collapse in `inspect`'s (kind, item, holder)
+        # dedupe (which it would under the lease holder, or under the gate name alone).
+        out.append(
+            H.Finding(
+                H.RUNAWAY,
+                f.item,
+                f"{f.kind}:{f.gate}" if f.gate else f.kind,
+                0.0,
+                f.detail,
+                "the loop will not converge on its own; `ddflow loops` names the threshold",
+                {
+                    "loop": f.kind,
+                    "count": f.count,
+                    "threshold": f.threshold,
+                    "gate": f.gate,
+                    "holder": lease_holder,
+                },
+            )
+        )
+    return out
 
 
 def limits(cfg) -> H.Limits:
@@ -222,10 +263,12 @@ def inspect(
     recoveries=None,
 ):
     """The findings now, deduplicated by (kind, item, holder)."""
+    events = log.read_all() if events is None else events
     lanes, procs, waits = gather(
         log, st, cfg, repo, now, events, activity, alive, recoveries=recoveries
     )
     found = H.inspect(lanes, procs, waits, [c.as_dict() for c in cycles], now, limits(cfg))
+    found += _loop_runaways(events, st, cfg)
     return list({f.key: f for f in found}.values())
 
 

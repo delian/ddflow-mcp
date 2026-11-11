@@ -213,13 +213,11 @@ def pipeline_by_diff(
         return gates, None
     paths = diff()
     chosen = gates
-    # A docs-only or format-only committed diff beside uncommitted work (an untracked file,
-    # or a dirty tracked file outside the change) must take the FULL pipeline, never a
-    # reduced one (rubber_duck): the reduced pipeline skips review + whole-suite ci.
-    tree = _item_tree(item, repo)
-    if tree is not None and _uncommitted_not_in(tree):
-        return chosen, lambda: paths
     if diff_is_docs_only(item, cfg, paths):
+        # Documents-only is a claim about the committed DIFF alone (all its paths are docs),
+        # so it does not fail closed on uncommitted work: `diff_is_trivial` below is the one
+        # that checks for an untracked or dirty file beside the change, because only the
+        # trivial tier skips review + whole-suite ci (rubber_duck).
         chosen = doc_pipeline
     elif diff_is_trivial(item, cfg, repo, paths):
         chosen = _trivial_pipeline(gates)

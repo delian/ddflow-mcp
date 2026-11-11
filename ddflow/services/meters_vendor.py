@@ -122,7 +122,8 @@ def _read_snapshot(ctx: B.MeterContext) -> dict[str, Any]:
     data = json.loads(ctx.snapshot.read_text(encoding="utf-8"))
     windows = data.get("windows") if isinstance(data, dict) else None
     version = data.get("version") if isinstance(data, dict) else None
-    if not isinstance(windows, dict) or version is True or version != SNAPSHOT_VERSION:
+    # ddflow only ever writes the integer, so a float like 1.0 is not this version.
+    if not isinstance(windows, dict) or type(version) is not int or version != SNAPSHOT_VERSION:
         raise ValueError("not a snapshot of this version")
     return windows
 
@@ -149,11 +150,12 @@ def read_claude_snapshot(ctx: B.MeterContext) -> list[B.Reading]:
     return out
 
 
-def _is_newer(row: object, now: float) -> bool:
-    """Was ``row`` observed after ``now``? A writer delayed on its way to the lock must not put
-    an older figure over a newer one."""
+def _is_newer(row: object, ctx: B.MeterContext) -> bool:
+    """Was ``row`` observed after ``ctx.now``, by no more than the stale window? A writer delayed
+    on its way to the lock must not put an older figure over a newer one, but a row dated by a
+    clock that disagrees with ours is stale (`is_stale`), never newer."""
     observed = _reset_of(_table(row).get("observed_at"))
-    return observed is not None and observed > now
+    return observed is not None and 0 < observed - ctx.now <= ctx.stale_after_s
 
 
 def _write(ctx: B.MeterContext, figures: dict[str, dict[str, Any]], origin: str) -> int:
@@ -171,7 +173,7 @@ def _write(ctx: B.MeterContext, figures: dict[str, dict[str, Any]], origin: str)
             windows = _read_snapshot(ctx)
         except (OSError, ValueError):
             windows = {}
-        fresh = {w: row for w, row in stamped.items() if not _is_newer(windows.get(w), ctx.now)}
+        fresh = {w: row for w, row in stamped.items() if not _is_newer(windows.get(w), ctx)}
         if fresh:
             body = {"version": SNAPSHOT_VERSION, "windows": {**windows, **fresh}}
             atomic_write(ctx.snapshot, json.dumps(body, sort_keys=True), mode=0o600)

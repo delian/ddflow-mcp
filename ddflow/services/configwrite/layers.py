@@ -39,6 +39,11 @@ MACHINE_LOCAL_KEYS: dict[str, str] = {
     # surface never writes them (no `<section>.<knob>` under them is a knob).
     "reviewer": "local",
     "companion": "local",
+    # The two tables that decide what a paired token may do: operator-owned, so a clone's
+    # committed file cannot widen a role (B-token-role-widened). Their writes default to the
+    # git-ignored local layer, like the reviewer/companion endpoints above.
+    "agent.roles": "local",
+    "agent.capability_verbs": "local",
 }
 
 

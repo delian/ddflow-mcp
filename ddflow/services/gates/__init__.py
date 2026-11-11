@@ -43,6 +43,7 @@ from .baseline import (  # noqa: F401
     cache_store,
     only_tests_failed,
     read_full,
+    test_check,
     test_files_of,
     write_full,
 )
@@ -182,6 +183,7 @@ from .runner import (  # noqa: F401
     OUTPUT_TAIL_CHARS,
     RUNS_DIR,
     Classified,
+    capture_test_durations,
     classify_exit,
     command_layer_evidence,
     output_evidence,

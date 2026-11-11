@@ -340,6 +340,7 @@ class EventLog(_GuardMixin, _ReadMixin):
         )
         ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
         line = (ev.to_json() + "\n").encode("utf-8")
+        created = not self.shard.exists()
         fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o644)
         try:
             # A shard that does not end in a newline holds a torn append from a writer
@@ -357,6 +358,10 @@ class EventLog(_GuardMixin, _ReadMixin):
             os.fsync(fd)
         finally:
             os.close(fd)
+        if created:
+            # A brand-new shard is a new name in `self.dir`: its fsync covers the bytes
+            # but not the entry, so fsync the directory too (AU-durability).
+            fsio.fsync_dir(self.dir)
         if self._meta is not None:
             self._meta.advance(self.shard, (size, before_mtime), ev, len(line))
         for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)

@@ -115,3 +115,10 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
 _MEMBER_FILTERS: dict[str, Callable[[Any], tuple[Any, list[str]]]] = {
     key: meta.members for key, meta in DECLARED.items() if meta.members is not None
 }
+
+#: Knobs the committed `file` layer may not set (`knob(operator_only=True)`): operator-only
+#: tables such as `[agent].roles` and `[agent].capability_verbs`, whose committed value would
+#: let a cloned project widen a token holder's authority (B-token-role-widened).
+_OPERATOR_ONLY: frozenset[str] = frozenset(
+    key for key, meta in DECLARED.items() if meta.operator_only
+)

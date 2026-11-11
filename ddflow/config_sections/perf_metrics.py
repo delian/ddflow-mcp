@@ -182,3 +182,17 @@ class PerfMetricsConfig:
             else "must be a number > 0"
         ),
     )
+    report_default_window: str = knob(
+        "28d",
+        doc="The time window a perf report measures when none is given: a duration back (7d, 12h) or a date YYYY-MM-DD (parse_since).",
+    )
+    report_max_rows: int = knob(
+        20,
+        doc="Most rows the perf report's text/markdown renderer shows per section; the cut line names the omitted count and says the json holds every row (PM-report-surfaces).",
+        check=int_at_least(1),
+    )
+    report_width: int = knob(
+        76,
+        doc="The width in characters the perf report's text/markdown renderer keeps every line within (terminal and chat alike).",
+        check=int_at_least(1),
+    )

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/swarm/digest.py:HEDGE_MIN_FAMILIES" = 'two distinct families racing one item is the DEFINITION of a hedge (one family is just an attempt); 2 is the definition itself, not a tunable knob'

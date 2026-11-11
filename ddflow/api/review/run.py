@@ -19,6 +19,7 @@ from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
+from ..gates import item_tree
 from ..lifecycle.author import _author_model
 from ..review_supersede import round_evidence
 from .context import (
@@ -141,6 +142,17 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     ):
         return _review_combined(asked, args, lines, under, log, cfg)
     return _review_each(asked, args)
+
+
+def _reviewed_tree(repo: Path, cfg, st, it, called_from: Path | None) -> Path:
+    """The tree the reviewer is run in and watched in: the item's own worktree when it has
+    one (B708761957b), or the primary (``repo``) for a review with no item.
+
+    Hoisted out of ``_review_gate`` so threading the tree does not push that long function
+    past the complexity ratchet; the conditional lives here while the call site stays one
+    plain call.
+    """
+    return (item_tree(repo, cfg, st, it, called_from)[0] if it else None) or repo
 
 
 def _same_reviewers(repo: Path, gates: list[str]) -> bool:
@@ -657,6 +669,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     _log_started(log, it, item, gate)
     results = []
     say(_BACKGROUND_HINT)
+    # The tree the reviewer is run in and watched in is the item's own worktree when it
+    # has one (B708761957b): a command reviewer must leave it as it found it, and only it
+    # is watched -- the primary (repo) is the honest fallback for a review with no item.
+    tree = _reviewed_tree(repo, cfg, st, it, called_from)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
@@ -666,6 +682,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             intent,
             context=context,
             repo=repo,
+            tree=tree,
             prompt_overrides=overrides,
             on_progress=say,
             on_tick=keep_lease,

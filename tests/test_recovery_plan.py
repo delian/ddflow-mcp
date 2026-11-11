@@ -140,6 +140,24 @@ class TestOrphans:
         assert a.cls == RP.PROPOSE
         assert a.evidence["effect"] == "resume"
 
+    def test_stale_flag_base_ref_is_flagged_and_repaired_safe_auto(self):
+        """Bda0ba7b9eb: a worktree whose own config holds a flag-valued base_ref is
+        repaired by `recover --apply`, whatever the salvage verdict."""
+        row = _row(kind="orphan_worktree", salvageable=False)
+        row["stale_base_ref"] = "--local"
+        out = _one(_facts(recoveries=[row]))
+        repairs = [a for a in out if a.evidence.get("effect") == "repair_base_ref"]
+        (a,) = repairs
+        assert a.cls == RP.SAFE_AUTO
+        assert a.evidence["stale_base_ref"] == "--local"
+        assert a.evidence["worktree"] == "/wt/T1"
+        assert a.command == "reset the stale worktree.base_ref = '--local' to the default"
+
+    def test_a_clean_worktree_without_a_stale_base_ref_emits_no_repair(self):
+        """Only a flag-valued base_ref is repaired; a clean tree emits its normal action."""
+        out = _one(_facts(recoveries=[_row(kind="orphan_worktree", salvageable=False)]))
+        assert all(a.evidence.get("effect") != "repair_base_ref" for a in out)
+
 
 class TestDeadRunsJobsQueue:
     def test_dead_gate_run_is_recorded_unavailable(self):
@@ -305,6 +323,47 @@ def test_a_job_whose_log_has_the_exit_is_ended_by_apply(repo):
     assert rec.exit == 0, rec.reason
     job = fold_all(EventLog(repo, "r").read_all()).jobs["J1"]
     assert job.ended_at and job.exit_code == 0
+
+
+def test_recover_flags_and_repairs_a_stale_flag_base_ref(repo):
+    """Bda0ba7b9eb: `recover` surfaces a worktree whose own config holds a flag-valued
+    base_ref, and `recover --apply` resets it. Pre-fix, recover said only 'INSPECT FIRST /
+    salvage' and offered no repair, so claim/status died on 'invalid worktree.base_ref'."""
+    from ddflow.api import lifecycle as LC
+    from ddflow.api import reporting as RP_API
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "init")
+    import re as _re
+
+    cfg = repo / ".ddflow" / "config.toml"
+    text = _re.sub(r"(?m)^(ttl_s|grace_s) = .*\n", "", cfg.read_text())
+    cfg.write_text(text.replace("[lease]\n", "[lease]\nttl_s = 1\ngrace_s = 0\n", 1))
+
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "p"})
+    log.append("task.added", "T1", {"parent": "P1", "title": "t", "globs": ["src/*"]})
+    out = LC.claim(repo, "T1", agent="crashed")
+    assert out.exit == 0, out.reason
+    wt = Path(out.data["worktree"])
+    (wt / ".ddflow").mkdir(parents=True, exist_ok=True)
+    (wt / ".ddflow" / "config.toml").write_text('[worktree]\nbase_ref = "--local"\n')
+    import time
+
+    time.sleep(2.2)
+
+    code, out_json, _ = run_cli(repo, "recover", "--all", "--plan", "--json")
+    assert code == 0
+    rows = json.loads(out_json)
+    assert any(
+        r["cls"] == "safe_auto"
+        and r["evidence"].get("effect") == "repair_base_ref"
+        and r["evidence"].get("stale_base_ref") == "--local"
+        for r in rows
+    )
+    rec = RP_API.recover(repo, all=True, apply=True, agent="op")
+    assert rec.exit == 0, rec.reason
+    assert "--local" not in (wt / ".ddflow" / "config.toml").read_text()
 
 
 def test_plain_recover_is_unchanged_on_a_clean_project(repo):

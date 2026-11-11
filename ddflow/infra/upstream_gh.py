@@ -16,11 +16,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
 from .forge import ForgeError, ForgeUnavailable, _check, _run
 
 Runner = Callable[..., Any]
 
-ERROR_MAX = 400
 _ISSUE = re.compile(r"/issues/(\d+)")
 
 
@@ -32,22 +32,29 @@ class GhError(RuntimeError):
     """`gh` was asked and said no."""
 
 
-def _ask(runner: Runner, cwd: Path, argv: list[str], what: str) -> str:
+def _ask(runner: Runner, cwd: Path, argv: list[str], what: str, *, cfg: Config | None = None) -> str:
+    error_max = (cfg or Config.load(cwd)).upstream_gh.error_max
     try:
         return _check(runner(cwd, argv), what)
     except ForgeUnavailable as exc:
-        raise Unavailable(str(exc)[:ERROR_MAX]) from exc
+        raise Unavailable(str(exc)[:error_max]) from exc
     except ForgeError as exc:
-        raise GhError(str(exc)[:ERROR_MAX]) from exc
+        raise GhError(str(exc)[:error_max]) from exc
 
 
-def ensure_ready(cwd: Path, *, runner: Runner = _run) -> None:
+def ensure_ready(cwd: Path, *, runner: Runner = _run, cfg: Config | None = None) -> None:
     """Raise `Unavailable` unless `gh` is installed and reports a logged-in account."""
-    _ask(runner, cwd, ["gh", "auth", "status"], "gh auth status")
+    _ask(runner, cwd, ["gh", "auth", "status"], "gh auth status", cfg=cfg)
 
 
 def create_issue(
-    cwd: Path, repo: str, title: str, body_file: Path, *, runner: Runner = _run
+    cwd: Path,
+    repo: str,
+    title: str,
+    body_file: Path,
+    *,
+    runner: Runner = _run,
+    cfg: Config | None = None,
 ) -> tuple[str, int | None]:
     """Run `gh issue create -R <repo> --title <title> --body-file <path>`; return the
     issue URL and number the command printed."""
@@ -56,6 +63,7 @@ def create_issue(
         cwd,
         ["gh", "issue", "create", "-R", repo, "--title", title, "--body-file", str(body_file)],
         "gh issue create",
+        cfg=cfg,
     ).strip()
     url = out.splitlines()[-1].strip() if out else ""
     m = _ISSUE.search(url)

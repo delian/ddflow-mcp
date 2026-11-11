@@ -553,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=e19b111a2e89 -->
-<details><summary>All 100 commands</summary>
+<!-- ddflow:begin README/commands sha=2256599cd648 -->
+<details><summary>All 101 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -651,6 +651,7 @@ needs a line written by hand here.
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
+| `ddflow perf` | perf of the host (fingerprint, measuring wrapper) and the perf report (window, filters, format) |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
 | `ddflow digest` | the operator queue: what waits on a person, as askable entries |
 | `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
@@ -1124,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 638 knobs.
+cadences, and the rest of the 645 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5428,7 +5429,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 638): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 645): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5712,7 +5713,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=010da106acce -->
+<!-- ddflow:begin README/tools sha=b614e785b788 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5723,7 +5724,7 @@ drift. The groups are the ones `ddflow help` prints.
 **Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
 
 - `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
-- `ddflow_view` (19 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `digest` (was `ddflow_digest`), `waves` (was `ddflow_waves`)
+- `ddflow_view` (20 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `waves` (was `ddflow_waves`)
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
@@ -5738,7 +5739,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 139 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 53 more in `all`</summary>
+<details><summary>All 140 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 54 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5793,6 +5794,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
+| Doing the work | `ddflow_perf` | all | Perf data about where ddflow runs. |
 | Doing the work | `ddflow_probe` | standard | Conflict probe: runs `git merge-tree --write-tree` between an item's branch and main (default) or another… |
 | Doing the work | `ddflow_suggest` | standard | Suggest a change to the agent that holds the item's lease: cut your patch onto their tip (commit-tree… |
 | Doing the work | `ddflow_sync` | standard | Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with… |
@@ -6017,7 +6019,7 @@ declared once and persists — see
 
 ## Configuration
 
-638 knobs across 57 sections, every one documented in place and listed, with its default
+645 knobs across 59 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6084,8 +6086,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=219a493f9704 -->
-<details><summary>All 638 knobs across 57 sections</summary>
+<!-- ddflow:begin README/knobs sha=5276dc8f3624 -->
+<details><summary>All 645 knobs across 59 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6530,6 +6532,9 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.prop_marginal_gain` | `0.25` |  |
 | `perf_metrics.prop_batch_dominance` | `2.0` |  |
 | `perf_metrics.prop_retire_payback` | `2.0` |  |
+| `perf_metrics.report_default_window` | `"28d"` |  |
+| `perf_metrics.report_max_rows` | `20` |  |
+| `perf_metrics.report_width` | `76` |  |
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
 | `pins.after_merge_timeout_s` | `120` |  |
@@ -6664,6 +6669,7 @@ long default is left to `ddflow config --explain`.
 | `slo.target_review_finding_rate` | `0.6` |  |
 | `slo.burn_rate_window_s` | `2592000` |  |
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
+| `store.stale_index_days` | `7.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
@@ -6713,6 +6719,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.index_url` | `""` |  |
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
+| `upstream_gh.error_max` | `400` |  |
 | `waves.auto_stamp` | `true` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
@@ -6723,6 +6730,8 @@ long default is left to `ddflow config --explain`.
 | `worktree.dispose_finished` | `true` |  |
 | `worktree.sweep_min_age_s` | `3600` |  |
 | `worktree.sweep_interval_s` | `900` |  |
+| `worktree.stash_retries` | `4` |  |
+| `worktree.stash_retry_pause_s` | `0.25` |  |
 | `worktree.max_parallel` | `0` |  |
 | `worktree.sync_before_start` | `true` |  |
 | `worktree.adopt_existing` | `true` |  |
@@ -7039,6 +7048,7 @@ Each is overridden with `ddflow prompts eject <name>`, which copies the shipped 
 | `onboard`, `import-existing-project` | Install into, and import history from, an existing project |
 | `research-companions`, `install-companions` | Choose and install companion tools |
 | `bug-hunt`, `code-deduplication`, `code-clean`, `all-tests` | Periodic quality passes |
+| `perf_report` | Answer performance questions from the perf report |
 
 ### CLI commands that change the project's setup
 

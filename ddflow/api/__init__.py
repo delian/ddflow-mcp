@@ -151,7 +151,6 @@ from .mergequeue_run import queue_run
 from .metrics import run_metrics
 from .model_cmds import model_show
 from .onboard import onboard as onboard_run
-from .perf import run_perf_env, run_perf_ingest, run_perf_run
 from .operations import (
     cadence,
     cleanup,
@@ -162,6 +161,8 @@ from .operations import (
     precommit,
     relevant_tests,
 )
+from .perf import run_perf_env, run_perf_ingest, run_perf_run
+from .perfreport import run_perf_report
 from .plan import plan_apply, plan_check, plan_confirm, plan_lint
 from .probe import probe as conflict_probe
 from .records import record_resource_listing, record_resource_read
@@ -383,6 +384,7 @@ __all__ = [
     "run_metrics",
     "run_perf_env",
     "run_perf_ingest",
+    "run_perf_report",
     "run_perf_run",
     "run_review",
     "session_adopt_orphans",

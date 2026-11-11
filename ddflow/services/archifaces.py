@@ -46,8 +46,19 @@ _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
 # (planned home task, modules already allowed) per program family; the default is ADP-tools.
 PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     "git": ("ADP-git", ("ddflow.infra.git",)),
-    "gh": ("ADP-forge", ("ddflow.infra.forge",)),
-    "glab": ("ADP-forge", ("ddflow.infra.forge",)),
+    "gh": (
+        "ADP-forge",
+        (
+            "ddflow.infra.forge",
+            "ddflow.infra.upstream_gh",
+            "ddflow.adapters.forge",
+            "ddflow.adapters.forge_github",
+        ),
+    ),
+    "glab": (
+        "ADP-forge",
+        ("ddflow.infra.forge", "ddflow.adapters.forge", "ddflow.adapters.forge_gitlab"),
+    ),
     DYNAMIC: ("ADP-tools", _RUNNER),
     **dict.fromkeys(TOOLS, ("ADP-tools", ())),
     **dict.fromkeys(PLATFORM, ("ADP-platform", ())),

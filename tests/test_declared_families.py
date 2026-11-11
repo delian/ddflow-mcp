@@ -64,7 +64,7 @@ def test_alias_table_is_generated_and_covers_every_non_hot_tool():
     assert table["ddflow_gate_record"] == ("ddflow_gate", "record")
     assert len(F.ALIASES) == len(table)
     assert all(F.FAMILIES[fam].members[act] == old for old, (fam, act) in table.items())
-    assert len(table) == 129
+    assert len(table) == len(TOOLS) - len(F.HOT_SINGLES)
 
 
 def test_a_declared_family_and_action_win_over_the_legacy_placement():
@@ -132,6 +132,10 @@ def test_loading_the_mcp_server_runs_the_family_check():
         "sys.exit(0 if 'ddflow.surfaces.tools.families' in sys.modules else 1)"
     )
     assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
+
+
+def test_perf_is_placed_in_the_view_family_as_action_perf():
+    assert F.placement("ddflow_perf") == ("ddflow_view", "perf")
 
 
 def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
