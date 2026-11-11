@@ -681,13 +681,17 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'. With `--phase`, ready upstream blocking-dependencies are included by default (labelled); `--phase-only` restores the in-phase-only slice.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "phase": {
           "type": "string",
-          "description": "Restrict to one phase (the 'implement phase X' entry point)."
+          "description": "Restrict to one phase (the 'implement phase X' entry point). By default the phase's ready blocking-dependencies are also returned, each labelled `blocking_dependency`; `phase_only=true` hides them."
+         },
+         "phase_only": {
+          "type": "boolean",
+          "description": "With `--phase`: return the phase's own ready items only, hiding the ready upstream blocking-dependencies shown by default."
          },
          "kind": {
           "type": "string",

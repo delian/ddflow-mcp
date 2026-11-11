@@ -121,6 +121,10 @@ class Plan:
     """What the scheduler decided, and everything it decided against."""
 
     ready: list[Item] = field(default_factory=list)
+    #: Ready work items OUTSIDE ``phase`` that ``phase`` transitively waits on, surfaced
+    #: by `next --phase` as blocking-dependencies (never as in-phase items). Empty unless
+    #: the caller asked for them (`plan(..., with_deps=True)`).
+    blocking_deps: list[Item] = field(default_factory=list)
     blocked: list[Blocked] = field(default_factory=list)
     running: list[Item] = field(default_factory=list)
     cycles: list[list[str]] = field(default_factory=list)
