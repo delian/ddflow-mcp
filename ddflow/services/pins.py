@@ -363,9 +363,7 @@ def _run_all(
         began = time.monotonic()
         kept = _snapshot(repo, r)
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        poisoned = (
-            done.error is None and done.returncode == 0 and _records_refusal(repo, r)
-        )  # the command "succeeded" by recording a guard refusal as the expected output
+        poisoned = _recorded_a_refusal(repo, r, done)
         broke = done.error is not None or done.returncode != 0 or poisoned
         # A killed or failed regeneration leaves its files as it dropped them (README.md with
         # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
@@ -384,13 +382,7 @@ def _run_all(
             ].unavailable = f"the regeneration did not finish in {limit}s (timed out).{back}"
             say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
         elif poisoned:
-            states[r.name].error = (
-                f"regeneration recorded a foreign-launch refusal ({FOREIGN_LAUNCH_REFUSAL!r}) as"
-                " the pin: the command ran from a tree whose code is not the caller's own, so what"
-                " it printed is that refusal, not the output the pin is for. Nothing was kept;"
-                " regenerate from the primary checkout, or from a lane whose own code runs."
-                f"{back}"
-            )
+            states[r.name].error = _REFUSED_RECORDING + back
             states[r.name].unavailable = ""
             say(f"pins: {r.name}: REFUSED ({time.monotonic() - began:.0f}s)")
         elif broke:
@@ -402,6 +394,19 @@ def _run_all(
             redone.append(r)
     _pmap(again, redone, workers, say, every, "re-checks")
     return [states[r.name] for r in chosen]
+
+
+_REFUSED_RECORDING = (
+    f"regeneration recorded a foreign-launch refusal ({FOREIGN_LAUNCH_REFUSAL!r}) as the pin: the"
+    " command ran from a tree whose code is not the caller's own, so what it printed is that"
+    " refusal, not the output the pin is for. Nothing was kept; regenerate from the primary"
+    " checkout, or from a lane whose own code runs."
+)
+
+
+def _recorded_a_refusal(repo: Path, r: Recipe, done: P.Captured) -> bool:
+    """A regeneration that "succeeded" by writing the foreign-launch refusal into the pin."""
+    return done.error is None and done.returncode == 0 and _records_refusal(repo, r)
 
 
 def _records_refusal(repo: Path, r: Recipe) -> bool:
