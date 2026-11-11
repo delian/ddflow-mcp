@@ -36,10 +36,12 @@ def _rules_line(v: dict[str, Any]) -> str:
 
 
 def _companions_line(v: dict[str, Any]) -> str:
-    ids = ", ".join(str(c["id"]) for c in v["actionable_companions"] if isinstance(c, dict))
+    ids = "".join(
+        f" {c['id']} [{c['state_word']}]" for c in v["actionable_companions"] if isinstance(c, dict)
+    )
     return (
         'Companions not wired up ("not checked" is not "missing"; '
-        f"`ddflow_companions` probes, has install commands): {ids}. Propose to the "
+        f"`ddflow_companions` probes, has install commands):{ids}. Propose to the "
         "operator; install nothing unasked."
     )
 
@@ -91,6 +93,7 @@ def volatile_lines(v: dict[str, Any]) -> str:
     if v.get("queue_is_empty") and v.get("importable"):
         parts.append(
             f"The queue is empty but {v['importable']} history file(s) were found: "
-            "`ddflow_import` (writes nothing), then put it to the operator."
+            "`ddflow_import` (writes nothing), then put it to the operator; the `onboard` "
+            "prompt also cuts the workflow over."
         )
     return "\n".join(parts)
