@@ -117,6 +117,7 @@ def propose_split_files(
     cfg = cfg or _section_knobs(Config())
     share = cfg.prop_split_share
     floor = _floor(rollup)
+    workers = _workers(rollup)
     out: list[Proposal] = []
     if floor is None:
         return out
@@ -125,6 +126,8 @@ def propose_split_files(
     for file, secs in sorted((rollup.get("per_file") or {}).items()):
         if not isinstance(secs, (int, float)) or isinstance(secs, bool) or not _is_finite(secs):
             continue  # an unmeasured or non-finite duration is not a sample
+        if secs > floor:
+            continue  # a file longer than the whole floor is a bad sample (its share must be <= 1)
         if secs / floor < share:
             continue
         size = (sizes or {}).get(file)
@@ -132,7 +135,7 @@ def propose_split_files(
             continue  # no size in hand, or under the rule: cannot propose a SPLIT
         # the SZ split into N modules of this file would let them run on the workers, so the
         # one-file portion of the floor is divided; the run saving is the part past floor / N.
-        saving = max(0.0, secs - secs / max(1, _workers(rollup)))
+        saving = _saving(secs, workers)
         out.append(
             Proposal(
                 "split_file",
@@ -155,11 +158,23 @@ def propose_split_files(
     return out
 
 
-def _workers(rollup: dict) -> int:
+def _workers(rollup: dict) -> int | None:
+    """The measured worker count, or ``None`` when the rollup carried none or an invalid
+    one (non-numeric, non-finite, non-positive, bool): a probe that did not run. ``None``
+    is never a measured 1, so a count it never had can never publish a zero saving."""
     w = rollup.get("workers")
     if isinstance(w, bool) or not isinstance(w, (int, float)) or not _is_finite(w) or w <= 0:
-        return 1
+        return None
     return int(w)
+
+
+def _saving(secs: float, workers: int | None) -> float | None:
+    """Seconds per run a split or shard removes from ``secs``: the file's pieces then run in
+    parallel on ``workers``, so its ``secs`` drop to ``secs / workers``. One worker means
+    the same path (a real 0); an unmeasured count is ``None`` -- never a published 0."""
+    if workers is None:
+        return None
+    return max(0.0, secs - secs / workers)
 
 
 def propose_shard_or_workers(
@@ -173,12 +188,15 @@ def propose_shard_or_workers(
     probe that did not run."""
     cfg = cfg or _section_knobs(Config())
     floor = _floor(rollup)
+    workers = _workers(rollup)
+    if floor is None:
+        return None
     per_file = {
         f: s
         for f, s in (rollup.get("per_file") or {}).items()
-        if isinstance(s, (int, float)) and not isinstance(s, bool) and _is_finite(s)
+        if isinstance(s, (int, float)) and not isinstance(s, bool) and _is_finite(s) and s <= floor
     }
-    if floor is None or not per_file:
+    if not per_file:
         return None
     slowest = max(per_file, key=lambda f: per_file[f])
     slowest_s = per_file[slowest]
@@ -197,7 +215,7 @@ def propose_shard_or_workers(
             },
             sample_size=len(per_file),
             effect_size=skew,
-            expected_saving_s_run=slowest_s - slowest_s / max(1, _workers(rollup)),
+            expected_saving_s_run=_saving(slowest_s, workers),
             expected_saving_s_day=None,
             risk="the shard only; it moves tests between files, the suite is ungreen until it re-passes",
             because=f"{slowest} is {skew:.2f} of the floor: shard it by historical duration",

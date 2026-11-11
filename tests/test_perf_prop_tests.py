@@ -159,3 +159,24 @@ def test_a_split_proposal_next_call_names_the_file():
     call = p.next_call()
     assert "ddflow split tests/test_a.py" in call
     assert "<file>" not in call
+
+
+def test_a_file_longer_than_the_floor_is_not_a_split_or_shard():
+    """A file whose duration exceeds the whole floor is a bad sample (its share must be
+    <= 1), never a split, shard or a saving above the floor."""
+    cfg = PerfMetricsConfig(prop_split_share=0.5, prop_shard_skew=0.5)
+    rollup = {"critical_path_floor_s": 10.0, "workers": 4, "per_file": {"big.py": 40.0}}
+    sizes = {"big.py": 1000}
+    assert prop_tests.propose_split_files(rollup, sizes=sizes, max_file_bytes=100, cfg=cfg) == []
+    assert prop_tests.propose_shard_or_workers(rollup, cfg=cfg) is None
+
+
+def test_an_unmeasured_worker_count_is_an_unknown_saving_not_zero():
+    """A present but non-positive worker count is unmeasured, not 1: the split is still
+    proposed (over the size rule), but its saving is ``None``, never a published 0."""
+    cfg = PerfMetricsConfig(prop_split_share=0.5)
+    rollup = _rollup({"tests/test_a.py": 8.0, "tests/test_b.py": 2.0}, workers=1)
+    rollup["workers"] = 0  # a present but non-positive count: unmeasured, not 1
+    sizes = {"tests/test_a.py": 200, "tests/test_b.py": 10}
+    [p] = prop_tests.propose_split_files(rollup, sizes=sizes, max_file_bytes=100, cfg=cfg)
+    assert p.expected_saving_s_run is None
