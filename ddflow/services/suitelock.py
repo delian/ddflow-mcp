@@ -32,6 +32,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..adapters.clock import DEFAULT as CLOCK
+from ..adapters.env import DEFAULT as ENV
 from ..infra import fsio
 from . import slots as SLOTS
 
@@ -66,7 +68,7 @@ class SuiteBusy(RuntimeError):
 
 
 def state_dir() -> Path:
-    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    base = ENV.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "ddflow" / "suites"
 
 
@@ -112,7 +114,7 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
     A ticket is live when its owner holds the flock on it and beat within ``stale_s``; a
     PARKED one (its owner gave up the wait) while it is younger than ``grace_s``. Anything
     else is dead and removed: a killed waiter's lock went with it."""
-    now = time.time()
+    now = CLOCK.wall()
     live = []
     for path in sorted(queue.glob("*.ticket")) + sorted(queue.glob("*.parked")):
         if path.name == mine:
@@ -163,7 +165,7 @@ def _parked_for(queue: Path, key: str, grace_s: float) -> Path | None:
     taken back."""
     for path in sorted(queue.glob(f"*-{key}.parked")):
         with contextlib.suppress(OSError):
-            if time.time() - path.stat().st_mtime <= grace_s:
+            if CLOCK.wall() - path.stat().st_mtime <= grace_s:
                 return path
     return None
 
@@ -237,7 +239,7 @@ def hold(
     grace_s = float(cfg.ci.suite_queue_grace_s)
     say = say or _say_default
     queue = directory / QUEUE
-    start = time.monotonic()
+    start = CLOCK.monotonic()
     slots = SLOTS.Slots(directory, NAME)
     said = 0
     with contextlib.ExitStack() as stack:
@@ -250,7 +252,7 @@ def hold(
             position = (line.index(name) + 1) if name in line else len(line) + 1
             if position == 1:
                 if head_since is None:
-                    head_since = time.monotonic()
+                    head_since = CLOCK.monotonic()
                 try:
                     slot = stack.enter_context(slots.hold(limit, 0))
                     break
@@ -258,7 +260,7 @@ def hold(
                     pass
             if position != said:
                 said = position
-                say(str(SuiteBusy(_holders(directory, limit), time.monotonic() - start, position)))
+                say(str(SuiteBusy(_holders(directory, limit), CLOCK.monotonic() - start, position)))
             # The default wait limit counts time IN LINE, not progress
             # (B-suite-wait-expires-at-head-of-queue): a waiter behind others gives up after
             # `wait` from when it queued; a waiter at the head gives up after `wait` from when
@@ -267,14 +269,14 @@ def hold(
             # run. An explicit `wait_s` override is a hard TOTAL bound (Ba5d5d63f12), so it keeps
             # the old queue-wide anchor. `waited_s` still reports the whole queueing.
             anchor = start if overridden else (head_since if head_since is not None else start)
-            if time.monotonic() - anchor >= wait:
+            if CLOCK.monotonic() - anchor >= wait:
                 ticket.park = True
-                raise SuiteBusy(_holders(directory, limit), time.monotonic() - start, position)
+                raise SuiteBusy(_holders(directory, limit), CLOCK.monotonic() - start, position)
             time.sleep(QUEUE_POLL_S)
             _beat(ticket.path)
         # Placed: hand the place on (the ticket goes with this block), then hold.
         note = _note(directory, slot.index)
-        now = time.time()
+        now = CLOCK.wall()
         body = {"holder": holder, "pid": os.getpid(), "at": now,
                 "at_iso": datetime.fromtimestamp(now).astimezone().strftime("%H:%M:%S")}  # fmt: skip
         with contextlib.suppress(OSError):

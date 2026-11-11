@@ -11,12 +11,12 @@ unavailable, never zero. No test argument, output or path beyond the test/file i
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 from xml.etree import ElementTree
 
 from ddflow.adapters import digest
+from ddflow.adapters.clock import DEFAULT as CLOCK
 from ddflow.services.perf import store
 
 
@@ -101,7 +101,7 @@ def fold(cases: list[TestCase], repo, gate: str, env: str = "") -> None:
         store.append(
             repo,
             "test_durations",
-            store.Sample(time.time(), env, c.duration_s, gate, digest_hex),
+            store.Sample(CLOCK.wall(), env, c.duration_s, gate, digest_hex),
         )
 
 
