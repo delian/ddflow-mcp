@@ -323,3 +323,4 @@
 {"agent":"swarm-launcher","data":{"at":1794436387.0164828,"holder":"swarm-launcher"},"id":"e7d4bd82b67718925a23b8ca7","kind":"lease.renewed","lamport":178255,"schema":1,"subject":"B-ac-smoke","ts":"2026-11-11T22:33:07.153587Z"}
 {"agent":"swarm-launcher","data":{"at":1794436515.266918,"holder":"swarm-launcher"},"id":"e7ddff878994a8b3ee47e1c36","kind":"lease.renewed","lamport":178265,"schema":1,"subject":"B-ac-smoke","ts":"2026-11-11T22:35:15.464793Z"}
 {"agent":"swarm-launcher","data":{"at":1794436664.9477568,"holder":"swarm-launcher"},"id":"ecbf6c726a4b931be3ccf9c50","kind":"lease.renewed","lamport":178293,"schema":1,"subject":"B-ac-smoke","ts":"2026-11-11T22:37:45.058162Z"}
+{"agent":"swarm-launcher","data":{"at":1794436786.9036944,"holder":"swarm-launcher"},"id":"e7d647a4b230242a7ff31608c","kind":"lease.renewed","lamport":178327,"schema":1,"subject":"B-ac-smoke","ts":"2026-11-11T22:39:47.058544Z"}
