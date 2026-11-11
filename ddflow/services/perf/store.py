@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ddflow.adapters.clock import DEFAULT as CLOCK
 from ddflow.config import Config
 from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.infra.fsio import atomic_write
@@ -340,7 +340,7 @@ class Store:
     ):
         self.repo = repo
         self.perf_metrics = perf_metrics or _section_knobs(Config())
-        self._now = clock or time.time
+        self._now = clock or CLOCK.wall
 
     def append(self, series: str, env: str, value: float, gate: str = "", digest: str = "") -> None:
         append(self.repo, series, Sample(self._now(), env, float(value), gate, digest))

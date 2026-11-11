@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from .. import modelreg
 from ..lane_driver import LaneHandle, Result, driver_for
@@ -104,7 +104,7 @@ def conformance_level(
     report = CIO.load(repo, agent)
     if report is None:
         return 0
-    at = time.time() if now is None else now
+    at = CLOCK.wall() if now is None else now
     if max_age_s and at - report.at > max_age_s:
         return 0
     return report.level
