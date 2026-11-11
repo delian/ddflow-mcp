@@ -355,7 +355,8 @@ def test_status_by_tag_json_keeps_the_budget_of_plain_status(repo, monkeypatch):
     assert "truncated" in body, "three quarters of the body is over the budget"
     for extra in ("truncated", "next"):
         body.pop(extra)
-    assert len(json.dumps(body, indent=2)) <= chars
+    size = len(json.dumps(body, indent=2))
+    assert chars // 2 < size <= chars, "held to the whole budget, not its half"
 
 
 def _heavy_row(item: str) -> dict:
@@ -444,6 +445,9 @@ def test_next_lane_footer_keeps_kind_and_phase(repo, monkeypatch):
     nxt = _lane_footer(monkeypatch, repo, {"lane": "L", "kind": "doc", "phase": "P1"})
     assert nxt["full_cli"] == "ddflow next --lane L --kind doc --phase P1 --full"
     assert nxt["full_mcp"] == "ddflow_next lane=L kind=doc phase=P1 full=true"
+    only = _lane_footer(monkeypatch, repo, {"lane": "L", "phase": "P1", "phase_only": True})
+    assert only["full_cli"] == "ddflow next --lane L --phase P1 --phase-only --full"
+    assert only["full_mcp"] == "ddflow_next lane=L phase=P1 phase_only=true full=true"
     default = _lane_footer(monkeypatch, repo, {"lane": "L"})
     assert default["full_cli"] == "ddflow next --lane L --full"
 

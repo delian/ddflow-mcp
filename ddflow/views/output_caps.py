@@ -147,26 +147,33 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     if not rest:
         return cli, tool, narrow, paged
     # `next --lane L [--kind K] [--phase P]`: the rerun keeps the whole selection.
-    lane, kind, phase = _split_lane(rest)
+    lane, kind, phase, only = _split_lane(rest)
     c_args, t_args = [f"--lane {shlex.quote(lane)}"], [f"lane={shlex.quote(lane)}"]
     for flag, val in (("kind", kind), ("phase", phase)):
         if val:
             c_args.append(f"--{flag} {shlex.quote(val)}")
             t_args.append(f"{flag}={shlex.quote(val)}")
+    if only:
+        c_args.append("--phase-only")
+        t_args.append("phase_only=true")
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
 
 
-def _split_lane(rest: str) -> tuple[str, str, str]:
-    """``'L --kind K --phase P'`` -> (L, K, P); kind and phase are optional."""
+def _split_lane(rest: str) -> tuple[str, str, str, bool]:
+    """``'L --kind K --phase P --phase-only'`` -> (L, K, P, True); all but L optional."""
+    rest, only, _ = rest.partition(" --phase-only")
     rest, _, phase = rest.partition(" --phase ")
     lane, _, kind = rest.partition(" --kind ")
-    return lane, kind, phase
+    return lane, kind, phase, bool(only)
 
 
-def lane_token(lane: str, kind: str = "", phase: str = "") -> str:
+def lane_token(lane: str, kind: str = "", phase: str = "", phase_only: bool = False) -> str:
     """The ``command`` token `apply` reads for `next --lane`: carries kind and phase."""
-    return f"next --lane {lane}" + (f" --kind {kind}" if kind else "") + (
-        f" --phase {phase}" if phase else ""
+    return (
+        f"next --lane {lane}"
+        + (f" --kind {kind}" if kind else "")
+        + (f" --phase {phase}" if phase else "")
+        + (" --phase-only" if phase_only else "")
     )
 
 
