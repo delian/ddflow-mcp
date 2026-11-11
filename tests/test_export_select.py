@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow.core import model
 from ddflow.core.events import PROVENANCE_KINDS, Event
@@ -420,7 +421,7 @@ def test_template_flag_renders_without_writing(proj):
 
 def test_the_help_topic_and_readme_document_the_new_verbs():
     help_text = (ROOT / "ddflow/templates/prompts/help/export.md").read_text()
-    readme = (ROOT / "README.md").read_text()
+    readme = readme_corpus()
     for needle in (
         "export enable",
         "export disable",
