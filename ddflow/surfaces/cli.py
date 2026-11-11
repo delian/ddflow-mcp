@@ -28,7 +28,7 @@ from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
 from ..api import surf_setup as SS
-from ..api.cmdlog import cmdlog
+from ..api.cmdlog import cmdlog, repo_root
 from ..api.guard_launch import guard_foreign_launch
 from ..api.refs import provide_upgrade_vocabulary
 from ..api.waves_auto import scope_of
@@ -430,13 +430,13 @@ def _remember_command(
     """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
     git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
     try:
-        from ..api.cmdlog import repo_root
-
         root = repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
     except Exception:
         root = Path.cwd()
     try:
-        cmdlog.record(root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags)
+        cmdlog.record(
+            root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags
+        )
     except Exception:  # the log is best-effort; it must not change the command's exit code
         pass
 
