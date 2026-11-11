@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
@@ -32,7 +33,7 @@ def test_session_start_brief_lists_missing_default_companions(repo):
 
 
 def test_readme_names_install_companions_and_counts_right():
-    text = README.read_text()
+    text = readme_corpus()
     start = text.index("### Companion tools")
     section = text[start : text.index("\n### ", start + 5)]
     assert "install-companions" in section
