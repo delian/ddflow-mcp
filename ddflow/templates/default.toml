@@ -271,12 +271,14 @@ idle_s = 900
 check_budget_s = 60
 reply_s = 600
 crash_s = 300
+orphan_s = 300
 mode_idle = "inherit"
 mode_stalled = "inherit"
 mode_unresponsive = "inherit"
 mode_locked = "inherit"
 mode_crashed = "inherit"
 mode_runaway = "inherit"
+mode_orphan_wait = "inherit"
 
 [hooks]
 forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
