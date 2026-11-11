@@ -84,3 +84,13 @@ def test_notice_does_not_offer_all_once_at_the_most_a_list_gives():
     assert "--all" in cut_notice(d)
     d = {**d, "limit": R.LIST_MAX_LIMIT}
     assert "--all" not in cut_notice(d) and "--match" in cut_notice(d)
+
+
+def test_mcp_phase_list_is_unpaged_like_the_cli():
+    from ddflow.core import limits as L
+    from ddflow.surfaces.tools.operations import _limit
+
+    assert _limit({"kind": "phase"}) == L.LIST_MAX_LIMIT
+    assert _limit({"kind": "task"}) == 25
+    assert _limit({"kind": "task", "all": True}) == L.LIST_MAX_LIMIT
+    assert _limit({"kind": "phase", "limit": 5}) == 5
