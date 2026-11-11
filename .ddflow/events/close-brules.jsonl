@@ -176,3 +176,5 @@
 {"agent":"close-brules","data":{"at":1794430948.5650892,"holder":"close-brules"},"id":"e498d03efb4b180ed3ca96f4f","kind":"lease.renewed","lamport":177479,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:02:28.715787Z"}
 {"agent":"close-brules","data":{"at":1794431572.051087,"holder":"close-brules"},"id":"e4e3aa24be3f378ad9552e039","kind":"lease.renewed","lamport":177499,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:12:52.198723Z"}
 {"agent":"close-brules","data":{"at":1794432193.5162432,"holder":"close-brules"},"id":"e418373f6f67d55d1dd6746fd","kind":"lease.renewed","lamport":177534,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:23:13.657282Z"}
+{"agent":"close-brules","data":{"at":1794432827.0036938,"holder":"close-brules"},"id":"e9e2c40b0f978693ac89dfd8c","kind":"lease.renewed","lamport":177580,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:33:47.150518Z"}
+{"agent":"close-brules","data":{"at":1794433451.63768,"holder":"close-brules"},"id":"ee25879fc77fd90c08f16ae35","kind":"lease.renewed","lamport":177681,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:44:11.787034Z"}
