@@ -28,6 +28,14 @@ def _commit(tmp_path, rel: str, text: str, message: str):
     _git(tmp_path, "commit", "-qm", message)
 
 
+def test_event_only_commit_does_not_supersede_a_gated_phase_run(tmp_path):
+    # With globs now too: a gated phase's source globs do not match `.ddflow/` files, so
+    # an event-only commit (ddflow's own bookkeeping) must NOT supersede its run (B4ba4673c0a).
+    began = _repo(tmp_path)
+    _commit(tmp_path, ".ddflow/events/shard.jsonl", "{}\n", "events: complete other")
+    assert not G.superseded_by(began, G.tree_identity(tmp_path), tmp_path, paths=["mine.py"])
+
+
 def test_event_only_commit_does_not_supersede_a_phase_run(tmp_path):
     # A phase has no globs, so `superseded_by` has no paths: an event-only commit
     # (`.ddflow/events`, ddflow's own bookkeeping) must NOT supersede the run.
@@ -62,3 +70,6 @@ def test_found_text_names_the_failing_test_ids():
     assert _run._found_text("failed", {"failed_tests": ["tests/a.py::test_1"]}) == (
         "FAILED tests/a.py::test_1"
     )
+    many = [f"tests/a.py::test_{n}" for n in range(81)]
+    text = _run._found_text("failed", {"failed_tests": many})
+    assert text.endswith("tests/a.py::test_79 (and 1 more)")

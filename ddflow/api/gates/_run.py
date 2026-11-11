@@ -189,11 +189,14 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+_MAX_FAILED_IDS_SHOWN = 80  #: how many failing test ids a superseded run's refusal names
+
+
 def _found_text(result: str, ev: dict[str, Any]) -> str:
     """What a finished-but-superseded run found, so its outcome is not lost
     (B267a6b0b5e). The failing test ids are named too: the test ids are not a side
     note, they are what an operator needs to fix, so they survive a supersede the way
-    the verdict does (B4ba4673c0a)."""
+    the verdict does (B4ba4673c0a), with a note when there are more."""
     found = [result.upper()]
     body: list[str] = []
     summary = ev.get("summary") or []
@@ -201,7 +204,10 @@ def _found_text(result: str, ev: dict[str, Any]) -> str:
         body.extend(str(s) for s in summary)
     ids = ev.get("failed_tests") or []
     if ids:
-        body.append(", ".join(str(t) for t in ids[:80]))
+        shown = ", ".join(str(t) for t in ids[: _MAX_FAILED_IDS_SHOWN])
+        body.append(
+            shown if len(ids) <= _MAX_FAILED_IDS_SHOWN else f"{shown} (and {len(ids) - _MAX_FAILED_IDS_SHOWN} more)"
+        )
     if body:
         found.append("; ".join(body))
     return " ".join(found).strip()
