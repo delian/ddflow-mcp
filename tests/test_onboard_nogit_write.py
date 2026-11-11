@@ -57,4 +57,13 @@ def test_a_bare_repository_is_a_repository(tmp_path):
 
     (tmp_path / "HEAD").write_text("ref: refs/heads/main\n")
     (tmp_path / "objects").mkdir()
+    (tmp_path / "refs").mkdir()
     assert OB._not_a_repository(tmp_path) is False
+
+
+def test_a_directory_with_only_head_and_objects_is_not_a_repository(tmp_path):
+    from ddflow.api import onboard as OB
+
+    (tmp_path / "HEAD").write_text("ref: refs/heads/main\n")
+    (tmp_path / "objects").mkdir()
+    assert OB._not_a_repository(tmp_path) is True

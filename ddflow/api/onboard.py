@@ -244,8 +244,8 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
 
 
 def _not_a_repository(repo: Path) -> bool:
-    """True when neither a ``.git`` nor a bare repository's ``HEAD`` + ``objects`` exists at
-    or above ``repo``.
+    """True when neither a ``.git`` nor a bare repository (``HEAD``, ``objects`` and ``refs``,
+    which is what git itself requires of a git directory) exists at or above ``repo``.
 
     The filesystem, not a `git` call: a call would be one more program invocation to
     guard, git's message changes with the locale, and a repository git merely refuses to
@@ -253,7 +253,8 @@ def _not_a_repository(repo: Path) -> bool:
     `git init`: the stage runs and reports what its probes find."""
     here = repo.resolve()
     return not any(
-        (d / ".git").exists() or ((d / "HEAD").is_file() and (d / "objects").is_dir())
+        (d / ".git").exists()
+        or ((d / "HEAD").is_file() and (d / "objects").is_dir() and (d / "refs").is_dir())
         for d in (here, *here.parents)
     )
 
