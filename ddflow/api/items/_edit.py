@@ -27,6 +27,7 @@ from ...services import landed as LD
 from ...services import leases as L
 from ...services import waiting as WG
 from ..lifecycle.claim import _worktree_held_by
+from ..record_update import update_record
 
 
 @dataclass
@@ -100,8 +101,6 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         st = L._fold(log)
         it = st.items.get(item)
         if it is None:
-            from ..record_update import update_record
-
             other = update_record(repo, item, edit, agent=agent)
             if other is not None:
                 return other

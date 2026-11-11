@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+from ..core import record_fields as RF
 from .overlay import OverlayError, OverlayLoader
 from .prompts import Template, TemplateError, builtin_dir, render
 
@@ -259,8 +260,6 @@ def render_index(repo: Path | None = None, *, tools: Iterable[str] = ()) -> str:
 def update_kinds() -> str:
     """What `ddflow update` accepts per kind, read from the catalogue (`core.record_fields`): the
     help text, the CLI and the MCP parameters cannot disagree about it."""
-    from ..core import record_fields as RF
-
     rows = [f"  {kd.kind:<9} {kd.accepts()}" for kd in RF.KINDS.values()]
     rows += [
         f"  {n:<9} (declared as a data kind: its own declaration lists the fields)"

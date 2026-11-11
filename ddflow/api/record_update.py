@@ -18,7 +18,11 @@ from ..core import globspec as GS
 from ..core import outcome as O
 from ..core import record_fields as RF
 from ..core.defs import key as def_key
+from . import defs as DEFS
+from . import records as R
 from ._base import _load
+from .rules import rule_get, rule_update
+from .schedule import schedule_update
 
 _EV = "record.updated"
 
@@ -52,8 +56,6 @@ def data_fields(kind) -> RF.KindFields:
 
 
 def _data_kind(name: str):
-    from . import records as R
-
     k = R.KINDS.get(name)
     return k if k is not None and k.name != "rule" else None
 
@@ -125,8 +127,6 @@ def _current(repo: Path, st, kind: str, rid: str, kd: RF.KindFields) -> dict[str
             return _fail(kind, rid, f"no recorded schedule {rid!r}")
         return {n: getattr(job, n) for n in {*kd.attrs.values(), *(o.name for o in kd.own)}}
     if kd.store == RF.RULE:
-        from .rules import rule_get
-
         got = rule_get(repo, rid)
         if got.exit != O.OK:
             return _fail(kind, rid, f"no rule {rid!r}")
@@ -137,55 +137,98 @@ def _current(repo: Path, st, kind: str, rid: str, kd: RF.KindFields) -> dict[str
     return dict(rec.fields)
 
 
-def _op_fields(kd: RF.KindFields, rid: str, edit, cur: dict, extra: dict[str, str]):
-    """The record fields ``edit`` sets, or a refusal text. ``extra`` is the ``--set`` mapping."""
+def _attr(kd: RF.KindFields, rid: str, op: str) -> str:
+    """The record field ``op`` changes on ``kd``; LookupError carries the refusal."""
+    attr = kd.attrs.get(op)
+    if not attr:
+        raise LookupError(RF.refusal(kd, rid, op))
+    return attr
+
+
+def _body_text(edit, cur: dict, attr: str) -> str:
+    """The new body: ``--body`` (or the current text) with ``--append-body`` added after it."""
+    base = (cur.get(attr) or "") if edit.body is None else edit.body
+    if edit.append_body:
+        base = (base + "\n\n" if base else "") + edit.append_body
+    return base
+
+
+def _list_value(edit, cur: dict, op: str, attr: str) -> list[str] | None:
+    """The new list for ``tags`` / ``needs`` / ``globs``, or None when the edit leaves it."""
+    given = getattr(edit, op)
+    add, rem = getattr(edit, f"add_{op}"), getattr(edit, f"remove_{op}")
+    if given is None and add is None and rem is None:
+        return None
+    if given is None:
+        held = list(cur.get(attr) or [])
+    else:
+        held = list(GS.parse(given)) if op == "globs" else list(given)
+    return GS.adjust(held, add, rem) if (add or rem) else held
+
+
+def _generic_fields(kd: RF.KindFields, rid: str, edit, cur: dict) -> dict[str, Any]:
+    """The fields the generic operations set; LookupError carries a refusal."""
     fields: dict[str, Any] = {}
+    for op in ("title", "priority"):
+        if getattr(edit, op) is not None:
+            fields[_attr(kd, rid, op)] = getattr(edit, op)
+    if edit.body is not None or edit.append_body:
+        attr = _attr(kd, rid, "body")
+        fields[attr] = _body_text(edit, cur, attr)
+    for op in RF.LIST_OPS:
+        value = _list_value(edit, cur, op, kd.attrs.get(op, ""))
+        if value is not None:
+            fields[_attr(kd, rid, op)] = value
+    if edit.parent is not None:
+        _attr(kd, rid, "parent")
+    return fields
 
-    def need(op: str) -> str:
-        attr = kd.attrs.get(op)
-        if not attr:
-            raise LookupError(RF.refusal(kd, rid, op))
-        return attr
 
-    try:
-        for op in ("title", "priority"):
-            value = getattr(edit, op)
-            if value is not None:
-                fields[need(op)] = value
-        if edit.body is not None or edit.append_body:
-            attr = need("body")
-            base = cur.get(attr) or "" if edit.body is None else edit.body
-            if edit.append_body:
-                base = (base + "\n\n" if base else "") + edit.append_body
-            fields[attr] = base
-        for op in RF.LIST_OPS:
-            given = getattr(edit, op)
-            add, rem = getattr(edit, f"add_{op}"), getattr(edit, f"remove_{op}")
-            if given is None and add is None and rem is None:
-                continue
-            attr = need(op)
-            held = (
-                list(GS.parse(given))
-                if op == "globs" and given is not None
-                else (list(given) if given is not None else list(cur.get(attr) or []))
-            )
-            fields[attr] = GS.adjust(held, add, rem) if (add or rem) else held
-        if edit.parent is not None:
-            need("parent")
-    except LookupError as exc:
-        return str(exc)
+def _own_fields(kd: RF.KindFields, rid: str, extra: dict[str, str]) -> dict[str, Any]:
+    """The kind's own fields from ``--set``; LookupError carries a refusal."""
+    fields: dict[str, Any] = {}
     for name, raw in extra.items():
         own = kd.own_field(name)
         if own is None:
-            return (
+            raise LookupError(
                 f"{kd.kind} {rid} has no field {name!r} of its own. "
                 f"A {kd.kind} accepts: {kd.accepts()}. Nearest verb: {kd.nearest}."
             )
         try:
             fields[name] = RF.coerce(own, raw)
         except ValueError as exc:
-            return f"{kd.kind} {rid}: {exc}"
+            raise LookupError(f"{kd.kind} {rid}: {exc}") from None
     return fields
+
+
+def _op_fields(kd: RF.KindFields, rid: str, edit, cur: dict, extra: dict[str, str]):
+    """The record fields ``edit`` sets, or a refusal text. ``extra`` is the ``--set`` mapping."""
+    try:
+        return {**_generic_fields(kd, rid, edit, cur), **_own_fields(kd, rid, extra)}
+    except LookupError as exc:
+        return str(exc)
+
+
+def _item_only(kd: RF.KindFields, rid: str, edit) -> O.Outcome | None:
+    """The refusal when ``edit`` asks a record for a work-item field (a line, a landing ...)."""
+    for op in RF.ITEM_ONLY:
+        if getattr(edit, op):
+            return O.refused(
+                _EV,
+                f"{kd.kind} {rid} has no {op.replace('_', '-')} field: it is a work-item field "
+                f"(task, phase). A {kd.kind} accepts: {kd.accepts()}. Nearest verb: {kd.nearest}.",
+                id=rid,
+                record_kind=kd.kind,
+            )
+    return None
+
+
+def _fold_set_lists(edit, extra: dict[str, str]) -> None:
+    """Move ``add_tags=a,b`` style ``--set`` items onto ``edit`` (the MCP carries the list
+    folds there: its schema stays small)."""
+    for name in [n for n in extra if n.partition("_")[0] in ("add", "remove")]:
+        if name.split("_", 1)[1] in RF.LIST_OPS:
+            setattr(edit, name, [p for p in extra.pop(name).split(",") if p])
 
 
 def update_record(repo: Path, ref: str, edit, *, agent: str = "") -> O.Outcome | None:
@@ -197,25 +240,14 @@ def update_record(repo: Path, ref: str, edit, *, agent: str = "") -> O.Outcome |
         return None if not kind and "several" not in problem else O.refused(_EV, problem, id=ref)
     kd = _entry(kind)
     if kd is None:
-        return _fail(
-            kind, rid, f"unknown record kind {kind!r}: the kinds are {', '.join(RF.ALL_KIND_NAMES)}"
-        )
-    for op in RF.ITEM_ONLY:
-        if getattr(edit, op):
-            return O.refused(
-                _EV,
-                f"{kind} {rid} has no {op.replace('_', '-')} field: it is a work-item field (task, phase). A {kind} accepts: {kd.accepts()}. Nearest verb: {kd.nearest}.",
-                id=rid,
-                record_kind=kind,
-            )
+        known = ", ".join(RF.ALL_KIND_NAMES)
+        return _fail(kind, rid, f"unknown record kind {kind!r}: the kinds are {known}")
+    if (refusal := _item_only(kd, rid, edit)) is not None:
+        return refusal
     extra, bad = RF.split_set(edit.set)
     if bad:
         return _fail(kind, rid, bad)
-    # `add_*`/`remove_*` given as set items (the MCP carries them there: its schema stays small).
-    for name in [n for n in extra if n.partition("_")[0] in ("add", "remove")]:
-        op = name.split("_", 1)[1]
-        if op in RF.LIST_OPS:
-            setattr(edit, name, [p for p in extra.pop(name).split(",") if p])
+    _fold_set_lists(edit, extra)
     with log.transaction():
         _log, _cfg, st = _load(repo, agent)
         cur = _current(repo, st, kind, rid, kd)
@@ -235,17 +267,10 @@ def _write(repo, log, cfg, kind, rid, kd, changed, agent) -> O.Outcome:
         log.append(kd.event, rid, {"fields": changed})
         return O.ok(_EV, id=rid, record_kind=kind, changed=sorted(changed), fields=changed)
     if kd.store == RF.RULE:
-        from .rules import rule_update
-
         out = rule_update(repo, rid, agent=agent, **changed)
     elif kd.store == RF.SCHEDULE:
-        from .schedule import schedule_update
-
         out = schedule_update(repo, rid, changed, agent=agent)
     else:
-        from . import defs as DEFS
-        from . import records as R
-
         dk = _data_kind(kind)
         if dk is not None:
             out = R.record_edit(repo, dk, rid, changed, agent=agent)
