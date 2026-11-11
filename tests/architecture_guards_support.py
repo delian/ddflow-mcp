@@ -94,12 +94,12 @@ _PROCESS_CALLS = frozenset(
     }
 )
 
-#: pathlib calls whose RESULT is a `Path` -- the constructor and the methods that return
+#: pathlib CALLS whose result is a `Path` -- the constructor and the methods that return
 #: one, deterministically. `_resolve` types such a call `pathlib.Path`, so the `os_replace`
 #: counter sees `.replace` on it (and on a chain like ``p.replace(a).replace(b)``, where
 #: every atomic rename is counted, not just the first). `.rename` and the rest return a
 #: Path but are not atomic renames, so they surface for chaining only, not as a counted
-#: site.
+#: site. A pathlib ATTRIBUTE that returns a Path (`Path.parent`) is in `_PATH_ATTRS`.
 _PATH_RESULT = frozenset(
     {
         "pathlib.Path",
@@ -108,13 +108,15 @@ _PATH_RESULT = frozenset(
         "pathlib.Path.with_name",
         "pathlib.Path.with_suffix",
         "pathlib.Path.with_stem",
-        "pathlib.Path.parent",
         "pathlib.Path.resolve",
         "pathlib.Path.absolute",
         "pathlib.Path.expanduser",
         "pathlib.Path.joinpath",
     }
 )
+
+#: pathlib ATTRIBUTES whose value is a `Path` (so `.replace` on ``p.parent`` is counted).
+_PATH_ATTRS = frozenset({"parent"})
 
 
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
@@ -167,6 +169,8 @@ class _Sites(ast.NodeVisitor):
             return None
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
+            if base == "pathlib.Path" and node.attr in _PATH_ATTRS:
+                return "pathlib.Path"
             return f"{base}.{node.attr}" if base else None
         if isinstance(node, ast.Call):
             return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
@@ -195,7 +199,11 @@ class _Sites(ast.NodeVisitor):
     # -- scopes ---------------------------------------------------------------------
     def _function(self, node: ast.AST) -> None:
         self.scopes.append({})
-        for arg in getattr(node.args, "args", ()):
+        for arg in (
+            *getattr(node.args, "posonlyargs", ()),
+            *getattr(node.args, "args", ()),
+            *getattr(node.args, "kwonlyargs", ()),
+        ):
             if (
                 isinstance(arg, ast.arg)
                 and isinstance(arg.annotation, ast.Name)
