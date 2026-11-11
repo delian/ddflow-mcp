@@ -24,8 +24,10 @@ from .proc_server import kill_group, stop_group
 LOG = "lane.log"
 #: A lane name is one plain file name: it names the lane's directory.
 _FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
-#: signal name -> number; the vocabulary the remote bundle allowed (`_SIGNALS`).
+#: signal name -> number; the vocabulary the remote bundle allowed (`_SIGNALS`). TERM, INT and
+#: KILL end the lane; HUP is a hangup, which a lane may trap and survive, so it alone is not a stop.
 _SIGNALS = {"TERM": 15, "INT": 2, "HUP": 1, "KILL": 9}
+_STOP = frozenset({"TERM", "INT", "KILL"})
 #: copy_out reads this much at a time, so the cap bounds the read, not just the copy.
 _CHUNK = 65536
 
@@ -106,7 +108,8 @@ class LocalTransport:
             return failed(f"no such lane {lane!r}")
         if run.popen.poll() is not None:
             return failed("the lane has ended")
-        run.stopped = True
+        if sig in _STOP:
+            run.stopped = True
         kill_group(run.popen, _SIGNALS[sig])
         return ok(f"{sig} sent to the process group")
 
