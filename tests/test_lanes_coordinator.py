@@ -170,3 +170,11 @@ def test_a_suite_note_that_is_not_an_object_does_not_hide_the_other_suites(tmp_p
 def test_the_positional_coordinator_view_takes_item_too(busy):
     code, out, _ = run_cli(busy, "lanes", "coordinator", "--item", "Y", agent="reader")
     assert code == 0 and "CHAIN Y" in out
+
+
+def test_the_queued_count_ignores_an_injected_now(tmp_path):
+    Cfg = Config()
+    ticket = tmp_path / SL.QUEUE / "00000000000000000001-lane-x.ticket"
+    ticket.parent.mkdir(parents=True)
+    ticket.write_text("")
+    assert SL.running(Cfg, tmp_path, now=1_000.0)[1] == 1  # a fresh ticket, whatever `now` says

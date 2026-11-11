@@ -117,7 +117,7 @@ def running(
     stale = float(cfg.ci.suite_queue_stale_s)
     for path in (directory / QUEUE).glob("*.ticket"):
         with contextlib.suppress(OSError):
-            queued += at - path.stat().st_mtime <= stale
+            queued += CLOCK.wall() - path.stat().st_mtime <= stale  # file times: the real clock
     return sorted(rows, key=lambda n: n.get("at", 0)), queued
 
 
