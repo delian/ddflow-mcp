@@ -1363,6 +1363,10 @@
           "type": "boolean",
           "description": "With interfaces: print the ratchet baseline text instead of the report."
          },
+         "tick": {
+          "type": "boolean",
+          "description": "Record the plan as one audit note (advise + audit)."
+         },
          "cmd": {
           "type": "string",
           "description": "with action=run: the command to measure. CLI: `ddflow perf run --cmd 'pytest -q'`."
@@ -1409,6 +1413,7 @@
            "health",
            "docs",
            "archdeps",
+           "dispatch",
            "vigil",
            "paths",
            "perf",

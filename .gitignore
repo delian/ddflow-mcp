@@ -37,3 +37,4 @@ __pycache__/
 # parent DIRECTORY is excluded, as the trailing slash here does.
 .vscode/
 
+.aider*
