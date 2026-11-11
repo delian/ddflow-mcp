@@ -10,7 +10,6 @@ from __future__ import annotations
 from conftest import run_cli
 
 from ddflow.infra.log import EventLog
-
 from tests.test_bugs_as_items import K, seed, state
 
 
