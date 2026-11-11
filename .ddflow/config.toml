@@ -60,8 +60,21 @@ base_ref = ""
 # Starts at "warn" so adopting ddflow never breaks an existing repo on day one.
 commit_without_lease = "warn"
 # D-readme-split: the README is the front door; the reference it used to hold lives in
-# docs/guide/, so editing a guide counts as updating the README (readme_with_code).
-readme_files = ["README.md", "docs/guide/*.md"]
+# docs/guide/, so editing one of these guides counts as updating the README (readme_with_code); listed
+# one by one, because docs/guide/ also holds pages that are not part of the split.
+readme_files = [
+    "README.md",
+    "docs/guide/workflow.md",
+    "docs/guide/adoption.md",
+    "docs/guide/contributing.md",
+    "docs/guide/cli-mcp.md",
+    "docs/guide/configuration.md",
+    "docs/guide/customisation.md",
+    "docs/guide/knowledge.md",
+    "docs/guide/upgrading.md",
+    "docs/guide/parallelism.md",
+    "docs/guide/gitflow.md",
+]
 # Operator 2026-09-29 (decision D-strip-coauthor-history): no commit in this
 # repository credits a tool. The commit-msg hook refuses it for every agent.
 forbidden_trailers = ["Co-Authored-By"]

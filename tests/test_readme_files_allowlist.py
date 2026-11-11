@@ -24,6 +24,7 @@ def test_the_projects_readme_files_cover_the_front_door_and_every_guide():
     for g in GUIDES:
         assert is_shared(f"docs/guide/{g}.md", patterns), g
     assert not is_shared("docs/ddflow/RESEARCH.md", patterns)
+    assert not is_shared("docs/guide/tokens.md", patterns), "a page outside the split is not the README"
 
 
 def test_a_guide_edit_satisfies_the_real_readme_with_code_check(repo):
