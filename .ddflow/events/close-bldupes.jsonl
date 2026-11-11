@@ -94,3 +94,4 @@
 {"agent":"close-bldupes","data":{"by":"close-bldupes","digest":"40c6cde3f471dc20d311c087a9d6254af06acaded16db61cf2f7bce85cbfd6ad","id":"Qcc2498c6e4","verb":"pins.regenerate"},"id":"e70cf2b5dff0576eb88fd7274","kind":"ask.consumed","lamport":173988,"schema":1,"subject":"Qcc2498c6e4","ts":"2026-11-11T12:48:31.976190Z"}
 {"agent":"close-bldupes","data":{"at":1794401353.4719396,"holder":"close-bldupes"},"id":"e1e9971344bc30801ad15f32d","kind":"lease.renewed","lamport":173990,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T12:49:14.175227Z"}
 {"agent":"close-bldupes","data":{"gate":"ci"},"id":"e798fe0a47cb8205c9e7e87bb","kind":"gate.started","lamport":173995,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T12:49:38.342312Z"}
+{"agent":"close-bldupes","data":{"at":1794401662.9123209,"holder":"close-bldupes"},"id":"e1472da08041551397514a76f","kind":"lease.renewed","lamport":174031,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T12:54:23.581052Z"}
