@@ -198,7 +198,7 @@ def _repair_base_ref(repo: Path, a) -> dict:
         )
         if n == 0:
             return {"item": a.item, "applied": False, "note": "no base_ref line to repair"}
-        path.write_text(new, "utf-8")
+        fsio.atomic_write(path, new, encoding="utf-8")
         return {"item": a.item, "applied": True, "note": a.reason}
     except Exception as e:
         return {"item": a.item, "applied": False, "note": f"failed: {e!r}"}

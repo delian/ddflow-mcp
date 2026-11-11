@@ -13,7 +13,6 @@ import time
 
 from ...api import reporting as A
 from ...api import surf_reporting as R
-from ...infra import worktree as W
 from ...views import output_caps as OC
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
@@ -47,7 +46,7 @@ def _stale_worktree_note(c, it, wt) -> str:
     recorded, not present."""
     if wt.is_dir():
         return ""
-    if it.branch and W.branch_exists(c.repo, it.branch):
+    if it.branch and R.branch_exists(c.repo, it.branch):
         return ""
     return "  (recorded, but gone: no such worktree or branch)"
 

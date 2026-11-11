@@ -71,3 +71,7 @@ baseline = 0
 # The freed-lane next-move text (LC-reuse): `ddflow lanes state` renders it for a released
 # lane; the lanes view is its first caller and lands with LC-reuse's consumer task.
 "ddflow/services/lanes/reuse.py:next_for" = "LC-reuse"
+# The lane-rotation hand-off note and launch env (TE-context-caps): the rotation loop that
+# writes the note into the item's evidence and puts the window env on the launch.
+"ddflow/services/lanerotate.py:handoff_note" = "TE-context-caps"
+"ddflow/services/lanerotate.py:window_env" = "TE-context-caps"

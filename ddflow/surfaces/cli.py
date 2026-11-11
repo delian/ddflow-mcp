@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 from ..api import cap_blas_threads
+from ..api.guard_launch import guard_foreign_launch
 from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
@@ -341,52 +342,10 @@ def main(argv: list[str] | None = None) -> int:
 def _guard_foreign_launch() -> int:
     """Refuse to run when this process imported ddflow from a foreign lane's worktree.
 
-    A shared editable install repointed at another lane's tree imports that lane's
-    unmerged code and later crashes when the tree merges away (a lazy re-export reaches a
-    removed file). Imported from the CALLER's own tree is legitimate; imported from any
-    other linked worktree is not. Heal the install back to its primary and refuse, so the
-    retry runs the primary's code. A positive foreign hit refuses; a check that cannot
-    even identify the import (no linked worktree) still lets every ordinary command run.
+    Delegates to ``ddflow.api`` (surfaces reach infra/services only through api); the
+    guard itself lives in ``ddflow/api/guard_launch.py``.
     """
-    from ..infra import worktree as W
-    from ..services import install_info as I
-
-    try:
-        foreign = I.foreign_launch_root()
-    except Exception:
-        return OK
-    if foreign is None:
-        return OK
-    try:
-        own = W.current(Path(os.getcwd()))
-    except Exception:
-        # The import IS from a linked worktree (or the guard would have returned above),
-        # so running it could execute another lane's unmerged code — the failure this
-        # guard exists for — while not identifying the caller is NOT evidence the import
-        # is the caller's own tree. Refuse, and repoint nothing: a heal on an unproven
-        # foreignity would strand the caller's own tree if git merely misread it.
-        print(
-            "ddflow: imported from the linked worktree"
-            f" {I.normalise_path(foreign.worktree)}, but the caller's own tree cannot be"
-            " identified; refusing to run code that may be another lane's — re-run once"
-            " the checkout is reachable",
-            file=sys.stderr,
-        )
-        return FAIL
-    if own is not None and own.path.resolve() == foreign.worktree.resolve():
-        return OK  # the very tree this code came from: legitimate, not foreign
-    try:
-        I.repoint_shared_editable(foreign.worktree, foreign.primary)
-    except Exception:
-        pass
-    print(
-        "ddflow: imported from the linked worktree"
-        f" {I.normalise_path(foreign.worktree)}, not the primary or your own tree;"
-        " the shared editable install was reset to"
-        f" {I.normalise_path(foreign.primary)} — re-run the command",
-        file=sys.stderr,
-    )
-    return FAIL
+    return guard_foreign_launch()
 
 
 def _main(argv: list[str] | None = None) -> int:
