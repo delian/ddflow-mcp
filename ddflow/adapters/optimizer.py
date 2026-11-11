@@ -134,6 +134,24 @@ def _fact(ctx: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
     return cell if isinstance(cell, Mapping) else {}
 
 
+def _fact_flag(cell: Mapping[str, Any], key: str) -> bool:
+    """A flag fact, True only when truthy; an absent or ``None`` fact is neutral (False)."""
+    value = cell.get(key)
+    return bool(value)
+
+
+def _fact_num(cell: Mapping[str, Any], key: str) -> float:
+    """A numeric fact as a float, neutral ``0.0`` when absent, ``None`` or not a number:
+    the open ctx says "miss", never an error, so an unmeasured fact cannot abort ordering."""
+    value = cell.get(key)
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 @port
 @runtime_checkable
 class Optimizer(Protocol):
@@ -227,8 +245,8 @@ class SwarmV1(GreedyV1):
         def key(c: Candidate) -> tuple:
             cell = _fact(ctx, c.id)
             return (
-                not bool(cell.get("critical", False)),
-                -float(cell.get("waited_s", 0.0)),
+                not _fact_flag(cell, "critical"),
+                -_fact_num(cell, "waited_s"),
                 tuple(v for _, v in c.terms),
                 c.id,
             )
@@ -237,8 +255,8 @@ class SwarmV1(GreedyV1):
         for n, c in enumerate(sorted(candidates, key=key)):
             cell = _fact(ctx, c.id)
             terms = (
-                ("critical", bool(cell.get("critical", False))),
-                ("waited_s", float(cell.get("waited_s", 0.0))),
+                ("critical", _fact_flag(cell, "critical")),
+                ("waited_s", _fact_num(cell, "waited_s")),
             )
             placed.append(Placement(c.id, n, terms + tuple(c.terms)))
         return placed
