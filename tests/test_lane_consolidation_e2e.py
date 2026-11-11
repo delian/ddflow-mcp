@@ -35,25 +35,42 @@ def rp(proj: Path) -> Path:
 
 @pytest.mark.slow
 def test_a_freed_lane_claims_its_next_item_while_the_integrator_merges_the_released_one(rp):
-    """Scenario 1: T1 is queued with --release, its lane claims T2 while the integrator
-    runs ci/unit_tests and merges T1."""
+    """Scenario 1: T1 is queued with --release, its lane claims T2 WHILE the integrator
+    runs ci/unit_tests (blocked on the suite lock) and merges T1."""
     _finish(rp, "T1")
     code, out, err = run_cli(
         rp, "task", "add", "T2", "--title", "knob t2", "--globs", "knobs/t2.txt"
     )
     assert code == 0, out + err  # a second, open item the freed lane can take next
     assert _release(rp, "T1")[0] == 0
-    # the freed lane runs next and claims the next item
-    code, out, err = run_cli(rp, "--json", "next", agent="t1")
-    assert code == 0, out + err
-    ready = [i.get("id") for i in json.loads(out).get("ready", [])]
-    assert "T2" in ready, ready
-    code, out, err = run_cli(rp, "--json", "claim", "T2", agent="t1")
-    assert code == 0, out + err
-    assert json.loads(out)  # T2 is claimed; the lane moved on, not held-and-waited
-    # the integrator finishes T1 without the lane
-    code, out, err = run_cli(rp, "queue", "run", agent="integrator")
-    assert code == 0, out + err
+    hold = rp.parent / "hold"
+    hold.write_text("")
+    integrator = subprocess.Popen(
+        [
+            sys.executable, "-m", "ddflow", "--repo", str(rp), "--agent", "one", "queue", "run"
+        ],
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for _ in range(1200):
+            if MQ.holder(rp):
+                break
+            time.sleep(0.05)
+        assert MQ.holder(rp), "the integrator never took the lock"
+        # while the integrator holds the suite lock, the freed lane takes the next item
+        code, out, err = run_cli(rp, "--json", "next", agent="t1")
+        assert code == 0, out + err
+        ready = [i.get("id") for i in json.loads(out).get("ready", [])]
+        assert "T2" in ready, ready
+        code, out, err = run_cli(rp, "--json", "claim", "T2", agent="t1")
+        assert code == 0, out + err
+    finally:
+        hold.unlink(missing_ok=True)
+        integrator.communicate(timeout=120)
+    assert integrator.returncode == 0, integrator.stderr
     assert _landed(rp) == ["T1"]
     assert _item(rp, "T1")["state"] == "done", "the item did not complete without its agent"
     assert _lease_of(rp, "T2"), "the freed lane did not take the next item"
