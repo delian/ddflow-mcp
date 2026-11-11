@@ -119,6 +119,11 @@ _PATH_RESULT = frozenset(
 )
 
 
+#: pathlib ATTRIBUTE whose value is a `Path` (a property, not a call, so it is not in
+#: `_PATH_RESULT`): ``Path("a").parent.replace(dst)`` is a `Path.replace` too.
+_PATH_ATTRS = frozenset({"parent"})
+
+
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
 _TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
 
@@ -169,9 +174,13 @@ class _Sites(ast.NodeVisitor):
             return None
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
+            if base == "pathlib.Path" and node.attr in _PATH_ATTRS:
+                return "pathlib.Path"
             return f"{base}.{node.attr}" if base else None
         if isinstance(node, ast.Call):
             return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return "pathlib.Path" if self._resolve(node.left) == "pathlib.Path" else None
         return None
 
     # -- imports --------------------------------------------------------------------
