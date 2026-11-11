@@ -89,7 +89,11 @@ def merge_pin_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, bool
     # which the recipe re-records right after the merge.
     kept: dict[str, str] = {}
     for name in set(b_blocks) | set(t_blocks) | set(o_blocks):
-        if o_blocks.get(name) == b_blocks.get(name) and t_blocks.get(name) != b_blocks.get(name):
+        if (
+            name in t_blocks
+            and o_blocks.get(name) == b_blocks.get(name)
+            and t_blocks[name] != b_blocks.get(name)
+        ):
             kept[name] = t_blocks[name]
         elif name in o_blocks:
             kept[name] = o_blocks[name]

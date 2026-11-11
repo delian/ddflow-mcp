@@ -47,3 +47,10 @@ def test_a_block_only_the_incoming_side_changed_keeps_the_incoming() -> None:
     assert not conflicted
     assert b"<<<<<<<" not in out
     assert b"new main region" in out
+
+
+def test_a_block_the_incoming_side_deleted_does_not_raise() -> None:
+    theirs = BASE.replace(b"<!-- ddflow:begin t -->\nx\n<!-- ddflow:end t -->\n", b"")
+    out, conflicted = merge_pin_text(BASE, BASE, theirs)
+    assert not conflicted
+    assert b"<<<<<<<" not in out
