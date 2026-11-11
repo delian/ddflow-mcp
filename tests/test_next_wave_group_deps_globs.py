@@ -116,3 +116,14 @@ def test_human_text_shows_needs_inline_and_co_location(repo):
     assert code == 0, out
     assert "needs: Shared" in out, out
     assert "Co-locate" in out, out
+
+
+def test_two_unstamped_items_are_one_unstamped_bucket_not_two(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "M", "--title", "m")
+    run_cli(repo, "task", "add", "M.A", "--title", "a", "--phase", "M", "--globs", "a.py")
+    run_cli(repo, "task", "add", "M.B", "--title", "b", "--phase", "M", "--globs", "b.py")
+    code, out, _err = run_cli(repo, "next")
+    assert code == 0, out
+    assert out.count("unstamped") == 1, out
+

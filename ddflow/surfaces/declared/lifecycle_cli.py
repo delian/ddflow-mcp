@@ -342,10 +342,10 @@ def _next_ready_lines(p, flat, clusters) -> list[str]:
     prints, so "independent" is not claimed for them.
     """
     lines = [f"Ready ({p.summary()}):"]
-    last_k = None  # the previous row's wave bucket, so a header prints only on a change
+    last_k = object()  # a fresh sentinel: distinct from every wave number AND from unstamped's None
     for it in p.ready:
         k = None if flat else wave_of(it.tags)
-        if not flat and (last_k is None or last_k != k):
+        if not flat and last_k != k:
             label = f"wave:{k}" if k is not None else "wave:unstamped"
             lines.append(f"  [{label}]")
             last_k = k
