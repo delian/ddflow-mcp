@@ -4,7 +4,8 @@ The shim remembers the tool list it served in the connection's last `tools/list`
 worker's list differs and the client is not known to honour `list_changed` (or did not
 acknowledge the announcement), tool results carry ONE line saying what changed and to restart
 the agent, and a call to a tool the upgrade removed gets the same text instead of a bare
-"no such tool". The same `message` is what `ddflow doctor` and the SessionStart hook say.
+"no such tool". `message` is the one text `ddflow doctor` and the SessionStart hook are to say too
+(SU-upgrade-integration wires them; this module has no caller until it and the shim land).
 
 Rate limited, never silent: the first result after a change carries it at once, then it repeats
 at most once per `every_calls` results AND `every_seconds`; a different change is news again.
@@ -22,6 +23,8 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from .clients import HONOURS
 
 
 @dataclass(frozen=True)
@@ -115,7 +118,7 @@ class RestartNotice:
         """The footer for the next tool result, or "". `client` is the capability of the
         connected client; `unacknowledged` says an honouring client did not re-fetch the list."""
         d = delta(served, live)
-        if not d or (client == "honours" and not unacknowledged):
+        if not d or (client == HONOURS and not unacknowledged):
             self._said, self._since = None, 0  # caught up (or told another way): start over
             return ""
         self._since += 1

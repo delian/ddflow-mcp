@@ -34,7 +34,10 @@ def test_the_module_is_stdlib_only():
     tree = ast.parse((ROOT / "ddflow/mcpshim/notice.py").read_text())
     for n in ast.walk(tree):
         if isinstance(n, ast.ImportFrom):
-            assert n.level == 0 and n.module.split(".")[0] in sys.stdlib_module_names, n.module
+            if n.level == 1:  # a sibling of the shim package, itself stdlib-only
+                assert n.module == "clients", n.module
+            else:
+                assert n.level == 0 and n.module.split(".")[0] in sys.stdlib_module_names, n.module
         elif isinstance(n, ast.Import):
             assert all(a.name.split(".")[0] in sys.stdlib_module_names for a in n.names)
 
@@ -199,3 +202,9 @@ def test_a_list_not_loaded_yet_is_no_baseline_not_an_empty_list():
     assert not N.delta(None, live) and not N.delta(live, None)
     assert notice().footer("unknown", None, live) == ""
     assert N.removed_tool("doctor", live, None) is None
+
+
+def test_the_capability_word_is_the_client_tables():
+    from ddflow.mcpshim import clients
+
+    assert N.HONOURS == clients.HONOURS
