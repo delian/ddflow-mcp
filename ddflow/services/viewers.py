@@ -14,6 +14,7 @@ goes through the same redaction the export documents use. `owner` is an agent id
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -203,43 +204,41 @@ def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     return [_session_row(s, cfg) for s in st.sessions.values()]
 
 
-def _filter_rows(  # noqa: PLR0913 -- one filter per viewer flag
-    rows: list[dict[str, Any]],
-    cfg: Config,
-    *,
-    state: str,
-    phase: str,
-    tag: str,
-    agent: str,
-    item: str,
-    match: str,
-    since: str,
-) -> list[dict[str, Any]]:
-    """`rows` narrowed by every filter that is set (each one a plain AND)."""
-    if state:
-        rows = [r for r in rows if r["state"].lower() == state.lower()]
-    if phase:
-        rows = [r for r in rows if r["phase"] == phase]
-    if tag:
-        want_tag = redact_text(tag, cfg).text  # compared as the row shows it
-        rows = [r for r in rows if want_tag in r["tags"]]
-    if agent:
-        rows = [r for r in rows if r["owner"] == agent]
-    if item:
+def _since_pred(since: str) -> Callable[[dict[str, Any]], bool]:
+    try:
+        at_or_after = _cutoff(since)
+    except ExportError as exc:
+        raise ViewError(str(exc).replace("--since", "since")) from None
+    return lambda r: bool(r["updated"]) and bool(at_or_after(r["updated"]))
+
+
+def _match_pred(match: str) -> Callable[[dict[str, Any]], bool]:
+    # Server-side text filter (id or title, case-insensitive substring): the reason no
+    # caller needs `| grep`, which a paged list defeats (Bd515797884).
+    needle = match.lower()
+    return lambda r: needle in r["id"].lower() or needle in r["title"].lower()
+
+
+def _filter_rows(rows: list[dict[str, Any]], cfg: Config, **given: str) -> list[dict[str, Any]]:
+    """`rows` narrowed by every filter that is set (each one a plain AND): `state`, `phase`,
+    `tag`, `agent`, `item`, `match`, `since`."""
+    want_tag = redact_text(given["tag"], cfg).text  # compared as the row shows it
+    preds: dict[str, Callable[[dict[str, Any]], bool]] = {
+        "state": lambda r: r["state"].lower() == given["state"].lower(),
+        "phase": lambda r: r["phase"] == given["phase"],
+        "tag": lambda r: want_tag in r["tags"],
+        "agent": lambda r: r["owner"] == given["agent"],
         # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
         # this honest if a future kind with the filter lacks the field.
-        rows = [r for r in rows if r.get("item") == item]
-    if match:
-        # Server-side text filter (id or title, case-insensitive substring): the reason no
-        # caller needs `| grep`, which a paged list defeats (Bd515797884).
-        needle = match.lower()
-        rows = [r for r in rows if needle in r["id"].lower() or needle in r["title"].lower()]
-    if since:
-        try:
-            at_or_after = _cutoff(since)
-        except ExportError as exc:
-            raise ViewError(str(exc).replace("--since", "since")) from None
-        rows = [r for r in rows if r["updated"] and at_or_after(r["updated"])]
+        "item": lambda r: r.get("item") == given["item"],
+    }
+    for name, pred in preds.items():
+        if given[name]:
+            rows = [r for r in rows if pred(r)]
+    if given["match"]:
+        rows = list(filter(_match_pred(given["match"]), rows))
+    if given["since"]:
+        rows = list(filter(_since_pred(given["since"]), rows))
     return rows
 
 
