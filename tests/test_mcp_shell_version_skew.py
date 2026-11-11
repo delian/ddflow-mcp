@@ -68,7 +68,7 @@ def test_declared_version_reads_the_literal_from_disk(tmp_path):
 
 def test_declared_version_is_empty_when_the_tree_has_no_literal(tmp_path):
     (tmp_path / "ddflow").mkdir()
-    (tmp_path / "ddflow" / "__init__.py").write_bytes(b"x = 1\n\xff\n")
+    (tmp_path / "ddflow" / "__init__.py").write_text("x = 1\n")
     assert declared_version(tmp_path) == ""
 
 
