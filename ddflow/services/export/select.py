@@ -10,7 +10,9 @@ path or mode); enabling or disabling edits it through the same guarded write as
   agent and the command that stops it, ``brief`` carries a line and ``doctor`` a note until
   the operator acknowledges it (``ddflow export ack``, or ``ddflow export`` at a terminal);
 - the operator may VETO with ``disable --lock``: an agent's later enable is refused (exit 3);
-  only a person at a terminal enables a locked document again.
+  only a person at a terminal enables a locked document again;
+- an agent may lock too (B-export-agent-lock): the event records its id, other agents' enables
+  are refused, a person's own lock outranks it and the operator can always unlock it.
 
 An enable creates no file: the first write is the next export run, with every hand-edit
 protection of D-export. Nothing here prints; ``api.export`` wraps these into Outcomes.
@@ -53,8 +55,23 @@ def _is_agent(requested_agent: str, via_mcp: bool) -> str:
 
 
 def _locked(st: State, doc: str) -> dict[str, Any] | None:
+    """The standing lock ``{by, human, at}`` of ``doc`` (a person's or an agent's), or None."""
     e = st.exports.get(doc)
-    return e if e and e.get("locked") and not e.get("enabled") else None
+    if not (e and e.get("locked") and not e.get("enabled")):
+        return None
+    return e.get("lock") or {"by": e.get("by", ""), "human": True, "at": e.get("at", "")}
+
+
+def _locked_entry(st: State, doc: str) -> dict[str, Any]:
+    e = st.exports.get(doc) or {}
+    return e.get("lock") or {"by": e.get("by", ""), "human": True}
+
+
+def lock_label(lock: dict[str, Any]) -> str:
+    """How a refusal or a listing names who holds a lock."""
+    if lock.get("human", True):
+        return f"locked by the operator ({lock.get('by') or '?'})"
+    return f"locked by agent {lock.get('by') or '?'}"
 
 
 def _write_selection(
@@ -111,16 +128,18 @@ def _local_by_approval(log, cfg: Config, doc: str, action: str, approval: str) -
 
 def _unlock_by_approval(log, cfg: Config, doc: str, lock, why_agent: str, approval: str) -> str:
     """An agent's enable of a locked document: refused unless it spends the operator's approval
-    (then it counts as the operator's own enable, so ""); anything else passes through."""
+    (then it counts as the operator's own enable, so ""); anything else passes through. The
+    agent that holds an agent lock may lift it (an agent lock is a veto, not the operator's)."""
     if not (lock and why_agent):
+        return why_agent
+    if not lock.get("human", True) and lock.get("by") == log.agent_id:
         return why_agent
     state = json.dumps(lock, sort_keys=True)
     route = _approval_route(log, cfg, "export.unlock", doc, state, approval)
     if route:
         raise ExportError(
-            f"{doc} is locked by the operator ({lock.get('by') or '?'}, "
-            f"{str(lock.get('at', ''))[:19]}): an agent cannot enable it without the "
-            f"operator's approval. {route}",
+            f"{doc} is {lock_label(lock)}, {str(lock.get('at', ''))[:19]}: an agent cannot "
+            f"enable it without the operator's approval. {route}",
             EXIT_REFUSED,
         )
     return ""
@@ -218,6 +237,23 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
     return result
 
 
+def _lock_event_due(st: State, doc: str, by_agent: str) -> bool:
+    """A lock is recorded when none stands, or when a person's replaces an agent's."""
+    e = st.exports.get(doc) or {}
+    if not e.get("locked"):
+        return True
+    return not by_agent and not (e.get("lock") or {}).get("human", True)
+
+
+def _lock_note(doc: str, agent_id: str, by_agent: bool) -> str:
+    if not by_agent:
+        return "; locked: an agent cannot enable it again"
+    return (
+        f"; locked by agent {agent_id}: other agents cannot enable it, "
+        f"the operator can always unlock it (ddflow export enable {doc})"
+    )
+
+
 def disable(
     repo: Path,
     log: Any,
@@ -238,15 +274,8 @@ def disable(
     by_agent = bool(why_agent)
     if local and by_agent:
         _local_by_approval(log, cfg, doc, "disable", approval)
-    if lock and why_agent:
-        route = _approval_route(log, cfg, "export.lock", doc, doc, approval)
-        if route:
-            raise ExportError(
-                f"locking a document is the operator's veto, and this call is an agent's "
-                f"({why_agent}). {route}",
-                EXIT_REFUSED,
-            )
-        why_agent = ""  # the operator's approval stands for the operator's own veto
+    # An agent may lock (veto) too; the event records its id and `human: false`, so a person's
+    # lock outranks it and only the operator, or that agent, lifts it (B-export-agent-lock).
     selected = list(ops.selection(cfg))
     was = doc in selected
     if was:
@@ -263,7 +292,8 @@ def disable(
             f"(try {'without' if local else 'with'} --local)"
         )
     already_locked = bool((st.exports.get(doc) or {}).get("locked"))
-    if was or (lock and not already_locked):
+    due = lock and _lock_event_due(st, doc, why_agent)
+    if was or due:
         log.append(
             "export.disabled",
             doc,
@@ -276,11 +306,13 @@ def disable(
             },
         )
     msg = f"disabled {doc}" if was else f"{doc} is not selected"
-    if lock:
-        msg += "; locked: an agent cannot enable it again"
+    if due:
+        msg += _lock_note(doc, log.agent_id, bool(why_agent))
+    elif lock:
+        msg += f"; already {lock_label(_locked_entry(st, doc))}"
     return {
         "doc": doc,
-        "changed": was or lock,
+        "changed": was or due,
         "locked": lock or already_locked,
         "by": log.agent_id,
         "local": local,
@@ -346,6 +378,10 @@ def annotate(rows: list[dict[str, Any]], st: State) -> None:
         row["by_agent"] = bool(on and not e.get("human"))
         row["acknowledged"] = bool(e.get("acked")) if on else True
         row["locked"] = bool(e.get("locked")) and not e.get("enabled")
+        row["locked_by"] = (e.get("lock") or {}).get("by", "") if row["locked"] else ""
+        row["locked_by_agent"] = bool(
+            row["locked"] and not (e.get("lock") or {}).get("human", True)
+        )
 
 
 def brief_line(st: State, cfg: Config) -> str:

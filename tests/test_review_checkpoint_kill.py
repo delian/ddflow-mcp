@@ -133,3 +133,39 @@ def test_a_torn_trailing_multibyte_line_keeps_the_earlier_chunks(tmp_path):
     # keeps it; the torn chunk 2 line loses only itself.
     assert rf.chunks() == [(1, "ok")]
 
+
+def test_a_concurrent_registration_does_not_trip_the_snapshot(tmp_path):
+    """DX-review-concurrent-runs: `active_files` snapshots `_ACTIVE` under the lock and
+    reads each file's chunks outside it, so a reviewer's worker thread registering a
+    sibling reply file while a killed run's read-back iterates drops nothing."""
+    import threading
+
+    from ddflow.api.review.reviewers import _ReplyFile, active_files
+
+    first = _ReplyFile(tmp_path, "T1", "critic", "r")
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    first.add(1, "ok")
+
+    started = threading.Event()
+    registered: list[_ReplyFile] = []
+
+    def register():
+        other = _ReplyFile(tmp_path, "T1", "critic", "q")
+        other.path.parent.mkdir(parents=True, exist_ok=True)
+        other.add(2, "late")
+        registered.append(other)
+        started.set()
+
+    t = threading.Thread(target=register)
+    t.start()
+    # Read back while the registrar is still appending its own `_ReplyFile`: on the
+    # unguarded path the list the killed run iterates is being mutated under it.
+    while not started.wait(0.1):
+        active_files("T1", "critic")
+    t.join(timeout=10)
+    assert registered, "the sibling registration finished"
+    got = active_files("T1", "critic")
+    assert first in got, "the killed run's own reply file is in the snapshot"
+    chunked = [c for f in got for c, _r in f.chunks()]
+    assert 1 in chunked, "the checkpoint read back the chunk that already answered"
+    assert all(f in got for f in registered), "a sibling registration is never lost"

@@ -323,6 +323,19 @@ def test_generated_regions_are_regenerated_not_blended(mixed: Path):
     assert git(mixed, "status", "--porcelain").strip() == ""
 
 
+def test_regenerate_warns_when_the_branch_is_behind_its_base(repo: Path):
+    # Bf4ee89e08e: on a branch forked before main moved ahead, `pins regenerate` re-recorded
+    # drift from the out-of-date base together with the item's own change with no warning that
+    # the branch lags main. It must re-record the item's change AND name the base it is behind.
+    git(repo, "commit", "--allow-empty", "-qm", "ahead")
+    git(repo, "checkout", "-q", "-b", "topic", "HEAD~1")
+    (repo / "knobs.txt").write_text("a\nb\n")  # the item's own change
+    done = ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (repo / "pin.txt").read_text() == "2 knobs\n- a\n- b\n"
+    assert "behind `main`" in done.stdout + done.stderr
+
+
 def test_text_that_is_not_utf8_still_merges_and_conflicts_are_kept():
     from ddflow.services.pins_text import merge_pin_text
 

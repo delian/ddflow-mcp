@@ -236,7 +236,8 @@ class _ReplyFile:
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
-        _ACTIVE.append(self)
+        with _ACTIVE_LOCK:
+            _ACTIVE.append(self)
 
     def plan(
         self, diff_sha: str, chunks_total: int, max_chunk_chars: int, wanted: list[int]
@@ -356,16 +357,22 @@ class _ReplyFile:
 #: runs in one process -- the CLI, or the MCP worker a review tool is offloaded to -- so a
 #: process-global list is enough; `review()` clears it (`_begin_run`) at entry, so
 #: `_terminated` (bug B982d306cc8) checkpoints only the run that is being killed, never a
-#: sibling or an earlier completed review's files.
+#: sibling or an earlier completed review's files. Both append and iteration are guarded by
+#: ``_ACTIVE_LOCK`` (DX-review-concurrent-runs): a reviewer's worker threads register reply
+#: files while the killed run's read-back iterates, and a torn list must not drop one.
 _ACTIVE: list[_ReplyFile] = []
+_ACTIVE_LOCK = threading.Lock()
 
 
 def _begin_run() -> None:
     """Forget every reply file of prior runs in this process: the next run starts fresh."""
-    _ACTIVE.clear()
+    with _ACTIVE_LOCK:
+        _ACTIVE.clear()
 
 
 def active_files(item: str, gate: str) -> list[_ReplyFile]:
     """The reply files of THIS process's run for ``item.gate`` that already have a chunk:
     the checkpoint a killed review reads back (bug B982d306cc8)."""
-    return [f for f in _ACTIVE if f.item == item and f.gate == gate and f.chunks()]
+    with _ACTIVE_LOCK:
+        files = list(_ACTIVE)
+    return [f for f in files if f.item == item and f.gate == gate and f.chunks()]
