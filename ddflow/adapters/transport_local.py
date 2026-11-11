@@ -18,7 +18,7 @@ from typing import Any
 from . import fs, fsio
 from . import proc as P
 from .lanes import LaneStatus, Result, failed, ok
-from .proc_server import kill_group, stop_group
+from .proc import kill_group, stop_group
 
 #: The lane's captured output (stdout and stderr merged), read back with `copy_out`.
 LOG = "lane.log"
@@ -123,7 +123,9 @@ class LocalTransport:
         # stopped = the process died BY the exact stop signal we sent (a trapped term that then
         # exits nonzero, or a SIGABRT a signal did not cause, is its own failure, not a stop).
         sig = run.stop_sig
-        state = "stopped" if sig is not None and code == -sig else "exited" if code == 0 else "failed"
+        state = (
+            "stopped" if sig is not None and code == -sig else "exited" if code == 0 else "failed"
+        )
         return LaneStatus(state, pid=run.popen.pid, exit_code=code)
 
     def copy_in(self, lane: str, local: Path, name: str) -> Result:

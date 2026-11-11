@@ -4,8 +4,8 @@ This shim stays until its import sites import the adapter modules directly, then
 The private `_shell_group` seam is re-exported explicitly because the proc tests patch it.
 """
 
-from ddflow.adapters.proc import *  # noqa: F403  # the port + run/capture/spawn_shell + Captured + TIMEOUTS
-from ddflow.adapters.proc_server import *  # noqa: F403  # run_shell, kill_group, relay_stdio, ...
+from ddflow.adapters.proc import *  # noqa: F403  # the port + run/capture/spawn_shell + kill_group/stop_group + Captured + TIMEOUTS
+from ddflow.adapters.proc_server import *  # noqa: F403  # run_shell, relay_stdio, ...
 from ddflow.adapters.proc_server import (  # noqa: F401  # private seams the tests patch
     _WATCHER,
     _arm_watcher,
