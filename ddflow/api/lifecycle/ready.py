@@ -86,7 +86,7 @@ def next_(
         kind=kind,
         phase=phase,
         agent=me,
-        with_deps=bool(phase) and not phase_only,
+        phase_only=phase_only,
     )
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
@@ -105,12 +105,18 @@ def next_(
     }
     if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
         data["contested"] = contested
-    if p.ready or p.blocking_deps:
+    if _actionable(p):
         return O.ok("next", **data)
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
     return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
+
+
+def _actionable(p) -> bool:
+    """Is there something for a caller to START right now: an in-phase ready item, or a
+    ready upstream blocking-dependency (offered to a lane asked to drive that phase)."""
+    return bool(p.ready or p.blocking_deps)
 
 
 def _ready_rows(items) -> list[dict[str, Any]]:
