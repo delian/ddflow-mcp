@@ -144,6 +144,17 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return _review_each(asked, args)
 
 
+def _reviewed_tree(repo: Path, cfg, st, it, called_from: Path | None) -> Path:
+    """The tree the reviewer is run in and watched in: the item's own worktree when it has
+    one (B708761957b), or the primary (``repo``) for a review with no item.
+
+    Hoisted out of ``_review_gate`` so threading the tree does not push that long function
+    past the complexity ratchet; the conditional lives here while the call site stays one
+    plain call.
+    """
+    return (item_tree(repo, cfg, st, it, called_from)[0] if it else None) or repo
+
+
 def _same_reviewers(repo: Path, gates: list[str]) -> bool:
     """Is every gate served by the same reviewers? A combined review runs the FIRST gate's,
     so a gate with a reviewer of its own must not be recorded from another gate's (or as
@@ -661,7 +672,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     # The tree the reviewer is run in and watched in is the item's own worktree when it
     # has one (B708761957b): a command reviewer must leave it as it found it, and only it
     # is watched -- the primary (repo) is the honest fallback for a review with no item.
-    tree = (item_tree(repo, cfg, st, it, called_from)[0] if it else None) or repo
+    tree = _reviewed_tree(repo, cfg, st, it, called_from)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
