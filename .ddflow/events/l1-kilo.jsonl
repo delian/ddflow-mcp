@@ -1,0 +1,3 @@
+{"agent":"l1-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"ef4114d5a5ca64c5fb1a22add","kind":"ddflow.seen","lamport":175341,"schema":1,"subject":"ddflow","ts":"2026-11-11T15:01:47.625769Z"}
+{"agent":"l1-kilo","data":{"path":".ddflow/worktrees/B-item-globs-omit-wiring-files"},"id":"e2d64a3548ee22f71194ba8a3","kind":"worktree.removed","lamport":175342,"schema":1,"subject":"B-item-globs-omit-wiring-files","ts":"2026-11-11T15:01:47.696338Z"}
+{"agent":"l1-kilo","data":{"path":".ddflow/worktrees/B-mcp-shell-version-skew"},"id":"ea50f87dec43682c2ccf8d8cd","kind":"worktree.removed","lamport":175346,"schema":1,"subject":"B-mcp-shell-version-skew","ts":"2026-11-11T15:01:51.201956Z"}
