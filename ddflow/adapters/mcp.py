@@ -26,10 +26,9 @@ from __future__ import annotations
 import json
 import math
 import threading
-import time
 import traceback
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from .ports import port
@@ -326,19 +325,17 @@ class StdioServer:
 
 # -- the client side ---------------------------------------------------------------------
 # The client ORM lives in `ddflow.adapters.mcp_client` (imported at the bottom): separating
-# it keeps neither side alone at the 20 KB adapter ceiling (r-small-files). Every name the
-# client module defines is re-exported here so `from ddflow.adapters import mcp as W` and
-# `from .mcp import McpClient` keep resolving unchanged (the ACP client imports them too).
+# it keeps neither side alone at the 20 KB adapter ceiling (r-small-files). The names below
+# are re-exported here only so `from ddflow.adapters import mcp as W` and `from .mcp import
+# McpClient` keep resolving unchanged (the ACP client imports them too).
 
-from .mcp_client import (  # noqa: E402 -- the client side, re-exported for the callers above
-    _ChannelClient,
-    _is_echo,
+from .mcp_client import (  # noqa: E402, F401 -- re-exported, not used locally
     Channel,
     Handshake,
     McpClient,
     Outcome,
     Starter,
     StdioClient,
+    _ChannelClient,
     finish_answer,
-    send_line,
 )
