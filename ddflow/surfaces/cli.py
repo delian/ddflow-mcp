@@ -451,19 +451,28 @@ def _main(argv: list[str] | None = None) -> int:
         # nothing to do without printing one still answers the reason (Bac9d773a44).
         if getattr(args, "json", False) and code != 0 and not out.wrote:
             emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
-        # DX-command-log: remember this command (argv shape + exit code + stderr tail) in the
-        # git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N.
-        try:
-            from ..infra import worktree as _W
-
-            _root = _W.repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
-        except Exception:
-            _root = Path.cwd()
-        cmdlog.record(
-            _root, getattr(args, "agent", "") or "", typed, code, said.text, verbs=verbs, flags=flags
-        )
+        _remember_command(args, typed, code, said.text, verbs, flags)
         reset_command(tagged)
         return code
+
+
+def _remember_command(
+    args: argparse.Namespace,
+    typed: list[str],
+    code: int,
+    said: str,
+    verbs: set[str],
+    flags: set[str],
+) -> None:
+    """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
+    git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
+    try:
+        from ..infra import worktree as _W
+
+        root = _W.repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+    except Exception:
+        root = Path.cwd()
+    cmdlog.record(root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags)
 
 
 def _run(args: argparse.Namespace) -> int:
