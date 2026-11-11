@@ -203,6 +203,46 @@ def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     return [_session_row(s, cfg) for s in st.sessions.values()]
 
 
+def _filter_rows(  # noqa: PLR0913 -- one filter per viewer flag
+    rows: list[dict[str, Any]],
+    cfg: Config,
+    *,
+    state: str,
+    phase: str,
+    tag: str,
+    agent: str,
+    item: str,
+    match: str,
+    since: str,
+) -> list[dict[str, Any]]:
+    """`rows` narrowed by every filter that is set (each one a plain AND)."""
+    if state:
+        rows = [r for r in rows if r["state"].lower() == state.lower()]
+    if phase:
+        rows = [r for r in rows if r["phase"] == phase]
+    if tag:
+        want_tag = redact_text(tag, cfg).text  # compared as the row shows it
+        rows = [r for r in rows if want_tag in r["tags"]]
+    if agent:
+        rows = [r for r in rows if r["owner"] == agent]
+    if item:
+        # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
+        # this honest if a future kind with the filter lacks the field.
+        rows = [r for r in rows if r.get("item") == item]
+    if match:
+        # Server-side text filter (id or title, case-insensitive substring): the reason no
+        # caller needs `| grep`, which a paged list defeats (Bd515797884).
+        needle = match.lower()
+        rows = [r for r in rows if needle in r["id"].lower() or needle in r["title"].lower()]
+    if since:
+        try:
+            at_or_after = _cutoff(since)
+        except ExportError as exc:
+            raise ViewError(str(exc).replace("--since", "since")) from None
+        rows = [r for r in rows if r["updated"] and at_or_after(r["updated"])]
+    return rows
+
+
 def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     st: State,
     cfg: Config,
@@ -247,31 +287,17 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     if phase and not (phase in st.items and st.items[phase].kind == "phase"):
         raise ViewError(f"no phase {phase!r}")
 
-    rows = _candidates(st, kind, cfg)
-    if state:
-        rows = [r for r in rows if r["state"].lower() == state.lower()]
-    if phase:
-        rows = [r for r in rows if r["phase"] == phase]
-    if tag:
-        want_tag = redact_text(tag, cfg).text  # compared as the row shows it
-        rows = [r for r in rows if want_tag in r["tags"]]
-    if agent:
-        rows = [r for r in rows if r["owner"] == agent]
-    if item:
-        # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
-        # this honest if a future kind with the filter lacks the field.
-        rows = [r for r in rows if r.get("item") == item]
-    if match:
-        # Server-side text filter (id or title, case-insensitive substring): the reason no
-        # caller needs `| grep`, which a paged list defeats (Bd515797884).
-        needle = match.lower()
-        rows = [r for r in rows if needle in r["id"].lower() or needle in r["title"].lower()]
-    if since:
-        try:
-            at_or_after = _cutoff(since)
-        except ExportError as exc:
-            raise ViewError(str(exc).replace("--since", "since")) from None
-        rows = [r for r in rows if r["updated"] and at_or_after(r["updated"])]
+    rows = _filter_rows(
+        _candidates(st, kind, cfg),
+        cfg,
+        state=state,
+        phase=phase,
+        tag=tag,
+        agent=agent,
+        item=item,
+        match=match,
+        since=since,
+    )
     # Two stable sorts: id ascending, then newest first, so equal timestamps keep id order.
     rows.sort(key=lambda r: r["id"])
     rows.sort(key=lambda r: r["updated"], reverse=True)
