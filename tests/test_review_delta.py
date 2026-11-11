@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git as _git
+from readme_corpus import readme_corpus
 
 import ddflow.api.review as api
 from ddflow.config import Config
@@ -570,7 +571,7 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
         "ddflow/templates/prompts/help/gates.md",
         "ddflow/templates/prompts/help/manual.md",
     ):
-        text = (root / rel).read_text()
+        text = readme_corpus() if rel == "README.md" else (root / rel).read_text()
         assert "delta_default" in text and ("--full" in text or "full=true" in text), rel
 
 

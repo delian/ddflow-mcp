@@ -1419,8 +1419,8 @@
   
   positional arguments:
     topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, parallel, recovery, upgrade, verify, viewers, workflow. Omit for the
-                overview.
+                metrics, parallel, recovery, update, upgrade, verify, viewers, workflow. Omit for
+                the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -3423,7 +3423,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--set SET] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -3474,6 +3474,8 @@
     --phase PHASE         same as --parent
     --kind KIND           change the work kind: task, doc, research or job (the gate pipeline
                           [gates].kind_pipelines gives it)
+    --set SET             field=value, repeatable: the record's own fields (lesson why, bug severity
+                          ...); the fields each kind has are listed by `ddflow help update`
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   
@@ -3768,7 +3770,8 @@
       split               split an item into sub-tasks in place, keeping its id and history
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
-      update              change an item's fields
+      update              change the fields of any record (task, phase, bug, lesson, research,
+                          decision, memory, session, rule, schedule, trigger ...)
       batch               apply many item edits in one all-or-nothing transaction
       rename              move an item to a new id (and phase), re-pointing every needs edge
       chore               commit or approve chore files (no reviewer)

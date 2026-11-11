@@ -1,0 +1,6 @@
+<!-- section: driver -->
+An operator-only act is refused to you: file it with `ddflow approvals ask` (MCP: `ddflow_session action=ask`), show the operator the question it returns, then re-run the command with `--approval ID` once they have answered. The answer is theirs alone.
+<!-- section: route -->
+This is the operator's act, not yours. Ask them in chat: run `ddflow approvals ask {{ ask_id }}` (MCP: `ddflow_session action=ask`) and show them the question it returns. When they have answered, re-run this command with `--approval {{ ask_id }}` (`ddflow approvals attest {{ ask_id }}` records a chat answer, and `ddflow wait --approval {{ ask_id }}` blocks until it is answered). The approval is single-use, bound to this exact command and its current state, and expires.
+<!-- section: route_new -->
+This is the operator's act, not yours. Re-run this command with `--approval request`: that files the ask and prints its id. Then run `ddflow approvals ask ID` (MCP: `ddflow_session action=ask`) with that id and show the operator the question it returns. When they have answered, re-run this command with `--approval ID` (`ddflow wait --approval ID` blocks until it is answered). The approval is single-use, bound to this exact command and its current state, and expires.

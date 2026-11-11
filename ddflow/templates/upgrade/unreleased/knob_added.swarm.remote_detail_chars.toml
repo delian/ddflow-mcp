@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.remote_detail_chars"
-new = 200
+new = "200"
 why = "The [swarm] remote_* knobs (SW-remote-config): every field of remote.Knobs is a knob."
 impact = "additive"

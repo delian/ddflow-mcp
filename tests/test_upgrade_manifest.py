@@ -38,6 +38,24 @@ def test_replaying_the_manifest_gives_this_releases_knobs_and_event_kinds():
     )
 
 
+def test_unreleased_fragments_store_defaults_json_encoded():
+    """Bff1f5169b0: a `new` default is a JSON-encoded string, whatever its type. The
+    SW-remote-config fragments stored bare TOML natives (an int, a list, an unquoted
+    string), so `load()` raised ManifestError and `test_installed_adopt_works_end_to_end`
+    reddened in the ci. Re-baring one must fail HERE."""
+    m = UM.load()  # ManifestError when any fragment's default is not JSON-encoded
+    swarm = {
+        c.key: c.new
+        for _v, _d, cs in m.releases
+        for c in cs
+        if c.key.startswith("swarm.remote")
+    }
+    assert swarm["swarm.remote_branch_prefix"] == "swarm/remote/"
+    assert swarm["swarm.remote_exclude"] == [".ddflow", ".env", "**/.env"]
+    assert swarm["swarm.remote_ssh_argv"] == ["ssh"]
+    assert swarm["swarm.remote_bundle_max_bytes"] == 104857600
+
+
 def test_every_knob_entry_says_why_and_every_changed_default_its_effect():
     changes = UM.load().changes()
     cut = [
