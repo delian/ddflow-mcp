@@ -25,6 +25,7 @@ from ddflow.services import actors as A
 from ddflow.services import approval as AP
 from ddflow.services.approvals import consume as C
 from ddflow.services.approvals import harness as H
+from ddflow.services.approvals import policy as PO
 from ddflow.services.approvals import request as R
 from ddflow.services.approvals.canon import Canon
 from ddflow.services.ask import engine as E
@@ -116,17 +117,18 @@ def test_an_agent_cannot_revoke_withdraw_someone_elses_or_answer_the_cli(repo):
 # -- forging the log -------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("source", ["terminal", "credential", "named", "signed", "chat", "harness"])
 @pytest.mark.parametrize("claimed", [(0, ""), (2, "harness"), (3, "chat"), (4, "signed")])
-def test_a_hand_appended_answer_never_reaches_a_level_it_cannot_prove(log, claimed):
+def test_a_hand_appended_answer_never_reaches_a_level_it_cannot_prove(log, claimed, source):
     """An agent appends `ask.answered` with a high level it cannot back. For a T3 act (needs
     L4) it is refused whatever it claims; with no recorded source it is refused outright."""
     cfg = Config()
     t3 = _canon(T3, item="", target="")
     filed = _file(log, cfg, t3)
     level, via = claimed
-    _forge(log, filed, source="terminal", level=level, via=via)
+    _forge(log, filed, source=source, level=level, via=via)
     got = C.operator_gate(log, cfg, t3, approval_id=filed.id, now=T0 + 1)
-    assert not got.ok, claimed
+    assert not got.ok, (claimed, source)
     assert asks_of(_state(log))[filed.id]["used"] == 0
 
 
@@ -150,16 +152,23 @@ def test_a_hand_appended_answer_for_another_digest_or_command_is_refused(log):
     assert not C.operator_gate(log, cfg, _canon(item="T1"), approval_id=other.id, now=T0 + 1).ok
 
 
-def test_a_forged_use_count_cannot_make_a_spent_approval_fresh(log):
+def test_replaying_a_spent_approval_cannot_be_undone_by_appending_events(log):
     cfg = Config()
     filed = _file(log, cfg)
-    E.answer(log, cfg, filed.id, "approved", actor=A.resolve_actor(cfg, "me"),
-             digest=filed.digest, now=T0)  # fmt: skip
+    person = A.resolve_actor(cfg, "me")
+    E.answer(log, cfg, filed.id, "approved", actor=person, digest=filed.digest, now=T0)
     assert C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + 1).ok
-    for n in range(3):  # replay: every later try is refused and the count stays one
-        got = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + 2 + n)
-        assert not got.ok
     assert asks_of(_state(log))[filed.id]["used"] == 1
+    # the hostile appends: the same id requested again, answered again, a fake fresh use
+    log.append("ask.requested", filed.id, {"id": filed.id, "verb": T2, "digest": filed.digest,
+                                           "uses": 9, "min_level": 1})  # fmt: skip
+    _forge(log, filed, source="terminal")
+    log.append("ask.consumed", filed.id, {"id": filed.id, "by": "x", "used": 0})
+    for n in range(3):
+        got = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + 2 + n)
+        assert not got.ok, n
+    row = asks_of(_state(log))[filed.id]
+    assert row["uses"] == 1 and row["used"] == 1  # the first request owns the id and the count
 
 
 # -- retargeting and widening ------------------------------------------------------------------
@@ -185,7 +194,22 @@ def test_an_approval_does_not_stretch_to_a_changed_command(log, change):
     assert asks_of(_state(log))[filed.id]["used"] == 0  # the refusal spent nothing
 
 
-def test_a_denied_expired_withdrawn_or_missing_id_is_never_an_approval(log):
+def test_an_expired_request_cannot_be_answered_or_spent_and_says_so(log):
+    cfg = Config()
+    person = A.resolve_actor(cfg, "me")
+    filed = _file(log, cfg)
+    late = T0 + cfg.agent.ask_ttl_s + 1
+    with pytest.raises(E.AskRefused, match="expired"):
+        E.answer(log, cfg, filed.id, "approved", actor=person, digest=filed.digest, now=late)
+    got = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=late)
+    assert not got.ok and "expired" in got.message
+    # control: the same request answered in time is spendable, so only the clock differs
+    fresh = _file(log, cfg, _canon(item="F"))
+    E.answer(log, cfg, fresh.id, "approved", actor=person, digest=fresh.digest, now=T0)
+    assert C.operator_gate(log, cfg, _canon(item="F"), approval_id=fresh.id, now=T0 + 1).ok
+
+
+def test_a_denied_withdrawn_or_missing_id_is_never_an_approval(log):
     cfg = Config()
     person = A.resolve_actor(cfg, "me")
     denied = _file(log, cfg, _canon(item="D"))
@@ -223,11 +247,24 @@ def test_a_t3_act_refuses_a_level_one_answer_and_a_chat_answer_without_the_opt_i
     assert not C.operator_gate(log, cfg, _canon(T3, item="x", target=""), approval_id=other.id).ok
 
 
-def test_auto_approval_is_capped_and_never_reaches_a_higher_tier(log):
+def test_auto_approval_never_reaches_a_higher_tier(repo, log, monkeypatch):
+    """A standing rule that matches its verb answers a T2 act and is refused for a T3 one:
+    the contrast proves the rule is live and the tier is what stops it."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "t.py")
     cfg = Config()
-    cfg.approvals.policy = ["skip_after_unavailable", "complete_unavailable"]
-    t3 = _canon(T3, item="", target="")
+    cfg.approvals.standing_verbs = [
+        *cfg.approvals.standing_verbs,
+        T3,
+    ]  # in scope: only the tier stops it
+    always = lambda it, target, c: True  # noqa: E731
+    monkeypatch.setitem(PO.RULES, "t2rule", PO.Rule("t2rule", T2, "x", always))
+    monkeypatch.setitem(PO.RULES, "t3rule", PO.Rule("t3rule", T3, "x", always))
+    cfg.approvals.policy = ["t2rule", "t3rule"]
+    ok = C.operator_gate(log, cfg, _canon(), reason="r", now=T0)
+    assert ok.ok and ok.stamp["via"] == "policy"
+    t3 = _canon(T3, target="")  # item T1 exists, the rule matches, the window covers the verb
     got = C.operator_gate(log, cfg, t3, reason="r", now=T0)
-    assert not got.ok and got.ask_id  # a rule never answers a verb above its level
+    assert not got.ok and got.ask_id
     row = asks_of(_state(log))[got.ask_id]
-    assert row["state"] == "pending" and not row["policy"]
+    assert row["state"] == "pending" and not row["policy"] and row["used"] == 0

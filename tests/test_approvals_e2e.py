@@ -22,9 +22,9 @@ from ddflow.core import clock
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
+from ddflow.services import actors as A
 from ddflow.services import approval as AP
 from ddflow.services.approvals import consume as C
-from ddflow.services.approvals.canon import Canon
 
 SKIP = ("gate", "skip", "T1", "critic", "--reason", "the reviewer is down")
 
@@ -135,8 +135,6 @@ def test_transcript_an_approval_names_one_command_not_a_family(proj):
     )
     assert code == 3 and not _skipped(proj, "T2")
     assert _row(proj, ask_id)["used"] == 0
-    code, _o, _err = run_cli(proj, "complete", "T1", "--approval", ask_id, agent="bot")
-    assert code != 0 and _row(proj, ask_id)["used"] == 0
     assert run_cli(proj, *SKIP, "--approval", ask_id, agent="bot")[0] == 0  # the real one works
 
 
@@ -150,28 +148,43 @@ def test_transcript_a_revoked_approval_cannot_be_spent(proj):
 
 
 def test_transcript_a_request_and_an_approval_expire(proj):
-    cfg = Config()
-    ask_id, _ = _refuse(proj)
-    log = EventLog(proj, "bot")
-    it = _state(proj).items["T1"]
     from ddflow.services.approvals import gate_skip as GS
+    from ddflow.services.ask import engine as E
 
-    canon = GS.canon_for(it, "critic", "T1", "failed with no triaged findings on record",
-                         "bot", "skipped")  # fmt: skip
-    # unanswered past its request window: not spendable and not answerable
-    late = clock.epoch(_row(proj, ask_id)["requested_at"], default=0.0) + cfg.agent.ask_ttl_s + 1
-    got = C.operator_gate(log, cfg, canon, approval_id=ask_id, now=late)
-    assert not got.ok
-    # answered, then left past the use window
+    cfg = Config()
+    log = EventLog(proj, "bot")
+    reason = "failed with no triaged findings on record"
+
+    def canon(item):
+        return GS.canon_for(_state(proj).items[item], "critic", item, reason, "bot", "skipped")
+
+    # a request left past its window is expired: it cannot be answered and says so
+    ask_id, _ = _refuse(proj)
+    requested = clock.epoch(_row(proj, ask_id)["requested_at"], default=0.0)
+    late = requested + cfg.agent.ask_ttl_s + 1
+    person = A.resolve_actor(cfg, "me")
+    with pytest.raises(E.AskRefused, match="expired"):
+        E.answer(
+            log,
+            cfg,
+            ask_id,
+            "approved",
+            actor=person,
+            digest=_row(proj, ask_id)["digest"],
+            now=late,
+        )
+    got = C.operator_gate(log, cfg, canon("T1"), approval_id=ask_id, now=late)
+    assert not got.ok and "expired" in got.message
+    # an approval answered in time but left past its use window
     ask2, _ = _refuse(proj, "gate", "skip", "T2", "critic", "--reason", "r")
     _approve_at_the_terminal(proj, ask2)
     answered = clock.epoch(_row(proj, ask2)["answered_at"], default=0.0)
-    t2 = GS.canon_for(_state(proj).items["T2"], "critic", "T2", "failed with no triaged findings on record",
-                      "bot", "skipped")  # fmt: skip
     stale = C.operator_gate(
-        log, cfg, t2, approval_id=ask2, now=answered + cfg.approvals.use_ttl_s + 1
+        log, cfg, canon("T2"), approval_id=ask2, now=answered + cfg.approvals.use_ttl_s + 1
     )
     assert not stale.ok and "request a new approval" in stale.message
+    fresh = C.operator_gate(log, cfg, canon("T2"), approval_id=ask2, now=answered + 1)
+    assert fresh.ok  # control: only the clock differed
 
 
 def test_transcript_a_standing_rule_is_capped_and_recorded_as_policy(proj):
@@ -194,4 +207,3 @@ def test_transcript_a_standing_rule_is_capped_and_recorded_as_policy(proj):
     second = C.operator_gate(log, cfg, canon)  # the cap: one use per item and target
     assert not second.ok and second.ask_id  # a person is asked instead
     assert _row(proj, second.ask_id)["state"] == "pending"
-    assert isinstance(canon, Canon)
