@@ -9,6 +9,7 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from typing import Any
 
@@ -89,11 +90,25 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
     return tuple(out)
 
 
+#: Terminal control sequences a record's raw text must not replay to a terminal: the ANSI
+#: CSI (e.g. an SGR like `\x1b[31m`) and OSC (`\x1b]0;...BEL`) an operator stored in a
+#: title, their 8-bit C1 single-byte forms (`\x9b` CSI, `\x9d` OSC), and the bare C0/C1
+#: controls (CR drives the cursor back to column 0, LF injects rows). Strip them when a
+#: bare text line is rendered (B-B743bfde582).
+_CONTROL = re.compile(
+    "\x1b\\[[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI, 7-bit (SGR \x1b[31m, ...)
+    "|\x1b\\][^\x07\x1b\x9c]*(?:\x07|\x9c)"  # ANSI OSC, 7-bit \x1b]... BEL/ST
+    "|\x9b[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI, 8-bit C1 \x9b...
+    "|\x9d[^\x07\x9c]*(?:\x07|\x9c)"  # ANSI OSC, 8-bit C1 \x9d...
+    "|[\x00-\x1f\x7f-\x9f]"  # a bare C0/C1 control (CR, LF, TAB, the lone ESC, ...)
+)
+
+
 def _line(kind: str, r: dict[str, Any]) -> str:
     parts = [f"  {r['id']:<18} {r['state']:<10}"]
     if kind == "phase":
         parts.append(f" {r['done']}/{r['total']:<4}")
-    parts.append(f" {r['title']}")
+    parts.append(f" {_CONTROL.sub('', r['title'])}")
     tail = [x for x in (r["owner"] and f"@{r['owner']}", r["updated"][:10]) if x]
     if tail:
         parts.append("  [" + " ".join(tail) + "]")
