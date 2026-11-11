@@ -343,8 +343,7 @@ def _orphans(lanes: list[Lane], runs: list[Run], now: float, limits: Limits) -> 
         return []
     newest: dict[str, Run] = {}
     for r in runs:
-        stamp = r.ended_at or r.started_at
-        if r.item not in newest or stamp > (newest[r.item].ended_at or newest[r.item].started_at):
+        if r.item not in newest or r.started_at > newest[r.item].started_at:
             newest[r.item] = r
     out: list[Finding] = []
     for ln in lanes:

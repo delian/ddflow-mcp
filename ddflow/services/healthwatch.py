@@ -234,12 +234,13 @@ def _runs(repo: Path, st) -> list[H.Run]:
 def _live_run_items(repo: Path, held: dict[str, Any], now: float) -> set[str]:
     """Items with a live registered run still WITHIN its expected duration: work in flight,
     so the lane is not idle or stalled (a legitimate long run is not a dead one). A live run
-    past its expected duration is no longer in flight, and a run with no expected duration
-    recorded (``expected_s`` 0) is treated as in flight for as long as it lives."""
+    past its expected duration is no longer in flight, and one that recorded none
+    (``expected_s`` 0) is not within an expected duration either -- so neither is in
+    flight, and the lane is judged idle or stalled as its progress says."""
     out: set[str] = set()
     for i in held:
         if any(
-            m.expected_s <= 0 or now - clock.epoch(m.at) < m.expected_s
+            m.expected_s > 0 and now - clock.epoch(m.at) < m.expected_s
             for m in running.live_runs(repo, i)
         ):
             out.add(i)

@@ -95,11 +95,11 @@ def test_a_live_run_within_its_expected_duration_is_live_work(tmp_path):
     assert HW._live_run_items(tmp_path, {"T1": object()}, now) == {"T1"}
 
 
-def test_a_live_run_with_unknown_duration_is_live_work(tmp_path):
+def test_a_live_run_with_unknown_duration_is_not_within_expected(tmp_path):
     from ddflow.services import healthwatch as HW
     from ddflow.services.gates import running as RUN
 
-    m = RUN.mark_started(tmp_path, "T1", "ci", "tree-aaa")  # expected_s 0 = unknown
+    m = RUN.mark_started(tmp_path, "T1", "ci", "tree-aaa")  # expected_s 0 = unknown: suspect
     assert m is not None
     now = clock.epoch(m.at) + 100000
-    assert HW._live_run_items(tmp_path, {"T1": object()}, now) == {"T1"}
+    assert HW._live_run_items(tmp_path, {"T1": object()}, now) == set()
