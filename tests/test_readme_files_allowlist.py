@@ -21,10 +21,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_the_projects_readme_files_cover_the_front_door_and_every_guide():
     patterns = _root_anchored(Config.load(ROOT).enforce.readme_files)
     assert is_shared("README.md", patterns)
+    assert GUIDES, "the guide list is empty, so the loop below would pass vacuously"
+    listed = {f for f in Config.load(ROOT).enforce.readme_files if f != "README.md"}
+    assert listed == {f"docs/guide/{g}.md" for g in GUIDES}, "readme_files and GUIDES disagree"
     for g in GUIDES:
         assert is_shared(f"docs/guide/{g}.md", patterns), g
     assert not is_shared("docs/ddflow/RESEARCH.md", patterns)
-    assert not is_shared("docs/guide/tokens.md", patterns), "a page outside the split is not the README"
+    assert not is_shared("docs/guide/tokens.md", patterns), (
+        "a page outside the split is not the README"
+    )
 
 
 def test_a_guide_edit_satisfies_the_real_readme_with_code_check(repo):
