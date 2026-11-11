@@ -148,7 +148,7 @@ def _ends_on_signal(fn):
         bound = sig.bind(*a, **kw)
         bound.apply_defaults()
         started_at = clock.now_iso()
-        _begin_run()  # forget prior runs BEFORE the guard can checkpoint their files (B982d306cc8)
+        _begin_run(started_at)  # record this run's identity BEFORE its files are created (B982d306cc8)
         try:
             with RUN.terminating():
                 return fn(*a, **kw)
@@ -162,13 +162,14 @@ _NOTHING_REVIEWED = "nothing was reviewed, which is not a pass"
 
 
 def _terminated_gate(
-    repo, log, cfg, st, item: str, gate: str, signame: str, called_from, gates
+    repo, log, cfg, st, item: str, gate: str, signame: str, called_from, gates, run: str
 ) -> str:
-    """One gate's record for a review cut short by ``signame``; returns the reason recorded.
+    """One gate's record for a review cut short by ``signame`` (``run`` is its invocation
+    ``started_at``); returns the reason recorded.
 
     Chunks already checkpointed (bug B982d306cc8) become a `partial` record that keeps their
     findings -- a killed background shell loses no reviewer work; none become `unavailable`."""
-    files = active_files(item, gate)
+    files = active_files(item, gate, run)
     reviewed = sorted({c for f in files for c, _r in f.chunks()})
     if not reviewed:
         reason = (
@@ -237,7 +238,7 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
                 kept.append(f"{g} = {rec.outcome}")  # this run already recorded it
                 continue
             reasons.append(
-                _terminated_gate(repo, log, cfg, st, item, g, signame, args["called_from"], gates)
+                _terminated_gate(repo, log, cfg, st, item, g, signame, args["called_from"], gates, run=started_at)
             )
     reason = "; ".join(reasons) if reasons else fallback
     if kept:

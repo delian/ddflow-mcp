@@ -236,6 +236,7 @@ class _ReplyFile:
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
+        self.run_token = _RUN  # which review() invocation owns this file (per-run, not process-global)
         _ACTIVE.append(self)
 
     def plan(
@@ -354,18 +355,21 @@ class _ReplyFile:
 
 #: The reply files of the review(s) running in THIS process, in creation order. A review
 #: runs in one process -- the CLI, or the MCP worker a review tool is offloaded to -- so a
-#: process-global list is enough; `review()` clears it (`_begin_run`) at entry, so
-#: `_terminated` (bug B982d306cc8) checkpoints only the run that is being killed, never a
-#: sibling or an earlier completed review's files.
+#: process-global list is enough; each file records the ``started_at`` of the invocation
+#: that owns it (`_begin_run`), and `_terminated` (bug B982d306cc8) reads back only that
+#: run's files -- a concurrent review in one process must not clear a sibling's checkpoints.
 _ACTIVE: list[_ReplyFile] = []
+_RUN: str = ""  # the ``started_at`` token of the review() invocation this process is running
 
 
-def _begin_run() -> None:
-    """Forget every reply file of prior runs in this process: the next run starts fresh."""
-    _ACTIVE.clear()
+def _begin_run(token: str) -> None:
+    """Record which ``review()`` invocation this process is about to run (its ``started_at``):
+    the next run starts fresh, but files of a CONCURRENT run in this process are untouched."""
+    global _RUN
+    _RUN = token
 
 
-def active_files(item: str, gate: str) -> list[_ReplyFile]:
-    """The reply files of THIS process's run for ``item.gate`` that already have a chunk:
+def active_files(item: str, gate: str, run: str) -> list[_ReplyFile]:
+    """The reply files of the ``run`` invocation for ``item.gate`` that already have a chunk:
     the checkpoint a killed review reads back (bug B982d306cc8)."""
-    return [f for f in _ACTIVE if f.item == item and f.gate == gate and f.chunks()]
+    return [f for f in _ACTIVE if f.item == item and f.gate == gate and f.run_token == run and f.chunks()]
