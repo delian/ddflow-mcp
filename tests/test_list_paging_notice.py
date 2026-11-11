@@ -19,9 +19,9 @@ from ddflow.services import viewers as V
 @pytest.fixture
 def many(repo, monkeypatch):
     run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T-needle", "--title", "Find Me")  # the OLDEST row
     for i in range(1, 8):
         run_cli(repo, "task", "add", f"T{i}", "--title", f"title {i}")
-    run_cli(repo, "task", "add", "T-needle", "--title", "Find Me")
     monkeypatch.setattr(V, "DEFAULT_LIMIT", 3)
     return repo
 
@@ -60,3 +60,27 @@ def test_help_no_longer_claims_all_lists_everything_already():
     from ddflow.surfaces.commands import viewers_lists as VL
 
     assert "already" not in VL._ALL_HELP[""]
+
+
+def test_phase_list_prints_every_phase_past_the_page_size(many, monkeypatch, capsys):
+    from ddflow.api import surf_reporting as R
+    from ddflow.surfaces.cli import main
+
+    monkeypatch.setattr(R, "LIST_DEFAULT_LIMIT", 2)
+    for i in range(5):
+        run_cli(many, "phase", "add", f"P{i}", "--title", f"phase {i}")
+    assert main(["--repo", str(many), "phase", "list"]) == 0
+    out = capsys.readouterr().out
+    assert all(f"P{i} " in out for i in range(5)) and "PARTIAL" not in out
+    assert main(["--repo", str(many), "task", "list"]) == 0  # a task page is still cut
+    assert "PARTIAL LIST" in capsys.readouterr().out
+
+
+def test_notice_does_not_offer_all_once_at_the_most_a_list_gives():
+    from ddflow.api import surf_reporting as R
+    from ddflow.surfaces.commands.viewers_lists import cut_notice
+
+    d = {"shown": 2, "total": 9, "offset": 0, "limit": 2, "next": 2}
+    assert "--all" in cut_notice(d)
+    d = {**d, "limit": R.LIST_MAX_LIMIT}
+    assert "--all" not in cut_notice(d) and "--match" in cut_notice(d)

@@ -32,7 +32,7 @@ def empty_list(kind: str, limit: int = V.DEFAULT_LIMIT) -> dict[str, Any]:
     }
 
 
-def view_list(
+def view_list(  # noqa: PLR0913 -- one reader carries every viewer filter
     repo: Path,
     kind: str,
     *,

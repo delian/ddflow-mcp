@@ -194,11 +194,16 @@ def _json_body(out) -> dict[str, Any]:
 
 def cut_notice(d: dict[str, Any]) -> str:
     """The one-line notice of a cut list: how many of how many, and how to see the rest."""
-    return (
-        f"(PARTIAL LIST: showing {d['shown']} of {d['total']} from {d['offset']}; "
-        f"narrow with --match TEXT or a filter, or see the rest with --all, "
-        f"or the next page: --limit {d['limit']} --offset {d['next']})"
+    more = (
+        f"the next page: --limit {d['limit']} --offset {d['next']}"
+        if d["next"] is not None
+        else "no further page"
     )
+    # `--all` only raises the page to the most a list gives: past that, only narrowing helps.
+    ways = "narrow with --match TEXT or a filter"
+    if d["limit"] < R.LIST_MAX_LIMIT:
+        ways += ", or see the rest with --all"
+    return f"(PARTIAL LIST: showing {d['shown']} of {d['total']} from {d['offset']}; {ways}, or {more})"
 
 
 def _warn_cut(out, c: Ctx) -> None:
