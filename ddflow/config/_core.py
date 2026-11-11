@@ -103,6 +103,21 @@ def _widens_verb_table(committed: Any, below: Any) -> bool:
     return False
 
 
+def _operator_only_refusal(sec: str, knob: str, key: str, value: Any, below: Any) -> str:
+    """Why the committed ``file`` layer may not set ``key``, or ``""`` when it may.
+
+    The committed layer is visible to every clone, so a token holder who can land a commit
+    could widen its own role there (B-token-role-widened). Refused only when it WIDENS an
+    authority the layer below holds: a tightening restatement is fine (r-tighten-only)."""
+    if not _widens_verb_table(value, below):
+        return ""
+    return (
+        f"{key} is operator-only: the committed config may not widen an authority the "
+        f"layer below holds. Widen it in the local layer (`ddflow config --set "
+        f"{sec}.{knob} ... --local`), the environment, or `ddflow_configure`."
+    )
+
+
 class _SectionFields:
     """Mixes every `[section]` dataclass into `Config` as a field, alphabetically by
     section name (sorted discovery, r-extension-contract). `declare()` is the ONE place a
@@ -349,18 +364,8 @@ class Config(_SectionFields):
         typ = next(f.type for f in fields(target) if f.name == knob)
         value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
         if key in _OPERATOR_ONLY and source == "file":
-            # The committed layer is visible to every clone, so a token holder who can land
-            # a commit could widen its own role there and escalate everything it may do
-            # (B-token-role-widened). Refused only when it WIDENS an authority the layer
-            # below holds: a committed table that merely restates or tightens it is fine
-            # (r-tighten-only). A wider table is the operator's, in local/env/`ddflow_configure`.
-            if _widens_verb_table(value, getattr(target, knob)):
-                raise InvalidValue(
-                    f"{key} is operator-only: the committed config may not widen an "
-                    "authority the layer below holds. Widen it in the local layer "
-                    f"(`ddflow config --set {sec}.{knob} ... --local`), the environment, "
-                    "or `ddflow_configure`."
-                )
+            if why := _operator_only_refusal(sec, knob, key, value, getattr(target, knob)):
+                raise InvalidValue(why)
         written = value  # what THIS layer says, before any merge: what a note names
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
