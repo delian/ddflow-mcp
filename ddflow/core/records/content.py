@@ -75,6 +75,9 @@ class Bug:
     #: `bug found --tags` and `bug tag` (`bug.tagged`): plain strings, namespaced ones
     #: (`ns:x`) included; an old event carries none and folds to []. `wave:*` is derived.
     tags: list[str] = field(default_factory=list)
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
     upstream_url: str = ""
@@ -136,6 +139,9 @@ class Lesson:
     how: str = ""
     seen_in: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
     at: str = ""
     #: Rival definitions of this id from different agents (B230e852e10), each {"event",
     #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
@@ -319,6 +325,9 @@ class Memory:
     id: str
     text: str = ""
     tags: list[str] = field(default_factory=list)
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
     at: str = ""
     #: When it became true, if that is not when it was written down (an import).
     origin_at: str = ""
@@ -358,6 +367,9 @@ class Decision:
     alternatives: str = ""  # what was rejected, and why
     globs: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
     #: Where this decision came from: an ADR path, a URL, a commit sha. `Lesson` has
     #: `seen_in` and `ResearchNote` has `sources`; a decision had only the prose
     #: `context`, so the import's vanished-source check could cover items, lessons,
@@ -415,6 +427,9 @@ class ResearchNote:
     #: one, and telling those apart by their SHAPE is a heuristic pretending to be a
     #: fact. One marker, spelled the same way on all three.
     tags: list[str] = field(default_factory=list)
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
     #: Rival definitions of this id from different agents (B230e852e10), each {"event",
     #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
     #: not empty the displayed fields are the FIRST definition's, never mixed with a
@@ -438,6 +453,9 @@ class Session:
     #: `session end --summary`: what the session did, in its own words (B194). The last
     #: non-empty one wins, so a bare `session.ended` never blanks it.
     summary: str = ""
+    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
+    #: new value of each field, never the old value (REC-correct-event).
+    corrections: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

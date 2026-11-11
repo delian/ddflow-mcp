@@ -11,6 +11,7 @@ HISTORY_VERBS: dict[str, str] = {
     "phase.added": "phase added",
     "task.added": "task added",
     "task.updated": "updated",
+    "record.corrected": "corrected",
     "task.removed": "removed from the queue",
     "phase.removed": "removed from the queue",
     "item.blocked": "blocked",

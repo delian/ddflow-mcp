@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "record.corrected"
+why = "A record of any event kind or a work item can be corrected as an event: the new values, a reason and an audit entry of digests; the earlier text stays in the log until a scrub."
+impact = "additive"

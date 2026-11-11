@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from typing import Any
 
+from .. import digest as D
 from .. import record_fields as RF
 from ..events import Event
 from ..records import Bug, Decision, Lesson, Memory, ResearchNote, State
+from .items import _h_updated
 from .sessions import _session
 
 _BOOKS = {
@@ -53,6 +56,94 @@ def _handler(kind: str) -> Callable[[State, Event], None]:
     return handle
 
 
+#: The kinds a `record.corrected` event may name: the records held as events of their own kind
+#: and the work items. Rules, schedules, triggers and data kinds are definitions with their own
+#: revision path (`def.*`); a correction of one is refused, never silently dropped.
+CORRECTABLE = (*RF.EVENT_KINDS, "task", "phase")
+KIND = "record.corrected"
+
+
+def _int_at_least_one(data: dict[str, Any], name: str, top: int | None = None) -> int:
+    v = data.get(name)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 1 or (top is not None and v > top):
+        bound = f" and at most {top}" if top else ""
+        raise ValueError(f"{KIND}: {name} must be a whole number of at least 1{bound}; got {v!r}")
+    return v
+
+
+def _digest(value: Any, chars: int, min_chars: int) -> str:
+    """A truncated digest of ``value``, or "" when the value is shorter than ``min_chars``:
+    a short secret could be recovered by guessing against its digest."""
+    text = D.canonical(value)
+    return "" if len(text) < min_chars else D.content_digest(text, length=chars)
+
+
+def _record_of(st: State, kind: str, rid: str) -> Any:
+    if kind in ("task", "phase"):
+        rec = st.items.get(rid)
+        if rec is None or rec.removed or (rec.kind == "phase") != (kind == "phase"):
+            return None
+        return rec
+    if kind == "session":
+        return st.sessions.get(rid)
+    book, _cls = _BOOKS[kind]
+    return getattr(st, book).get(rid)
+
+
+def _correct(st: State, ev: Event) -> None:
+    """Replace fields of an existing record and keep an audit entry on it.
+
+    The event carries the NEW values only; the fold sets them through the kind's own update
+    handler and records who, why and a digest of the old and the new value of each field. The
+    old value is never written anywhere by this event. Strict, like `<kind>.updated`."""
+    d = ev.data
+    kind, fields, reason = d.get("kind"), d.get("fields"), d.get("reason")
+    if kind not in CORRECTABLE:
+        raise ValueError(
+            f"{KIND}: kind {kind!r} cannot be corrected; one of {', '.join(CORRECTABLE)}"
+        )
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError(f"{KIND}: fields must be a non-empty object")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"{KIND}: a reason is required")
+    chars = _int_at_least_one(d, "digest_chars", len(D.content_digest("")))
+    min_chars = _int_at_least_one(d, "min_chars")
+    kd = RF.KINDS[kind]
+    ok = {*kd.attrs.values(), *(o.name for o in kd.own)}
+    bad = sorted(set(fields) - ok)
+    if bad:
+        raise ValueError(f"{KIND}: unknown field(s) for a {kind}: {', '.join(bad)}")
+    rec = _record_of(st, kind, ev.subject)
+    if rec is None:
+        raise ValueError(f"{KIND}: no {kind} {ev.subject}")
+    rows = [
+        {
+            "field": name,
+            "old": _digest(getattr(rec, name, ""), chars, min_chars),
+            "new": _digest(value, chars, min_chars),
+        }
+        for name, value in sorted(fields.items())
+    ]
+    if kind in ("task", "phase"):
+        _h_updated(
+            st,
+            Event(f"{kind}.updated", ev.subject, dict(fields), ev.agent, ev.lamport, ev.ts),
+            kind,
+        )
+    else:
+        UPDATE_HANDLERS[f"{kind}.updated"](
+            st,
+            Event(
+                f"{kind}.updated", ev.subject, {"fields": dict(fields)}, ev.agent, ev.lamport, ev.ts
+            ),
+        )
+    rec = _record_of(st, kind, ev.subject)
+    rec.corrections.append(
+        {"at": ev.ts, "by": ev.agent, "lamport": ev.lamport, "reason": reason, "fields": rows}
+    )
+
+
 UPDATE_HANDLERS: dict[str, Callable[[State, Event], None]] = {
-    f"{kind}.updated": _handler(kind) for kind in RF.EVENT_KINDS
+    **{f"{kind}.updated": _handler(kind) for kind in RF.EVENT_KINDS},
+    KIND: _correct,
 }
