@@ -11,8 +11,13 @@ from ..records import State
 
 def _lock_of(prev: dict) -> dict | None:
     """The standing lock ``{by, human, at}`` of a document's fold entry, or None."""
+    if not prev.get("locked"):
+        return None
     lock = prev.get("lock")
-    return lock if prev.get("locked") and isinstance(lock, dict) else None
+    if isinstance(lock, dict):
+        return lock
+    # a lock from before the lock record existed was always the operator's
+    return {"by": str(prev.get("by", "")), "human": True, "at": str(prev.get("at", ""))}
 
 
 def _h_export_enabled(st: State, ev: Event) -> None:

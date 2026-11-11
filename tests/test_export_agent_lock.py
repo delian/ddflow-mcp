@@ -120,3 +120,14 @@ def test_a_second_lock_says_who_holds_it_and_records_nothing(proj):
     code, out, err = _lock(proj, "bot")
     assert code == 0 and "already locked by the operator" in out + err
     assert len(_events(proj, "export.disabled")) == 2
+
+
+def test_a_legacy_lock_without_a_lock_record_is_still_the_operators():
+    from ddflow.core.handlers.exports import _h_export_disabled, _h_export_enabled
+
+    st = model.State()
+    st.exports["roadmap"] = {"enabled": False, "locked": True, "human": True, "by": "op"}
+    _h_export_disabled(st, _ev("export.disabled", "roadmap", 2, by="bot", human=False))
+    assert st.exports["roadmap"]["locked"] and st.exports["roadmap"]["lock"]["human"] is True
+    _h_export_enabled(st, _ev("export.enabled", "roadmap", 3, by="bot"))
+    assert st.exports["roadmap"]["locked"]
