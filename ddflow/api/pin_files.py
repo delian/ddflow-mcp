@@ -10,6 +10,7 @@ from ..core.events import SkewRefused
 from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import approval as AP
+from ..services import drift as DR
 from ..services import leasekeep as LK
 from ..services import mergedrivers as MD
 from ..services import pins as PN
@@ -151,6 +152,7 @@ def _regenerate_tail(
     if rep.problem:
         return O.failed("pins", rep.problem)
     out = _regenerate_outcome(rep, check, attr_actions)
+    _attach_behind_warning(out, primary, repo, cfg, check)
     if stamp and out.exit == O.OK and not check:
         out.data["approval"] = stamp
     return out
@@ -231,6 +233,35 @@ def _older_binary_refusal(primary: Path, agent: str) -> str:
     except Exception:  # a log this cannot read is not a version skew to refuse on
         return ""
     return ""
+
+
+def _behind_warning(primary: Path, repo: Path, cfg) -> str:
+    """A warning when a re-recording runs on a tree behind its base: the pins it writes may
+    record drift from the out-of-date base along with this item's own change, and nothing
+    else says the branch lags the base (Bf4ee89e08e)."""
+    try:
+        base = DR.base_of(primary, repo, cfg)
+    except Exception:  # an unreadable log is not a reason to fail the regeneration
+        return ""
+    if not base:
+        return ""
+    n = G.run(repo, "rev-list", "--count", f"HEAD..{base}")
+    if not n.ok or not n.out.isdigit() or int(n.out) <= 0:
+        return ""
+    return (
+        f"ddflow: this branch is {n.out} commit(s) behind `{base}`: pins regenerated here "
+        "may record drift from the out-of-date base along with this item's own change. "
+        f"Merge `{base}` first when the drift is not this item's."
+    )
+
+
+def _attach_behind_warning(out: O.Outcome, primary: Path, repo: Path, cfg, check: bool) -> None:
+    """Put the behind-base warning on a re-recording's note, off the ``--check`` route too."""
+    if check or out.exit != O.OK:
+        return
+    warn = _behind_warning(primary, repo, cfg)
+    if warn:
+        out.data["note"] = warn
 
 
 def _linked_worktree(repo: Path) -> bool:
