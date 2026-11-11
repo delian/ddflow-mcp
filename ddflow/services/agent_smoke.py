@@ -262,6 +262,25 @@ def consented_install(
     return given, ""
 
 
+def _rounds(
+    result: SmokeResult, attempt: Callable[[int, int], Attempt], rounds: int, retries: int
+) -> list[str]:
+    """Run the rounds, retrying a failed attempt; an unavailable attempt ends the run."""
+    verdicts: list[str] = []
+    for r in range(max(rounds, 1)):
+        att = Attempt(UNAVAILABLE)
+        for t in range(max(retries, 0) + 1):
+            att = attempt(r, t)
+            result.attempts.append(att)
+            if att.verdict != FAIL:
+                break
+        verdicts.append(att.verdict)
+        if att.verdict == UNAVAILABLE:
+            result.reason = att.reason
+            break
+    return verdicts
+
+
 def smoke(
     h: harnessreg.Harness,
     *,
@@ -292,21 +311,9 @@ def smoke(
     if not why:
         line = command_line(h, max_turns=max_turns)
         prep = prepare or (lambda p: scaffold(p, h.id))
-        verdicts: list[str] = []
-        retries = max(retries, 0)
-        for r in range(max(rounds, 1)):
-            att = None
-            for t in range(retries + 1):
-                att = _attempt(
-                    h, Path(workdir) / f"r{r}-t{t}", line, env, runner, timeout_s, prep, assess_fn
-                )
-                result.attempts.append(att)
-                if att.verdict != FAIL:
-                    break
-            verdicts.append(att.verdict)
-            if att.verdict == UNAVAILABLE:
-                result.reason = att.reason
-                break
+        verdicts = _rounds(
+            result, lambda r, t: _attempt(h, Path(workdir) / f"r{r}-t{t}", line, env, runner,
+                                          timeout_s, prep, assess_fn), rounds, retries)  # fmt: skip
         result.verdict = majority(verdicts)
         if result.verdict != PASS and not result.reason:
             result.reason = next((a.reason for a in reversed(result.attempts) if a.reason), "")
