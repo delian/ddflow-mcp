@@ -104,24 +104,27 @@ _PROCESS_CALLS = frozenset(
 _PATH_RESULT = frozenset(
     {
         "pathlib.Path",
+        "pathlib.PurePath",
         "pathlib.Path.with_name",
         "pathlib.Path.with_suffix",
         "pathlib.Path.with_stem",
+        "pathlib.Path.with_segments",
         "pathlib.Path.rename",
         "pathlib.Path.replace",
         "pathlib.Path.resolve",
         "pathlib.Path.absolute",
         "pathlib.Path.expanduser",
+        "pathlib.Path.relative_to",
+        "pathlib.Path.readlink",
         "pathlib.Path.joinpath",
         "pathlib.Path.cwd",
         "pathlib.Path.home",
     }
 )
 
-
 #: pathlib ATTRIBUTE whose value is a `Path` (a property, not a call, so it is not in
 #: `_PATH_RESULT`): ``Path("a").parent.replace(dst)`` is a `Path.replace` too.
-_PATH_ATTRS = frozenset({"parent"})
+_PATH_ATTRS = frozenset({"parent", "parents"})
 
 
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
@@ -181,6 +184,8 @@ class _Sites(ast.NodeVisitor):
             return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
             return "pathlib.Path" if self._resolve(node.left) == "pathlib.Path" else None
+        if isinstance(node, ast.Subscript):
+            return "pathlib.Path" if self._resolve(node.value) == "pathlib.Path" else None
         return None
 
     # -- imports --------------------------------------------------------------------
