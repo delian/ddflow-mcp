@@ -9,6 +9,7 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from typing import Any
 
@@ -89,11 +90,22 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
     return tuple(out)
 
 
+#: Terminal control sequences a record's raw text must not replay to a terminal: the ANSI
+#: CSI (e.g. an SGR like `\x1b[31m`) and OSC (`\x1b]0;...BEL`) an operator stored in a
+#: title, and the bare C0/C1 controls. Strip them when a bare text line is rendered
+#: (B-B743bfde582).
+_CONTROL = re.compile(
+    "\x1b\\[[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI (SGR \x1b[31m, ...)
+    "|\x1b\\][^\x07\x1b]*\x07"  # ANSI OSC \x1b]...BEL (ST is its \x1b\ form or U+009C)
+    "|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x9b\x9c]"  # bare C0/C1 single-byte controls
+)
+
+
 def _line(kind: str, r: dict[str, Any]) -> str:
     parts = [f"  {r['id']:<18} {r['state']:<10}"]
     if kind == "phase":
         parts.append(f" {r['done']}/{r['total']:<4}")
-    parts.append(f" {r['title']}")
+    parts.append(f" {_CONTROL.sub('', r['title'])}")
     tail = [x for x in (r["owner"] and f"@{r['owner']}", r["updated"][:10]) if x]
     if tail:
         parts.append("  [" + " ".join(tail) + "]")
