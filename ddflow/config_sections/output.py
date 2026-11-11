@@ -26,7 +26,7 @@ class OutputConfig:
     )
     max_chars: int = knob(
         30000,
-        doc="Characters a default answer of those commands may hold (text and serialised `--json` alike; about 4 characters a token, so 30000 is roughly 7500 tokens, well under the 25000-token cap an MCP client puts on a tool result). A `--json` body that carries both prose and rows (`board`) gives each half. A longer answer is cut on a line boundary and ends in a footer; a `--json` body first loses rows until it fits and keeps its schema, adding `truncated` and `next`. 0 lifts the character cap, unless `allow_full` is false.",
+        doc="Characters a default answer of those commands may hold (text and serialised `--json` alike; about 4 characters a token for ASCII text only, so 30000 is roughly 7500 tokens of English; non-ASCII prose costs more, see `non_ascii_weight`; well under the 25000-token cap an MCP client puts on a tool result). A `--json` body that carries both prose and rows (`board`) gives each half. A longer answer is cut on a line boundary and ends in a footer; a `--json` body first loses rows until it fits and keeps its schema, adding `truncated` and `next`. 0 lifts the character cap, unless `allow_full` is false.",
         check=int_at_least(0),
     )
     non_ascii_weight: int = knob(
