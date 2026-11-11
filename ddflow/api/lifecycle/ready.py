@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,14 @@ from ...core import progress as PR
 from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import REVIEW
 from ...core.plain import plain
-from ...core.schedule import critical_path
+from ...core.schedule import (
+    Blocked,
+    bug_items,
+    co_location_hints,
+    critical_path,
+    glob_conflict,
+    wave_of,
+)
 from ...core.tier import tier_of
 from ...services import flow as FS
 from ...services import leases as LS
@@ -34,9 +42,16 @@ def next_(
     phase: str = "",
     agent: str = "",
     phase_only: bool = False,
+    flat: bool = False,
+    exclude_leased: bool = False,
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
-    ``phase`` names no item (`_unknown_phase`)."""
+    ``phase`` names no item (`_unknown_phase`).
+
+    ``flat`` (False) groups the ready list by ``wave:N`` bucket (bugs and
+    dependency-carrying items lead each bucket); ``exclude_leased`` drops ready items
+    whose globs overlap another agent's live lease to ``excluded_leased``.
+    """
 
     log, cfg, st = _load(repo, agent)
     unknown = _unknown_phase(st, phase)
@@ -52,16 +67,7 @@ def next_(
         if promoted:
             log, cfg, st = _load(repo, agent)
     synced: dict[str, Any] = {}
-    if (
-        cfg.flow.integration == "pr"
-        and cfg.flow.sync_on_next
-        and (
-            any(i.state == REVIEW for i in st.items.values())
-            # A hotfix's back-merge request outlives its item (B171): the item completes
-            # the moment it is opened, so "something in review" alone never re-asks.
-            or any(r["state"] == "open" for r in st.back_merges.values())
-        )
-    ):
+    if _wants_pr_sync(cfg, st):
         # Reviewers act between an agent's turns. Asking here is what lets a merged
         # request complete, and a requested change come back as work, without anyone
         # remembering to run `pr sync` -- the loop stays `next`, `claim`, work, `merge`.
@@ -88,12 +94,15 @@ def next_(
         agent=me,
         phase_only=phase_only,
     )
+    excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
         "promoted": promoted,
         "ready": _ready_rows(p.ready),
+        "co_location_hints": co_location_hints(p.ready),
+        "excluded_leased": [plain(b) for b in excluded],
         "blocking_deps": _blocking_dep_rows(p.blocking_deps),
         "blocked": [plain(b) for b in p.blocked],
         "running": [i.id for i in p.running],
@@ -119,13 +128,86 @@ def _actionable(p) -> bool:
     return bool(p.ready or p.blocking_deps)
 
 
+def _wants_pr_sync(cfg, st) -> bool:
+    """Should `next` sync the forge first: pr integration with sync-on-next, and an item in
+    review (or a hotfix back-merge open) whose settle re-asks here."""
+    return (
+        cfg.flow.integration == "pr"
+        and cfg.flow.sync_on_next
+        and (
+            any(i.state == REVIEW for i in st.items.values())
+            or any(r["state"] == "open" for r in st.back_merges.values())
+        )
+    )
+
+
+def _offer_ready(p, st, cfg, agent, *, flat: bool, exclude_leased: bool) -> list[Blocked]:
+    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``)
+    and group the rest by wave (``flat`` keeps the flat optimizer order). Returns the
+    dropped items, so `next_` reports them distinctly from ``blocked``."""
+    dropped: list[Blocked] = []
+    if exclude_leased:
+        p.ready, dropped = _drop_leased_overlap(p.ready, st, cfg, agent)
+    if not flat:
+        p.ready.sort(key=_group_key(bug_items(st, cfg)))
+    return dropped
+
+
+def _drop_leased_overlap(items, st, cfg, agent):
+    """Drop from ``items`` any item whose globs overlap a live lease held by ANOTHER agent,
+    returning ``(kept, dropped)`` -- ``dropped`` as `Blocked` records the caller reports.
+
+    Under ``[schedule] ready_policy = deps_and_lease`` (the default) the ``globs`` filter
+    has already moved these to ``blocked``, so this is a no-op there; it exists so an
+    orchestrator can ask `next_item(..., exclude_leased=True)` for the contention-free view
+    WITHOUT changing the project's policy. Kept live here, not in the plan, because
+    `Plan` holds only its offers -- a lease the caller must judge is a caller concern.
+    """
+    live = st.active_leases(time.time(), cfg.lease.grace_s)
+    kept: list = []
+    dropped: list[Blocked] = []
+    for it in items:
+        clash = glob_conflict(st, cfg, it, list(it.globs), agent, against="live", live=live)
+        if clash is None:
+            kept.append(it)
+            continue
+        lease = clash.lease
+        holder = lease.holder if lease is not None else "?"
+        dropped.append(
+            Blocked(
+                it.id,
+                "conflict",
+                f"globs overlap {clash.item} leased by {holder} "
+                f"({clash.pair[0]} vs {clash.pair[1]})",
+                [clash.item],
+            )
+        )
+    return kept, dropped
+
+
+def _group_key(bugs: set[str]):
+    """The default ready ordering: group by ``wave:N`` bucket (unstamped last), and within
+    a bucket lead bugs, then dependency-carrying items, then the rest. The sort is STABLE
+    over the configured optimizer order, so the ready set is grouped, not re-prioritised
+    inside a bucket. ``--flat`` skips this and leaves the flat optimizer order."""
+
+    def key(it) -> tuple:
+        w = wave_of(it.tags)
+        rank = 0 if it.id in bugs else (1 if it.needs else 2)
+        return (w is None, w if w is not None else -1, rank)
+
+    return key
+
+
 def _ready_rows(items) -> list[dict[str, Any]]:
     """The ready items as rows; a `tier:` tag also as a `tier` field (advisory, so an
-    untagged item carries nothing extra)."""
+    untagged item carries nothing extra), and the ``wave:N`` tag as a `wave` field (None
+    when unstamped), so an orchestrator can group by wave from `--json` too."""
 
     rows = []
     for i in items:
         row = plain(i)
+        row["wave"] = wave_of(i.tags)
         if tier := tier_of(i.tags):
             row["tier"] = tier
         rows.append(row)
