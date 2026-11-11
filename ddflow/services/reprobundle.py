@@ -21,10 +21,9 @@ from ..core import clock
 from ..core.model import State
 from ..core.redact import redact_leaves
 from ..infra.blobstore import BlobStore
-from . import logblobs
+from . import cmdlog, logblobs
 from . import repro_facts as F
 from . import reprocheck as RC
-from . import cmdlog
 from .redact_report import redactor
 
 _MIN_LEAF = 64
