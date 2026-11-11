@@ -23,13 +23,13 @@ class BugsConfig:
     #: bug fixed in the commit that found it.
     file_task: bool = knob(
         True,
-        doc="Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase` (never the found item's own phase, which it would hold open), carrying the bug's own found scope (the files its summary names plus the tests pinning them) unless `--globs` says otherwise -- and the item's inherited globs when the bug names more than `named_scope_at` files -- and linked to the bug. `bugs_first` offers it before features and a feature on the same files waits behind it, so bugs do not pile up under new work. `complete <fix task>` refuses while the bug is open and `--regression-test` closes it; `bug found --no-task` files no task (a bug fixed in the same commit); `bug file-tasks <id>` files the task of one open bug that has none (`--all`: every such bug; with neither it only previews). When the item named is itself an OPEN bug-fix task that fixes no other bug, that task is the fix and nothing new is filed. `false`: bugs are flat records, as before.",
+        doc="Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the found item's own OPEN phase (Be8ca1270a5) instead of the standing `[bugs] phase`, carrying the bug's own found scope (the files its summary names plus the tests pinning them) unless `--globs` says otherwise -- and the item's inherited globs when the bug names more than `named_scope_at` files -- and linked to the bug. `bugs_first` offers it before features and a feature on the same files waits behind it, so bugs do not pile up under new work. `complete <fix task>` refuses while the bug is open and `--regression-test` closes it; `bug found --no-task` files no task (a bug fixed in the same commit); `bug file-tasks <id>` files the task of one open bug that has none (`--all`: every such bug; with neither it only previews). When the item named is itself an OPEN bug-fix task that fixes no other bug, that task is the fix and nothing new is filed. `false`: bugs are flat records, as before.",
     )
-    #: The standing phase every fix task goes under, whatever item the bug names. Created on
-    #: first use.
+    #: The standing phase every fix task goes under when the found item has none of its own
+    #: (`_file_fix_task` prefers the item's OPEN phase; Be8ca1270a5). Created on first use.
     phase: str = knob(
         "bugs",
-        doc="The standing phase (default `bugs`) every fix task is filed under, whatever item the bug names. Made on first use, with the title `Bugs`.",
+        doc="The standing phase (default `bugs`) every fix task is filed under when the found item has no open phase of its own. Made on first use, with the title `Bugs`.",
         check=id_problem,
     )
 

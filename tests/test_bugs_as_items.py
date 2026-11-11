@@ -3,10 +3,10 @@
 Operator 2026-09-28: "Can the bugs be treated as tasks and part of the DAG tree with
 priority for correction by default in order to not accumulate bugs over bugs?"
 
-`bug found` files the fix task by default (`[bugs].file_task`), under the standing
-`bugs` phase, tagged as a bug fix and carrying the item's
-globs -- so `bugs_first` offers it ahead of features and a feature on the same files waits
-behind it. The bug closes when that task completes with a verified regression test:
+`bug found` files the fix task by default (`[bugs].file_task`), under the found item's
+open phase (falling back to the standing `bugs` phase), tagged as a bug fix and carrying the
+item's globs -- so `bugs_first` offers it ahead of features and a feature on the same files
+waits behind it. The bug closes when that task completes with a verified regression test:
 `complete` refuses while a bug the task fixes is open, and `--regression-test` closes it.
 """
 
@@ -51,14 +51,14 @@ def seed(repo: Path, *, feature: bool = True):
 # -- filing ---------------------------------------------------------------------------
 
 
-def test_bug_found_files_a_fix_task_under_the_bugs_phase_with_the_items_globs(repo):
+def test_bug_found_files_a_fix_task_under_the_items_phase_with_the_items_globs(repo):
     seed(repo)
     out = K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
     assert out.exit == 0, out.reason
     assert out.data["fix_task"] == "fix-Bx" and out.data["fix_task_filed"] is True
     st = state(repo)
     fix = st.items["fix-Bx"]
-    assert fix.kind == "task" and fix.parent == "bugs"
+    assert fix.kind == "task" and fix.parent == "P1"
     assert fix.globs == ["src/parser.py"]
     assert "bugfix" in fix.tags
     assert fix.fixes == ["Bx"]
@@ -153,7 +153,7 @@ def test_an_open_untagged_task_named_as_the_item_is_where_it_was_found_not_its_f
     assert out.exit == 0
     assert out.data["fix_task"] == "fix-Bx" and out.data["fix_task_filed"] is True
     st = state(repo)
-    assert st.items["fix-Bx"].parent == "bugs" and st.items["fix-Bx"].globs == ["src/parser.py"]
+    assert st.items["fix-Bx"].parent == "P1" and st.items["fix-Bx"].globs == ["src/parser.py"]
 
 
 def test_cli_reply_names_the_fix_task(repo):
@@ -351,7 +351,7 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     assert out.data["linked"] == ["B-linked", "B-hand"]
     assert state(repo).bugs["B-hand"].fix_task == "fix-B-hand"
     st = state(repo)
-    assert st.items["fix-B-old"].parent == "bugs" and st.items["fix-B-old"].globs == [
+    assert st.items["fix-B-old"].parent == "P1" and st.items["fix-B-old"].globs == [
         "src/parser.py"
     ]
     assert st.bugs["B-old"].fix_task == "fix-B-old"
@@ -384,7 +384,7 @@ def test_a_re_report_files_the_task_the_record_names_and_lacks(repo):
     )
     out = K.bug_found(repo, summary="cut off", item="T1", id="B-cut", agent="a")
     assert out.exit == 0 and out.data["fix_task_filed"] is True
-    assert state(repo).items["fix-B-cut"].parent == "bugs"
+    assert state(repo).items["fix-B-cut"].parent == "P1"
     again = K.bug_found(repo, summary="cut off", item="T1", id="B-cut", agent="a")
     assert again.exit == 0 and again.data["fix_task_filed"] is False
 
