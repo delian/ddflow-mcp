@@ -33,4 +33,6 @@ def guide_files() -> list[Path]:
 
 
 def readme_corpus() -> str:
-    return "\n".join([(ROOT / "README.md").read_text("utf-8"), *(p.read_text("utf-8") for p in guide_files())])
+    return "\n".join(
+        [(ROOT / "README.md").read_text("utf-8"), *(p.read_text("utf-8") for p in guide_files())]
+    )

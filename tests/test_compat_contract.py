@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import ddflow
 from readme_corpus import readme_corpus
+
+import ddflow
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "ddflow" / "compatibility.md"

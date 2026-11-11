@@ -18,8 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
-from readme_corpus import readme_corpus
 from helpers import git as _git
+from readme_corpus import readme_corpus
 
 import ddflow.api.review as api
 from ddflow.config import Config
