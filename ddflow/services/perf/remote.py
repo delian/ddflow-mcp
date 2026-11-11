@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 import re
 import shlex
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+
+from ddflow.adapters.clock import DEFAULT as CLOCK
 
 from .env import Fingerprint, in_container
 
@@ -86,7 +87,7 @@ def measure(
     run: Callable[[], None],
     *,
     probe: Callable[[str], dict[str, float | None] | None],
-    clock: Callable[[], float] = time.monotonic,
+    clock: Callable[[], float] = CLOCK.monotonic,
     container: Callable[[], bool | None] | None = None,
     env_key: str = "",
 ) -> CommandSample:
