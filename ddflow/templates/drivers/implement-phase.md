@@ -366,8 +366,9 @@ disposable on purpose.
 - **Prefer `ddflow brief` over reading the rule and lesson files.** That is what it is
   for, and what keeps a session's opening cost roughly constant as the project grows.
 - **Read the project with the viewers, never by scraping `.ddflow/events`.**
-  `ddflow task|phase|bug|research list` [`ddflow_list` `kind=...`] filter by state, phase,
-  tag, owner and date and page with `--limit`/`--offset`; `ddflow session list|show`
+  `ddflow task|phase|bug|research list` [`ddflow_list` `kind=...`] filter by `--state`,
+  `--since` and, where the kind has them, `--phase`, `--tag`, `--owner`, and page with
+  `--limit`/`--offset`; `ddflow session list|show`
   [`ddflow_list` `kind=session`] read sessions; `ddflow show <id>` [`ddflow_show`] is one
   whole record; `ddflow history --tail N` [`ddflow_history`] is the event log;
   `ddflow search '<text>'` [`ddflow_list` `kind=search`] looks across everything. They are
