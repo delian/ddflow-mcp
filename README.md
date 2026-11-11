@@ -553,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=2256599cd648 -->
-<details><summary>All 101 commands</summary>
+<!-- ddflow:begin README/commands sha=4e4e8a96386b -->
+<details><summary>All 102 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -649,6 +649,7 @@ needs a line written by hand here.
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
+| `ddflow dispatch` | the dispatcher's plan: what to start now, in order, on which lane (advise only) |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
 | `ddflow perf` | perf of the host (fingerprint, measuring wrapper) and the perf report (window, filters, format) |
@@ -5733,7 +5734,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=48806863a20a -->
+<!-- ddflow:begin README/tools sha=204ca0eb76c3 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5744,7 +5745,7 @@ drift. The groups are the ones `ddflow help` prints.
 **Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
 
 - `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
-- `ddflow_view` (21 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `rules_inventory` (was `ddflow_rule_inventory`), `waves` (was `ddflow_waves`)
+- `ddflow_view` (21 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `dispatch` (was `ddflow_dispatch`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `waves` (was `ddflow_waves`)
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
@@ -5774,7 +5775,6 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_prompts` | all | Inspect the prompt templates this project uses and where each comes from (shipped, project override, or… |
 | Setting up | `ddflow_rule_add` | standard | Add a project rule; duplicate-checked like every add (answer new \| extends:ID \| duplicate_of:ID \| related:ID). |
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
-| Setting up | `ddflow_rule_inventory` | all | Read-only inventory of the native rule, cross-agent and command files: per file which agents load it and… |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
 | Setting up | `ddflow_rule_search` | core | Search rules by title or content, ranked by relevance, for an area or topic. |
@@ -5815,6 +5815,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
+| Doing the work | `ddflow_dispatch` | all | Compute which queue items to start right now from the free slots, the ready set, conflicts and pin waits… |
 | Doing the work | `ddflow_perf` | all | Perf data about where ddflow runs. |
 | Doing the work | `ddflow_probe` | standard | Conflict probe: runs `git merge-tree --write-tree` between an item's branch and main (default) or another… |
 | Doing the work | `ddflow_suggest` | standard | Suggest a change to the agent that holds the item's lease: cut your patch onto their tip (commit-tree… |
@@ -6107,8 +6108,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7871d7d9e4b4 -->
-<details><summary>All 653 knobs across 60 sections</summary>
+<!-- ddflow:begin README/knobs sha=02c33f8c846b -->
+<details><summary>All 675 knobs across 60 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6556,6 +6557,10 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.prop_marginal_gain` | `0.25` |  |
 | `perf_metrics.prop_batch_dominance` | `2.0` |  |
 | `perf_metrics.prop_retire_payback` | `2.0` |  |
+| `perf_metrics.prop_split_share` | `0.5` |  |
+| `perf_metrics.prop_shard_skew` | `0.9` |  |
+| `perf_metrics.prop_select_miss_min` | `2` |  |
+| `perf_metrics.prop_select_min_runs` | `3` |  |
 | `perf_metrics.report_default_window` | `"28d"` |  |
 | `perf_metrics.report_max_rows` | `20` |  |
 | `perf_metrics.report_width` | `76` |  |
@@ -6733,6 +6738,24 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
+| `swarm.remote_bundle_max_bytes` | `104857600` |  |
+| `swarm.remote_return_max_bytes` | `52428800` |  |
+| `swarm.remote_return_max_commits` | `200` |  |
+| `swarm.remote_git_timeout_s` | `120` |  |
+| `swarm.remote_scan_max_blob_bytes` | `1048576` |  |
+| `swarm.remote_scan_batch_files` | `64` |  |
+| `swarm.remote_branch_prefix` | `"swarm/remote/"` |  |
+| `swarm.remote_seed_name` | `"SEED.md"` |  |
+| `swarm.remote_proposals_max` | `5` |  |
+| `swarm.remote_proposal_chars` | `400` |  |
+| `swarm.remote_proposals_max_bytes` | `65536` |  |
+| `swarm.remote_ssh_argv` | `["ssh"]` |  |
+| `swarm.remote_ssh_timeout_s` | `60` |  |
+| `swarm.remote_ssh_connect_timeout_s` | `15` |  |
+| `swarm.remote_copy_timeout_s` | `600` |  |
+| `swarm.remote_lanes_root` | `"ddflow-lanes"` |  |
+| `swarm.remote_detail_chars` | `200` |  |
 | `triggers.max_fires_per_hour` | `10` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.skew_notice` | `"once"` | `once` \| `always` \| `off` |
