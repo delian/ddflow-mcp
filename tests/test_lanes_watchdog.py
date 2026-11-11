@@ -150,6 +150,26 @@ def test_six_silent_deaths_are_all_losslessly_recovered():
         assert "kept" in d.rationale or "nothing is lost" in d.rationale or d.effect == STAY
 
 
+def test_recover_auto_a_present_false_adopted_beats_the_adopted_items_fallback():
+    """A row's own ``adopted`` wins where both exist, even when it is False: a lane
+    measured as not-adopted is refused auto-resume rather than silently borrowed."""
+    rows = [
+        _row("T1", "lane-not-adopted", True, adopted=False),  # own False -> not adopted
+        _row("T2", "lane-borrowed", True),  # no own flag -> borrows the fallback True
+    ]
+    got = decisions(rows, adopted_items={"T1": True, "T2": True})
+    assert got[0].effect == AUTO_RESUME  # False won: salvageable and not adopted
+    assert got[1].effect == STAY  # fallback adopted: left alone
+
+
+def test_recover_auto_adopted_items_fills_only_a_missing_flag():
+    """A row with no ``adopted`` key borrows the caller's answer, instead of default-TRUE."""
+    rows = [_row("T1", "lane-a", True), _row("T2", "lane-b", True)]
+    got = decisions(rows, adopted_items={"T1": True, "T2": False})
+    assert got[0].effect == STAY  # inherited adopted
+    assert got[1].effect == AUTO_RESUME  # inherited not-adopted -> salvageable work resumes
+
+
 def test_recover_auto_decisions_serialise_every_verdict():
     d = decide("T1", "lane-a", salvageable=True)
     assert set(d.as_dict()) == {"item", "lane", "effect", "rationale", "auto", "marker"}
