@@ -65,3 +65,4 @@
 {"agent":"swarm-launcher","data":{"at":1794404690.210274,"holder":"swarm-launcher"},"id":"eef85386f37729eeb57ddfa12","kind":"lease.renewed","lamport":174655,"schema":1,"subject":"P-agent-lifecycle.manifest","ts":"2026-11-11T13:44:51.063590Z"}
 {"agent":"swarm-launcher","data":{"at":1794404953.6759713,"holder":"swarm-launcher"},"id":"e13a769ab596c43f148c8e8bd","kind":"lease.renewed","lamport":174683,"schema":1,"subject":"P-agent-lifecycle.manifest","ts":"2026-11-11T13:49:13.806440Z"}
 {"agent":"swarm-launcher","data":{"at":1794405213.5585198,"holder":"swarm-launcher"},"id":"edd91579bdb8cf81b8e5c7054","kind":"lease.renewed","lamport":174738,"schema":1,"subject":"P-agent-lifecycle.manifest","ts":"2026-11-11T13:53:34.384809Z"}
+{"agent":"swarm-launcher","data":{"at":1794405481.7971034,"holder":"swarm-launcher"},"id":"ee1ed2a3f712b90545ee25af1","kind":"lease.renewed","lamport":174778,"schema":1,"subject":"P-agent-lifecycle.manifest","ts":"2026-11-11T13:58:02.809910Z"}
