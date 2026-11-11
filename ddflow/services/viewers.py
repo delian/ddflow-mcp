@@ -62,14 +62,14 @@ class View:
 #: ignored: `bug list --agent x` returning every bug would read as "x filed all of
 #: these", which is a claim the log does not make.
 _FILTERS: dict[str, frozenset[str]] = {
-    "task": frozenset({"state", "phase", "tag", "agent", "since"}),
-    "phase": frozenset({"state", "tag", "agent", "since"}),
+    "task": frozenset({"state", "phase", "tag", "agent", "since", "match"}),
+    "phase": frozenset({"state", "tag", "agent", "since", "match"}),
     # `item`: the queue item a bug was filed in or affects -- the bug's own `item` field,
     # not its phase (a bug filed against no item has none).
-    "bug": frozenset({"state", "phase", "tag", "since", "item"}),
-    "research": frozenset({"state", "phase", "tag", "since"}),
+    "bug": frozenset({"state", "phase", "tag", "since", "item", "match"}),
+    "research": frozenset({"state", "phase", "tag", "since", "match"}),
     # `owner` is the lesson's `by`: the agent that first recorded it.
-    "lesson": frozenset({"state", "tag", "agent", "since"}),
+    "lesson": frozenset({"state", "tag", "agent", "since", "match"}),
     "session": frozenset({"state", "agent", "since"}),
 }
 
@@ -214,6 +214,7 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     agent: str = "",
     since: str = "",
     item: str = "",
+    match: str = "",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> View:
@@ -227,6 +228,7 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
         "agent": agent,
         "since": since,
         "item": item,
+        "match": match,
     }
     given = {k: v for k, v in asked.items() if v}
     unsupported = sorted(k for k in given if k not in _FILTERS[kind])
@@ -259,6 +261,11 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
         # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
         # this honest if a future kind with the filter lacks the field.
         rows = [r for r in rows if r.get("item") == item]
+    if match:
+        # Server-side text filter (id or title, case-insensitive substring): the reason no
+        # caller needs `| grep`, which a paged list defeats (Bd515797884).
+        needle = match.lower()
+        rows = [r for r in rows if needle in r["id"].lower() or needle in r["title"].lower()]
     if since:
         try:
             at_or_after = _cutoff(since)

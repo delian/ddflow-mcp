@@ -674,10 +674,13 @@
     '''
         T1                 done       Tokenizer  [2026-01-01]
       
-      (showing 1 of 3 from 0; next page: the same command with --limit 1 --offset 1)
+      (PARTIAL LIST: showing 1 of 3 from 0; narrow with --match TEXT or a filter, or see the rest with --all, or the next page: --limit 1 --offset 1)
   
     ''',
-    '',
+    '''
+      (PARTIAL LIST: showing 1 of 3 from 0; narrow with --match TEXT or a filter, or see the rest with --all, or the next page: --limit 1 --offset 1)
+  
+    ''',
   )
 # ---
 # name: test_human[task list --since 2020-01-01]
@@ -991,7 +994,7 @@
         ],
         "total": 1,
         "shown": 1,
-        "limit": 50,
+        "limit": 1000,
         "truncated": false,
         "filters": {},
         "offset": 0,
@@ -1302,7 +1305,7 @@
         ],
         "total": 1,
         "shown": 1,
-        "limit": 50,
+        "limit": 1000,
         "truncated": false,
         "filters": {},
         "offset": 0,
@@ -1369,7 +1372,7 @@
         "rows": [],
         "total": 0,
         "shown": 0,
-        "limit": 50,
+        "limit": 1000,
         "truncated": false,
         "filters": {
           "state": "done"
@@ -1410,7 +1413,7 @@
         ],
         "total": 1,
         "shown": 1,
-        "limit": 50,
+        "limit": 1000,
         "truncated": false,
         "filters": {},
         "offset": 0,
@@ -2253,7 +2256,10 @@
       }
   
     ''',
-    '',
+    '''
+      (PARTIAL LIST: showing 1 of 3 from 0; narrow with --match TEXT or a filter, or see the rest with --all, or the next page: --limit 1 --offset 1)
+  
+    ''',
   )
 # ---
 # name: test_json[task list --since 2020-01-01]

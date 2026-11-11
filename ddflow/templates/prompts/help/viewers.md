@@ -5,7 +5,7 @@ many shards in Lamport order and only ddflow folds it correctly. Every viewer is
 prints one line per record (`show` prints the whole record) and takes `--json`.
 
     ddflow task list --phase P2 --state open     tasks (id, state, title, owner, date), newest change first
-    ddflow phase list                            phases with done/total task counts
+    ddflow phase list                            every phase with done/total task counts (unpaged)
     ddflow bug list [--all] [--sort severity]    OPEN bugs; --all adds fixed and invalid ones
     ddflow research list --state refuted         research notes; the state is the verdict
     ddflow session list [--state open|ended]     sessions; `session show <id>` reads one
@@ -15,14 +15,15 @@ prints one line per record (`show` prints the whole record) and takes `--json`.
     ddflow list <kind>                           the same as `<kind> list`; kind also takes lesson
 
 List filters: `--state`, `--phase`, `--tag`, `--owner` (the lease holder; not `--agent`, which
-is who you are), `--since` (ISO date), `--limit` (default 50; 0 is the 1000 maximum) and
-`--offset` (paging). A kind offers only the filters it has data for, so `bug list --tag x` is
-an error, not "everything". A cut list says how many matched and the `--offset` of the next page.
+is who you are), `--since` (ISO date), `--match TEXT` (id or title contains it; use it, never `| grep`, which
+sees one page only), `--all` (every row up to the 1000 maximum), `--limit` (default 50; 0 is the
+1000 maximum) and `--offset` (paging). A kind offers only the filters it has data for, so `bug list --tag x` is
+an error, not "everything". A cut list says PARTIAL LIST, how many matched and the `--offset` of the next page, on stderr too when piped.
 
 Exit codes: 0 = at least one row was listed, 2 = nothing matched (the message names the filters), 3 a refused value such
 as an unknown `--phase`.
 
 Over MCP these are one tool, `ddflow_list`, with `kind` = `task | phase | bug | research |
 session | search` and the same filters (`id` with `kind=session` shows one session;
-`kind=search` takes `query`, `mode`, `sources`). It returns 25 rows unless `limit` says
+`match` filters id/title; `all` lifts the page; `kind=search` takes `query`, `mode`, `sources`). It returns 25 rows unless `limit` says
 otherwise. The log is `ddflow_history`; one record is `ddflow_show`.

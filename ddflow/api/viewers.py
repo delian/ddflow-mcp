@@ -42,6 +42,7 @@ def view_list(
     agent: str = "",
     since: str = "",
     item: str = "",
+    match: str = "",
     limit: int = V.DEFAULT_LIMIT,
     offset: int = 0,
 ) -> O.Outcome:
@@ -58,6 +59,7 @@ def view_list(
             agent=agent,
             since=since,
             item=item,
+            match=match,
             limit=limit,
             offset=offset,
         )
@@ -93,11 +95,11 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 #: The selector arguments each kind takes, beyond the state/owner/since filters, which the
 #: engines check themselves; any other one that is set is refused.
 _TAKES: dict[str, frozenset[str]] = {
-    "task": frozenset({"phase", "tag", "all", "offset"}),
-    "phase": frozenset({"tag", "all", "offset"}),
-    "bug": frozenset({"phase", "tag", "all", "item", "offset"}),
-    "research": frozenset({"phase", "tag", "all", "offset"}),
-    "lesson": frozenset({"tag", "all", "offset"}),
+    "task": frozenset({"phase", "tag", "all", "offset", "match"}),
+    "phase": frozenset({"tag", "all", "offset", "match"}),
+    "bug": frozenset({"phase", "tag", "all", "item", "offset", "match"}),
+    "research": frozenset({"phase", "tag", "all", "offset", "match"}),
+    "lesson": frozenset({"tag", "all", "offset", "match"}),
     "session": frozenset({"id"}),
     "search": frozenset({"query", "mode", "sources", "source", "phase"}),
 }
@@ -120,6 +122,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     owner: str = "",
     since: str = "",
     item: str = "",
+    match: str = "",
     limit: int = V.DEFAULT_LIMIT,
     all: bool = False,
     mode: str = "ranked",
@@ -147,6 +150,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         "phase": phase,
         "item": item,
         "offset": offset,
+        "match": match,
     }
     stray = sorted(k for k, v in given.items() if v and k not in _TAKES[kind])
     if stray:
@@ -176,6 +180,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         agent=owner,
         since=since,
         item=item,
+        match=match,
         limit=limit,
         offset=offset,
     )
