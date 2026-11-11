@@ -211,9 +211,11 @@ exit_codes = "0"                # comma list of accepted exit codes
 `scripts/ci/agent-smoke plan` lists the commands and runs nothing; `agent-smoke run <agent>
 --live` starts the REAL agent in a throwaway project (`agent.smoke` records the verdict). It
 asserts only on the event log: the MCP tool was called, a claim exists under a distinct
-identity, the item completed or was released, no stray lease. A missing session.started,
-session.prompt (the "no native prompt hook, first-call fallback" level) or uncommitted shard is
-listed as a gap in the report. Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
+identity, the item completed or was released, no stray lease, the event shard committed. A
+missing session.started or session.prompt (a harness at the "no native prompt hook, first-call
+fallback" level is expected to lack the latter) is listed as a gap in the report, not a failure.
+The smoke never installs an agent CLI: a missing one is `unavailable` (a consented scratch-dir
+install is a later step). Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
 
 ## Overriding a value
 

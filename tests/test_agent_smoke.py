@@ -66,7 +66,7 @@ def _fake(bindir: Path, body: str, name: str = "fakeagent") -> Path:
 #: The fake agent: claims the one task and completes it, as events, in the project it runs in.
 _GOOD_BODY = f"""
 [ "$1" = "--version" ] && exit 0
-exec {sys.executable} - "$PWD" <<'PY'
+{sys.executable} - "$PWD" <<'PY'
 import sys
 sys.path.insert(0, {str(ROOT)!r})
 from ddflow.infra.log import EventLog
@@ -78,6 +78,8 @@ log.append("lease.acquired", "T1", {{"agent": "smoke-fake-1"}})
 log.append("item.completed", "T1", {{}})
 log.append("lease.released", "T1", {{"agent": "smoke-fake-1"}})
 PY
+git add -A
+git -c user.name=x -c user.email=x@x -c commit.gpgsign=false commit -qm work
 """
 
 
@@ -246,3 +248,33 @@ def test_a_session_started_for_another_harness_is_a_gap(tmp_path, repo, log):
     log.append("session.started", "s", {"harness": "other"})
     _, gaps = S.assess(repo, "fakeagent")
     assert "no session.started with the harness name" in gaps
+
+
+def test_a_shard_left_uncommitted_fails(tmp_path):
+    body = _GOOD_BODY.replace("git add -A", "true").replace("git -c", "true # -c")
+    r = _run(tmp_path, body=body, rounds=1, retries=0)
+    assert r.verdict == "fail"
+    assert r.attempts[0].assertions["shard_committed"] is False
+
+
+def test_a_harness_with_no_headless_command_is_unavailable(tmp_path):
+    text = _DESCRIPTOR.replace(
+        '[headless]\nargv = ["fakeagent", "-p"]\nmax_turns_flag = "--max-turns"\n'
+        'autonomy = "yolo"\n\n[autonomy]\nprofiles = { yolo = "--yes" }\n',
+        "[headless]\nnone = true\n",
+    )
+    r = S.smoke(harnessreg.parse(text, "fakeagent"), workdir=tmp_path, env=_env(tmp_path))
+    assert r.verdict == "unavailable" and "no headless command" in r.reason
+
+
+def test_the_cli_reads_the_process_environment_through_the_script(tmp_path):
+    bindir = tmp_path / "bin"
+    _fake(bindir, "exit 1\n", name="grok")
+    env = {"PATH": f"{bindir}:{Path(sys.executable).parent}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    out = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ci" / "agent-smoke"), "run", "grok", "--live",
+         "--rounds", "1", "--retries", "0", "--json"],
+        capture_output=True, text=True, env=env, cwd=tmp_path,
+    )  # fmt: skip
+    # the CLI on PATH was SEEN (not unavailable for a missing binary): the run reached the agent
+    assert "not installed" not in out.stdout

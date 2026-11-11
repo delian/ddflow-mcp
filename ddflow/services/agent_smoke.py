@@ -40,7 +40,13 @@ PROMPT = (
 )
 _RATE = re.compile(r"\b429\b|rate.?limit|too many requests|quota", re.I)
 #: The assertions a verdict rests on; the others are listed as gaps in the report.
-CORE = ("tool_called", "claim_exists", "completed_or_released", "no_stray_lease")
+CORE = (
+    "tool_called",
+    "claim_exists",
+    "completed_or_released",
+    "no_stray_lease",
+    "shard_committed",
+)
 
 
 @dataclass
@@ -134,32 +140,43 @@ def detect(h: harnessreg.Harness, env: Mapping[str, str], runner: C.CommandRunne
     return ""
 
 
-def assess(project: Path, harness: str = "") -> tuple[dict[str, bool], list[str]]:
-    """The assertions, from the project's event log only."""
-    evs = EventLog(project, RUNNER_IDENTITY).read_all()
-    theirs = [e for e in evs if e.agent != RUNNER_IDENTITY]
-    acquired = [e for e in evs if e.kind == "lease.acquired"]
-    open_leases = {e.subject for e in acquired}
+def _open_leases(evs: list[Any]) -> set[str]:
+    open_leases = {e.subject for e in evs if e.kind == "lease.acquired"}
     for e in evs:
         if e.kind in ("lease.released", "item.completed", "lease.expired", "item.abandoned"):
             open_leases.discard(e.subject)
-    done = any(e.kind in ("item.completed", "lease.released") for e in evs)
-    a = {
-        "tool_called": bool(theirs),
-        "claim_exists": any(e.agent != RUNNER_IDENTITY for e in acquired),
-        "completed_or_released": done,
-        "no_stray_lease": not open_leases,
-    }
+    return open_leases
+
+
+def _shard_committed(project: Path) -> bool:
+    """Shards exist in git and none of them has uncommitted changes."""
+    tracked = G.run(project, "ls-files", ".ddflow/events").out.strip()
+    return bool(tracked) and not G.status_run(project, ".ddflow/events").out.strip()
+
+
+def _gaps(evs: list[Any], harness: str) -> list[str]:
+    """What the compat report lists but the verdict does not rest on."""
     gaps = []
     started = [e for e in evs if e.kind == "session.started"]
     if not started or (harness and not any(e.data.get("harness") == harness for e in started)):
         gaps.append("no session.started with the harness name")
     if not any(e.kind == "session.prompt" for e in evs):
         gaps.append("no session.prompt: no native prompt hook, first-call fallback")
-    porcelain = G.status_run(project, ".ddflow/events").out
-    if porcelain.strip():
-        gaps.append("the event shard is not committed")
-    return a, gaps
+    return gaps
+
+
+def assess(project: Path, harness: str = "") -> tuple[dict[str, bool], list[str]]:
+    """The assertions, from the project's event log (and git for the shard) only."""
+    evs = EventLog(project, RUNNER_IDENTITY).read_all()
+    acquired = [e for e in evs if e.kind == "lease.acquired"]
+    a = {
+        "tool_called": any(e.agent != RUNNER_IDENTITY for e in evs),
+        "claim_exists": any(e.agent != RUNNER_IDENTITY for e in acquired),
+        "completed_or_released": any(e.kind in ("item.completed", "lease.released") for e in evs),
+        "no_stray_lease": not _open_leases(evs),
+        "shard_committed": _shard_committed(project),
+    }
+    return a, _gaps(evs, harness)
 
 
 def scaffold(project: Path, agent: str = "") -> None:
@@ -238,7 +255,11 @@ def smoke(
     assess_fn = assess_fn or (lambda p: assess(p, h.id))
     keys = [k.strip() for k in _test(h).get("env_keys", "").split(",") if k.strip()]
     runner = C.CommandRunner(max_output=20000, redactor=_redactor(env, keys))
-    why = detect(h, env, runner)
+    try:
+        command_line(h)
+        why = detect(h, env, runner)
+    except ValueError as exc:
+        why = str(exc)
     result = SmokeResult(h.id, UNAVAILABLE, why)
     if not why:
         line = command_line(h, max_turns=max_turns)
