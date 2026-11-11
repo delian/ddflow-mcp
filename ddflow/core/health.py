@@ -331,9 +331,7 @@ def _orphan(lane: Lane, run: Run, now: float) -> Finding:
     )
 
 
-def _orphans(
-    lanes: list[Lane], runs: list[Run], now: float, limits: Limits
-) -> list[Finding]:
+def _orphans(lanes: list[Lane], runs: list[Run], now: float, limits: Limits) -> list[Finding]:
     """A lane that showed no progress for ``orphan_s`` while its newest registered run is
     finished, or whose pid is gone with no recorded outcome, is waiting on nothing."""
     if limits.orphan_s <= 0:

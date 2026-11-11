@@ -212,7 +212,9 @@ def _runs(repo: Path, st) -> list[H.Run]:
             out.append(H.Run(i, m.gate, m.pid, clock.epoch(m.at), True, m.path))
         for g, rec in it.gates.items():
             if rec.outcome:
-                out.append(H.Run(i, g, 0, clock.epoch(rec.at) if rec.at else 0.0, None, "", rec.outcome))
+                out.append(
+                    H.Run(i, g, 0, clock.epoch(rec.at) if rec.at else 0.0, None, "", rec.outcome)
+                )
     return out
 
 
@@ -414,7 +416,9 @@ def correct(
             continue
         move = None
         if f.kind in (H.IDLE, H.ORPHAN_WAIT):
-            move = _idle_move(log, st, f, m)  # ORPHAN_WAIT rides the nudge ladder, carrying the detail
+            move = _idle_move(
+                log, st, f, m
+            )  # ORPHAN_WAIT rides the nudge ladder, carrying the detail
         elif f.kind == H.STALLED:
             move = _stalled_move(log, st, cfg, f, events, now, act, m)
         elif f.kind == H.UNRESPONSIVE and f.evidence.get("waiters"):
