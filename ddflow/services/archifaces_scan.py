@@ -128,7 +128,9 @@ for _fam, _lits in (
     ("utcp", UTCP_LITERALS),
 ):
     _overlap = set(_lits) & _LITERAL_FAMILY.keys()
-    assert not _overlap, f"protocol literals overlap {_fam} with an earlier family: {sorted(_overlap)}"
+    assert not _overlap, (
+        f"protocol literals overlap {_fam} with an earlier family: {sorted(_overlap)}"
+    )
     for _lit in _lits:
         _LITERAL_FAMILY[_lit] = _fam
 
