@@ -78,10 +78,13 @@ def cut_text(text: Any, *, chars: int = 0, lines: int = MAX_LINES) -> tuple[Any,
         kept = "\n".join(cut[:lines])
     cut_chars = 0
     if chars and len(kept) > chars:
-        at = kept.rfind("\n", 0, chars + 1)
-        at = at if at > 0 else chars
-        cut_chars = len(kept) - at
-        kept = kept[:at]
+        at = kept.rfind("\n", 0, chars)
+        if at >= 0:  # the kept newline stays: every line shown is whole
+            cut_chars = len(kept) - at - 1
+            kept = kept[: at + 1]
+        else:  # one line longer than `chars`: cut mid-line (there is no boundary to stop at)
+            cut_chars = len(kept) - chars
+            kept = kept[:chars]
     return kept, cut_chars, cut_lines
 
 

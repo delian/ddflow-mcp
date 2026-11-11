@@ -86,3 +86,10 @@ def test_no_config_uses_the_shipped_default_char_budget():
     out = B.apply(huge, cfg=None, bounded=True)
     assert out.cut_chars == 100 + (len(huge) - B.DEFAULT_CHARS - 100)
     assert "character(s) cut" in out.footer
+
+
+def test_a_character_cut_stops_at_the_line_boundary_not_mid_line():
+    # The boundary at index 0 must be kept (finding: `at > 0` sliced mid-line).
+    out = B.apply("\n" + "y" * 50, cfg=_cfg(10), bounded=True)
+    assert out.text == "\n"
+    assert out.cut_chars == 50
