@@ -327,7 +327,7 @@ def _continuation(lines: list[str], fenced: list[bool], n: int, indent: int) -> 
         ln = lines[k]
         if fenced[k] or not ln.strip() or _HEADING.match(ln) or _CHECK.match(ln):
             break
-        if len(ln) - len(ln.lstrip()) <= indent or re.match(r"\s*(?:[-*+]|\d{1,9}[.)])\s", ln):
+        if len(ln) - len(ln.lstrip()) <= indent or re.match(r"\s*[-*]\s", ln):
             break
         if _GLOBS.search(ln) or _NEEDS.search(ln) or _RESOURCES.search(ln):
             break

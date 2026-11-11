@@ -49,3 +49,16 @@ def test_ticked_plus_and_numbered_forms_are_done_like_dash(repo):
 def test_a_plain_numbered_item_without_a_box_is_not_a_task(repo):
     titles = _titles(repo, "# T\n\n## Work\n\n1. not a task\n+ also not\n- [ ] real\n")
     assert titles == ["real"], titles
+
+
+def test_continuation_with_plus_or_numbered_note_keeps_its_annotations(repo):
+    """Only a box starts a new item: an indented `+ note` / `1. detail` stays in the
+    continuation of the task above, so the `Needs` line under it is still read."""
+    (repo / "TODO.md").write_text(
+        "# T\n\n## Work\n\n- [ ] **T.1** first\n  + keep this note\n  1. detail\n"
+        "  **Needs:** T.0\n- [ ] **T.0** zero\n"
+    )
+    run_cli(repo, "init")
+    _, out, _ = run_cli(repo, "--json", "import")
+    first = next(f for f in json.loads(out)["found"] if f["id"] == "T.1")
+    assert first["needs"] == ["T.0"], first
