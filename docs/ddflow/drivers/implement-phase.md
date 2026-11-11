@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=ee3ae6e8945f -->
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.11 fmt=1 sha=197ab715d8e0 -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -278,6 +278,12 @@ different record), `--extends ID` / `--duplicate-of ID` (the same thing) or `--r
 (linked both ways). Prefer extending an **open, unclaimed** record -- the text is appended
 to it and no new id is made; a record somebody has claimed, or that is closed, gets a new
 record linked to it instead. `--check` shows the candidates without writing anything.
+
+A duplicate **bug** is closed only once its original is fixed, and never automatically:
+`ddflow bug fixed <ORIGINAL>` lists the open bugs linked to it as duplicates
+(`open_duplicates`); close each explicitly -- `ddflow bug duplicate <DUP> --of <ORIGINAL>`
+(refused while the original is open or was fixed without a test; it cites the original's
+test), its own `bug fixed` with its own test, or `bug invalid` when it was never a bug.
 
 Any bug, any operator correction, any surprise:
 
