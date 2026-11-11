@@ -21,7 +21,6 @@ from . import fake
 class _Run:
     running: bool = True
     exit_code: int | None = None
-    log: str = ""
     files: dict[str, bytes] = field(default_factory=dict)
     pid: int = 100
     stopped: bool = False
@@ -55,8 +54,7 @@ class FakeTransport(Transport):
         self.lanes[lane] = _Run(
             running=opts.get("running", True),
             exit_code=opts.get("exit_code"),
-            log=opts.get("log", ""),
-            files=dict(opts.get("files", {})),
+            files={"lane.log": opts.get("log", "").encode(), **dict(opts.get("files", {}))},
         )
         return ok()
 
@@ -94,7 +92,7 @@ class FakeTransport(Transport):
         run = self._run(lane)
         if run is None:
             return failed(f"no such lane {lane!r}")
-        data = run.log.encode() if name == "lane.log" else run.files.get(name)
+        data = run.files.get(name)
         if data is None:
             return failed(f"no {name!r} in lane {lane!r}")
         if len(data) > max_bytes:

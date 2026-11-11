@@ -74,18 +74,27 @@ class LocalTransport:
             return failed(f"lane {lane!r} is already running")
         d = self._dir(lane)
         d.mkdir(parents=True, exist_ok=True)
+        log = d / LOG
+        side = d / f"{LOG}.next"  # fresh: the previous log stays put until the child exists
         try:
-            log = (d / LOG).open("ab")  # append: a spawn that then fails does not wipe prior output
+            fh = side.open("wb")
         except OSError as e:
             return failed(f"cannot open the lane log: {e}")
         try:
             # one open file description for both streams: fd 1 and 2 share the offset (`2>&1`);
             # the child runs in the lane directory, so a copied file is where a relative argv sees it.
-            p = P.popen(list(argv), cwd=d, stdout=log, stderr=log, start_new_session=True)
+            p = P.popen(list(argv), cwd=d, stdout=fh, stderr=fh, start_new_session=True)
         except (OSError, ValueError) as e:
-            log.close()
+            fh.close()
+            side.unlink(missing_ok=True)
             return failed(f"cannot start {argv[0] if argv else 'a process'}: {e}")
-        log.close()  # fd 1 and 2 already hold the file; the launcher override is free now
+        fh.close()
+        try:  # only a start that succeeded becomes the lane log; a failed one kept the old file
+            fs.DEFAULT.replace_path(side, log)
+        except OSError as e:
+            kill_group(p)
+            side.unlink(missing_ok=True)
+            return failed(f"cannot put the lane log in place: {e}")
         self._runs[_safe(lane)] = _Run(p, d)
         return ok()
 
