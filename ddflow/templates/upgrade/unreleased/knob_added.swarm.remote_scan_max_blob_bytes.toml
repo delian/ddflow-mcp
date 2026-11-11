@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.remote_scan_max_blob_bytes"
-new = 1048576
+new = "1048576"
 why = "The [swarm] remote_* knobs (SW-remote-config): every field of remote.Knobs is a knob."
 impact = "additive"

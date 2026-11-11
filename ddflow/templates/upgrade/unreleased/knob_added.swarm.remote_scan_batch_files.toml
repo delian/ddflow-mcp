@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.remote_scan_batch_files"
-new = 64
+new = "64"
 why = "The [swarm] remote_* knobs (SW-remote-config): every field of remote.Knobs is a knob."
 impact = "additive"
