@@ -18,7 +18,7 @@ from typing import Any
 from . import fs, fsio
 from . import proc as P
 from .lanes import LaneStatus, Result, failed, ok
-from .proc_server import kill_group, stop_group
+from .proc import kill_group, stop_group
 
 #: The lane's captured output (stdout and stderr merged), read back with `copy_out`.
 LOG = "lane.log"
