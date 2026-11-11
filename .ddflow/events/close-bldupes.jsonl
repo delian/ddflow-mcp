@@ -280,3 +280,4 @@
 {"agent":"close-bldupes","data":{"at":1794431408.1885707,"holder":"close-bldupes"},"id":"ea2fc745588674bc6b2c74240","kind":"lease.renewed","lamport":177495,"schema":1,"subject":"B-dedupe-driver-docs","ts":"2026-11-11T21:10:08.367664Z"}
 {"agent":"close-bldupes","data":{"at":1794431671.7576284,"holder":"close-bldupes"},"id":"e6090d3c4f64dcb3b77187d5d","kind":"lease.renewed","lamport":177501,"schema":1,"subject":"B-dedupe-driver-docs","ts":"2026-11-11T21:14:31.900088Z"}
 {"agent":"close-bldupes","data":{"at":1794431934.8240614,"holder":"close-bldupes"},"id":"e5379bed4a970dd5038e9ca7a","kind":"lease.renewed","lamport":177511,"schema":1,"subject":"B-dedupe-driver-docs","ts":"2026-11-11T21:18:54.977208Z"}
+{"agent":"close-bldupes","data":{"at":1794432200.0592115,"holder":"close-bldupes"},"id":"e527735724ca6787678798c53","kind":"lease.renewed","lamport":177535,"schema":1,"subject":"B-dedupe-driver-docs","ts":"2026-11-11T21:23:20.234796Z"}
