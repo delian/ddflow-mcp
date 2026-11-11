@@ -54,6 +54,13 @@ def _flagged(parser) -> list[tuple[tuple[str, ...], str]]:
 
 def test_no_free_text_id_like_argument_is_silently_skipped():
     parser = build_parser()
+    parsed = [a for _path, a in _walk(parser)]
+    id_like = [
+        a
+        for a in parsed
+        if kinds.looks_like_id(a.dest or "", metavar=(a.metavar if isinstance(a.metavar, str) else None))
+    ]
+    assert id_like, "the ratchet's id-like filter matches the real parser (non-vacuous)"
     flagged = _flagged(parser)
     assert flagged == []
 
@@ -66,7 +73,6 @@ def test_every_exemption_names_a_real_argument():
         for path, action in _walk(parser)
     }
     for entry in EX.EXEMPTIONS:
-        name = tuple(entry.argument) if not entry.argument.startswith("-") else entry.argument
         assert (entry.path, entry.argument) in real, f"unused exemption {entry.path}{entry.argument}"
 
 
