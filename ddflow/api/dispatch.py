@@ -25,6 +25,7 @@ from ..services.swarm import dispatch as D
 from ..services.swarm import score
 from ..services.swarm.score_config import Weights
 from ._base import _load
+from .briefing import agent_brief as _agent_brief
 from .lifecycle.planning import plan_for
 from .lifecycle.pull import _source as _lane_source
 from .lifecycle.pull import _world_and_items
@@ -93,6 +94,7 @@ def dispatch(
             "claim": f"ddflow claim {s.item}",
             "globs": list(s.globs),
             "note": s.note,
+            "brief": _brief_text(repo, s.item, s.lane, me),
         }
         for s in starts
     ]
@@ -111,6 +113,14 @@ def dispatch(
             {"text": _render(rows, move_rows), "source": "dispatch"},
         )
     return O.ok("dispatch", **data)
+
+
+def _brief_text(repo: Path, item: str, for_agent: str, agent: str) -> str:
+    """The launch brief for the lane to run ``item`` (`services.agent_brief`); "" when it
+    could not render. The brief is the DX-agent-brief the start asks for, and it is where
+    the pin-file rule is stated (decisions over these files), so a start row carries both."""
+    brief = _agent_brief(repo, item=item, for_agent=for_agent, agent=agent)
+    return brief.data.get("brief") or "" if not brief.exit else ""
 
 
 def _render(rows: list[dict], moves: list[dict]) -> str:
