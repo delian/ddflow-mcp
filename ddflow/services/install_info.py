@@ -345,7 +345,9 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     # hold ddflow's own code under test, not another lane's unmerged branch — a ci/pre-push run
     # lives in one, so importing from it is legitimate and must not read as foreign (B267ff88849).
     # A lane's worktree is under `.ddflow/worktrees/`, never a sibling of the temp root.
-    if root.resolve().parent == Path(tempfile.gettempdir()).resolve() and root.name.startswith("ddflow-"):
+    if root.resolve().parent == Path(tempfile.gettempdir()).resolve() and root.name.startswith(
+        "ddflow-"
+    ):
         return None
     primary = _paths.primary_checkout(root)
     if primary is None:

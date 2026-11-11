@@ -70,7 +70,7 @@ def test_ddflows_own_scratch_tree_is_not_foreign(checkout, monkeypatch, tmp_path
     monkeypatch.setattr(II.tempfile, "gettempdir", lambda: str(tmp_path))
     scratch = tmp_path / "ddflow-ci.abc123"
     _git(primary, "worktree", "add", "-q", str(scratch), "--detach")
-    monkeypatch.setattr(PATHS, "package_parent", lambda: scratch.resolve())
+    monkeypatch.setattr(PATHS, "package_parent", scratch.resolve)
     assert I.foreign_launch_root() is None
 
 
@@ -154,7 +154,9 @@ def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
 
     _primary, tree = checkout
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base=""))
+    monkeypatch.setattr(
+        W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base="")
+    )
     assert CLI._guard_foreign_launch() == CLI.OK
 
 
