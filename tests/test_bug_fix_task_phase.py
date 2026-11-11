@@ -7,6 +7,9 @@ back to the standing `bugs` phase (B1bfcaf6ebb, which first sent every fix task 
 
 from __future__ import annotations
 
+from conftest import run_cli
+
+from ddflow.infra.log import EventLog
 from tests.test_bugs_as_items import K, seed, state
 
 
@@ -16,6 +19,18 @@ def test_fix_task_inherits_the_found_items_phase(repo):
     assert out.exit == 0, out.reason
     st = state(repo)
     assert st.items["fix-Bx"].parent == "P1"
+
+
+def test_a_fix_task_found_on_a_phase_with_needs_is_a_bugs_leaf(repo):
+    "A phase with its own needs must not parent a fix task: the leaf would inherit them."
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P0", {"title": "Unrelated phase"})
+    log.append("phase.added", "P1", {"title": "Found phase", "needs": ["P0"]})
+    out = K.bug_found(repo, summary="empty summary accepted", item="P1", id="Bx", agent="a")
+    assert out.exit == 0, out.reason
+    st = state(repo)
+    assert st.items["fix-Bx"].parent == "bugs"
 
 
 def test_every_stray_fix_task_lands_under_the_standing_bugs_phase(repo):
