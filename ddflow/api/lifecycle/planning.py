@@ -67,6 +67,39 @@ def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brie
     )
 
 
+def plan_for_offer(
+    repo: Path,
+    log,
+    cfg: Config,
+    st: State,
+    *,
+    kind: str,
+    phase: str,
+    agent: str,
+    now: float | None = None,
+    phase_only: bool = False,
+) -> Plan:
+    """The ``purpose="offer"`` plan ``next`` and ``pull`` must agree on, in one copy.
+
+    Both ``ready.next_`` and ``pull.next_lane`` build the offer an agent acts on; the
+    answer is one line at each site, so the `duplicate_code_clusters` ratchet does not
+    count the same 12-line call twice. ``now`` is optional because ``next_`` lets the
+    planner take its own absent clock as "now".
+    """
+    return plan_for(
+        repo,
+        log,
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=phase,
+        agent=agent,
+        now=now,
+        phase_only=phase_only,
+    )
+
+
 def alternatives_offer(repo: Path, log, cfg: Config):
     """What a refused claim names as "you could take instead": the first five of the offer
     `next` makes now, in its order, for the items of the refused item's kind, minus the

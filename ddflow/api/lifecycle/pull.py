@@ -31,7 +31,7 @@ from ...services.swarm.score_config import Weights
 from ...services.ticks import TickCtx
 from .._base import _load
 from ..model_cmds import LOCAL
-from .planning import plan_for
+from .planning import plan_for_offer
 from .ready import _unknown_phase
 
 
@@ -174,17 +174,8 @@ def next_lane(
         return O.failed("next", unknown, phase=phase)
     now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
-    p = plan_for(
-        repo,
-        log,
-        cfg,
-        st,
-        purpose="offer",
-        kind=kind,
-        phase=phase,
-        agent=me,
-        phase_only=phase_only,
-        now=now,
+    p = plan_for_offer(
+        repo, log, cfg, st, kind=kind, phase=phase, agent=me, now=now, phase_only=phase_only
     )
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)
@@ -269,9 +260,7 @@ def _launch_due(ctx: TickCtx) -> str | None:
         return None
     live = st.active_leases(now, cfg.lease.grace_s)
     me = cfg.agent.id or log.agent_id
-    p = plan_for(
-        repo, log, cfg, st, purpose="offer", kind=DEFAULT_NEXT_KIND, phase="", agent=me, now=now
-    )
+    p = plan_for_offer(repo, log, cfg, st, kind=DEFAULT_NEXT_KIND, phase="", agent=me, now=now)
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     c = caps(st, cfg, live, parallel)
     ids = _candidates(p, st, cfg, c, live)
