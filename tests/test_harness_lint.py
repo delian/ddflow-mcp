@@ -29,9 +29,7 @@ def test_shipped_descriptors_lint_without_left_out_warnings(repo):
     must be clean, not warn that their absence is unlisted (Bd5961564d8)."""
     for h in HR.load():
         out = HD.harness_lint(repo, h.id)
-        assert not [w for w in out.data["warnings"] if "left out but not listed" in w], (
-            h.id
-        )
+        assert not [w for w in out.data["warnings"] if "left out but not listed" in w], h.id
 
 
 def test_a_local_descriptor_still_warns_on_a_section_left_out(repo):
