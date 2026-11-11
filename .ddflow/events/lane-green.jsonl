@@ -57,3 +57,4 @@
 {"agent":"lane-green","data":{"at":1794437093.9444788,"holder":"lane-green"},"id":"e44f5d9b999db674f2a0c7b91","kind":"lease.renewed","lamport":178405,"schema":1,"subject":"VF-verify-shas","ts":"2026-11-11T22:44:54.088533Z"}
 {"agent":"lane-green","data":{"gate":"ci"},"id":"ea2885617e21fd3e6dd35f860","kind":"gate.started","lamport":178406,"schema":1,"subject":"VF-verify-shas","ts":"2026-11-11T22:44:56.773052Z"}
 {"agent":"lane-green","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ebd006e7225d224c07ef32165","kind":"cadence.ran","lamport":178408,"schema":1,"subject":"recall_recheck:VF-verify-shas","ts":"2026-11-11T22:45:03.966230Z"}
+{"agent":"lane-green","data":{"at":1794437715.4251611,"holder":"lane-green"},"id":"ede9292a7bd2322b124ef7068","kind":"lease.renewed","lamport":178480,"schema":1,"subject":"VF-verify-shas","ts":"2026-11-11T22:55:15.570160Z"}
