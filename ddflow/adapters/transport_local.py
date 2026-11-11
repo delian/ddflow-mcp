@@ -26,6 +26,8 @@ LOG = "lane.log"
 _FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 #: signal name -> number; the vocabulary the remote bundle allowed (`_SIGNALS`).
 _SIGNALS = {"TERM": 15, "INT": 2, "HUP": 1, "KILL": 9}
+#: copy_out reads this much at a time, so the cap bounds the read, not just the copy.
+_CHUNK = 65536
 
 
 @dataclass
@@ -73,7 +75,7 @@ class LocalTransport:
         d = self._dir(lane)
         d.mkdir(parents=True, exist_ok=True)
         try:
-            log = (d / LOG).open("wb")
+            log = (d / LOG).open("ab")  # append: a spawn that then fails does not wipe prior output
         except OSError as e:
             return failed(f"cannot open the lane log: {e}")
         try:
@@ -126,13 +128,16 @@ class LocalTransport:
         if not src.is_file():
             return failed(f"no {name!r} in lane {lane!r}")
         try:
-            if src.stat().st_size > max_bytes:
-                return failed(f"the file is over the {max_bytes} byte cap")
-            data = src.read_bytes()
+            data = bytearray()
+            with src.open("rb") as fh:
+                while chunk := fh.read(_CHUNK):
+                    if len(data) + len(chunk) > max_bytes:
+                        return failed(f"the file is over the {max_bytes} byte cap")
+                    data += chunk
         except OSError as e:
             return failed(f"cannot read {name!r} of lane {lane!r}: {e}")
         try:
-            Path(local).write_bytes(data)
+            Path(local).write_bytes(bytes(data))
         except OSError as e:
             return failed(f"cannot write {name!r} to {local}: {e}")
         return ok()

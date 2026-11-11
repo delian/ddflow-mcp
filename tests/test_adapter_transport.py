@@ -125,6 +125,15 @@ def test_the_lane_runs_in_its_own_directory(tmp_path):
     assert Path(got.read_text().strip()).resolve() == (tmp_path / "a").resolve()
 
 
+def test_a_failed_restart_keeps_the_prior_output(tmp_path):
+    t = LocalTransport(root=tmp_path)
+    assert t.start("a", BENIGN).ok
+    assert ended(t, "a").state == "exited"
+    assert t.start("a", ("/no/such/bin",)).status == "failed"
+    got = tmp_path / "got.log"
+    assert t.copy_out("a", "lane.log", got, 512).ok and "hello" in got.read_text()
+
+
 def test_a_bad_lane_name_is_refused_not_taken_as_a_path():
     with pytest.raises(ValueError):
         LocalTransport().start("../x", (sys.executable, "-c", "pass"))
