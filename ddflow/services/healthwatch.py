@@ -413,16 +413,14 @@ def correct(
         if m not in MODES[1:]:
             continue
         move = None
-        if f.kind == H.IDLE:
-            move = _idle_move(log, st, f, m)
+        if f.kind in (H.IDLE, H.ORPHAN_WAIT):
+            move = _idle_move(log, st, f, m)  # ORPHAN_WAIT rides the nudge ladder, carrying the detail
         elif f.kind == H.STALLED:
             move = _stalled_move(log, st, cfg, f, events, now, act, m)
         elif f.kind == H.UNRESPONSIVE and f.evidence.get("waiters"):
             move = _park_break(log, st, cfg, f.item, events, now, act, m)
         elif f.kind == H.CRASHED:
             move = _crash_move(log, f, m)
-        elif f.kind == H.ORPHAN_WAIT:
-            move = _idle_move(log, st, f, m)  # the ladder's nudge, carrying the orphan detail
         if move:
             moves.append(move)
     if cycles and by_kind.get(H.LOCKED) in MODES[1:]:
