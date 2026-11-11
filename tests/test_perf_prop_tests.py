@@ -180,3 +180,22 @@ def test_an_unmeasured_worker_count_is_an_unknown_saving_not_zero():
     sizes = {"tests/test_a.py": 200, "tests/test_b.py": 10}
     [p] = prop_tests.propose_split_files(rollup, sizes=sizes, max_file_bytes=100, cfg=cfg)
     assert p.expected_saving_s_run is None
+
+
+def test_a_fractional_worker_count_is_unmeasured_not_a_division_by_zero():
+    """A count in (0, 1) truncates to 0, so it is unmeasured, never a saving divided by 0."""
+    cfg = PerfMetricsConfig(prop_split_share=0.5)
+    rollup = {"critical_path_floor_s": 10.0, "workers": 0.4, "per_file": {"tests/test_a.py": 8.0}}
+    sizes = {"tests/test_a.py": 200}
+    [p] = prop_tests.propose_split_files(rollup, sizes=sizes, max_file_bytes=100, cfg=cfg)
+    assert p.expected_saving_s_run is None
+
+
+def test_a_whole_float_miss_count_is_measured_not_dropped():
+    """A whole float miss count (2.0) is a measured miss, not a dropped one: 2.0 + 3.0
+    widen with effect size 5, never fall through to ``None``."""
+    cfg = PerfMetricsConfig(prop_select_miss_min=1, prop_select_min_runs=2)
+    runs = [{"selected_fraction": 0.4, "misses": 2.0}, {"selected_fraction": 0.4, "misses": 3.0}]
+    p = prop_tests.propose_selection(runs, cfg=cfg)
+    assert p is not None and p.advice == "widen"
+    assert p.effect_size == 5

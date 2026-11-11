@@ -160,12 +160,14 @@ def propose_split_files(
 
 def _workers(rollup: dict) -> int | None:
     """The measured worker count, or ``None`` when the rollup carried none or an invalid
-    one (non-numeric, non-finite, non-positive, bool): a probe that did not run. ``None``
-    is never a measured 1, so a count it never had can never publish a zero saving."""
+    one (non-numeric, non-finite, non-positive, bool, or a fraction under 1 that truncates
+    to 0): a probe that did not run. ``None`` is never a measured 1, and a count it never
+    had can never divide a saving by 0."""
     w = rollup.get("workers")
     if isinstance(w, bool) or not isinstance(w, (int, float)) or not _is_finite(w) or w <= 0:
         return None
-    return int(w)
+    count = int(w)
+    return count if count > 0 else None
 
 
 def _saving(secs: float, workers: int | None) -> float | None:
@@ -291,18 +293,21 @@ def _fraction(run: dict) -> float | None:
 
 
 def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
-    """(counted misses, every run MEASURED its misses). A missing or non-numeric count is
-    UNAVAILABLE, and is not a measured miss: it neither adds to the widening trigger nor
-    count toward a NARROW, so a run that never recorded misses neither forces a NARROW nor
-    a silent 0."""
+    """(counted misses, every run MEASURED its misses). Misses are integer by nature: a
+    whole, non-negative count -- an ``int``, or an integral float like ``2.0`` -- is a
+    measured miss. A missing, non-numeric, non-finite, negative or fractional count is
+    UNAVAILABLE, never a truncation toward zero, so it neither adds to a WIDEN nor counts
+    toward a NARROW."""
     total = 0
     measured = True
     for r in runs:
         m = r.get("misses")
-        if isinstance(m, int) and not isinstance(m, bool) and m >= 0:
-            total += m
-        else:
+        if isinstance(m, bool) or not isinstance(m, (int, float)) or not _is_finite(m) or m < 0:
             measured = False
+        elif isinstance(m, float) and not m.is_integer():
+            measured = False  # a fractional miss count is malformed, never a truncation
+        else:
+            total += int(m)
     return total, measured
 
 
