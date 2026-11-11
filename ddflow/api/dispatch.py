@@ -3,10 +3,11 @@
 DX-dispatch-plan. The read half of the planner: it reads the queue (`ddflow next`), the
 fleet (lanes + templates + catalog) and the scheduler world, then asks the pure planner
 (`services.dispatch.plan`) which items to start right now, in order, on which lane. Advise
-only -- nothing starts, nothing is claimed, nothing writes, unless `--tick` records the plan
-as one `dispatch.planned` event so the advice is auditable.
+only -- nothing starts, nothing is claimed, nothing writes. `--tick` records the plan as
+one `session.note` audit note so the advice is auditable. The dispatch item act itself is
+still `ddflow claim`.
 
-Read-only by construction (r-read-verbs-read-only): the item act is still `ddflow claim`.
+Read-only by construction (r-read-verbs-read-only).
 """
 
 from __future__ import annotations
