@@ -96,6 +96,25 @@ ACP_METHODS = frozenset(
     }
 )
 
+# A hand-rolled A2A (Agent2Agent) client is detected by its JSON-RPC method names
+# (v1.0.0 core methods, `message/send` kept as its deprecated alias).
+A2A_METHODS = frozenset(
+    {
+        "message/send",
+        "message/stream",
+        "tasks/get",
+        "tasks/cancel",
+        "tasks/resubscribe",
+    }
+)
+
+# A hand-rolled client of a protocol that has no home yet names the protocol by its own
+# string literal (`"openapi"` is the version key of every OpenAPI document; ``"utcp"`` is the
+# Universal Tool Calling Protocol). They have no adapter today, so any use is a new interface
+# that must go through one (see ``archifaces.PROTOCOL_HOMES``).
+OPENAPI_LITERALS = frozenset({"openapi"})
+UTCP_LITERALS = frozenset({"utcp"})
+
 # A file another tool owns: the literal's last path component (or the whole literal).
 MANAGED_NAMES: dict[str, str] = {
     "settings.json": "settings.json",
@@ -416,6 +435,12 @@ class _Scan:
             self.add("protocol", "mcp", node, v)
         elif v in ACP_METHODS:
             self.add("protocol", "acp", node, v)
+        elif v in A2A_METHODS:
+            self.add("protocol", "a2a", node, v)
+        elif v in OPENAPI_LITERALS:
+            self.add("protocol", "openapi", node, v)
+        elif v in UTCP_LITERALS:
+            self.add("protocol", "utcp", node, v)
         m = _URL.match(v)
         name = v.rsplit("/", 1)[-1]
         if not m and name in MANAGED_NAMES and "\n" not in v and " " not in v:
