@@ -86,6 +86,20 @@ def test_a_session_ended_mid_gate_names_that_gate():
     assert "critic" in lane.remedy
 
 
+def test_a_corpse_names_its_own_gate_not_the_takeover_lanes():
+    """A corpse lane names the gate IT started, not the gate the lane that later took
+    over its item started (B963975258d: _mid_gates keyed by item collides)."""
+    g = Log()
+    g.task("I", "i.py")
+    g.claim("lane-gate", "I", T0, "i.py")
+    g.add("gate.started", "I", "lane-gate", T0 + 500, gate="unit_tests")
+    g.claim("lane-take", "I", T0 + 600, "i.py")  # recover re-lease: a second lane takes I
+    g.add("gate.started", "I", "lane-take", T0 + 700, gate="ci")
+    lanes = {lane.name: lane for lane in _ledger(g)}
+    assert lanes["lane-gate"].mid_gate == "unit_tests"
+    assert lanes["lane-take"].mid_gate == "ci"
+
+
 def test_the_sheet_render_attaches_the_remedy_to_a_stopped_lane():
     g = Log()
     g.task("H2", "h2.py")

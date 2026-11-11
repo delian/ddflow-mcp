@@ -49,17 +49,33 @@ class Marker:
     at: str
     path: str = ""
     sha: str = ""  #: the tree identity the run started on ("" for a marker written before this)
+    expected_s: int = 0  #: the run's expected duration in seconds (0 = unknown): a live run
+    #: past it is no longer work in flight, so the watchdog stops treating its lane as busy
+    #: (a run that outran its expected duration is as dead as one whose process ended).
 
 
 def _dir(repo: Path, item: str) -> Path:
     return Path(repo) / ".ddflow" / RUNS_DIR / item
 
 
-def mark_started(repo: Path, item: str, gate: str, sha: str = "") -> Marker | None:
+def mark_started(
+    repo: Path, item: str, gate: str, sha: str = "", expected_s: int = 0
+) -> Marker | None:
     """Write this process's started-marker. None where it cannot be written: advisory, the
-    run goes on (the sweeper then has nothing to find, as before)."""
+    run goes on (the sweeper then has nothing to find, as before). ``expected_s`` is how
+    long this run is expected to take (0 = unknown); the watchdog reads it so a run that
+    outlives its expected duration is not mistaken for legitimate work in flight."""
     pid = os.getpid()
-    m = Marker(item, gate, pid, proc_start(pid), H.hostname(), clock.now_iso(), sha=sha)
+    m = Marker(
+        item,
+        gate,
+        pid,
+        proc_start(pid),
+        H.hostname(),
+        clock.now_iso(),
+        sha=sha,
+        expected_s=expected_s,
+    )
     try:
         fsio.ensure_ignored_dir(
             Path(repo) / ".ddflow" / RUNS_DIR,
@@ -161,7 +177,13 @@ def live_run_any(repo: Path, item: str, gate: str) -> Marker | None:
 
 
 def claim_started(
-    repo: Path, item: str, gate: str, sha: str, *, same_commit: bool = True
+    repo: Path,
+    item: str,
+    gate: str,
+    sha: str,
+    *,
+    same_commit: bool = True,
+    expected_s: int = 0,
 ) -> tuple[Marker | None, Marker | None]:
     """(marker, twin): claim the started-marker for a run of ``gate`` on ``item`` at
     ``sha``, serialised across processes so of two runs started together exactly one sees
@@ -175,7 +197,7 @@ def claim_started(
     with start_lock(repo, item, gate):
         twin = live_run(repo, item, gate, sha) if same_commit else live_run_any(repo, item, gate)
         if twin is None:
-            return mark_started(repo, item, gate, sha), None
+            return mark_started(repo, item, gate, sha, expected_s), None
         return None, twin
 
 
