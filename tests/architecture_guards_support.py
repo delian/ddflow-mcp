@@ -146,6 +146,10 @@ class _Sites(ast.NodeVisitor):
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
             return f"{base}.{node.attr}" if base else None
+        if isinstance(node, ast.Call):
+            # `pathlib.Path(...)` returns a `Path`, so `Path(...).replace(...)` resolves to
+            # `pathlib.Path.replace` -- the pathlib twin of `os.replace` (an atomic rename).
+            return "pathlib.Path" if self._resolve(node.func) == "pathlib.Path" else None
         return None
 
     # -- imports --------------------------------------------------------------------
@@ -197,7 +201,7 @@ class _Sites(ast.NodeVisitor):
         name = self._resolve(node.func)
         if name in _PROCESS_CALLS:
             self.sites["subprocess_calls"].append(node.lineno)
-        if name == "os.replace":
+        if name in ("os.replace", "pathlib.Path.replace"):
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
