@@ -42,7 +42,7 @@ class PricesConfig:
             return None
         try:
             return float(raw)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return None
 
     def reset_of(self, model: str) -> str:
