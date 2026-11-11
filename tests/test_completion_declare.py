@@ -139,6 +139,17 @@ def test_an_id_flag_without_a_positional_metavar_is_inferred():
     assert kinds.infer("decision_id") == "id:decision"
 
 
+def test_tree_emits_the_narrowed_kind_of_a_record_verbs_id_positional():
+    """The tree's `kind` narrows `bug show <id>` to `id:bug` end-to-end."""
+    from ddflow.services.completion import tree as T
+
+    tree = T.command_tree(build_parser())
+    node = T.at(tree, ("bug", "file-tasks"))
+    assert node is not None
+    ids = [a for a in node["positionals"] if a["dest"] == "id"]
+    assert ids and ids[0]["kind"] == "id:bug"
+
+
 def test_vocabulary_introspection_for_the_engine():
     assert kinds.is_id("id") and kinds.is_id("id:bug") and not kinds.is_id("none")
     assert kinds.record_kind("id:bug") == "bug"

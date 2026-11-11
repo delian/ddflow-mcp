@@ -86,6 +86,13 @@ def declare_id_kind(name: str) -> None:
     _id_kinds.add(name)
 
 
+def seed(names: object) -> None:
+    """Register each record-kind word of ``names`` (the completion engine's boot passes the
+    record-kind registry's names), so a data kind is inferable with no per-kind edit."""
+    for name in names:
+        _id_kinds.add(str(name))
+
+
 def id_kinds() -> frozenset[str]:
     """The record-kind words inference maps a parameter name to, as `id:<name>`."""
     return frozenset(_id_kinds)
@@ -97,12 +104,8 @@ def is_id(kind: str) -> bool:
 
 
 def record_kind(kind: str) -> str | None:
-    """The record kind `id:<kind>` names, or None when ``kind`` is not an id form."""
-    if kind.startswith("id:"):
-        return kind[3:]
-    if kind == "id":
-        return None  # no kind narrowed
-    return None
+    """The record kind `id:<kind>` names, or None (bare ``id`` and non-id kinds carry none)."""
+    return kind[3:] if kind.startswith("id:") else None
 
 
 def normalize(kind: str) -> str:
