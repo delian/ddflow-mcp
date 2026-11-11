@@ -27,6 +27,16 @@ def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
     )
 
 
+def _drop_needed_edges(repo: Path, item: str, stranded, agent: str) -> O.Outcome | None:
+    """Drop the edge to ``item`` from every live item that still needs it, or the outcome
+    of the first drop that fails (``None`` when every drop landed)."""
+    for dep_id, _ in stranded:
+        out = _items.update(repo, dep_id, _items.ItemEdit(remove_needs=[item]), agent=agent)
+        if out.exit != O.OK:
+            return out
+    return None
+
+
 def abandon(
     repo: Path,
     item: str,
@@ -84,10 +94,9 @@ def abandon(
             f"so none is left waiting on it.",
         )
     if drop_edges:
-        for dep_id, _ in stranded:
-            out = _items.update(repo, dep_id, _items.ItemEdit(remove_needs=[item]), agent=agent)
-            if out.exit != O.OK:
-                return out
+        failed = _drop_needed_edges(repo, item, stranded, agent)
+        if failed is not None:
+            return failed
         stranded = []
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     SF.settle(log, st, cfg, item)
