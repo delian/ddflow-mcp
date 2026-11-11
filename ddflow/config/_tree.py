@@ -23,10 +23,10 @@ _VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 
 def declared_version(tree: Path) -> str:
     """The version `tree` declares on disk (`tree/ddflow/__init__.py`), or "" when it
-    cannot be told (an unreadable file, or no literal)."""
+    cannot be told (an unreadable file, a non-UTF-8 one, or no literal)."""
     try:
         text = (Path(tree) / "ddflow" / "__init__.py").read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):  # ValueError: not valid UTF-8 (UnicodeDecodeError)
         return ""
     found = _VERSION_LINE.search(text)
     return found.group(1) if found else ""

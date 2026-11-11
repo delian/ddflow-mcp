@@ -68,8 +68,19 @@ def test_declared_version_reads_the_literal_from_disk(tmp_path):
 
 def test_declared_version_is_empty_when_the_tree_has_no_literal(tmp_path):
     (tmp_path / "ddflow").mkdir()
-    (tmp_path / "ddflow" / "__init__.py").write_text("x = 1\n")
+    (tmp_path / "ddflow" / "__init__.py").write_bytes(b"x = 1\n\xff\n")
     assert declared_version(tmp_path) == ""
+
+
+def test_declared_version_is_empty_for_a_non_utf8_file(tmp_path):
+    """A non-UTF-8 `__init__.py` raises UnicodeDecodeError (a ValueError), not OSError: it
+    must be a blank answer, never an abort (the critic's finding on the first cut)."""
+    (tmp_path / "ddflow").mkdir()
+    (tmp_path / "ddflow" / "__init__.py").write_bytes(b'__version__ = "\xff"\n')
+    assert declared_version(tmp_path) == ""
+
+
+def test_declared_version_is_empty_when_the_file_is_missing(tmp_path):
     assert declared_version(tmp_path / "missing") == ""
 
 
