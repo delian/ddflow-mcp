@@ -1,0 +1,2 @@
+{"agent":"lane-naming","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e0976ff3ce1e2d43fa8897ffb","kind":"ddflow.seen","lamport":172943,"schema":1,"subject":"ddflow","ts":"2026-11-11T10:29:28.259684Z"}
+{"agent":"lane-naming","data":{"path":".ddflow/worktrees/fix-B30683f5446"},"id":"e099529528a20618d3f8c2491","kind":"worktree.removed","lamport":172944,"schema":1,"subject":"fix-B30683f5446","ts":"2026-11-11T10:29:28.377630Z"}
