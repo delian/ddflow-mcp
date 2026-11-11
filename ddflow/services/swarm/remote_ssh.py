@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 
 from ...infra import proc as P
 from ..lane_driver import LaneStatus, Result, failed, ok, unavailable
-from .remote import DEFAULT, Knobs, RemoteError, _safe
+from .remote_config import DEFAULT, Knobs, RemoteError, _safe
 
 _HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@%:\[\]-]*")
 _ROOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]*")
