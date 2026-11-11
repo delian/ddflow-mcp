@@ -136,7 +136,7 @@ def monitor(
     live = state.active_leases(now, cfg.lease.grace_s) if live is None else live
     recover: list[Item] = []
     complete: list[Item] = []
-    for iid, it in state.items.items():
+    for _iid, it in state.items.items():
         if it.merged_sha and not it.terminal:
             # A merged item is landed-but-unrecorded, never INTERRUPTED: recover is for
             # salvaging a crash's uncommitted work, and a merged item has none left (its
@@ -146,11 +146,27 @@ def monitor(
             recover.append(it)
     acts: list[Act] = []
     for it in fill_order(
-        cfg, state, recover, agent=agent, now=now, live=live, bugs=bugs, in_cycle=in_cycle, cycles=cycles
+        cfg,
+        state,
+        recover,
+        agent=agent,
+        now=now,
+        live=live,
+        bugs=bugs,
+        in_cycle=in_cycle,
+        cycles=cycles,
     ):
         acts.append(Act("recover", it.id, interrupted(state, it, live)))
     for it in fill_order(
-        cfg, state, complete, agent=agent, now=now, live=live, bugs=bugs, in_cycle=in_cycle, cycles=cycles
+        cfg,
+        state,
+        complete,
+        agent=agent,
+        now=now,
+        live=live,
+        bugs=bugs,
+        in_cycle=in_cycle,
+        cycles=cycles,
     ):
         acts.append(Act("complete", it.id, f"merged ({it.merged_sha[:12]}) but not completed"))
     ready = plan(state, cfg, agent=agent, now=now).ready
