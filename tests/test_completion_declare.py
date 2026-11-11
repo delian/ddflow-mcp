@@ -43,10 +43,16 @@ def _flagged(parser) -> list[tuple[tuple[str, ...], str]]:
     """The arguments that look completable but resolve to free text and are not exempt."""
     out: list[tuple[tuple[str, ...], str]] = []
     for path, action in _walk(parser):
-        name = (action.option_strings or [action.dest])[0] if action.option_strings else (action.dest or "")
+        name = (
+            (action.option_strings or [action.dest])[0]
+            if action.option_strings
+            else (action.dest or "")
+        )
         metavar = action.metavar if isinstance(action.metavar, str) else None
         kind = _resolve(path, action)
-        looks = action.choices is not None or kinds.looks_like_id(action.dest or "", metavar=metavar)
+        looks = action.choices is not None or kinds.looks_like_id(
+            action.dest or "", metavar=metavar
+        )
         if looks and kind == "none" and EX.exempt(path, name) is None:
             out.append((path, name))
     return out
@@ -58,7 +64,9 @@ def test_no_free_text_id_like_argument_is_silently_skipped():
     id_like = [
         a
         for a in parsed
-        if kinds.looks_like_id(a.dest or "", metavar=(a.metavar if isinstance(a.metavar, str) else None))
+        if kinds.looks_like_id(
+            a.dest or "", metavar=(a.metavar if isinstance(a.metavar, str) else None)
+        )
     ]
     assert id_like, "the ratchet's id-like filter matches the real parser (non-vacuous)"
     flagged = _flagged(parser)
@@ -69,11 +77,18 @@ def test_every_exemption_names_a_real_argument():
     """Each exemption matches a real argument that would otherwise be flagged (shrink-only)."""
     parser = build_parser()
     real = {
-        (path, (action.option_strings or [action.dest])[0] if action.option_strings else (action.dest or ""))
+        (
+            path,
+            (action.option_strings or [action.dest])[0]
+            if action.option_strings
+            else (action.dest or ""),
+        )
         for path, action in _walk(parser)
     }
     for entry in EX.EXEMPTIONS:
-        assert (entry.path, entry.argument) in real, f"unused exemption {entry.path}{entry.argument}"
+        assert (entry.path, entry.argument) in real, (
+            f"unused exemption {entry.path}{entry.argument}"
+        )
 
 
 def test_inference_resolves_every_choices_argument_to_enum():

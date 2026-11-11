@@ -48,7 +48,9 @@ def at(tree: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any] | None:
 
 
 def _node(
-    parser: argparse.ArgumentParser, help_: str, inherited: tuple[argparse.Action, ...],
+    parser: argparse.ArgumentParser,
+    help_: str,
+    inherited: tuple[argparse.Action, ...],
     record_kind: str | None = None,
 ) -> dict[str, Any]:
     from . import kinds  # local, so tree stays import-light until a tree is walked
@@ -68,9 +70,7 @@ def _node(
     return {
         "help": _plain(help_),
         "options": [_option(a) for a in own],
-        "positionals": [
-            _positional(a, record_kind) for a in parser._actions if _is_positional(a)
-        ],
+        "positionals": [_positional(a, record_kind) for a in parser._actions if _is_positional(a)],
         "exclusive": _groups(parser),
         "commands": commands,
     }
