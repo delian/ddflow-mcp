@@ -1,0 +1,2 @@
+{"agent":"finbatch-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"ef1b6f399ab8ea8d618df6044","kind":"ddflow.seen","lamport":178716,"schema":1,"subject":"ddflow","ts":"2026-11-11T23:26:44.099073Z"}
+{"agent":"finbatch-kilo","data":{"cwd":"$HOME/src/ddflow","model":"deepseek-ai/DeepSeek-V4-Pro-0813-Godzila","tool":""},"id":"ebecddbfc162d813da425e41d","kind":"session.started","lamport":178717,"schema":1,"subject":"s20261111T232640-201080","ts":"2026-11-11T23:26:44.493476Z"}
