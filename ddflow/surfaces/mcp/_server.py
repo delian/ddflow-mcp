@@ -41,7 +41,8 @@ from ._core import (
     _waves_auto,
 )
 from ._handlers import _Handlers
-from ._instructions import _instructions
+from ._instructions import _instructions_parts, _upgrade_note
+from ._snapfast import served as _snapshot_served
 
 
 class Server(_Handlers):
@@ -109,6 +110,11 @@ class Server(_Handlers):
         self.client_info: dict[str, Any] = {}
         #: The session-start preamble rides on the first call only (`_first_call_note`).
         self._first_call_done = False
+        #: Set when a handshake was answered from the interface snapshot (`_snapfast`): the
+        #: upgrade notice it left out rides the first tool result (`_deferred_notice`).
+        self._notice_deferred = False
+        #: The stable text of a handshake rendered live, for `serve` to write as the snapshot.
+        self.snapshot_due: str | None = None
         self._first_call_tries = 0
         #: Re-instruction cadence, per CONNECTION. `initialize` delivers the rules once and
         #: nothing re-states them afterwards; after a context compaction the model may
@@ -297,12 +303,34 @@ class Server(_Handlers):
             reply = self._dispatch(msg, modern=True)
         return _modernize(method, reply)
 
+    def _handshake_text(self) -> str:
+        """The instructions of `initialize` / `server/discover`: the fresh interface snapshot's
+        text, else the live rendering (stable text plus the upgrade line), which is then queued
+        as the next snapshot (`snapshot_due`)."""
+        if (snap := _snapshot_served(self)) is not None:
+            self._notice_deferred = True
+            return snap["instructions"]
+        stable, volatile = _instructions_parts(self.repo, self.agent, self.tier)
+        self.snapshot_due = stable
+        return stable + volatile
+
+    def _deferred_notice(self) -> str:
+        """The upgrade line a snapshot-served handshake left out, once, on the first tool result.
+        Never fails the call."""
+        if not self._notice_deferred:
+            return ""
+        self._notice_deferred = False
+        try:
+            return _upgrade_note(self.repo, self.agent)
+        except Exception:
+            return ""
+
     def _discover(self) -> dict[str, Any]:
         """`server/discover`: the versions, capabilities, identity and instructions a
         modern client would otherwise have learned from `initialize`. `resultType`, the
         identity in `_meta` and the cache hints are added by `_modernize`, like every
         modern result's."""
-        return protocol.discover(_instructions(self.repo, self.agent, self.tier))
+        return protocol.discover(self._handshake_text())
 
     def _dispatch(self, msg: dict[str, Any], *, modern: bool = False) -> dict[str, Any] | None:
         """Answer one JSON-RPC message: the method's own handler, else `method not found`.
