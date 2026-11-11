@@ -18,6 +18,13 @@ def _text(out, a) -> str:
     return out.data["text"] or out.data["brief"].rstrip("\n")
 
 
+def _target(a) -> str:
+    """The lane a view names; with the coordinator screen, `--item` (else the positional)."""
+    if a.get("coordinator") or a.get("view") == "coordinator":
+        return a.get("item") or a.get("lane") or ""
+    return a.get("lane") or ""
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("lanes",),
@@ -33,7 +40,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().lanes(
             repo,
             view="coordinator" if a.get("coordinator") else (a.get("view") or "state"),
-            lane=(a.get("item") or "") or a.get("lane") or "",
+            lane=_target(a),
             agent=agent,
         ),
         payload=(

@@ -177,4 +177,11 @@ def test_the_queued_count_ignores_an_injected_now(tmp_path):
     ticket = tmp_path / SL.QUEUE / "00000000000000000001-lane-x.ticket"
     ticket.parent.mkdir(parents=True)
     ticket.write_text("")
-    assert SL.running(Cfg, tmp_path, now=4_000_000_000.0)[1] == 1  # a fresh ticket, whatever `now` says
+    assert (
+        SL.running(Cfg, tmp_path, now=4_000_000_000.0)[1] == 1
+    )  # a fresh ticket, whatever `now` says
+
+
+def test_item_does_not_replace_the_lane_of_the_other_views(busy):
+    code, out, _ = run_cli(busy, "lanes", "brief", "holder", "--item", "Y", agent="reader")
+    assert code == 0 and out.startswith("# Lane brief: holder")
