@@ -1,0 +1,3 @@
+{"agent":"ad-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"ebd40a6642e38f8c2f1943765","kind":"ddflow.seen","lamport":172659,"schema":1,"subject":"ddflow","ts":"2026-11-11T10:06:18.151875Z"}
+{"agent":"ad-kilo","data":{"path":".ddflow/worktrees/DX-review-concurrent-runs"},"id":"ec350b80d99f3c7d1ffc136af","kind":"worktree.removed","lamport":172660,"schema":1,"subject":"DX-review-concurrent-runs","ts":"2026-11-11T10:06:18.212991Z"}
+{"agent":"ad-kilo","data":{"path":".ddflow/worktrees/fix-Bf4ee89e08e"},"id":"e3c38e7e83dc90663cae5518c","kind":"worktree.removed","lamport":172661,"schema":1,"subject":"fix-Bf4ee89e08e","ts":"2026-11-11T10:06:31.806007Z"}
