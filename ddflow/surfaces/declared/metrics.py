@@ -43,6 +43,8 @@ COMMANDS: tuple[Command, ...] = (
             "concurrent process time. view=variants: the directly-follows gate graph, top variants, "
             "burst overlap, superseded passes and out-of-order runs. "
             "view=slo: the service-level indicators ddflow tracks for itself. "
+            "view=batch: the size-bucket tables behind batched gates (review runs and minutes "
+            "by changed lines, findings per run, findings confirmed/refuted by size, lock wait). "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -59,8 +61,8 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm or slo.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm or slo",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch",
                 positional=True,
                 nargs="?",
                 choices=VIEWS,

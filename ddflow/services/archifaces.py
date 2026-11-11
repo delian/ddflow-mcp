@@ -69,6 +69,9 @@ PROTOCOL_HOMES: dict[str, str] = {
     "mcp": "ADP-mcp",
     "acp": "ADP-acp",
     "jsonrpc": "ADP-lane-transport",
+    "utcp": "ADP-utcp",
+    "a2a": "AG-a2a",
+    "openapi": "CN-adapter-openapi",
 }
 
 

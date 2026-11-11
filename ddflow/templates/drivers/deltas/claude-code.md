@@ -41,6 +41,10 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    every dispatch — a reviewer must never inherit the author's model. Map the
    `tier:fast|balanced|deep` hint `ddflow next --json` emits to the dispatched model;
    route reviews to a *different family*, and the merge decision to a frontier model.
+   Launch with `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h` in the environment (or
+   `subagentPromptCacheTtl` in `.claude/settings.json`) so a subagent that waits past the
+   5-minute default reuses its prompt cache instead of re-writing it (TE-subagent-ttl);
+   `ddflow doctor` warns while it is still 5m.
 4. **Asking the operator.** `AskUserQuestion`.
 5. **File references.** `@path`.
 6. **Rules files.** Keep `CLAUDE.md` pointing at the canonical driver rather than

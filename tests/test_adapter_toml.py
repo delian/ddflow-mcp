@@ -9,9 +9,13 @@ from __future__ import annotations
 import pytest
 
 from ddflow.adapters.fakes.toml import FakeTomlIo
-from ddflow.adapters.toml import TomlError, TomlIo, TomlLibIo
+from ddflow.adapters.toml import DEFAULT, TomlError, TomlIo, TomlLibIo
 
 SAMPLE = 'name = "x"\nn = 3\nflag = true\nitems = [1, 2]\n\n[a]\nk = "v"\n\n[a.b]\nz = 1\n'
+
+
+class NotedTomlError(TomlError):
+    """A subclass that must round-trip as itself (ADP-toml LOW #17)."""
 
 
 def toml_cases(io) -> None:
@@ -41,6 +45,12 @@ CONFORMANCE = {"TomlIo": {"real": lambda monkeypatch: TomlLibIo(), "cases": toml
 
 def test_the_default_adapter_passes_the_toml_cases():
     toml_cases(TomlLibIo())
+
+
+def test_the_default_toml_io_is_looked_up_in_the_family_not_imported():
+    # A caller takes the port as an argument, or looks it up as DEFAULT, and never imports
+    # TomlLibIo at the call site (r-swap-seam).
+    assert isinstance(DEFAULT, TomlIo) and not isinstance(DEFAULT, FakeTomlIo)
 
 
 def test_the_fake_passes_the_toml_cases():
@@ -114,6 +124,23 @@ def test_the_error_survives_pickle_with_its_position():
         caught.value.doc,
         caught.value.pos,
     )
+
+
+def test_a_subclass_and_added_notes_survive_pickle():
+    import pickle
+
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().loads("a = 1\nb = ]\n")
+    err = NotedTomlError(str(caught.value), caught.value)
+    err.add_note("from a later stage")
+    err.tag = "kept"
+
+    back = pickle.loads(pickle.dumps(err))
+    assert type(back) is NotedTomlError
+    assert back.tag == "kept"
+    assert back.__notes__ == ["from a later stage"]
+    assert (back.msg, back.doc, back.pos) == (err.msg, err.doc, err.pos)
+    assert (back.lineno, back.colno) == (err.lineno, err.colno)
 
 
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):

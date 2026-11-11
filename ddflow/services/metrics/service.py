@@ -13,6 +13,9 @@ from ...core import clock
 from ...core.events import Event
 from ...core.metrics import VIEWS
 from ...core.model import State
+from .batch import build as batch_build
+from .batch import has_figures as batch_ok
+from .batch import text as batch_text
 from .facts import collect
 from .forecast import forecast as forecast_view
 from .grid import sample as grid_sample
@@ -138,7 +141,7 @@ def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None
     return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
-def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
+def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
     events: Sequence[Event],
     state: State,
     cfg: Config,
@@ -186,6 +189,8 @@ def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Ser
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
         return _lanes(events, cfg, now, floor)
+    if view == "batch":
+        return _figure(ctx, batch_build, batch_ok, batch_text, "size bucket")
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

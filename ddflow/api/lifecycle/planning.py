@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 PURPOSES: tuple[str, ...] = ("offer", "view", "structure")
 
 
-def plan_for(
+def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brief`/`wait` share
     repo: Path,
     log,
     cfg: Config,
@@ -45,6 +45,7 @@ def plan_for(
     agent: str = "",
     now: float | None = None,
     events: Callable[[], Sequence[Event]] | Sequence[Event] | None = None,
+    phase_only: bool = False,
 ) -> Plan:
     """The ready set for ``purpose``, computed with the caller's identity (``agent``, else
     the configured id, else the log's), the reservation hold and the parallelism limit."""
@@ -62,6 +63,7 @@ def plan_for(
         agent=me,
         hold=_reservation_hold(repo, st, cfg, me, now),
         parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
+        with_deps=bool(phase) and not phase_only,
     )
 
 

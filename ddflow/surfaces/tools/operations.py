@@ -9,6 +9,17 @@ from typing import Any
 from ...core import limits as L
 from ._common import _api
 
+
+def _limit(a: dict[str, Any]) -> int:
+    """`limit` as given; 0 is the most a kind gives. Unset: the most for `all` and for phases
+    (few, and a page hid most of them: Bd515797884, as the CLI), else 25."""
+    if a.get("limit") == 0 or (
+        a.get("limit") is None and (a.get("all") or a.get("kind") == "phase")
+    ):
+        return L.SEARCH_MAX_LIMIT if a.get("kind") == "search" else L.LIST_MAX_LIMIT
+    return int(a.get("limit") or 25)
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_list": {
         "description": (
@@ -27,13 +38,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "owner": ("string", "Only this agent's rows.", False),
             "since": ("string", "Changed at/after this ISO date.", False),
             "item": ("string", "kind=bug: only bugs against this item.", False),
+            "match": ("string", "Only rows whose id/title contains this.", False),
             "limit": (
                 "integer",
                 f"Rows (default 25; 0 = the most: {L.LIST_MAX_LIMIT}, search {L.SEARCH_MAX_LIMIT}).",
                 False,
             ),
             "offset": ("integer", "Skip this many rows (paging; a cut list says `next`).", False),
-            "all": ("boolean", "kind=bug|lesson: include fixed/invalid/superseded.", False),
+            "all": ("boolean", "Every row (up to the most); bug|lesson also closed ones.", False),
             "mode": ("string", "search: ranked|exact|regex.", False),
             "sources": ("string", "search: comma-separated record kinds.", False),
             "source": ("string", "search: comma-separated search sources (default all).", False),
@@ -49,9 +61,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             owner=a.get("owner", "") or "",
             since=a.get("since", "") or "",
             item=a.get("item", "") or "",
-            limit=(L.SEARCH_MAX_LIMIT if a.get("kind") == "search" else L.LIST_MAX_LIMIT)
-            if a.get("limit") == 0
-            else int(a.get("limit") or 25),
+            match=a.get("match", "") or "",
+            limit=_limit(a),
             offset=int(a.get("offset") or 0),
             all=bool(a.get("all")),
             mode=a.get("mode", "") or "ranked",

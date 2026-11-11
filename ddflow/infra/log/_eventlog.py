@@ -65,6 +65,7 @@ def _reviewer_redact_names(root: Path) -> list[str]:
             key="name",
             fallback_key="model",
             lenient=True,
+            quiet=True,
         )
         for name, spec in blocks.items():
             where = spec if isinstance(spec, dict) else {}

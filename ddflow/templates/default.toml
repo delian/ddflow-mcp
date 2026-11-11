@@ -271,12 +271,14 @@ idle_s = 900
 check_budget_s = 60
 reply_s = 600
 crash_s = 300
+orphan_s = 300
 mode_idle = "inherit"
 mode_stalled = "inherit"
 mode_unresponsive = "inherit"
 mode_locked = "inherit"
 mode_crashed = "inherit"
 mode_runaway = "inherit"
+mode_orphan_wait = "inherit"
 
 [hooks]
 forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
@@ -352,6 +354,7 @@ idle_max_s = 900
 hold_max_s = 3600
 release_at_merge = true
 break_on_timeout = false
+reconcile_tests = "affected"
 inbox_max_chars = 2000
 inbox_max_pending = 50
 inbox_ttl_s = 86400
@@ -657,6 +660,9 @@ first_call_max_tokens = 600
 replay_verify_diffs = true
 progress_after_complete = "on"
 compaction_digest_chars = 2000
+agent_rotate_tokens = 250000
+claude_autocompact_window = 0
+claude_autocompact_pct_override = 0
 agent_brief_max_chars = 9000
 agent_brief_budget_share = 0.1
 agent_brief_min_chars = 4000
@@ -687,6 +693,7 @@ burn_rate_exhaust_s = 3600.0
 
 [store]
 stale_index_days = 7.0
+index_touch_s = 86400.0
 
 [swarm]
 w_critical = 3.0
@@ -745,6 +752,9 @@ self = "ask"
 
 [upstream_gh]
 error_max = 400
+
+[wait]
+max_call_seconds = 240
 
 [waves]
 auto_stamp = true

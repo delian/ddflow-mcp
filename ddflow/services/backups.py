@@ -19,7 +19,7 @@ from typing import Any
 
 from ..core import clock
 from ..infra import git
-from ..infra.fsio import atomic_write, ensure_ignored_dir, replace_text
+from ..infra.fsio import atomic_write, ensure_ignored_dir, replace_text, rmtree_owned
 
 BACKUPS = ".ddflow/backups"
 MANIFEST = "manifest.json"
@@ -110,7 +110,7 @@ def prune(repo: Path, keep: int) -> list[str]:
         doomed += [p for p, tag in sidecars.items() if tag not in live]
     removed: list[str] = []
     for old in sorted(doomed):
-        shutil.rmtree(old, ignore_errors=True)
+        rmtree_owned(old)
         if not old.exists():  # a removal that was refused is not a removal
             removed.append(old.name)
     return removed
@@ -258,7 +258,7 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
         head = _commit_and_tag(repo, tag, untracked, {"held": held, "created": created})
     except SnapshotRefused:
         if local:  # the sidecar of a tag that never existed
-            shutil.rmtree(local, ignore_errors=True)
+            rmtree_owned(local)
         raise
     return Snapshot(tag, head, tuple(held), tuple(created), local)
 

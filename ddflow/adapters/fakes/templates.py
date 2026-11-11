@@ -18,5 +18,5 @@ class FakeTemplates:
     def render(self, text: str, **vars: Any) -> str:
         return _render_stdlib(text, vars)
 
-    def render_from(self, directory: Path | str, name: str, **vars: Any) -> str:
-        return _render_stdlib((Path(directory) / name).read_text(encoding="utf-8"), vars)
+    def render_from(self, directory: Path | str, template: str, **vars: Any) -> str:
+        return _render_stdlib((Path(directory) / template).read_text(encoding="utf-8"), vars)

@@ -17,14 +17,17 @@ So every subprocess in this package goes through here, and the default is
 here does.
 
 The long-lived server / stdio-relay helpers (`relay_stdio`, `run_piped`, `run_shell`,
-`kill_group`, the owner-watch) live in `ddflow.adapters.proc_server`, beside this module,
-so each file stays under the r-small-files bound (ADP-migrate-homes). `ddflow.infra.proc`
-re-exports both.
+the owner-watch) live in `ddflow.adapters.proc_server`, beside this module, and
+`kill_group` / `stop_group` (signal and reap a session group) live here, so each file
+stays under the r-small-files bound (ADP-migrate-homes). `ddflow.infra.proc` re-exports
+both.
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
+import signal
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -194,6 +197,42 @@ def spawn_shell(
         text=True,
         start_new_session=True,
     )
+
+
+def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:
+    """Kill ``p`` and everything it started, then reap it (waiting at most ``reap_s``)."""
+    kill_group(p)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        p.wait(timeout=reap_s)
+
+
+def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
+    """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
+    SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
+
+    ``p`` must have been started in a session of its own (`run_shell` does), so the
+    group is its pid; call it before ``p`` is reaped, while that pid -- and so the group
+    id -- is still reserved and cannot name a recycled process. Windows has no process
+    groups: `taskkill /T` ends the tree, and `kill` the shell if that could not run.
+    """
+    if os.name == "posix":
+        try:
+            os.killpg(p.pid, signal.SIGKILL if sig is None else sig)
+            return
+        except (ProcessLookupError, PermissionError):
+            pass  # gone already, or not ours: the direct child is all we can still reach
+    else:
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            run(
+                ["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                capture_output=True,
+                timeout=TIMEOUTS["instant"],
+            )
+    with contextlib.suppress(OSError):
+        if sig is None or sig == getattr(signal, "SIGKILL", None):
+            p.kill()
+        else:
+            p.terminate()
 
 
 #: Every named timeout in seconds, in one table (D-unify: one process layer). A call site

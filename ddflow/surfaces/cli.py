@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from ..api import cap_blas_threads
 from ..api import items as A_ITEMS
@@ -34,6 +35,7 @@ from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
 from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
+from ..services import cmdlog
 from .cli_pipe import PIPE_CLOSED, run_quietly  # noqa: F401
 from .context import (
     FAIL,
@@ -330,6 +332,30 @@ provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names
 CONFLICT_SAFE = {("doctor",), ("help",)}
 
 
+def _cli_vocabulary(parser: argparse.ArgumentParser) -> tuple[set[str], set[str]]:
+    """The CLI's verb words and flag names, for `cmdlog`'s argv shape (`redact_argv` keeps
+    exactly those and placeholders everything else). Walked from the parser tree once."""
+    verbs: set[str] = set()
+    flags: set[str] = set()
+    seen: set[int] = set()
+    stack = [parser]
+    while stack:
+        p = stack.pop()
+        if id(p) in seen:
+            continue
+        seen.add(id(p))
+        for action in p._actions:
+            # A no-value switch (`--json`, `-h`, a store_true flag) never consumes the next
+            # token, so it is NOT offered to `redact_argv` as a "kept flag", which would read
+            # the word after it as its `<value>` and hide the verb it swallowed.
+            if action.nargs != 0:
+                flags.update(action.option_strings)
+            if isinstance(getattr(action, "choices", None), dict):  # a _SubParsersAction
+                verbs.update(action.choices)
+                stack.extend(action.choices.values())
+    return verbs, flags
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
     shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
@@ -337,9 +363,64 @@ def main(argv: list[str] | None = None) -> int:
     return run_quietly(_main, argv)
 
 
+def _guard_foreign_launch() -> int:
+    """Refuse to run when this process imported ddflow from a foreign lane's worktree.
+
+    A shared editable install repointed at another lane's tree imports that lane's
+    unmerged code and later crashes when the tree merges away (a lazy re-export reaches a
+    removed file). Imported from the CALLER's own tree is legitimate; imported from any
+    other linked worktree is not. Heal the install back to its primary and refuse, so the
+    retry runs the primary's code. A positive foreign hit refuses; a check that cannot
+    even identify the import (no linked worktree) still lets every ordinary command run.
+    """
+    from ..infra import worktree as W
+    from ..services import install_info as I
+
+    try:
+        foreign = I.foreign_launch_root()
+    except Exception:
+        return OK
+    if foreign is None:
+        return OK
+    try:
+        own = W.current(Path(os.getcwd()))
+    except Exception:
+        # The import IS from a linked worktree (or the guard would have returned above),
+        # so running it could execute another lane's unmerged code — the failure this
+        # guard exists for — while not identifying the caller is NOT evidence the import
+        # is the caller's own tree. Refuse, and repoint nothing: a heal on an unproven
+        # foreignity would strand the caller's own tree if git merely misread it.
+        print(
+            "ddflow: imported from the linked worktree"
+            f" {I.normalise_path(foreign.worktree)}, but the caller's own tree cannot be"
+            " identified; refusing to run code that may be another lane's — re-run once"
+            " the checkout is reachable",
+            file=sys.stderr,
+        )
+        return FAIL
+    if own is not None and own.path.resolve() == foreign.worktree.resolve():
+        return OK  # the very tree this code came from: legitimate, not foreign
+    try:
+        I.repoint_shared_editable(foreign.worktree, foreign.primary)
+    except Exception:
+        pass
+    print(
+        "ddflow: imported from the linked worktree"
+        f" {I.normalise_path(foreign.worktree)}, not the primary or your own tree;"
+        " the shared editable install was reset to"
+        f" {I.normalise_path(foreign.primary)} — re-run the command",
+        file=sys.stderr,
+    )
+    return FAIL
+
+
 def _main(argv: list[str] | None = None) -> int:
+    guarded = _guard_foreign_launch()
+    if guarded != OK:
+        return guarded
     parser = build_parser()
     typed = list(sys.argv[1:] if argv is None else argv)
+    verbs, flags = _cli_vocabulary(parser)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
@@ -374,8 +455,31 @@ def _main(argv: list[str] | None = None) -> int:
         # nothing to do without printing one still answers the reason (Bac9d773a44).
         if getattr(args, "json", False) and code != 0 and not out.wrote:
             emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
+        _remember_command(args, typed, code, said.text, verbs, flags)
         reset_command(tagged)
         return code
+
+
+def _remember_command(
+    args: argparse.Namespace,
+    typed: list[str],
+    code: int,
+    said: str,
+    verbs: set[str],
+    flags: set[str],
+) -> None:
+    """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
+    git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
+    try:
+        from ..infra import worktree as _W
+
+        root = _W.repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+    except Exception:
+        root = Path.cwd()
+    try:
+        cmdlog.record(root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags)
+    except Exception:  # the log is best-effort; it must not change the command's exit code
+        pass
 
 
 def _run(args: argparse.Namespace) -> int:

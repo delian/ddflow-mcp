@@ -48,6 +48,7 @@ from .handlers.flow import (  # noqa: F401
     _h_back_merge_recorded,
     _h_deploy_recorded,
     _h_flow_chosen,
+    _h_merge_reconciled,
     _h_port_applied,
     _h_pr_changes_requested,
     _h_pr_closed,
@@ -217,6 +218,13 @@ def _h_merge_forced(st: State, ev: Event) -> None:
     state: `worktree.merged` is what moved the item; this names the gates and the approval."""
 
 
+def _h_branch_synced(st: State, ev: Event) -> None:
+    """`branch.synced`: the record of `ddflow sync` merging an item's base into its branch. It
+    changes no state: the merge moved git refs; this names the base sha, the commits merged, the
+    relevant count and the gate outcomes still valid or stale, so the drift notice and the report
+    can read them."""
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
@@ -249,6 +257,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
     "merge.forced": _h_merge_forced,
+    "merge.reconciled": _h_merge_reconciled,
+    "branch.synced": _h_branch_synced,
     "worktree.removed": _h_worktree_removed,
     "pr.opened": _h_pr_opened,
     "pr.synced": _h_pr_synced,

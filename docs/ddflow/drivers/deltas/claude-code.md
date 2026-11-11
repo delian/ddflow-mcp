@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.10 fmt=1 sha=58addbb00420 -->
+<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.10 fmt=1 sha=0be24948b488 -->
 # Delta: Claude Code
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -42,11 +42,29 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    every dispatch — a reviewer must never inherit the author's model. Map the
    `tier:fast|balanced|deep` hint `ddflow next --json` emits to the dispatched model;
    route reviews to a *different family*, and the merge decision to a frontier model.
+   Launch with `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h` in the environment (or
+   `subagentPromptCacheTtl` in `.claude/settings.json`) so a subagent that waits past the
+   5-minute default reuses its prompt cache instead of re-writing it (TE-subagent-ttl);
+   `ddflow doctor` warns while it is still 5m.
 4. **Asking the operator.** `AskUserQuestion`.
 5. **File references.** `@path`.
 6. **Rules files.** Keep `CLAUDE.md` pointing at the canonical driver rather than
    restating it. `ddflow brief` supplies the per-task lesson retrieval that
    `CLAUDE.md` would otherwise have to mandate by prose.
+
+**Lane context caps (TE-context-caps).** `ddflow doctor` / `ddflow health` and the wake
+brief name the rotation threshold `[session].agent_rotate_tokens` (default 250000) once an
+agent's measured context passes it: the agent finishes the item, writes a hand-off note into
+its evidence and stops, and the lead starts a fresh agent whose first call is `ddflow brief`.
+The auto-compact window is the alternative a running session can still honour, controlled in
+the harness's env block, not by ddflow:
+
+- `CLAUDE_CODE_AUTO_COMPACT_WINDOW` — auto-compact window in tokens (100000–1000000);
+  `session.claude_autocompact_window` names the value to put there.
+- `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` — percent override that LOWERS the window only;
+  `session.claude_autocompact_pct_override` names it.
+- `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h` — set beside them (see 3), so a lane that
+  waits past the 5-minute default reuses its prompt cache instead of re-writing it.
 
 Register the MCP server in `.mcp.json`:
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from shlex import quote
 
 from ....views.output_caps import from_args as _cap
+from ....views.output_caps import lane_token as _lane_token
 from ..capflags import capped
 from ._shared import (
     AB,
@@ -30,10 +31,21 @@ from ._shared import (
 def _next(repo, a, agent):
     """`next`, or with `--lane` the pull answer for that lane."""
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
+    phase_only = bool(a.get("phase_only", False))
     if lane := a.get("lane", ""):
-        out = _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
-        return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
-    return _cap(repo, _api().next_item(repo, kind=kind, phase=phase, agent=agent), "next", a)
+        out = _api().next_lane(
+            repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
+        )
+        token = _lane_token(
+            lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
+        )
+        return _cap(repo, out, token, a)  # its footer names the lane call
+    return _cap(
+        repo,
+        _api().next_item(repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only),
+        "next",
+        a,
+    )
 
 
 def _next_notes(out, a, ctx):
@@ -57,16 +69,29 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_next",
         description="What may be started RIGHT NOW, and why the rest may not. Independent "
         "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
-        "it never means 'pick something anyway'.",
+        "it never means 'pick something anyway'. With `--phase`, ready upstream "
+        "blocking-dependencies are included by default (labelled); `--phase-only` "
+        "restores the in-phase-only slice.",
         call=_next,
         payload="",
         cli=CliPolicy(notes=_next_notes, human=_next_text),
         params=(
             Param(
                 "phase",
-                help="Restrict to one phase (the 'implement phase X' entry point).",
+                help="Restrict to one phase (the 'implement phase X' entry point). By default "
+                "the phase's ready blocking-dependencies are also returned, each labelled "
+                "`blocking_dependency`; `phase_only=true` hides them.",
                 cli_help="limit to this phase; exit 1 if it names no phase or item",
                 default="",
+            ),
+            Param(
+                "phase_only",
+                type="boolean",
+                help="With `--phase`: return the phase's own ready items only, hiding the "
+                "ready upstream blocking-dependencies shown by default.",
+                cli_help="with --phase: the phase's own ready items only (skip its ready "
+                "blocking-dependencies)",
+                default=False,
             ),
             Param(
                 "kind",

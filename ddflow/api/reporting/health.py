@@ -19,6 +19,7 @@ from ...infra import signals as SIG
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import adopt as AD
+from ...services import cachettl as CTL
 from ...services import cleanup as CL
 from ...services import configcompat as CC
 from ...services import embed as EMB
@@ -28,6 +29,7 @@ from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import lanerelease as LR
+from ...services import lanerotate as LROT
 from ...services import launchers as LA
 from ...services import leasebreak as LBR
 from ...services import leases as L
@@ -316,7 +318,7 @@ def _over_budget_notes(
     ]
 
 
-def doctor(
+def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per findings source
     repo: Path,
     *,
     agent: str = "",
@@ -392,6 +394,14 @@ def doctor(
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
+    # The effective Claude Code subagent cache TTL, and the warning while it is 5m
+    # (TE-subagent-ttl): a host that launches Claude Code with the 1-hour knob already set is
+    # not warned; a host on the 5-minute default is told the one-line remedy.
+    notes.extend(CTL.doctor_notes(repo, cfg))
+    # The lane-rotation hint (TE-context-caps): when an agent's context passes
+    # [session].agent_rotate_tokens, and the auto-compact window alternative when the
+    # operator chose it. Silent while the context is unmeasured (B-gap-spend is the feed).
+    notes.extend(LROT.doctor_notes(cfg))
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet

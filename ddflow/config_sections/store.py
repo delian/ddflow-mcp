@@ -26,3 +26,12 @@ class StoreConfig:
             else "must be a number >= 0"
         ),
     )
+    index_touch_s: float = knob(
+        86400.0,
+        doc="An index in use is `touch`ed (its mtime refreshed) at most this often, so its mtime means 'last used', not 'last rebuilt', and `stale_index_days` of silence really is disuse.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )

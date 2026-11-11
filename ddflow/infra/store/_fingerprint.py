@@ -37,9 +37,6 @@ INDEX_MAX_FILES = 3
 #: And at most this many MB of index files in total; `DDFLOW_INDEX_MAX_MB`. 0 = no size cap.
 INDEX_MAX_MB = 1024.0
 
-#: An index in use is touched at most this often, so its mtime means "last used", not "last
-#: rebuilt", and `[store].stale_index_days` of silence really is disuse.
-INDEX_TOUCH_S = 86400.0
 #: Fewer source files than this found under `ddflow/core/` means there is no source tree.
 MIN_FINGERPRINT_SOURCES = 3
 

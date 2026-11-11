@@ -30,11 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from ..core.textcut import clip
 from . import proc as P
 from .fs import which
 from .ports import port
 from .registry import Registry
+from .textcut import clip
 
 GITHUB, GITLAB = "github", "gitlab"
 

@@ -15,7 +15,7 @@ import pytest
 
 from ddflow.core.model import State
 from ddflow.infra.log import EventLog
-from ddflow.infra.log._eventlog import _is_local_endpoint
+from ddflow.infra.log._eventlog import _is_local_endpoint, _reviewer_redact_names
 from ddflow.services.gates.reviewers import _unapproved_reviewer
 
 NAME = "local-reviewer-f8f8"  # a service name only the ignored reviewers.toml holds
@@ -102,3 +102,34 @@ def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidenc
 )
 def test_is_local_endpoint(base_url, local):
     assert _is_local_endpoint(base_url) is local
+
+
+def test_the_narrowed_redaction_read_does_not_alarm_about_fields_it_deliberately_ignores(
+    tmp_path, capsys
+):
+    # `_reviewer_redact_names` reads reviewers.toml against a DELIBERATELY narrowed view
+    # (`_LocalReviewer`: name/model/base_url only, so the log layer stays off
+    # services.review). The fields it leaves out (family, gates, hedge, ...) ARE known to
+    # the full services.review.Reviewer, so `tomlcfg._check` may not warn "which this
+    # ddflow does not know ... config is newer than this code" for them (bug B506aa72f8e):
+    # that reads as a false "all reviewers broken" alarm on every event-log append.
+    root = tmp_path / "repo"
+    (root / ".ddflow").mkdir(parents=True)
+    (root / ".ddflow" / "reviewers.toml").write_text(
+        "[[reviewer]]\n"
+        f'name = "{NAME}"\n'
+        'kind = "openai"\n'
+        'family = "local"\n'
+        'gates = ["critic", "rubber_duck"]\n'
+        'base_url = "http://127.0.0.1:8000/v1"\n'
+        f'model = "{MODEL}"\n'
+        "hedge = 3\n"
+        "max_chunk_chars = 5000\n"
+        "temperature = 1.0\n"
+    )
+    capsys.readouterr()  # clear any prior stderr
+    _reviewer_redact_names(root)
+    _, err = capsys.readouterr()
+    assert "does not know" not in err, (
+        f"the narrowed redaction reader must not warn about fields it deliberately ignores: {err!r}"
+    )

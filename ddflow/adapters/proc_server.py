@@ -1,8 +1,9 @@
-"""The long-lived server / stdio-relay half of the `Proc` family (ADP-migrate-homes).
+"""The long-lived server / stdio-relay / shell-run half of the `Proc` family (ADP-migrate-homes).
 
-`relay_stdio`, `run_piped`, `run_shell`, `kill_group` and the owner-watch watcher: the
-subprocess machinery that runs a session of its own and relays or drains stdio. Moved out of
-`ddflow.adapters.proc` so each file stays under the r-small-files bound; callers reach every
+`relay_stdio`, `run_piped`, `run_shell` and the owner-watch watcher: the subprocess
+machinery that runs a session of its own and relays or drains stdio. `kill_group` and
+`stop_group` (how a session group is signalled and reaped) live in `ddflow.adapters.proc`,
+beside this module, so each file stays under the r-small-files bound; callers reach every
 name through `ddflow.adapters.proc` / `ddflow.infra.proc`.
 """
 
@@ -10,7 +11,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -97,7 +97,7 @@ def run_piped(
 
     reader = threading.Thread(target=drain, daemon=True, name="run_piped-stderr")
     reader.start()
-    clock = threading.Timer(timeout, kill_group, (p,))
+    clock = threading.Timer(timeout, _proc.kill_group, (p,))
     clock.start()
     try:
         answer = work(p)
@@ -115,7 +115,7 @@ def run_piped(
         with contextlib.suppress(ValueError, OSError):
             p.stderr.close()  # type: ignore[union-attr]
         if p.poll() is None:
-            stop_group(p)
+            _proc.stop_group(p)
 
 
 def pump_lines(src: Any, dst: Any, note: Callable[[str, bytes], None], direction: str) -> None:
@@ -152,45 +152,9 @@ def relay_stdio(argv: list[str], note: Callable[[str, bytes], None], *, grace_s:
     try:
         code = child.wait(timeout=grace_s)
     except subprocess.TimeoutExpired:
-        stop_group(child)
+        _proc.stop_group(child)
         code = 0
     os._exit(code)
-
-
-def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:
-    """Kill ``p`` and everything it started, then reap it (waiting at most ``reap_s``)."""
-    kill_group(p)
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        p.wait(timeout=reap_s)
-
-
-def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
-    """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
-    SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
-
-    ``p`` must have been started in a session of its own (`run_shell` does), so the
-    group is its pid; call it before ``p`` is reaped, while that pid -- and so the group
-    id -- is still reserved and cannot name a recycled process. Windows has no process
-    groups: `taskkill /T` ends the tree, and `kill` the shell if that could not run.
-    """
-    if os.name == "posix":
-        try:
-            os.killpg(p.pid, signal.SIGKILL if sig is None else sig)
-            return
-        except (ProcessLookupError, PermissionError):
-            pass  # gone already, or not ours: the direct child is all we can still reach
-    else:
-        with contextlib.suppress(OSError, subprocess.SubprocessError):
-            _proc.run(
-                ["taskkill", "/F", "/T", "/PID", str(p.pid)],
-                capture_output=True,
-                timeout=_proc.TIMEOUTS["instant"],
-            )
-    with contextlib.suppress(OSError):
-        if sig is None or sig == getattr(signal, "SIGKILL", None):
-            p.kill()
-        else:
-            p.terminate()
 
 
 @dataclass
@@ -383,12 +347,12 @@ def _shell_group(
                 if on_tick is not None:
                     on_tick()
     except subprocess.TimeoutExpired:
-        kill_group(p)
+        _proc.kill_group(p)
         out, err = _drain(p)
         _note_cost(cost, p, before)
         raise subprocess.TimeoutExpired(command, timeout or 0, output=out, stderr=err) from None
     except BaseException:
-        kill_group(p)
+        _proc.kill_group(p)
         _drain(p)
         raise
 

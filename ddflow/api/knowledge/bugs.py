@@ -77,7 +77,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
+    summary = " ".join(summary.split())
+    bad = _bug_fields_problem(summary, scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
     tag_list, bad_tags = found_tags(tags)
@@ -202,13 +203,16 @@ def _fix_task_of(st, cfg, item: str, bug_id: str):
 
 def _open_phase_of(st, item: str) -> str:
     """The nearest OPEN phase at or above ``item``, or "". A finished phase does not take
-    new work: a task filed under it would sit open beneath a phase that says done."""
+    new work (a task filed under it would sit open beneath a phase that says done), and
+    a phase with ``needs`` of its own does not either: a bug fix task is a `no-deps`
+    leaf, and sitting beneath a phase whose needs it inherits would hold it behind
+    unrelated phases (B53cff7c735). Both fall back to the standing bugs phase."""
 
     it = st.items.get(item) if item else None
     if it is None or it.removed:
         return ""
     for node in (it, *st.ancestors(item)):
-        if node.kind == "phase" and not node.terminal and not node.removed:
+        if node.kind == "phase" and not node.terminal and not node.removed and not node.needs:
             return node.id
     return ""
 
@@ -319,9 +323,12 @@ def _file_fix_task(
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it) and `no-deps` (no needs of its own, so none is a
-    decision and not an omission, r-task-phase-needs-wave), under the standing `[bugs] phase`
-    (made on first use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first
-    open or absent one, by id convention only) -- carrying ``globs`` (verbatim) or the bug's
+    decision and not an omission, r-task-phase-needs-wave), under the item's own OPEN phase
+    -- the nearest open phase at or above the found item, which the fix blocks (Be8ca1270a5,
+    r-task-phase-needs-wave) -- else (a stray bug, a removed source, a finished phase) the
+    standing `[bugs] phase` (made on first use; once it is done, its follow-up `<phase>-2`,
+    `-3`, ... -- the first open or absent one, by id convention only) -- carrying ``globs``
+    (verbatim) or the bug's
     own found scope (the files its text
     names plus the tests pinning them; past `[bugs].named_scope_at` named files, the item's
     that exist in the tree; a ddflow-scoped bug never takes the found scope), the item's
@@ -336,13 +343,16 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": "", "glob_warnings": []}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase,
-    # else its follow-up -- never the item's own phase, which the fix would hold open
-    # (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb); `--item` says where the bug was
-    # found, not which phase carries the fix. That is the rule's "say why not": a bug blocks
-    # no feature phase.
+    # globs are what makes a feature on them wait. The parent is the item's own OPEN phase
+    # (`_open_phase_of`): a bug found while working an item blocks that item's phase, so its
+    # fix belongs there (r-task-phase-needs-wave), and `carry no hold` keeps it from stalling
+    # the phase (D-old-work-behind-core-docs-accepted). A finished phase, a removed source or
+    # a stray bug (no `--item`) has no such phase and falls back to the standing bugs phase.
     src = st.items.get(item) if item else None
-    parent, phase_made = _bugs_parent(log, cfg, st)
+    parent = _open_phase_of(st, item) if item else ""
+    phase_made = ""
+    if not parent:
+        parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
@@ -526,8 +536,10 @@ def _link(st, task: str) -> dict[str, str]:
     return {"task": task, "state": it.state if it is not None and not it.removed else "missing"}
 
 
-def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
-    """Why `bug found`'s optional fields cannot be recorded, or ""."""
+def _bug_fields_problem(summary: str, scope: str, severity: str, globs: str) -> str:
+    """Why `bug found`'s fields cannot be recorded, or ""."""
+    if not summary:
+        return "a bug needs a summary: pass one line saying what is wrong"
     if scope and scope not in BUG_SCOPES:
         return f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}"
     if severity and severity not in BUG_SEVERITIES:

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/adapters/fakes/log_store.py:_ID_SIZE" = 'the fixed length of a derived event id (r-derived-don-t-store: the id is a deterministic digest, not a workload setting)'

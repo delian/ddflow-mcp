@@ -1,7 +1,7 @@
 # serializer version: 1
 # name: test_help[ddflow abandon]
   '''
-  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] id
+  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] [--drop-edges] id
   
   positional arguments:
     id
@@ -12,6 +12,7 @@
     --force
     --repoint-to REPOINT_TO
                           re-point the items that need this one to need ID instead
+    --drop-edges          drop the items that need this one from its needs
   
   '''
 # ---
@@ -33,6 +34,19 @@
     --refresh-docs        rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the
                           agents' native rules from this ddflow's templates; leaves MCP launches,
                           hooks and command files alone (what `doctor` points to when drivers lag)
+  
+  '''
+# ---
+# name: test_help[ddflow approvals answer]
+  '''
+  usage: ddflow approvals answer [-h] [--text TEXT] id
+  
+  positional arguments:
+    id           the question id
+  
+  options:
+    -h, --help   show this help message and exit
+    --text TEXT  the answer: one of the question's options, or the free text
   
   '''
 # ---
@@ -176,10 +190,10 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw} ...
   
   positional arguments:
-    {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
       pending             the requests still waiting for a person, each with its digest and its
@@ -197,6 +211,7 @@
       approve             a PERSON approves one request or every pending one, once (refused under an
                           agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
+      answer              a PERSON answers a question ask: free text, or one of its options
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
   
@@ -442,7 +457,7 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
     -h, --help         show this help message and exit
@@ -450,10 +465,13 @@
     --phase PHASE      only rows under this phase id
     --tag TAG          only rows carrying this tag
     --since SINCE      only rows last changed at or after this ISO date or timestamp
+    --match MATCH      only rows whose id or title contains this text (case-insensitive); use it
+                       instead of `| grep`, which sees one page only
     --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                        most)
     --offset OFFSET    skip this many rows (paging)
-    --all              include fixed and invalid bugs
+    --all              include fixed and invalid bugs, and list every row (up to the most a list
+                       gives)
     --item ITEM        only bugs filed in or against this queue item id
     --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
                        newest change first
@@ -1253,7 +1271,7 @@
   
   options:
     -h, --help     show this help message and exit
-    --agent AGENT  one agent (default: all)
+    --agent AGENT  an agent descriptor or control plane (default: all)
     --unverified   only leads, and sections left out
   
   '''
@@ -1344,7 +1362,8 @@
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
-      facts               every descriptor value with its status, source, tool version and date
+      facts               every descriptor value and control-plane fact with status, source, tool
+                          version and date
       add                 scaffold a descriptor skeleton with every fact left out (not verified)
       lint                a descriptor against the schema and the three-valued rule (exit 1 =
                           problems)
@@ -1389,7 +1408,8 @@
   
   positional arguments:
     topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, parallel, recovery, upgrade, verify, workflow. Omit for the overview.
+                metrics, parallel, recovery, upgrade, verify, viewers, workflow. Omit for the
+                overview.
   
   options:
     -h, --help  show this help message and exit
@@ -1703,7 +1723,7 @@
 # ---
 # name: test_help[ddflow lesson list]
   '''
-  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -1711,9 +1731,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            include superseded lessons
+    --all            include superseded lessons, and list every row (up to the most a list gives)
   
   '''
 # ---
@@ -1784,7 +1806,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1798,10 +1820,12 @@
     --tag TAG             only rows carrying this tag
     --owner OWNER         only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
     --item ITEM           only bugs filed in or against this queue item id
     --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
                           newest change first
@@ -1919,12 +1943,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths, variants, swarm or slo
+                          tiny, paths, variants, swarm, slo or batch
     item                  with retro: the item id
   
   options:
@@ -1963,11 +1987,13 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
+    --phase-only         with --phase: the phase's own ready items only (skip its ready blocking-
+                         dependencies)
     --kind {task,phase}
     --lane LANE          answer this idle lane: its best item and a note for claim
     --full               print everything: lift the default output caps ([output] max_rows,
@@ -2099,7 +2125,7 @@
 # ---
 # name: test_help[ddflow phase list]
   '''
-  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -2107,9 +2133,12 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
+    --limit LIMIT    most rows to show (default all rows, up to 1000; 0 or above 1000 = the 1000 a
+                     list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -2607,7 +2636,7 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
   
   positional arguments:
     {add,list,show}       optional: `research add` = `research`; `research list` lists the notes;
@@ -2641,10 +2670,12 @@
     --phase PHASE         only rows under this phase id
     --tag TAG             only rows carrying this tag
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -2714,6 +2745,9 @@
     ddflow review show <id> [--gate G]        list the recorded round's numbered findings
   --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
   `triage` verb: without it they are refused, never run as a review.
+  --agent AGENT names who this review is recorded under (a global option, accepted before or
+              after `review`); pass your `as_agent` so a run from a shell is not recorded
+              under a derived {host}-{tree} identity (Bbf6e536827).
   
   '''
 # ---
@@ -3243,7 +3277,7 @@
 # ---
 # name: test_help[ddflow task list]
   '''
-  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -3252,9 +3286,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -3858,6 +3894,7 @@
     'ddflow abandon',
     'ddflow adopt',
     'ddflow approvals',
+    'ddflow approvals answer',
     'ddflow approvals approve',
     'ddflow approvals ask',
     'ddflow approvals attest',

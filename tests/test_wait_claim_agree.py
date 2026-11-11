@@ -124,3 +124,18 @@ def test_wait_with_the_claim_globs_agrees_with_a_claim_that_names_them(repo):
     out = A.wait(repo, item="Y", globs="a.py", timeout_s=0, agent=WAITER)
     assert out.data["woke"] is False
     assert not A.claim(repo, "Y", no_worktree=True, agent=WAITER, globs="a.py").ok
+
+
+def test_wait_names_the_plan_conflict_next_reports_but_stays_ready(repo):
+    # B-wait-ready-contradicts-next-blocked: `next` withholds an item whose globs overlap
+    # an item it offers in this same plan, yet `wait --item` said only "claim now", because
+    # a named claim ignores the offered-overlap. The claim still succeeds, so READY stays;
+    # what the wake must also say is the plan-level conflict `next` reports.
+    _proj(repo, ("A", "a.py"), ("B", "a.py"))
+    nxt = A.next_(repo, agent=WAITER)
+    assert [r["id"] for r in nxt.data["ready"]] == ["A"]
+    blocked = {b["item"]: b for b in nxt.data["blocked"]}
+    assert "offered in this plan" in blocked["B"]["detail"]
+    out = A.wait(repo, item="B", timeout_s=0, agent=WAITER)
+    assert out.data["woke"] is True
+    assert "offered in this plan" in out.data["advice"]

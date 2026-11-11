@@ -795,6 +795,64 @@ def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -
     assert "new_failures" not in ev["baseline"] and not ev["baseline"].get("unmeasured")
 
 
+def test_a_baseline_red_fix_task_names_the_source_files_the_tests_exercise(
+    repo, monkeypatch
+) -> None:
+    """B83543b98f4: `_file` passed no globs, so the baseline-red bug's fix task inherited the
+    finding item's own (test) globs instead of the source files the failing tests exercise --
+    the fix edits source files its own task globs never named. The filed globs must name the
+    source the failing test imports."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.core import outcome as O
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # the fake pytest fails ID on the base too
+    (repo / "ddflow").mkdir()
+    (repo / "ddflow" / "mod.py").write_text("VALUE = 1\n")
+    (repo / "tests" / "test_x.py").write_text("import ddflow.mod\n\ndef test_a():\n    pass\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "add exercised source"], check=True)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        GB,
+        "bug_found",
+        lambda *a, **k: captured.update(k) or O.refused("bug.found", "dup"),
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    outcome, why = GB.apply(
+        repo,
+        cfg,
+        "worker",
+        it,
+        "unit_tests",
+        gdef,
+        "failed",
+        ev,
+        lambda g, where=None: (
+            "failed",
+            {"exit": 1, "failed_tests": [ID], "summary": ["1 failed in 0.1s"]},
+        ),
+        False,
+    )
+    assert outcome == "partial", why
+    globs = captured.get("globs") or []
+    assert "ddflow/mod.py" in globs, globs
+    assert "tests/test_x.py" in globs, globs
+
+
 def _sha(repo: Path, ref: str = "HEAD") -> str:
     return subprocess.run(
         ["git", "-C", str(repo), "rev-parse", ref], capture_output=True, text=True, check=True

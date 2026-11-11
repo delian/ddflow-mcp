@@ -189,12 +189,27 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+_MAX_FAILED_IDS_SHOWN = 80  #: how many failing test ids a superseded run's refusal names
+
+
 def _found_text(result: str, ev: dict[str, Any]) -> str:
-    """What a finished-but-superseded run found, so its outcome is not lost (B267a6b0b5e)."""
+    """What a finished-but-superseded run found, so its outcome is not lost
+    (B267a6b0b5e). The failing test ids are named too: the test ids are not a side
+    note, they are what an operator needs to fix, so they survive a supersede the way
+    the verdict does (B4ba4673c0a), with a note when there are more."""
     found = [result.upper()]
+    body: list[str] = []
     summary = ev.get("summary") or []
     if summary and not isinstance(summary, str):
-        found.append("; ".join(str(s) for s in summary))
+        body.extend(str(s) for s in summary)
+    ids = ev.get("failed_tests") or []
+    if ids:
+        shown = ", ".join(str(t) for t in ids[: _MAX_FAILED_IDS_SHOWN])
+        body.append(
+            shown if len(ids) <= _MAX_FAILED_IDS_SHOWN else f"{shown} (and {len(ids) - _MAX_FAILED_IDS_SHOWN} more)"
+        )
+    if body:
+        found.append("; ".join(body))
     return " ".join(found).strip()
 
 
@@ -248,12 +263,12 @@ def _superseded_run(
     return ""
 
 
-def _mark_or_refuse_twin(repo, item, gate, started_on):
+def _mark_or_refuse_twin(repo, item, gate, started_on, expected_s=0):
     """Mark, then look, under one lock: of two runs started together the first to take it
     marks and sees no twin; the second sees the first's marker and refuses.
     Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live twin, or
     ``(None, None)`` when no marker could be written and no twin was seen."""
-    marker, twin = RUN.claim_started(repo, item, gate, started_on)
+    marker, twin = RUN.claim_started(repo, item, gate, started_on, expected_s=expected_s)
     if not twin:
         return marker, None
     return None, O.nothing(
@@ -399,7 +414,7 @@ def run(
         if covered is not None:
             return covered
         started_on = G.tree_identity(cwd)
-        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, gdef.timeout_s)
         if twin_refusal is not None:
             return twin_refusal
         started_at = clock.now_iso()

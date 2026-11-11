@@ -212,7 +212,7 @@ the same implementation, so neither drifts from the other.
 | **find records filed twice** | `ddflow dupes [--kind bug,task,...] [--open-only] [--floor F] [--limit N] [--json]` -- exit 0 with pairs, 2 with none | `ddflow_dupes` |
 | **settle a near-duplicate pair** | `ddflow link <a> --duplicate-of\|--extends\|--related\|--distinct <b> [--reason ...]` | `ddflow_link` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
-| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--offset N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `offset`, `all`) |
+| **list tasks / phases / bugs / research / sessions** (`ddflow help viewers`) | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--offset N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all`; `ddflow session list\|show` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `offset`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find which earlier test file makes a test fail only in full-suite order** | `ddflow bisect VICTIM --cmd 'pytest -q {tests}' [--candidates a,b] [--glob G] [--timeout S] [--repeat N] [--max-runs N]` -- delta-debugs the files before the victim, running your command many times (exit 0 = found, 2 = nothing to report); see [Finding a test polluter](#finding-a-test-polluter) | `ddflow_bisect` (`glob`, `repeat` and `max_runs` are CLI-only) |
@@ -1125,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 645 knobs.
+cadences, and the rest of the 653 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -4967,7 +4967,9 @@ They read the folded log and write nothing; `ddflow show <id>` is the whole reco
 
 ```sh
 ddflow task list --phase P2 --state open        # what is left in a phase
-ddflow phase list                               # id, state, done/total tasks, title
+ddflow phase list                               # id, state, done/total tasks, title (every phase, unpaged)
+ddflow task list --match schedule               # id or title contains the text: use it, not `| grep`
+ddflow task list --all                          # every row (up to 1000), not one page
 ddflow bug list                                 # OPEN bugs only
 ddflow bug list --all                           # also fixed and invalid ones
 ddflow bug list --state invalid --since 2026-10-01
@@ -4982,9 +4984,13 @@ queue can be audited from `--json` without opening the sqlite index.
 
 Filters are `--state`, `--phase`, `--tag`, `--owner` (the leaseholder; not `--agent`, which is
 always who *you* are), `--since` (an ISO
-date or timestamp, compared with the last change) and `--limit` (default 50; 0 or a value above
+date or timestamp, compared with the last change), `--match TEXT` (only rows whose id or title contains the
+text, case-insensitive, applied before paging: a server-side filter, so `| grep` on one page is never
+needed; MCP `match`), `--all` (every row, up to 1000, for every kind; bugs and lessons also include
+closed ones) and `--limit` (default 50, but `phase list` shows every phase; 0 or a value above
 1000 gives the 1000 a list gives at most, and says it was cut) and `--offset` (paging: a cut list
-says how many matched and the `--offset` of the next page; `--json` has `total`, `truncated`, `offset`,
+says how many matched and the `--offset` of the next page, on stdout and, when stdout is not a terminal,
+on stderr too, so a pipe never swallows it; `--json` has `total`, `truncated`, `offset`,
 `next`, `clamped_from`). A kind offers only the filters it has data for:
 bugs have no tag or owner, so `bug list --tag x` is an unknown option rather than a
 silent "everything" (and the list flags are refused on `research` when recording a finding). Titles and tags are redacted as the export documents are. Exit
@@ -5274,7 +5280,7 @@ $ ddflow export enable roadmap                       # select it (shared config)
 $ ddflow export enable status --path docs/S.md --mode region
 $ ddflow export enable bugs --local                  # this machine only (.ddflow/local/)
 $ ddflow export disable roadmap                      # deselect; the file stays, printing still works
-$ ddflow export disable roadmap --lock               # the operator's veto: agents cannot enable it again
+$ ddflow export disable roadmap --lock               # a veto: other agents cannot enable it again
 $ ddflow export ack                                  # the operator has seen what agents enabled
 ```
 
@@ -5285,10 +5291,14 @@ path, mode and time (`export.disabled` and `export.acknowledged` are the other t
 kinds; an older ddflow reports them as skipped), `ddflow export` lists who enabled each
 document and when, `brief` carries one `Export:` line and `doctor` a note until the
 operator acknowledges (`ddflow export ack`, or `ddflow export` at a terminal), and
-`disable --lock` makes an agent's later `enable` exit 3 (`locked by the operator`). Locking,
-acknowledging and unlocking (`ddflow export enable <doc>` at a terminal) are the operator's
-acts, refused under `--agent`, `DDFLOW_AGENT` or a harness's shell (as `reviewers approve`
-is). Enable edits the selection through the same guarded write as `config --set`, and an
+`disable --lock` makes an agent's later `enable` exit 3 (`locked by the operator`). An agent
+may lock a document too (B-export-agent-lock): the `export.disabled` event records the agent's
+id, another agent's `enable` exits 3 (`locked by agent <id>`), the locking agent may lift its
+own lock, and the operator can always unlock (`ddflow export enable <doc>` at a terminal). An
+agent's lock never overrides or replaces the operator's lock, which only a person (or an
+agent spending the operator's approval, `export.unlock`) lifts. Acknowledging and unlocking
+the operator's lock are the operator's acts, refused under `--agent`, `DDFLOW_AGENT` or a
+harness's shell (as `reviewers approve` is). Enable edits the selection through the same guarded write as `config --set`, and an
 `append` target is registered as an append-only path.
 
 **Templates are yours to change.** The format of every kind is a Jinja2 template; resolution
@@ -5429,7 +5439,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 645): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 653): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6019,7 +6029,7 @@ declared once and persists — see
 
 ## Configuration
 
-645 knobs across 59 sections, every one documented in place and listed, with its default
+653 knobs across 60 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6086,8 +6096,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=5276dc8f3624 -->
-<details><summary>All 645 knobs across 59 sections</summary>
+<!-- ddflow:begin README/knobs sha=7871d7d9e4b4 -->
+<details><summary>All 653 knobs across 60 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6320,12 +6330,14 @@ long default is left to `ddflow config --explain`.
 | `health.check_budget_s` | `60` |  |
 | `health.reply_s` | `600` |  |
 | `health.crash_s` | `300` |  |
+| `health.orphan_s` | `300` |  |
 | `health.mode_idle` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_stalled` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_unresponsive` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_orphan_wait` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `hooks.fixture_max_age_months` | `6` |  |
@@ -6391,6 +6403,7 @@ long default is left to `ddflow config --explain`.
 | `lease.hold_max_s` | `3600` |  |
 | `lease.release_at_merge` | `true` |  |
 | `lease.break_on_timeout` | `false` |  |
+| `lease.reconcile_tests` | `"affected"` | `full` \| `affected` \| `off` |
 | `lease.inbox_max_chars` | `2000` |  |
 | `lease.inbox_max_pending` | `50` |  |
 | `lease.inbox_ttl_s` | `86400` |  |
@@ -6644,6 +6657,9 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.agent_rotate_tokens` | `250000` |  |
+| `session.claude_autocompact_window` | `0` |  |
+| `session.claude_autocompact_pct_override` | `0` |  |
 | `session.agent_brief_max_chars` | `9000` |  |
 | `session.agent_brief_budget_share` | `0.1` |  |
 | `session.agent_brief_min_chars` | `4000` |  |
@@ -6670,6 +6686,7 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_window_s` | `2592000` |  |
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
+| `store.index_touch_s` | `86400.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
@@ -6720,6 +6737,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `upstream_gh.error_max` | `400` |  |
+| `wait.max_call_seconds` | `240` |  |
 | `waves.auto_stamp` | `true` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |

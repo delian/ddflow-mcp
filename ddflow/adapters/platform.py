@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from . import fs, fsio
-from . import proc_server as ps
+from . import proc as _proc
 from .ports import port
 
 
@@ -53,7 +53,7 @@ class Platform(Protocol):
 class Posix:
     """The default `Platform`: the existing POSIX code, unchanged.
 
-    ``file_lock`` is `fsio.file_lock`, ``kill_group`` is `proc_server.kill_group`,
+    ``file_lock`` is `fsio.file_lock`, ``kill_group`` is `proc.kill_group`,
     ``which`` is `fs.which`; home and 0600 are `pathlib`/`os`; ``is_terminal`` is
     `stream.isatty()`.
     """
@@ -62,7 +62,7 @@ class Posix:
         return fsio.file_lock(path, **kwargs)
 
     def kill_group(self, proc: Any, sig: int | None = None) -> None:
-        ps.kill_group(proc, sig)
+        _proc.kill_group(proc, sig)
 
     def which(self, cmd: str) -> str | None:
         return fs.which(cmd)

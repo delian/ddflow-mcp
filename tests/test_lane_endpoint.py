@@ -66,19 +66,21 @@ def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
     assert isinstance(ep, E.Endpoint) and E.launch_env(ep) == {}
     assert "apiKey" not in json.loads(E.render(ep, "kilo"))["provider"][ep.provider]["options"]
     ep2 = E.resolve(_verified(tmp_path), "lan-vllm")
-    assert E.launch_env(ep2) == {}  # no variable set and no key file: nothing resolved yet
+    assert E.launch_env(ep2) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
     assert "key_env='LAN_ENDPOINT_KEY'" in repr(ep2)
     monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "hh")
-    assert pr.env == {"LAN_ENDPOINT_KEY": "sk-sentinel-value"}
+    assert pr.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+    assert pr.secret_env == {}
     assert "sk-sentinel-value" not in repr(pr) + pr.config.read_text()
     assert "ENDPOINT-HOST" not in repr(ep2)
 
 
 def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, monkeypatch):
     # A keyed lane endpoint whose key lives ONLY in its key file must still launch: the
-    # resolver reads the variable first, then the file, and `launch_env` hands the value
-    # to the child under the variable name -- without exporting it into the process env.
+    # resolver reads the variable first, then the file, `secret_env` hands the file's value
+    # to the child under the variable name -- and `launch_env` asks for nothing live (a
+    # missing source name would wrongly refuse a file key whose variable is not set).
     keyfile = tmp_path / "endpoint.key"
     keyfile.write_text("sk-key-from-file")
     keyfile.chmod(0o600)
@@ -91,8 +93,28 @@ def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, mon
     ep = E.resolve(_cat(tmp_path, t), "lan-vllm")
     assert isinstance(ep, E.Endpoint)
     assert E.resolve_key(ep).value == "sk-key-from-file"
-    assert E.launch_env(ep) == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
+    assert E.launch_env(ep) == {}
+    assert E.secret_env(ep) == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
     assert "LAN_ENDPOINT_KEY" not in os.environ
+
+
+def test_prepare_of_a_file_key_with_the_variable_unset_writes_a_prepared(tmp_path, monkeypatch):
+    # The prepare-level shape the helper-level contract pins: a keyed lane endpoint whose key
+    # lives ONLY in its key file still write a Prepared -- env names nothing live (so the
+    # launcher never refuses a file key whose variable is unset) and the file value travels
+    # in secret_env alone.
+    keyfile = tmp_path / "endpoint.key"
+    keyfile.write_text("sk-key-from-file")
+    keyfile.chmod(0o600)
+    t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
+    t = t.replace(
+        'api_key_env = "LAN_ENDPOINT_KEY"',
+        f'api_key_env = "LAN_ENDPOINT_KEY", api_key_file = "{keyfile}"',
+    )
+    monkeypatch.delenv("LAN_ENDPOINT_KEY", raising=False)
+    pr = E.prepare(_cat(tmp_path, t), "lan-vllm", "kilo", tmp_path / "home")
+    assert isinstance(pr, E.Prepared)
+    assert pr.env == {} and pr.secret_env == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
 
 
 @pytest.mark.parametrize(
@@ -133,8 +155,10 @@ def test_prepare_writes_private_block_and_reports_probe(tmp_path, monkeypatch):
     monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "home")
     assert isinstance(pr, E.Prepared) and pr.config.is_file()
-    assert pr.env == {"LAN_ENDPOINT_KEY": "sk-sentinel-value"} and pr.model.endswith(
-        "/SERVED-MODEL-ID"
+    assert (
+        pr.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+        and pr.model.endswith("/SERVED-MODEL-ID")
+        and pr.secret_env == {}
     )
     assert pr.probe.status == "unavailable"
     assert E.prepare(_cat(tmp_path), "lan-vllm", "kilo", tmp_path / "h2").status == "unavailable"

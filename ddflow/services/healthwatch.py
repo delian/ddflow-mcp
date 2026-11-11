@@ -42,6 +42,7 @@ from . import jobs as JOBS
 from . import leasebreak as LB
 from . import leases as L
 from . import waiting as WT
+from .gates import running
 from .schedule import last_run_epoch
 
 ACTOR = "ddflow:health"
@@ -94,7 +95,7 @@ def _loop_runaways(events, st, cfg) -> list[H.Finding]:
 
 def limits(cfg) -> H.Limits:
     h = cfg.health
-    return H.Limits(h.stall_s, h.runaway_s, h.idle_s, h.reply_s, h.crash_s)
+    return H.Limits(h.stall_s, h.runaway_s, h.idle_s, h.reply_s, h.crash_s, h.orphan_s)
 
 
 def modes(cfg, override: str = "") -> dict[str, str]:
@@ -107,6 +108,7 @@ def modes(cfg, override: str = "") -> dict[str, str]:
         H.LOCKED: h.mode_locked,
         H.CRASHED: h.mode_crashed,
         H.RUNAWAY: h.mode_runaway,
+        H.ORPHAN_WAIT: h.mode_orphan_wait,
     }
     out = {k: override or (h.mode if own[k] == "inherit" else own[k]) for k in H.KINDS}
     return out
@@ -196,6 +198,55 @@ def _expired(log, st, cfg, repo, now, recoveries) -> dict[str, Any]:
     return {r.item: r for r in found if r.kind == "expired_lease"}
 
 
+def _runs(repo: Path, st) -> list[H.Run]:
+    """The live-run registry rows for every leased, unfinished item: one per run marker
+    (alive or dead) plus one per recorded gate outcome (the run that finished; its pid and
+    log path stay in the cleared marker, so only the outcome and when it ended remain)."""
+    out: list[H.Run] = []
+    for i, it in st.items.items():
+        if it.lease is None or it.removed or it.terminal:
+            continue
+        for m in running.dead_runs(repo, i):
+            out.append(
+                H.Run(i, m.gate, m.pid, clock.epoch(m.at), False, m.path, expected_s=m.expected_s)
+            )
+        for m in running.live_runs(repo, i):
+            out.append(
+                H.Run(i, m.gate, m.pid, clock.epoch(m.at), True, m.path, expected_s=m.expected_s)
+            )
+        for g, rec in it.gates.items():
+            if rec.outcome:
+                out.append(
+                    H.Run(
+                        i,
+                        g,
+                        0,
+                        0.0,
+                        None,
+                        "",
+                        rec.outcome,
+                        clock.epoch(rec.at) if rec.at else 0.0,
+                    )
+                )
+    return out
+
+
+def _live_run_items(repo: Path, held: dict[str, Any], now: float) -> set[str]:
+    """Items with a live registered run still WITHIN its expected duration: work in flight,
+    so the lane is not idle or stalled (a legitimate long run is not a dead one). A live run
+    past its expected duration is no longer in flight, and one that recorded none
+    (``expected_s`` 0) is not within an expected duration either -- so neither is in
+    flight, and the lane is judged idle or stalled as its progress says."""
+    out: set[str] = set()
+    for i in held:
+        if any(
+            m.expected_s > 0 and now - clock.epoch(m.at) < m.expected_s
+            for m in running.live_runs(repo, i)
+        ):
+            out.add(i)
+    return out
+
+
 def gather(
     log: EventLog,
     st,
@@ -226,6 +277,11 @@ def gather(
     ]
     budget = cfg.health.runaway_s
     busy = {p.item for p in procs if p.running and (budget <= 0 or now - p.started_at < budget)}
+    # A live registered run (a gate/review/ci/pins process still going) is work in flight
+    # while it is alive WITHIN its expected duration: its lane is NOT idle or stalled (a
+    # legitimate long run is not a dead one). One that outlived its expected duration is
+    # no longer in flight, so the lane is judged idle or stalled as its progress says.
+    busy |= _live_run_items(repo, held, now)
     clone = log.clone_id(create=False)
     lanes = [
         _lane(
@@ -267,7 +323,9 @@ def inspect(
     lanes, procs, waits = gather(
         log, st, cfg, repo, now, events, activity, alive, recoveries=recoveries
     )
-    found = H.inspect(lanes, procs, waits, [c.as_dict() for c in cycles], now, limits(cfg))
+    found = H.inspect(
+        lanes, procs, waits, [c.as_dict() for c in cycles], now, limits(cfg), _runs(repo, st)
+    )
     found += _loop_runaways(events, st, cfg)
     return list({f.key: f for f in found}.values())
 
@@ -384,8 +442,10 @@ def correct(
         if m not in MODES[1:]:
             continue
         move = None
-        if f.kind == H.IDLE:
-            move = _idle_move(log, st, f, m)
+        if f.kind in (H.IDLE, H.ORPHAN_WAIT):
+            move = _idle_move(
+                log, st, f, m
+            )  # ORPHAN_WAIT rides the nudge ladder, carrying the detail
         elif f.kind == H.STALLED:
             move = _stalled_move(log, st, cfg, f, events, now, act, m)
         elif f.kind == H.UNRESPONSIVE and f.evidence.get("waiters"):

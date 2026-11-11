@@ -87,10 +87,13 @@ outside the repo, symlinks, `.git` and `.ddflow` are refused. Every selected tar
 An agent may enable a document without approval, but never silently: the result names the
 agent and the stop command (`ddflow export disable <doc>`), `ddflow export` lists who
 enabled each document and when, `brief` shows one `Export:` line and `doctor` a note until
-`ddflow export ack` (or `ddflow export` at a terminal). After `disable --lock` an agent's
-enable exits 3 (locked by the operator); locking, acknowledging and unlocking
-(`ddflow export enable <doc>` at a terminal) are refused under `--agent`, `DDFLOW_AGENT` or a
-harness's shell. The events are `export.enabled`, `export.disabled`, `export.acknowledged`.
+`ddflow export ack` (or `ddflow export` at a terminal). An agent may also lock a document
+(`disable --lock`): the event records its id, and another agent's enable exits 3 (locked by
+agent <id>); only that agent or the operator lifts it. After the operator's own `disable --lock`
+every agent's enable exits 3 (locked by the operator). Acknowledging and unlocking an
+operator's lock (`ddflow export enable <doc>` at a terminal) are refused under `--agent`,
+`DDFLOW_AGENT` or a harness's shell; the operator can always unlock, and an agent's lock never
+overrides the operator's lock or unlock. The events are `export.enabled`, `export.disabled`, `export.acknowledged`.
 
 ## Templates
 

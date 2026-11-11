@@ -55,11 +55,25 @@ from .fsio import atomic_write, file_lock, lock_path_for  # noqa: F401
 _WARNED: set[tuple[str, str]] = set()
 
 
-def _check(spec: dict[str, Any], known: set[str], where: str, lenient: bool = False) -> dict:
-    """``spec`` without its unknown fields, or ValueError naming them (not ``lenient``)."""
+def _check(
+    spec: dict[str, Any],
+    known: set[str],
+    where: str,
+    lenient: bool = False,
+    quiet: bool = False,
+) -> dict:
+    """``spec`` without its unknown fields, or ValueError naming them (not ``lenient``).
+
+    ``quiet`` drops unknown fields silently, for a reader whose dataclass is a
+    DELIBERATE narrowed view (``_eventlog._LocalReviewer``) rather than an older code
+    reading a newer config: those fields are known to the full class, so the "which this
+    ddflow does not know / config is newer than this code" warning would be a false alarm
+    (bug B506aa72f8e)."""
     unknown = sorted(set(spec) - known)
     if not unknown:
         return spec
+    if quiet:
+        return {k: v for k, v in spec.items() if k in known}
     if not lenient:
         raise ValueError(f"unknown field(s) {unknown} in {where}. Known: {sorted(known)}")
     new = [k for k in unknown if (where, k) not in _WARNED]
@@ -114,8 +128,9 @@ def overlay_array(
     key: str,
     fallback_key: str = "",
     lenient: bool = False,
+    quiet: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    """`[[table]]` blocks, merged by the value of ``key``. Later paths win."""
+    """``[[table]]`` blocks, merged by the value of ``key``. Later paths win."""
     known = set(cls.__dataclass_fields__)
     out: dict[str, dict[str, Any]] = {}
     for path in paths:
@@ -127,7 +142,7 @@ def overlay_array(
                 continue
             ident = raw.get(key) or (raw.get(fallback_key) if fallback_key else "")
             where = f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}"
-            spec = _check(raw, known, where, _lenient_for(path, lenient))
+            spec = _check(raw, known, where, _lenient_for(path, lenient), quiet=quiet)
             if not ident:
                 raise ValueError(f"[[{table}]] #{n} in {path} has no `{key}`")
             out[str(ident)] = spec
