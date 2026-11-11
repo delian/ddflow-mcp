@@ -20,9 +20,7 @@ from .pairs import link_record
 def open_duplicates(st, bug: str) -> list[str]:
     """Open bugs that say they are duplicates of ``bug`` (the link sits on the duplicate)."""
     found = {
-        other
-        for other, lk in st.links.items()
-        if other != bug and bug in lk.linked("duplicate_of")
+        other for other, lk in st.links.items() if other != bug and bug in lk.linked("duplicate_of")
     }
     return sorted(b for b in found if b in st.bugs and b != bug and st.bugs[b].open)
 
@@ -70,6 +68,10 @@ def bug_duplicate(repo: Path, bug: str, *, of: str, agent: str = "") -> O.Outcom
     )
     if not out.ok:
         return out
-    return O.ok("bug.duplicate", id=bug, of=of, regression_test=test, **{
-        k: v for k, v in out.data.items() if k.startswith("fix_task")
-    })
+    return O.ok(
+        "bug.duplicate",
+        id=bug,
+        of=of,
+        regression_test=test,
+        **{k: v for k, v in out.data.items() if k.startswith("fix_task")},
+    )

@@ -74,7 +74,7 @@ def test_duplicate_refused_while_the_original_is_open(repo):
 def test_duplicate_closes_once_the_original_is_fixed(repo):
     _init(repo)
     assert _fix(repo)[0] == OK
-    code, out, err = run_cli(repo, "bug", "duplicate", "B2", "--of", "B1")
+    code, _out, err = run_cli(repo, "bug", "duplicate", "B2", "--of", "B1")
     assert code == OK, err
     st = _state(repo)
     assert not st.bugs["B2"].open and st.bugs["B2"].fixed_at == ""

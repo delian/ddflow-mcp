@@ -349,9 +349,9 @@ COMMANDS: tuple[Command, ...] = (
         "test. Refused (exit 3) while `of` is open, fixed without a test, unknown, or `id` "
         "is closed. `bug fixed` lists the open duplicates of the bug it closes; nothing "
         "closes automatically.",
-        call=lambda repo, a, agent: importlib.import_module(
-            "ddflow.api.knowledge"
-        ).bug_duplicate(repo, a["id"], of=a.get("of", "") or "", agent=agent),
+        call=lambda repo, a, agent: importlib.import_module("ddflow.api.knowledge").bug_duplicate(
+            repo, a["id"], of=a.get("of", "") or "", agent=agent
+        ),
         payload=("id", "of", "regression_test", "fix_task", "fix_task_removed"),
         render=lambda out, a: (
             f"bug {a['id']} closed as a duplicate of {out.data['of']} "
