@@ -26,7 +26,7 @@ from ...services import flow as FS
 from ...services import leases as LS
 from ...services import promotions as PM
 from .._base import _load
-from .planning import plan_for
+from .planning import plan_for_offer
 from .reservations import WAITABLE
 
 #: `brief` scans for recoverable work unless told not to. On by default because the one
@@ -83,17 +83,7 @@ def next_(
         if rep.changes:
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
-    p = plan_for(
-        repo,
-        log,
-        cfg,
-        st,
-        purpose="offer",
-        kind=kind,
-        phase=phase,
-        agent=me,
-        phase_only=phase_only,
-    )
+    p = plan_for_offer(repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only)
     excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
