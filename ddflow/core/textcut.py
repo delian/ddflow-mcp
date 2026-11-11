@@ -11,6 +11,13 @@ Pure: no I/O.
 
 from __future__ import annotations
 
-from ..adapters.textcut import MARK_START, clip, clip_lines, whole_marks, window
+from ..adapters.textcut import (
+    _MARK,
+    MARK_START,
+    clip,
+    clip_lines,
+    whole_marks,
+    window,
+)
 
-__all__ = ["MARK_START", "clip", "clip_lines", "whole_marks", "window"]
+__all__ = ["MARK_START", "_MARK", "clip", "clip_lines", "whole_marks", "window"]
