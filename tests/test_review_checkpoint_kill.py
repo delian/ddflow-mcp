@@ -121,3 +121,15 @@ def test_a_sigtermed_review_keeps_the_chunk_that_already_answered(repo, tmp_path
     assert findings and findings[0]["chunk"] == 1, gate["evidence"]
     assert findings[0]["location"] == "x.py:1" and BODY in findings[0]["detail"], findings
     assert "not a pass" in gate["reason"], gate
+
+
+def test_a_torn_trailing_multibyte_line_keeps_the_earlier_chunks(tmp_path):
+    from ddflow.api.review.reviewers import _ReplyFile
+
+    rf = _ReplyFile(tmp_path, "T1", "critic", "r")
+    rf.path.write_bytes(b'{"chunk": 1, "reply": "ok"}\n{"chunk": 2, "reply": "ab' + b"\xe2\x82")
+    # ``\xe2\x82`` is a torn multi-byte UTF-8 lead byte: read_text("utf-8") raises a
+    # UnicodeDecodeError, which the OSError guard misses, losing chunk 1 too. Line-by-line
+    # keeps it; the torn chunk 2 line loses only itself.
+    assert rf.chunks() == [(1, "ok")]
+

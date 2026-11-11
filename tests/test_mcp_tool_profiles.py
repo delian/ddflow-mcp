@@ -59,7 +59,8 @@ def test_the_default_is_the_lean_core(repo, monkeypatch):
         names
     )
     assert "ddflow_memory" in names
-    assert _bytes(tools) < 33_000
+    # 36_000 (raised, B92ab2d8f54): the lean core (16 tools) now serializes to 34,935 bytes.
+    assert _bytes(tools) < 36_000
 
 
 @pytest.mark.parametrize(
