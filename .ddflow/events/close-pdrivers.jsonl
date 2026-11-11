@@ -31,3 +31,4 @@
 {"agent":"close-pdrivers","data":{"tags":["bugfix","no-deps","wave:0"]},"id":"ef1c762c1e338e5025b39aaec","kind":"task.updated","lamport":171550,"schema":1,"subject":"fix-B13a9b13bba","ts":"2026-11-11T07:36:30.045239Z"}
 {"agent":"close-pdrivers","data":{"parent":"P-agent-parity"},"id":"e8d17295e8c0b616fa089cb39","kind":"task.updated","lamport":171551,"schema":1,"subject":"fix-B53fdb31ee5","ts":"2026-11-11T07:36:42.439587Z"}
 {"agent":"close-pdrivers","data":{"parent":"P-agent-parity"},"id":"ec4bc55b160d38d920aabdc87","kind":"task.updated","lamport":171557,"schema":1,"subject":"fix-B13a9b13bba","ts":"2026-11-11T07:36:57.737205Z"}
+{"agent":"close-pdrivers","data":{"evidence":{"note":"ran: arch interfaces/constants/deps tests, 2 red-on-main bugs filed B53fdb31ee5 B13a9b13bba"},"result":"15"},"id":"e0d13bda469a24eb5a1d6b3b0","kind":"cadence.ran","lamport":171558,"schema":1,"subject":"architecture_review","ts":"2026-11-11T07:37:06.501900Z"}
