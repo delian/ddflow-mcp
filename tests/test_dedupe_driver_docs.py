@@ -50,7 +50,7 @@ def test_every_ddflow_command_the_dedupe_text_names_parses():
     for line in re.findall(r"`(ddflow [^`]+)`", text):
         argv = re.sub(r"<[A-Z]+>", "X1", line).replace('"<the text>"', "text").split()[1:]
         argv = [a for a in argv if a not in ("...",)]
-        if not argv or argv[0] not in ("bug", "similar", "lesson", "link"):
+        if not argv:
             continue
         try:
             parser.parse_args(["--agent", "t", *argv])
@@ -61,12 +61,20 @@ def test_every_ddflow_command_the_dedupe_text_names_parses():
 
 
 def test_the_manual_names_a_real_tool_action_and_argument(repo, monkeypatch):
+    """Every `ddflow_bug action=X key=value` snippet of the manual's dedupe paragraph is
+    checked against the live tool schema."""
     from ddflow.surfaces.mcp import Server
 
+    text = MANUAL.read_text("utf-8")
+    para = _section(text, "A duplicate bug closes only once", "\n\n")
+    snippets = re.findall(r"`ddflow_bug ([^`]+)`", para)
+    assert snippets, "the manual no longer shows a ddflow_bug call"
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", "families")
     run_cli(repo, "init")
     reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     spec = next(t for t in reply["result"]["tools"] if t["name"] == "ddflow_bug")
     props = spec["inputSchema"]["properties"]
-    assert "duplicate" in props["action"]["enum"]
-    assert "of" in props
+    for snippet in snippets:
+        pairs = dict(w.split("=", 1) for w in snippet.split() if "=" in w)
+        assert pairs.get("action") in props["action"]["enum"], snippet
+        assert all(k in props for k in pairs), snippet
