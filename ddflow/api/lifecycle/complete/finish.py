@@ -35,14 +35,14 @@ from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
 
 
-def _closing_tail(hard: bool, agent: str, it, item: str, gates: list[str]) -> str:
-    """The close after the blockers: what lifts them. `gate_accept.next_step` already names the
-    route for a person-only baseline-red partial ("Do NOT request an approval: fix what it
-    names"), so the agent `_ask_hint` tail ("ask the operator to override these in chat") is
-    dropped when one of the unmet gates says so (B-complete-refusal-contradicts-approval-advice)."""
+def _closing_tail(hard: bool, agent: str, it, gates: list[str]) -> str:
+    """The close after the blockers: what lifts them. `gate_accept.person_only` names the route
+    for a person-only baseline-red partial ("Do NOT request an approval: ... `ddflow approve`"),
+    so the agent `_ask_hint` tail ("ask the operator to override these in chat") is dropped when
+    one of the unmet gates is that one (B-complete-refusal-contradicts-approval-advice)."""
     if hard:
         return "--force does not lift the review-gate blocker above."
-    if any(GA.next_step(it, item, g) for g in gates):
+    if any(GA.person_only(it, g) for g in gates):
         return "--force overrides, and the override is recorded."
     return "--force overrides, and the override is recorded." + _ask_hint(agent)
 
@@ -181,7 +181,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
             + f"\n\n`ddflow gate status {item}` shows the pipeline. "
-            + _closing_tail(hard, agent, it, item, v.unmet_gates),
+            + _closing_tail(hard, agent, it, v.unmet_gates),
             forced=False,
             **base,
         )
