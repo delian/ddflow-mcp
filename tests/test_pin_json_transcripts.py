@@ -47,3 +47,15 @@ def test_rerecord_replaces_only_the_rows_that_differ():
     merged = rerecord(got, want)
     assert merged == got and merged[1] is want[1] and merged[2] is want[2]
     assert rerecord(want, want) == want
+
+
+def test_regenerate_refuses_when_imported_from_a_foreign_worktree(monkeypatch):
+    from ddflow.api import pin_files as PF
+    from ddflow.core import outcome as O
+    from ddflow.services import install_info as II
+
+    foreign = II.ForeignLaunch(Path("/worktrees/some-lane"), Path("/primary"))
+    monkeypatch.setattr(II, "foreign_launch_root", lambda *a, **k: foreign)
+    out = PF.pins_regenerate(ROOT, verb="regenerate", only="nosuch")
+    assert out.exit == O.REFUSED, out.reason
+    assert "imported from the linked worktree" in out.reason

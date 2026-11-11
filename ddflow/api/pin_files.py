@@ -11,6 +11,7 @@ from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import approval as AP
 from ..services import drift as DR
+from ..services import install_info as I
 from ..services import leasekeep as LK
 from ..services import mergedrivers as MD
 from ..services import pins as PN
@@ -54,6 +55,9 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
+    foreign_refused = _foreign_import_refusal() if verb == "regenerate" and not check else None
+    if foreign_refused is not None:
+        return foreign_refused
     refused = _skew_refusal(primary, repo, agent, check=check, after_merge=after_merge)
     if refused is not None:
         return refused
@@ -101,6 +105,28 @@ def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcom
     if not p.empty():
         note += f"\nwrite these with: {MD.NEXT_CLI}  (MCP: {MD.NEXT_MCP})"
     return O.ok("pins", note=note)
+
+
+def _foreign_import_refusal() -> O.Outcome | None:
+    """``verb regenerate`` re-records pins by running the commands whose output they pin
+    (the transcript recipes run pytest); a process that imported ddflow from a linked
+    worktree would pin ``guard_foreign_launch``'s refusal — a path that differs per worktree
+    and the commands' error, not their output — instead of the real transcript
+    (Bc28808f9c3). Refuse here so a transcript pin is always re-recorded from the primary
+    checkout, where the import is the caller's own code and the commands really run."""
+    try:
+        foreign = I.foreign_launch_root()
+    except Exception:
+        return None
+    if foreign is None:
+        return None
+    return O.refused(
+        "pins",
+        "refusing to regenerate pins: ddflow was imported from the linked worktree"
+        f" {I.normalise_path(foreign.worktree)}; run `ddflow pins regenerate` from the"
+        " primary checkout so a transcript pins the commands' real output, not the"
+        " import guard's refusal",
+    )
 
 
 def _regenerate_tail(
