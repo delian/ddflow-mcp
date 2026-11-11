@@ -15,6 +15,7 @@ import shlex
 import sys
 from pathlib import Path
 
+from ..adapters.env import DEFAULT as ENV
 from ..infra import fsio
 from ..infra import paths as PA
 
@@ -70,7 +71,7 @@ def with_shim_on_path(env, tree: Path) -> dict[str, str]:
     env = dict(env)
     path = env.get("PATH")
     if path is None:
-        path = os.environ.get("PATH", "")
+        path = ENV.get("PATH", "")
     env["PATH"] = str(directory) + (os.pathsep + path if path else "")
     return env
 

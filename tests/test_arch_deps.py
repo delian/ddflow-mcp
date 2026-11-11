@@ -320,7 +320,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.prompts",
     ),
     "model2vec": (),
-    "radon": ("ddflow.services.complexity_budget",),
+    "radon": (),
     "rapidfuzz": (),
     "tomlkit": (),
 }

@@ -205,7 +205,17 @@ def _own_code_env() -> dict[str, str]:
 
 def _answers(repo: Path) -> Check:
     """`brief` and `next` answer on stdout. Exit 2 means nothing READY for `next` (a
-    real answer with text); `brief` exiting 2 is a failure to run, never a pass."""
+    real answer with text); `brief` exiting 2 is a failure to run, never a pass.
+
+    A repo with no `.ddflow` yet (git initialised, ddflow not) is not asked: running
+    `brief` underneath would create `.ddflow/local` state, and `onboard status` is a
+    read-only report (Ba126c86130)."""
+    if not (Path(repo) / ".ddflow").is_dir():
+        return Check(
+            "brief/next answer",
+            "unavailable",
+            "no .ddflow yet: run `ddflow init`, then onboard status",
+        )
     brief = P.capture(
         [sys.executable, "-m", "ddflow", "--repo", str(repo.resolve()), "brief"],
         timeout=120,
@@ -250,7 +260,7 @@ def _has_imports(repo: Path) -> bool | None:
     """
     try:
         state = fold(
-            EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log).read_all(),
+            EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log, cache_writes=False).read_all(),
             strict=False,
         )
     except Exception:

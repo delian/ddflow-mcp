@@ -10,12 +10,13 @@ import os
 import re
 import shlex
 import sys
-import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
+from ...adapters.clock import DEFAULT as CLOCK
+from ...adapters.env import DEFAULT as ENV
 from ...config import Config
 from ...infra import fsio
 from ...infra import worktree as W
@@ -319,9 +320,9 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
     The queue wait (`[ci].suite_wait_s`) is separate from ``budget``: the run keeps its whole
     budget however long it queued (B4f35548c0a)."""
     waited = None
-    queued_at = time.monotonic()
+    queued_at = CLOCK.monotonic()
     with SL.hold(cfg, holder):
-        waited = round(time.monotonic() - queued_at, 6)
+        waited = round(CLOCK.monotonic() - queued_at, 6)
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
@@ -353,10 +354,10 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
     The queue wait (`[ci].suite_wait_s`) never comes off ``budget``: the timeout budgets the run
     alone (B4f35548c0a)."""
     waited: float | None = None
-    queued_at = time.monotonic()
+    queued_at = CLOCK.monotonic()
     with SL.hold(cfg, holder) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
-            waited = round(time.monotonic() - queued_at, 6)
+            waited = round(CLOCK.monotonic() - queued_at, 6)
         p, out_prefix, elapsed = _execute(
             cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
         )
@@ -485,7 +486,7 @@ def _runs_whole_suite(cmd: str, scope) -> bool:
 
 
 def _holder(repo: Path, ref: str) -> str:
-    return os.environ.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
+    return ENV.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
 
 
 @contextmanager

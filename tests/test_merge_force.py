@@ -42,7 +42,7 @@ def _claimed(repo: Path) -> Path:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
-    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="bot")
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])
     (tree / "a.py").write_text("x = 1\n")

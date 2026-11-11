@@ -134,6 +134,9 @@ class State:
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.
     waiting: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: agent -> "path\0key" -> the newest `agent.onboarded` record of that artifact ({"path",
+    #: "kind", "key", "digest", "descriptor", "version"}); read it through `onboarded_of`.
+    onboarded: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     #: document kind -> who last enabled or disabled its export and when, and whether the
     #: operator vetoed it: {"enabled", "by", "human", "at", "path", "mode", "local",
     #: "locked", "acked"}. The SELECTION itself lives in the config; this is the record

@@ -15,11 +15,11 @@ counts only.
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from ddflow.adapters.clock import DEFAULT as CLOCK
 from ddflow.config import Config
 from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.core import clock
@@ -89,7 +89,7 @@ def rates(
     never mistaken for a count. Only ids and counts leave here: no failure text, argument
     or secret. ``now`` defaults to wall time."""
     cfg = _section(perf_metrics)
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     # Clamp to 1s: a non-positive window must not divide by zero.
     window = max(1.0, cfg.flaky_window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -141,7 +141,7 @@ def proposals(
     person), an expiry (``now + flaky_quarantine_expiry_s``, ISO), and ``proposed`` as a MARKER
     that this is a measure, not an action."""
     cfg = _section(perf_metrics)
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     window = max(1.0, cfg.flaky_window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
@@ -183,7 +183,7 @@ def report(
     # One snapshot of ``now`` for BOTH views: rates and proposals must agree on the window
     # edge, so a flake counted by one is never dropped by the other (each resolves ``now``
     # only when it is None -- a collected view resolves it here, once).
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     view = rates(rows, now=now, perf_metrics=cfg)
     view["proposals"] = proposals(rows, now=now, perf_metrics=cfg)
     return view

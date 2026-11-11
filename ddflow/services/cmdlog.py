@@ -21,11 +21,11 @@ read-only log must not break the command being logged.
 from __future__ import annotations
 
 import json
-import os
-import time
 from collections.abc import Iterable
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as CLOCK
+from ..adapters.env import DEFAULT as ENV
 from ..core.redact import redact_argv
 from ..infra import fsio
 from .redact_report import redactor
@@ -56,8 +56,8 @@ def record(
     path = _path(repo)
     try:
         line = {
-            "t": time.time(),
-            "agent": agent or os.environ.get("DDFLOW_AGENT", ""),
+            "t": CLOCK.wall(),
+            "agent": agent or ENV.get("DDFLOW_AGENT", ""),
             "argv": redact_argv(list(argv), verbs, flags),
             "exit": int(code) if code is not None else None,
             "tail": redactor("log").text(tail or "").text[-TAIL_CHARS:],

@@ -349,7 +349,7 @@ def test_a_session_becomes_fixtures_the_normalizer_replays(repo, tmp_path):
     assert fx["expect"] == {"session_id": "s-1", "prompt": "say PONG", "cwd": "/w"}
     pre = json.loads((fixtures / "pre_tool.json").read_text())
     assert pre["expect"]["tool"] == "Bash"
-    got = hookio.normalize("claude", "prompt", "claude", json.dumps(fx["stdin"]))
+    got = hookio.normalize(hookio.fieldmap(None), "prompt", "claude", json.dumps(fx["stdin"]))
     assert (got.session_id, got.prompt) == ("s-1", "say PONG")
 
 

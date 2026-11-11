@@ -86,11 +86,11 @@ def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
 
 def test_pre_tool_level_derives_from_the_deny_dialect(repo):
     # NATIVE only claims what the enforcement really does: the hookio deny reply exists for
-    # the claude and codex emitter dialects (DENY_EMITTERS); every other emitter's firing
+    # the `plain` emitter dialect (DENY_EMITTERS); every other emitter's firing
     # records 'not enforceable' and reaches the model not at all, whatever block mode says.
     gem = HR.get("gemini")
-    claude_dialect = replace(gem, hooks=replace(gem.hooks, emitter="claude"))
-    assert claude_dialect.hooks.emitter == "claude"
+    claude_dialect = replace(gem, hooks=replace(gem.hooks, emitter="plain"))
+    assert claude_dialect.hooks.emitter == "plain"
     assert "pre_tool" not in claude_dialect.hooks.inject
     assert H.event_level(claude_dialect, "pre_tool") == H.NATIVE
     assert "pre_tool" not in gem.hooks.inject
@@ -104,12 +104,12 @@ def test_pre_tool_level_derives_from_the_deny_dialect(repo):
     )
     assert H.event_level(injected_claude, "pre_tool") == H.NATIVE
     # The session_start claim reads the SAME copy: a copy whose emitter flips to a
-    # non-claude dialect is judged by the copy alone -- its inject still renders (NATIVE)
+    # non-deny dialect is judged by the copy alone -- its inject still renders (NATIVE)
     # while its pre_tool loses the deny reply (WIRED).
     copied = replace(
         claude_dialect, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt"))
     )
-    inverted = replace(copied, hooks=replace(copied.hooks, emitter="gemini"))
+    inverted = replace(copied, hooks=replace(copied.hooks, emitter="json_context"))
     assert H.event_level(inverted, "session_start") == H.NATIVE
     assert H.event_level(inverted, "pre_tool") == H.WIRED
     # A copy whose id the registry does not know covers the removed plan_for -> None path:
