@@ -6,12 +6,21 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import run_cli
-from test_export_select import _call, _ev, _events, proj, run_human  # noqa: F401
+from test_export_select import _call, _ev, _events, run_human
 
 from ddflow.core import model
+
+
+@pytest.fixture
+def proj(repo: Path) -> Path:
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "Billing")[0] == 0
+    return repo
 
 
 def _lock(proj, agent="bot"):
