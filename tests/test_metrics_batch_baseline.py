@@ -26,9 +26,10 @@ def seeded() -> Log:
     log.add("task.added", "B", "lead", T0 - 1000, title="B", body="", parent="P1")
 
     def size(item: str) -> dict:
-        return {"A": {"insertions": 20, "deletions": 10}, "B": {"insertions": 800, "deletions": 500}}[
-            item
-        ]
+        return {
+            "A": {"insertions": 20, "deletions": 10},
+            "B": {"insertions": 800, "deletions": 500},
+        }[item]
 
     for item in ("A", "B"):
         log.claim("a1", item, T0 + 600)
@@ -40,7 +41,12 @@ def seeded() -> Log:
             T0 + 1100,
             gate=R,
             by="r1",
-            evidence={"model": "m-alpha", "elapsed_s": 200, "waited_s": 30, "diff_stat": size(item)},
+            evidence={
+                "model": "m-alpha",
+                "elapsed_s": 200,
+                "waited_s": 30,
+                "diff_stat": size(item),
+            },
         )
         log.complete("a1", item, T0 + 1200)
         log.release("a1", item, T0 + 1201)
