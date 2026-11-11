@@ -54,3 +54,4 @@ def test_a_block_the_incoming_side_deleted_does_not_raise() -> None:
     out, conflicted = merge_pin_text(BASE, BASE, theirs)
     assert not conflicted
     assert b"<<<<<<<" not in out
+    assert b"<!-- ddflow:begin t -->" not in out  # main's deletion survives
