@@ -68,3 +68,6 @@ baseline = 0
 # already read; P-operator-digest renders the section, their first consumer.
 "ddflow/services/swarm/digest.py:hedges_from" = "P-operator-digest"
 "ddflow/services/swarm/digest.py:spend_usd" = "P-operator-digest"
+# The freed-lane next-move text (LC-reuse): `ddflow lanes state` renders it for a released
+# lane; the lanes view is its first caller and lands with LC-reuse's consumer task.
+"ddflow/services/lanes/reuse.py:next_for" = "LC-reuse"
