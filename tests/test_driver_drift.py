@@ -151,9 +151,15 @@ def test_claude_delta_carries_the_lane_context_caps_section():
     it, and the docs view must match (so it is no longer flagged as hand-edited)."""
     text = (ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md").read_text()
     assert "Lane context caps (TE-context-caps)" in text, "the claude delta lacks the caps section"
-    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW" in text, "the claude delta lacks the compact-window vars"
-    assert "session.claude_autocompact_window" in text, "the claude delta lacks the compact-window knob"
-    assert "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h" in text, "the claude delta lacks the subagent ttl"
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW" in text, (
+        "the claude delta lacks the compact-window vars"
+    )
+    assert "session.claude_autocompact_window" in text, (
+        "the claude delta lacks the compact-window knob"
+    )
+    assert "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h" in text, (
+        "the claude delta lacks the subagent ttl"
+    )
     view = AD._region_body(AD._driver_region(DELTA), (ROOT / DELTA).read_text())
     assert view == text, "the claude docs view was not regenerated from the template"
     region = AD._driver_region(DELTA)
@@ -178,4 +184,3 @@ def test_refresh_docs_plan_reports_without_writing(repo):
     assert "would" in p.stdout, "the plan names what it would change"
     for rel, data in before.items():
         assert (repo / rel).read_bytes() == data, f"{rel} must not be written by --plan"
-

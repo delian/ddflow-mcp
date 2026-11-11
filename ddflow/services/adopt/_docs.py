@@ -15,13 +15,13 @@ from ._rules import (
     CURRENT,
     DUPLICATE,
     NO_BLOCK,
+    _block_state,
     adopted_agents,
     block_edited,
     has_been_adopted,
     native_rule_text,
     project_section,
     rules_status,
-    _block_state,
 )
 from ._targets import FORM_BLOCK, FORM_WHOLE, NATIVE_RULES
 from ._upsert import _section_body, _upsert_block, local_edits_path
@@ -168,8 +168,10 @@ def _plan_actions(
         if only is not None and name not in only:
             continue
         path = repo / name
-        if name == "CLAUDE.md" and not path.exists() and "claude" not in (
-            adopted_agents(repo, docs_dir=docs_dir)
+        if (
+            name == "CLAUDE.md"
+            and not path.exists()
+            and "claude" not in (adopted_agents(repo, docs_dir=docs_dir))
         ):
             continue
         out.append(_plan_block(path, section, name))
@@ -200,7 +202,9 @@ def _plan_block(path: Path, section: str, name: str) -> str:
         return f"would collapse the managed blocks in {label}"
     if state == NO_BLOCK:
         return (
-            f"would create {label}" if not existing.strip() else f"would append the managed block to {label}"
+            f"would create {label}"
+            if not existing.strip()
+            else f"would append the managed block to {label}"
         )
     note = " (your edits are kept in .local-edits)" if block_edited(existing) else ""
     return f"would update the managed block in {label}{note}"
