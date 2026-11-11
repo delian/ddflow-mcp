@@ -1,4 +1,5 @@
-"""The orchestrator's wave fill-order: which next item a free lane claims first.
+"""The orchestrator's native wave loop: what a free lane claims next, and what to do
+next at all (`fill_order`, then `monitor`).
 
 The orchestration wave loop answers one steering question each wave: *what do I claim
 next?* `ddflow next` already says which items may start; what was left to prose (the
@@ -21,11 +22,13 @@ accepts the candidates the caller already has.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..adapters.clock import DEFAULT as _CLOCK
 from ..config import Config
 from ..core.graph import find_cycles
 from ..core.model import Item, State
-from ..core.schedule import PlanCtx, bug_items, order_key
+from ..core.schedule import PlanCtx, bug_items, interrupted, order_key, plan
 
 #: The fill tiers, highest-value first (their proxies: recover, bug, unphased, ready).
 FILL_ORDER: tuple[str, ...] = ("recover", "bug", "unphased", "ready")
@@ -82,3 +85,76 @@ def fill_order(
         cycles=cycles,
     )
     return sorted(items, key=order_key(ctx))
+
+
+@dataclass(frozen=True)
+class Act:
+    """One action the native coordinator should take next, in value order.
+
+    ``verb`` is ``recover`` (resume an INTERRUPTED item: salvage its work before
+    anything starts from scratch), ``complete`` (record an item that merged but was
+    never completed) or ``fill`` (claim the next ready item). ``item`` is the item id
+    and ``why`` says what the action is for, worded so a caller can print it as-is."""
+
+    verb: str
+    item: str
+    why: str = ""
+
+
+def monitor(
+    cfg: Config,
+    state: State,
+    *,
+    agent: str = "",
+    now: float | None = None,
+    live: dict | None = None,
+    bugs: frozenset[str] | None = None,
+    in_cycle: set[str] | None = None,
+    cycles=None,
+) -> list[Act]:
+    """The native coordinator's next actions (`Act`), most valuable first.
+
+    `fill_order` answers *which ready item to claim next*; this is its loop
+    counterpart, *what to do next at all*. It MONITORS the implement status the log
+    holds and derives the ACTIONS that resume the loop, once, in code — the monitor
+    the harness cron used to substitute for:
+
+      1. ``recover``  -- an INTERRUPTED item (RUNNING with no live lease): `ddflow
+         recover --item <id>` resumes it, so a crash's uncommitted work is salvaged
+         before anything new starts from scratch;
+      2. ``complete`` -- an item that merged but was never completed: `ddflow complete
+         <id>` records it, releasing what its open state still holds;
+      3. ``fill``     -- a ready item in `fill_order` order, one claim each.
+
+    Refill — how many lanes exist, and when the loop's next wave runs — stays the
+    harness wave-driver's call (decision D-autofill-is-harness-pattern): this is a
+    pure derivation of the action list, with no daemon and no timer of its own, so any
+    trigger (a cron line, `/implement`, a session start) drives the same loop
+    (decision D-sched-no-daemon-r2)."""
+    now = _CLOCK.wall() if now is None else now
+    agent = agent or cfg.agent.id
+    live = state.active_leases(now, cfg.lease.grace_s) if live is None else live
+    acts: list[Act] = []
+    for iid, it in state.items.items():
+        why = interrupted(state, it, live)
+        if why:
+            acts.append(Act("recover", iid, why))
+    for iid, it in state.items.items():
+        if it.merged_sha and not it.terminal:
+            acts.append(
+                Act("complete", iid, f"merged ({it.merged_sha[:12]}) but not completed")
+            )
+    ready = plan(state, cfg, agent=agent, now=now).ready
+    for it in fill_order(
+        cfg,
+        state,
+        ready,
+        agent=agent,
+        now=now,
+        live=live,
+        bugs=bugs,
+        in_cycle=in_cycle,
+        cycles=cycles,
+    ):
+        acts.append(Act("fill", it.id))
+    return acts
