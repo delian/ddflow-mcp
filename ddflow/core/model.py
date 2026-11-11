@@ -73,6 +73,7 @@ from .handlers.gates import (  # noqa: F401
     _h_reviewer_approved,
     _h_reviewer_configured,
 )
+from .handlers.installmanifest import INSTALLMANIFEST_HANDLERS
 from .handlers.items import (  # noqa: F401
     _apply_definition,
     _definition,
@@ -141,7 +142,6 @@ from .handlers.links import (  # noqa: F401
     _links,
     link_targets,
 )
-from .handlers.installmanifest import INSTALLMANIFEST_HANDLERS
 from .handlers.probe import PROBE_HANDLERS
 from .handlers.record_update import UPDATE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
