@@ -75,3 +75,8 @@
 {"agent":"lane-naming","data":{"at":1794401401.483143,"holder":"lane-naming"},"id":"e0a09d6d3083af837b0aad253","kind":"lease.renewed","lamport":174000,"schema":1,"subject":"LN-name-model","ts":"2026-11-11T12:50:01.568721Z"}
 {"agent":"lane-naming","data":{"at":1794401805.9109948,"holder":"lane-naming"},"id":"e2384392a555d115638ea13bf","kind":"lease.renewed","lamport":174052,"schema":1,"subject":"LN-name-model","ts":"2026-11-11T12:56:46.778122Z"}
 {"agent":"lane-naming","data":{"at":1794402304.0007105,"holder":"lane-naming"},"id":"e519b8a5d4bcd36697e1607f7","kind":"lease.renewed","lamport":174131,"schema":1,"subject":"LN-name-model","ts":"2026-11-11T13:05:04.810789Z"}
+{"agent":"lane-naming","data":{"at":1794402428.5203454,"holder":"lane-naming"},"id":"ebb866db64dece4fe27ad60d0","kind":"lease.renewed","lamport":174145,"schema":1,"subject":"LN-name-model","ts":"2026-11-11T13:07:09.316213Z"}
+{"agent":"lane-naming","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e3b7f8c0b6df848ff600c56b2","kind":"cadence.ran","lamport":174151,"schema":1,"subject":"recall_recheck:LN-name-model","ts":"2026-11-11T13:07:18.531228Z"}
+{"agent":"lane-naming","data":{"tags":["wave:1"]},"id":"e998a940dbe65ed4d4fc873b6","kind":"task.updated","lamport":174152,"schema":1,"subject":"RA-channel-signed","ts":"2026-11-11T13:07:25.107828Z"}
+{"agent":"lane-naming","data":{"tags":["wave:1"]},"id":"e0489efb454702eb4932f7474","kind":"task.updated","lamport":174153,"schema":1,"subject":"RA-docs","ts":"2026-11-11T13:07:25.203629Z"}
+{"agent":"lane-naming","data":{"tags":["wave:0"]},"id":"e185db91cbff75ed6f49efab0","kind":"task.updated","lamport":174154,"schema":1,"subject":"RA-e2e","ts":"2026-11-11T13:07:25.298850Z"}
