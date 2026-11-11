@@ -57,8 +57,3 @@ def pick(
             return model
     return None
 
-
-def exhausted(prices: PR.PricesConfig, model: str, spent: dict[str, float]) -> bool:
-    """True when ``model`` has a limit on record and it is reached (not headroom)."""
-    room = headroom(prices, model, spent)
-    return prices.limit_of(model) is not None and not room.known
