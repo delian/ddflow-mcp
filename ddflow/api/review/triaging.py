@@ -387,11 +387,11 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     confirmed -- never in `gate list --refuted` (B1396d7bd55). `rounds.settled_pass` keeps
     either off the round count."""
     rounds = {"rounds": used, "max_rounds": cap}
-    refuted = counts["refuted"]
+    refuted = counts.get("refuted", 0)
     return (
-        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts["confirmed"], **rounds}}
+        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts.get("confirmed", 0), **rounds}}
         if refuted
-        else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
+        else {"findings_fixed": {"confirmed": counts.get("confirmed", 0), **rounds}}
     )
 
 
@@ -609,12 +609,12 @@ def _release_settled(log, cfg, it, gate: str, how: str, why: str, counts: dict[s
         evidence={**((rec.evidence or {}) if rec is not None else {}), **mark},
         by=rec.by if rec is not None else "",
     )
-    flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
+    flag = "ON REFUTATION (flagged)" if counts.get("refuted") else "(findings fixed)"
     tag = f"{it.id}.{gate}" if it is not None else gate
     text = (
         f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
-        f"{counts['findings']} finding(s) has a verdict with its probe "
-        f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
+        f"{counts.get('findings', 0)} finding(s) has a verdict with its probe "
+        f"({counts.get('refuted', 0)} refuted, {counts.get('confirmed', 0)} confirmed)"
     )
     return O.ok(
         "review",
@@ -628,20 +628,22 @@ def _release_settled(log, cfg, it, gate: str, how: str, why: str, counts: dict[s
 
 
 def _dropped_unrechecked(it, gate: str) -> list[tuple[str, str]]:
-    """Unrechecked confirmed findings (`_unrechecked_confirmed`) the gate's LATEST record no
+    """Unchecked confirmed findings (`_unrechecked_confirmed`) the gate's LATEST record no
     longer carries -- a later round reviewed the tree and did not raise them again. Only a
     delta asked for over a tree unchanged since the reviewed head gets here (their fix IS that
-    head), and a finding the latest record still carries raises no fix at all, so it is left
-    out: releasing it would merge an unfixed defect."""
+    head). A finding the latest record still carries raises no fix at all, so it is left out:
+    releasing it would merge an unfixed defect. Returns the list only when EVERY unchecked
+    confirmed finding was dropped; a mix (one dropped, another still carried) releases nothing."""
     unrechecked, unreadable = _unrechecked_confirmed(it, gate)
-    if unreadable:
+    if unreadable or not unrechecked:
         return []
     rec = it.gates.get(gate)
     carried: set[str] = set()
     found = LB.full((rec.evidence or {}) if rec is not None else {}).get("chunk_findings")
     if GD.is_triageable(found):
         carried = {f["digest"] for f in found}
-    return [(d, fam) for d, fam in unrechecked if d not in carried]
+    dropped = [(d, fam) for d, fam in unrechecked if d not in carried]
+    return dropped if len(dropped) == len(unrechecked) else []
 
 
 def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
