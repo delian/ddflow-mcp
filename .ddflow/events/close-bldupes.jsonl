@@ -158,3 +158,4 @@
 {"agent":"close-bldupes","data":{"at":1794413540.7540984,"holder":"close-bldupes"},"id":"e059de8f858ac639c2f808666","kind":"lease.renewed","lamport":175849,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T16:12:20.931085Z"}
 {"agent":"close-bldupes","data":{"at":1794413803.5691268,"holder":"close-bldupes"},"id":"e6b933c5c6439e5c328d5ea41","kind":"lease.renewed","lamport":175896,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T16:16:43.696244Z"}
 {"agent":"close-bldupes","data":{"at":1794414062.7944825,"holder":"close-bldupes"},"id":"ed103ce90cf20df42d4faac94","kind":"lease.renewed","lamport":175959,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T16:21:03.608303Z"}
+{"agent":"close-bldupes","data":{"at":1794414342.5214474,"holder":"close-bldupes"},"id":"e588ff663ffac55608e9a7c11","kind":"lease.renewed","lamport":176011,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T16:25:42.662370Z"}

@@ -57,3 +57,4 @@
 {"agent":"fix-guard","data":{"at":1794413888.7763913,"holder":"fix-guard"},"id":"e516f8edaa4d4580faa4ee645","kind":"lease.renewed","lamport":175913,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:18:08.901734Z"}
 {"agent":"fix-guard","data":{"at":1794414031.0224233,"holder":"fix-guard"},"id":"e6eddd4dd9cf885549c3eb93a","kind":"lease.renewed","lamport":175951,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:20:31.152947Z"}
 {"agent":"fix-guard","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e14d5cb704210f54e8a66d98d","kind":"cadence.ran","lamport":175953,"schema":1,"subject":"recall_recheck:fix-Bbaaaba1364","ts":"2026-11-11T16:20:40.561884Z"}
+{"agent":"fix-guard","data":{"at":1794414352.9881577,"holder":"fix-guard"},"id":"e10e9bbddc41de78c15769b14","kind":"lease.renewed","lamport":176013,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:25:53.698153Z"}
