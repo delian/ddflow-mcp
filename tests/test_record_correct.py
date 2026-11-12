@@ -26,6 +26,8 @@ def _correct(log, rid, kind, fields, reason="a typo", **extra):
         "reason": reason,
         "digest_chars": 12,
         "min_chars": 8,
+        "digest_old": True,
+        "digest_new": True,
         **extra,
     }
     return log.append("record.corrected", rid, data)
@@ -210,27 +212,50 @@ def test_the_kind_is_declared_with_its_text_fields_redacted():
     assert "fields" in k.text
 
 
-def test_a_secret_correction_keeps_no_digest_of_the_old_value(seeded, log):
-    _correct(log, "B1", "bug", {"summary": "a long enough clean text"}, digest_old=False)
+def test_digests_are_opt_in_an_event_that_asks_for_none_keeps_none(seeded, log):
+    _correct(
+        log,
+        "B1",
+        "bug",
+        {"summary": "a long enough clean text"},
+        digest_old=False,
+        digest_new=False,
+    )
     (row,) = _st(seeded).corrections["bug:B1"][-1]["fields"]
-    assert row["old"] == ""
-    assert row["new"]
+    assert row == {"field": "summary", "old": "", "new": ""}
 
 
-def test_digest_old_defaults_to_keeping_the_old_digest(seeded, log):
-    _correct(log, "B1", "bug", {"summary": "a long enough clean text"})
+def test_an_event_that_says_nothing_about_digests_keeps_none(seeded, log):
+    log.append(
+        "record.corrected",
+        "B1",
+        {
+            "kind": "bug",
+            "fields": {"summary": "a long enough clean text"},
+            "reason": "r",
+            "digest_chars": 12,
+            "min_chars": 8,
+        },
+    )
     (row,) = _st(seeded).corrections["bug:B1"][-1]["fields"]
-    assert row["old"]
+    assert row["old"] == "" and row["new"] == ""
 
 
-def test_digest_old_must_be_a_bool(seeded, log):
+def test_the_new_value_digest_can_be_withheld_alone(seeded, log):
+    _correct(log, "B1", "bug", {"summary": "a long enough clean text"}, digest_new=False)
+    (row,) = _st(seeded).corrections["bug:B1"][-1]["fields"]
+    assert row["old"] and row["new"] == ""
+
+
+@pytest.mark.parametrize("flag", ["digest_old", "digest_new"])
+def test_a_digest_flag_must_be_a_bool(seeded, log, flag):
     data = {
         "kind": "bug",
         "fields": {"summary": "x"},
         "reason": "r",
         "digest_chars": 12,
         "min_chars": 8,
-        "digest_old": "no",
+        flag: "no",
     }
-    with pytest.raises(ValueError, match="digest_old"):
+    with pytest.raises(ValueError, match=flag):
         _folded(seeded, log, data)

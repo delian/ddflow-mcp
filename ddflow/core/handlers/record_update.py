@@ -108,12 +108,15 @@ def _correct(st: State, ev: Event) -> None:
         raise ValueError(f"{KIND}: a reason is required")
     chars = _int_at_least_one(d, "digest_chars", len(D.content_digest("")))
     min_chars = _int_at_least_one(d, "min_chars")
-    # A digest of a low-entropy old value (a password, a short token) lets anyone holding the log
-    # CONFIRM a guess, so a correction of a secret says `digest_old: false` and no digest of the
-    # old value is kept at all; the default keeps one, as a check that the right text was replaced.
-    digest_old = d.get("digest_old", True)
-    if not isinstance(digest_old, bool):
-        raise ValueError(f"{KIND}: digest_old must be true or false; got {digest_old!r}")
+    # A digest of a low-entropy value (a password, a short token) lets anyone holding the log
+    # CONFIRM a guess, and the log cannot tell a secret from a typo. So a digest is OPT-IN: the
+    # writer asks for one of the old and/or the new value (`digest_old`, `digest_new`), and an
+    # event that asks for neither keeps only the field names, who and why.
+    want = {}
+    for flag in ("digest_old", "digest_new"):
+        want[flag] = d.get(flag, False)
+        if not isinstance(want[flag], bool):
+            raise ValueError(f"{KIND}: {flag} must be true or false; got {want[flag]!r}")
     kd = RF.KINDS[kind]
     ok = {*kd.attrs.values(), *(o.name for o in kd.own)}
     bad = sorted(set(fields) - ok)
@@ -125,8 +128,8 @@ def _correct(st: State, ev: Event) -> None:
     rows = [
         {
             "field": name,
-            "old": _digest(getattr(rec, name, ""), chars, min_chars) if digest_old else "",
-            "new": _digest(value, chars, min_chars),
+            "old": _digest(getattr(rec, name, ""), chars, min_chars) if want["digest_old"] else "",
+            "new": _digest(value, chars, min_chars) if want["digest_new"] else "",
         }
         for name, value in sorted(fields.items())
     ]

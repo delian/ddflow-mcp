@@ -45,7 +45,7 @@ exempt = "changes an existing record (same id); the add was checked"
 [[kind]]
 name = "record.corrected"
 doc = "A record's fields were corrected (a typo, a wrong fact, a leaked value): the event holds the new values, the reason and the digest width; the fold keeps an audit entry of the field names and digests of the old and the new value, never the old value."
-fields = { "kind" = ["str"], "fields" = ["dict"], "reason" = ["str"], "digest_chars" = ["int"], "digest_old" = ["bool"], "min_chars" = ["int"] }
+fields = { "kind" = ["str"], "fields" = ["dict"], "reason" = ["str"], "digest_chars" = ["int"], "digest_old" = ["bool"], "digest_new" = ["bool"], "min_chars" = ["int"] }
 text = ["fields", "reason"]
 lookup = { kind = "the record kind, compared against the catalogue" }
 exempt = "changes an existing record (same id); the add was checked"

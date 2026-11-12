@@ -750,6 +750,7 @@
   "record.corrected": {
    "fields": {
     "digest_chars": ["int"],
+    "digest_new": ["bool"],
     "digest_old": ["bool"],
     "fields": ["dict"],
     "kind": ["str"],
