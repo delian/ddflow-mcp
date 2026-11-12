@@ -284,3 +284,8 @@ def test_the_prices_accessors_read_the_knobs():
     assert cfg.prices.limit_of("other") is None
     assert (cfg.prices.reset_of("a"), cfg.prices.reset_of("b")) == ("1d", "2d")
     assert cfg.prices.reset_of("other") == "1mo"
+    cfg.prices.limit = {"a": 9, "c": "2.5"}  # a second map: only a live read follows it
+    cfg.prices.reset = {"c": "1w"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("c")) == (9.0, 2.5)
+    assert cfg.prices.limit_of("b") is None
+    assert (cfg.prices.reset_of("c"), cfg.prices.reset_of("a")) == ("1w", "1mo")
