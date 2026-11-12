@@ -66,7 +66,7 @@ def _code_entries(cwd: Path) -> dict[str, str] | None:
         if not os.path.lexists(path):  # a broken symlink is still something
             entries.pop(rel, None)
             continue
-        if path.is_dir():  # a submodule: the commit it is at now
+        if path.is_dir() and (path / ".git").exists():  # a submodule: the commit it is at now
             head = G.run(path, "rev-parse", "HEAD")
             if not head.ok or not head.out.strip():
                 return None

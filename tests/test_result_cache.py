@@ -368,3 +368,13 @@ def test_a_broken_symlink_is_code(tmp_path: Path):
     plain = key(repo)
     (repo / "run.sh").symlink_to(repo / "missing-target")
     assert key(repo) not in (None, plain)
+
+
+def test_a_new_plain_directory_is_keyed_by_its_files_not_the_superproject_head(tmp_path: Path):
+    repo = project(tmp_path)
+    plain = key(repo)
+    (repo / "newdir").mkdir()
+    (repo / "newdir" / "t.py").write_text("a = 1\n")
+    one = key(repo)
+    (repo / "newdir" / "t.py").write_text("a = 2\n")
+    assert one not in (None, plain) and key(repo) not in (None, one)
