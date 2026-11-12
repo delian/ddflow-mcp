@@ -59,6 +59,8 @@ _NARROWING = (
     "--last-failed",
     "--sw",
     "--stepwise",
+    "--sw-skip",
+    "--stepwise-skip",
     "-m",
 )
 #: Pytest options whose next argument is their value, not a path.

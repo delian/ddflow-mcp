@@ -206,6 +206,7 @@ def test_whole_suite_command_detection():
     assert whole("pytest tests/test_a.py tests/")  # a root collects everything beneath it
     assert not whole("pytest tests -k test_one")
     assert not whole("pytest -vk tests/")
+    assert not whole("pytest --sw-skip tests/")
     assert not whole("pytest -xm slow tests/")
     assert whole("pytest -n24 -rA tests/")
     assert not whole("pytest tests/ --ignore=tests/test_slow.py")
