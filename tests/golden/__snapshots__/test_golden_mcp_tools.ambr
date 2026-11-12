@@ -1261,7 +1261,7 @@
          },
          "item": {
           "type": "string",
-          "description": "The item to look back on; with view=retro."
+          "description": "With coordinator: an item whose blocked-by chain to show."
          },
          "match": {
           "type": "string",
@@ -1350,6 +1350,10 @@
          "lane": {
           "type": "string",
           "description": "Lane name (or a unique part); with view=brief, resume or approve."
+         },
+         "coordinator": {
+          "type": "boolean",
+          "description": "The coordinator's screen: running suites, lease holders (idle ones flagged), pending approvals, ready work per ..."
          },
          "group_by": {
           "type": "string",

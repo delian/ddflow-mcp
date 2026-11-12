@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.outlier_runs"
+new = "0"
+why = "The runs-to-merge report labels a merged item whose run count reaches this many an outlier instead of widening the phase's average; 0 turns the flag off."
+impact = "additive"

@@ -5,13 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 
+from ...api import completion_scripts
 from ...services.completion import install as _install
-from ...services.completion import scripts
 from ..context import Ctx
-
-
-def _shell_of(a: argparse.Namespace) -> str:
-    return a.shell or "bash"
 
 
 def _cmd_completion(a: argparse.Namespace, c: Ctx) -> int:
@@ -20,7 +16,7 @@ def _cmd_completion(a: argparse.Namespace, c: Ctx) -> int:
         return _do_install(a)
     if a.cmd == "uninstall":
         return _do_uninstall(a)
-    print(scripts.for_shell(a.cmd), end="")
+    print(completion_scripts.for_shell(a.cmd), end="")
     return 0
 
 

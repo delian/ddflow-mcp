@@ -256,3 +256,27 @@ def test_a_real_three_segment_jwt_in_an_event_shard_still_fires(tmp_path):
     )
     line = "jwt " + signed + "\n"
     assert _scan_committed(tmp_path / "signed", ".ddflow/events/a.jsonl", line) != 0
+
+
+# Built from pieces so the repository's own scan does not read the flagged value out of
+# this file: the value is ddflow's synthetic gitlab PAT filler sample (`glpat-` plus the
+# "Fk3Zq9Lm" filler body built at run time in tests/test_secret_shapes_table.py), quoted
+# in a committed event-log detail while a critic finding for the AU-redact-shapes work
+# argues the provider-sample test misses a changed first character. It is synthetic
+# filler, not a credential, allowlisted by exact value, not the gitlab-pat shape.
+_GLPAT_FILLER = "glpat-" + "Xk3Zq9" + "LmFk3Zq9" + "LmFk3Z"
+
+
+def test_the_synthetic_gitlab_pat_filler_in_an_event_shard_scans_clean(tmp_path):
+    # The event shard lane-hard.jsonl quotes the synthetic gitlab sample; scoped to exactly
+    # this value, exactly the gitlab-pat rule, exactly the event-log shard files.
+    line = "the sample " + _GLPAT_FILLER + " is filler\n"
+    assert _scan_committed(tmp_path / "event", ".ddflow/events/a.jsonl", line) == 0
+
+
+def test_a_real_gitlab_pat_in_an_event_shard_still_fires(tmp_path):
+    # Only the synthetic filler value is allowlisted, not the gitlab-pat shape: a real
+    # `glpat-` token in a committed event shard is a real finding.
+    token = "glpat-" + "zk9LKmcXw3" + "Nc7Kd4Hf6Jg1" + "T7"
+    line = "leaked " + token + "\n"
+    assert _scan_committed(tmp_path / "real", ".ddflow/events/a.jsonl", line) != 0

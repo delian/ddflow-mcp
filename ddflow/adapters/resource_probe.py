@@ -11,11 +11,13 @@ approximation, and the answer says not-collected, never zero.
 from __future__ import annotations
 
 import os
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from ddflow.adapters import proc
+
+from .ports import port
 
 #: The default stdlib ladder is proc then ps; a host prepends its OPTIONAL cgroup/psutil
 #: adapters in the cgroup -> psutil -> proc -> ps degrade order and passes the list to ``sample``.
@@ -36,16 +38,16 @@ class ResourceSample:
     io_out_blocks: int | None = None
 
 
-class ResourceProbe(ABC):
+@port
+class ResourceProbe(Protocol):
     """The port: one live RSS sample of a process. Optional adapters (cgroup v2, psutil)
-    implement this; the stdlib /proc and ps adapters live in this module."""
+    implement this; the stdlib /proc and ps adapters live in `ddflow.adapters.resource_probe`."""
 
-    def name(self) -> str:
-        return self.__class__.__name__
+    name: str
 
-    @abstractmethod
     def sample(self, pid: int) -> ResourceSample | None:
         """RSS KB of ``pid`` (and its tree, when the adapter counts it), else None."""
+        ...
 
 
 def _proc_rss_kb(pid: int) -> int | None:
@@ -69,8 +71,7 @@ def _proc_rss_kb(pid: int) -> int | None:
 class ProcProbe(ResourceProbe):
     """The stdlib Linux adapter: RSS via ``/proc/<pid>/stat`` (never the command's args)."""
 
-    def name(self) -> str:
-        return "proc"
+    name = "proc"
 
     def sample(self, pid: int) -> ResourceSample | None:
         rss = _proc_rss_kb(pid)
@@ -80,8 +81,7 @@ class ProcProbe(ResourceProbe):
 class PsProbe(ResourceProbe):
     """The stdlib ``ps`` adapter for hosts without ``/proc`` (macOS). Returns RSS in KB."""
 
-    def name(self) -> str:
-        return "ps"
+    name = "ps"
 
     def sample(self, pid: int) -> ResourceSample | None:
         try:
