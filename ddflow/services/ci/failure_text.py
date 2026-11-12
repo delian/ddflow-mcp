@@ -23,17 +23,16 @@ _SCRATCH = re.compile(r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+"
 #: A lane worktree: ``<anything>/.ddflow/worktrees/<item>``.
 _WORKTREE = re.compile(r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+")
 #: pytest's own temp tree: the user and the run counter differ between two runs.
-_PYTEST = re.compile(r"(?:/[^\s:'\"]*?)?/pytest-of-[^/\s]+/pytest-\d+")
+_PYTEST = re.compile(r"(?:/(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+")
 
 
 def normalise(text: str, roots: Iterable[str] = ()) -> str:
     """``text`` with each tree root blanked to ``<tree>``: the named ``roots`` (longest first,
     so a nested root is not half-replaced) and the roots ddflow's own scratch trees and
     worktrees have. A path outside any tree is left alone."""
-    for root in sorted(
-        {str(r).rstrip("/") for r in roots if str(r).strip("/")}, key=len, reverse=True
-    ):
-        text = text.replace(root, TREE)
+    named = sorted({str(r).rstrip("/") for r in roots if str(r).strip("/")}, key=len, reverse=True)
+    for root in named:  # a whole path component: `/run/7` is not the start of `/run/70`
+        text = re.sub(re.escape(root) + r"(?![\w.\-])", TREE, text)
     text = _PYTEST.sub(PYTEST_TMP, text)
     return _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
 

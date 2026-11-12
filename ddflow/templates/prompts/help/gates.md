@@ -56,7 +56,7 @@ every plain re-review a delta (`--full` then still asks for a full round).
 ## Failure text across trees
 
 A failure that prints a path prints the checkout it ran in. Before two failures are
-compared by digest, the ci scratch tree, a base scratch tree, a lane worktree and a pytest
-temp directory are rewritten to `<tree>` (`ddflow/services/ci/failure_text.py`), so the same
+compared by digest, the ci scratch tree, a base scratch tree and a lane worktree are
+rewritten to `<tree>` and a pytest temp directory to `<pytest-tmp>` (`ddflow/services/ci/failure_text.py`), so the same
 failure on the base and on the candidate has one digest and an old red is not read as new.
 A different message or a different repo-relative path still differs.

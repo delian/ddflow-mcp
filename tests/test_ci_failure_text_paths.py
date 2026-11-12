@@ -58,3 +58,25 @@ def test_pytest_temp_dirs_are_blanked() -> None:
     one = "boom /tmp/pytest-of-ana/pytest-17/test_a0/x.txt"
     two = "boom /tmp/pytest-of-bob/pytest-3/test_a0/x.txt"
     assert FT.digest(one) == FT.digest(two)
+
+
+def test_pytest_temp_blanking_keeps_what_follows_it() -> None:
+    one = "boom /tmp/pytest-of-ana/pytest-17/test_a0/x.txt"
+    other = "boom /tmp/pytest-of-bob/pytest-3/test_a0/y.txt"
+    assert FT.normalise(one) == "boom <pytest-tmp>/test_a0/x.txt"
+    assert FT.digest(one) != FT.digest(other)
+
+
+def test_a_directory_above_a_pytest_temp_root_is_not_swallowed() -> None:
+    one = "/repo/a/pytest-of-user/pytest-0/test.py"
+    two = "/repo/b/pytest-of-user/pytest-0/test.py"
+    assert FT.digest(one) != FT.digest(two)
+
+
+def test_a_named_root_matches_whole_path_components_only() -> None:
+    text = "/srv/ci/run/70/tests/x.json and /srv/ci/run/7-old/y and /srv/ci/run/7/z"
+    got = FT.normalise(text, ["/srv/ci/run/7"])
+    assert got == "/srv/ci/run/70/tests/x.json and /srv/ci/run/7-old/y and <tree>/z"
+    assert FT.digest("/srv/ci/run/70/same.txt", ["/srv/ci/run/7"]) != FT.digest(
+        "/other/0/same.txt", ["/other"]
+    )
