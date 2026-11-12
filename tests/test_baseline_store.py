@@ -168,3 +168,29 @@ def test_the_config_entry_reads_the_keep_knob_and_takes_the_suite_lock(
     BS.baseline_for_cfg(tmp_path, cfg, OTHER, CMD, _measure(calls))
     BS.baseline_for_cfg(tmp_path, cfg, OTHER, CMD, _measure(calls))
     assert len(calls) == 3
+
+
+def test_the_same_failure_from_two_ci_trees_stores_one_digest(tmp_path: Path) -> None:
+    text = "FAILED t.py::a - AssertionError: {root}/data/x.json missing"
+    one = BS.baseline_for(
+        tmp_path / "a",
+        SHA,
+        CMD,
+        _measure([], {"t.py::a": text.format(root="/tmp/ddflow-ci.k3j2h1x9")}),
+        keep_days=14,
+    )
+    two = BS.baseline_for(
+        tmp_path / "b",
+        SHA,
+        CMD,
+        _measure([], {"t.py::a": text.format(root="/tmp/ddflow-base.Zq81aa0")}),
+        keep_days=14,
+    )
+    other = BS.baseline_for(
+        tmp_path / "c",
+        SHA,
+        CMD,
+        _measure([], {"t.py::a": text.format(root="/tmp/ddflow-ci.x").replace("missing", "bad")}),
+        keep_days=14,
+    )
+    assert one.failing == two.failing and one.failing != other.failing

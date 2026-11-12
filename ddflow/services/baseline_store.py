@@ -32,6 +32,7 @@ from ..core.digest import content_digest
 from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
 from . import suitelock
+from .ci.failure_text import digest as tree_digest
 
 STORE_DIR = Path(".ddflow") / "local" / "baseline-store"
 DAY_S = 86400.0
@@ -58,9 +59,9 @@ class Baseline:
 
 
 def digest_of(text: str) -> str:
-    """The digest a failure text is compared by (the whole text; path normalisation is
-    applied by the caller before it gets here)."""
-    return content_digest(text)[:16]
+    """The digest a failure text is compared by: the whole text with the ci tree's path blanked
+    (`ci.failure_text`, GM-ci-path-normalise), so one failure from two trees has one digest."""
+    return tree_digest(text)
 
 
 def store_dir(repo: Path) -> Path:
