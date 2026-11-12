@@ -22,14 +22,16 @@ PYTEST_TMP = "<pytest-tmp>"
 _START = r"(?<![\w.\-/])"
 _END = r"(?=\.?(?:[/\s:'\")\],]|$))"
 #: A scratch tree ddflow makes: the directory name is the marker, whatever the temp root is.
-_SCRATCH = re.compile(_START + r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+" + _END)
+_SCRATCH = re.compile(
+    _START + r"(?:/[^\s:'\",)\]]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+" + _END
+)
 #: A lane worktree: ``<anything>/.ddflow/worktrees/<item>``.
-_WORKTREE = re.compile(_START + r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+" + _END)
+_WORKTREE = re.compile(_START + r"(?:/[^\s:'\",)\]]*?)?/\.ddflow/worktrees/[^/\s:'\"]+" + _END)
 #: pytest's own temp tree, under a directory named tmp, T (macOS) or temp (a custom root is
 #: named in ``roots``): the user and the run counter differ between runs.
 _PYTEST = re.compile(
     _START
-    + r"(?:/(?:[^\s:'\"]*?/)?(?:tmp|T|temp)|"
+    + r"(?:/(?:[^\s:'\",)\]]*?/)?(?:tmp|T|temp)|"
     + re.escape(TREE)
     + r")/pytest-of-[^/\s]+/pytest-\d+"
     + _END

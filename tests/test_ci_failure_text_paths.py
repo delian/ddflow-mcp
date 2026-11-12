@@ -145,3 +145,11 @@ def test_a_worktree_inside_a_scratch_tree_is_one_root_like_either_alone() -> Non
     scratch = "/tmp/ddflow-base.bbbb/src/a.py"
     lane = "/repo/.ddflow/worktrees/item/src/a.py"
     assert FT.normalise(nested) == FT.normalise(scratch) == FT.normalise(lane) == "<tree>/src/a.py"
+
+
+def test_an_earlier_path_is_not_swallowed_by_a_later_tree_root() -> None:
+    assert FT.normalise("/foo,/tmp/pytest-of-ci/pytest-1/test_x.py:1: boom") == (
+        "/foo,<pytest-tmp>/test_x.py:1: boom"
+    )
+    assert FT.normalise("(/foo)/tmp/ddflow-ci.abc/t.py") == "(/foo)<tree>/t.py"
+    assert FT.normalise("[/a],/repo/.ddflow/worktrees/x/t.py") == "[/a],<tree>/t.py"
