@@ -88,3 +88,22 @@ def test_exclude_leased_drops_a_cap_held_item_whose_files_are_held(repo, monkeyp
     d = next_item(Path(repo), agent="lane2", exclude_leased=True).data
     assert "M.C" not in {r["id"] for r in d["held_by_cap"]}, d["held_by_cap"]
     assert "M.C" in {e["item"] for e in d["excluded_leased"]}, d["excluded_leased"]
+
+
+def test_a_cut_needs_complete_list_still_leaves_the_blocked_list_free_of_merged_rows(
+    repo, monkeypatch
+):
+    _full_cap(repo, monkeypatch)
+    cfg = Path(repo) / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + "\n[output]\nmax_rows = 2\n")
+    from ddflow.api._base import _load
+
+    log, _c, _s = _load(Path(repo), "lane2")
+    for n in range(5):
+        run_cli(
+            repo, "task", "add", f"M.X{n}", "--title", "x", "--phase", "M", "--globs", f"x{n}.py"
+        )
+        log.append("worktree.merged", f"M.X{n}", {"sha": "0123456789abcdef0123"})
+    _, out, _ = run_cli(repo, "next", agent="lane2")
+    assert "Merged, not completed (5)" in out, out
+    assert "but not completed" not in out, out

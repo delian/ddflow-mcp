@@ -100,6 +100,7 @@ def next_(
     )
     p.blocking_deps = with_tags(p.blocking_deps, tags)
     held = _take_cap_held(p, st, ignore_cap)
+    merged = _merged_uncompleted(p, st)
     excluded, held = _offer_ready(p, st, cfg, me, held, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
@@ -108,7 +109,7 @@ def next_(
         "promoted": promoted,
         "ready": _ready_rows(p.ready),
         "held_by_cap": _ready_rows(held),
-        "needs_complete": [i.id for i in _merged_uncompleted(p, st)],
+        "needs_complete": [i.id for i in merged],
         "co_location_hints": co_location_hints(p.ready),
         "excluded_leased": [plain(b) for b in excluded],
         "blocking_deps": _blocking_dep_rows(p.blocking_deps),
@@ -119,7 +120,7 @@ def next_(
         "critical_path": critical_path(st, phase, cfg),
         "finished_phases": p.finished,
         "filter": {"tag": list(tags), "phase": phase},
-        "_render": {"plan": p},
+        "_render": {"plan": p, "own_sections": _own_sections(held, merged)},
     }
     if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
         data["contested"] = contested
@@ -169,6 +170,17 @@ def _take_cap_held(p, st, ignore_cap: bool) -> list:
     p.blocked = [b for b in p.blocked if b.item not in ids]
     p.capped = []
     return []
+
+
+def _own_sections(held: list, merged: list) -> dict[str, Any]:
+    """What the text's own sections hold, as TOTALS taken before the output cap cuts the
+    JSON lists: the ids (a set, which the cap leaves alone) so the blocked list skips every
+    one of them, not just the rows that survived the cut, and the counts the headers print."""
+    return {
+        "ids": frozenset(i.id for i in [*held, *merged]),
+        "held": len(held),
+        "complete": len(merged),
+    }
 
 
 def _merged_uncompleted(p, st) -> list:
