@@ -48,13 +48,16 @@ def next_(
     flat: bool = False,
     exclude_leased: bool = False,
     tags: Sequence[str] = (),
+    ignore_cap: bool = False,
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`).
 
     ``flat`` (False) groups the ready list by ``wave:N`` bucket (bugs and
     dependency-carrying items lead each bucket); ``exclude_leased`` drops ready items
-    whose globs overlap another agent's live lease to ``excluded_leased``. ``tags`` (every
+    whose globs overlap another agent's live lease to ``excluded_leased``. ``ignore_cap`` offers
+    the items only the parallelism cap holds back as ready (a named claim is not capped).
+    ``tags`` (every
     one required, ``wave:N`` included) limits the offer to items carrying them; a tag no
     item carries is a refusal naming the nearest ones, never an empty answer.
     """
@@ -96,13 +99,17 @@ def next_(
         repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only, tags=tags
     )
     p.blocking_deps = with_tags(p.blocking_deps, tags)
-    excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
+    held = _take_cap_held(p, st, ignore_cap)
+    merged = _merged_uncompleted(p, st)
+    excluded, held = _offer_ready(p, st, cfg, me, held, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
         "promoted": promoted,
         "ready": _ready_rows(p.ready),
+        "held_by_cap": _ready_rows(held),
+        "needs_complete": [i.id for i in merged],
         "co_location_hints": co_location_hints(p.ready),
         "excluded_leased": [plain(b) for b in excluded],
         "blocking_deps": _blocking_dep_rows(p.blocking_deps),
@@ -113,16 +120,23 @@ def next_(
         "critical_path": critical_path(st, phase, cfg),
         "finished_phases": p.finished,
         "filter": {"tag": list(tags), "phase": phase},
-        "_render": {"plan": p},
+        "_render": {"plan": p, "own_sections": _own_sections(held, merged)},
     }
     if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
         data["contested"] = contested
     if _actionable(p):
         return O.ok("next", **data)
+    if held:
+        # Operator ruling: unblocked work exists and a named claim grants it, so this is
+        # exit 0, not 2. Exit 2 stays for "nothing ready and nothing held".
+        data["headline"] = f"No free slot under the cap ({p.summary()}).{_held_hint(held)}"
+        return O.ok("next", **data)
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
-    return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
+    return O.nothing(
+        "next", f"{head} ({p.summary()}).{_held_hint(held)}{_wait_hint(p)}{p.close_note()}", **data
+    )
 
 
 def _clean_tags(tags: Sequence[str]) -> tuple[str, ...]:
@@ -141,6 +155,50 @@ def _unknown_tag(st, tags: Sequence[str]) -> str:
             hint = f" Nearest: {', '.join(near)}." if near else ""
             return f"no item carries the tag {tag!r}.{hint}"
     return ""
+
+
+def _take_cap_held(p, st, ignore_cap: bool) -> list:
+    """The items ONLY the parallelism cap (or a reserved slot) keeps out of ``ready``.
+
+    By default they stay in ``p.blocked`` too (the key's rows are unchanged) and are
+    returned for the ``held_by_cap`` section. With ``ignore_cap`` they join ``p.ready`` and
+    leave ``blocked``, and nothing is returned: a named `claim` is never capped (B30f9d383ba),
+    so they are claimable now."""
+    held = [st.items[i] for i in p.capped if i in st.items]
+    if not (ignore_cap and held):
+        return held
+    ids = {i.id for i in held}
+    p.ready = [*p.ready, *held]
+    p.blocked = [b for b in p.blocked if b.item not in ids]
+    p.capped = []
+    return []
+
+
+def _own_sections(held: list, merged: list) -> dict[str, Any]:
+    """What the text's own sections hold, as TOTALS taken before the output cap cuts the
+    JSON lists: the ids (a set, which the cap leaves alone) so the blocked list skips every
+    one of them, not just the rows that survived the cut, and the counts the headers print."""
+    return {
+        "ids": frozenset(i.id for i in [*held, *merged]),
+        "held": len(held),
+        "complete": len(merged),
+    }
+
+
+def _merged_uncompleted(p, st) -> list:
+    """The blocked items that are merged but not completed: they need `ddflow complete`, not
+    work, so they get their own section instead of crowding the blocked list."""
+    return [st.items[b.item] for b in p.blocked if st.items[b.item].merged_sha]
+
+
+def _held_hint(held: list) -> str:
+    """The sentence that keeps 'Nothing actionable' from reading as 'nothing unblocked'."""
+    if not held:
+        return ""
+    return (
+        f" {len(held)} item(s) are ready and held ONLY by the cap (listed below, or "
+        f"`--ignore-cap`): a named `ddflow claim` of one is not capped and grants it now."
+    )
 
 
 def _actionable(p) -> bool:
@@ -162,16 +220,19 @@ def _wants_pr_sync(cfg, st) -> bool:
     )
 
 
-def _offer_ready(p, st, cfg, agent, *, flat: bool, exclude_leased: bool) -> list[Blocked]:
-    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``)
-    and group the rest by wave (``flat`` keeps the flat optimizer order). Returns the
-    dropped items, so `next_` reports them distinctly from ``blocked``."""
+def _offer_ready(p, st, cfg, agent, held, *, flat: bool, exclude_leased: bool):
+    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``,
+    cap-held ones too: their files are as taken) and group the rest by wave (``flat`` keeps
+    the flat optimizer order). Returns ``(dropped, held)``, so `next_` reports the dropped
+    distinctly from ``blocked``."""
     dropped: list[Blocked] = []
     if exclude_leased:
         p.ready, dropped = _drop_leased_overlap(p.ready, st, cfg, agent)
+        held, more = _drop_leased_overlap(held, st, cfg, agent)
+        dropped += more
     if not flat:
         p.ready.sort(key=_group_key(bug_items(st, cfg)))
-    return dropped
+    return dropped, held
 
 
 def _drop_leased_overlap(items, st, cfg, agent):

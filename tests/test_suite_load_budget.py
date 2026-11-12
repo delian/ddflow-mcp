@@ -27,6 +27,11 @@ def cfg(*, ceiling=0.35, cap=0, per_suite=96, ci_slots=1, wait=10.0, poll=0.0):
             cores_per_suite=per_suite,
             load_ceiling_per_core=ceiling,
             load_poll_s=poll,
+            max_wait_factor=3.0,
+            agent_share=1.0,
+            default_cost_s=600.0,
+            cost_runs=20,
+            class_patterns=Config().suites.class_patterns,
         ),
     )
 

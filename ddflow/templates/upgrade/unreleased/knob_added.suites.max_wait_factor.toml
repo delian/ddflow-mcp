@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "suites.max_wait_factor"
+new = '3.0'
+why = "SQ-priority-fair-queue: priority classes, aging, fair share and an estimated wait for the suite queue."
+impact = "additive"
