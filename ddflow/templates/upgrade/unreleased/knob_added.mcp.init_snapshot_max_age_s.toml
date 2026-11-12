@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.init_snapshot_max_age_s"
+new = "300.0"
+why = "Seconds a cached MCP interface snapshot may be served for initialize and server/discover (SU-init-fast-hook); 0 renders every handshake live."
+impact = "additive"

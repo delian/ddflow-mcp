@@ -167,6 +167,11 @@ def _upgrade_line(repo: Path, agent: str) -> str:
     return f"\n\n{notice}" if notice else ""
 
 
+def _upgrade_note(repo: Path, agent: str) -> str:
+    """The upgrade line as one note for a tool result (no leading blank lines)."""
+    return _upgrade_line(repo, agent).strip()
+
+
 def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     """What the client injects into the model's context on connect.
 
@@ -186,12 +191,20 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     """
     # One load of the project for the whole handshake (B-mcp-initialize-folds-log): the queue
     # counts and each upgrade reader share it instead of folding the log once apiece.
+    stable, volatile = _instructions_parts(repo, agent, tier)
+    return stable + volatile
+
+
+def _instructions_parts(repo: Path, agent: str, tier: str) -> tuple[str, str]:
+    """`(stable, upgrade line)`: the text the interface snapshot caches, and the volatile
+    upgrade notice a snapshot-served handshake says on the first tool result instead
+    (SU-init-fast-hook)."""
     with _surf().load_scope():
-        return _instructions_text(repo, agent, tier)
+        return _instructions_text(repo, agent, tier), _upgrade_line(repo, agent)
 
 
 def _instructions_text(repo: Path, agent: str, tier: str) -> str:
-    """`_instructions`, inside its load scope."""
+    """The rendered template, inside the caller's load scope (no upgrade line)."""
     vars_ = _instruction_vars(repo, agent)
     vars_["tool_tier_note"] = tier_note(tier, names=False)
     overrides: dict[str, str] = {}
@@ -212,5 +225,4 @@ def _instructions_text(repo: Path, agent: str, tier: str) -> str:
             "Call `ddflow_brief` for the state of the queue, and `ddflow_prompts` to "
             "inspect the template configuration."
         )
-    # After the try, not in it: a broken template is exactly when the upgrade may be why.
-    return text + _upgrade_line(repo, agent)
+    return text

@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=d608561f2d4e -->
-<details><summary>All 681 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=417b5e8fa216 -->
+<details><summary>All 682 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1250,6 +1250,7 @@ long default is left to `ddflow config --explain`.
 | `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
 | `mcp.stale_check_every_s` | `60.0` |  |
 | `mcp.progress_s` | `20.0` |  |
+| `mcp.init_snapshot_max_age_s` | `300.0` |  |
 | `memory.max_chars` | `280` |  |
 | `memory.brief_items` | `12` |  |
 | `merge.require_gates` | `"warn"` | `warn` \| `refuse` |
