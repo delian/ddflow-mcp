@@ -11,7 +11,7 @@ $ ddflow config --set gate.unit_tests.command "python -m pytest -q"
 $ ddflow phase add P1 --title "Billing" --globs "src/billing/**"
 $ ddflow task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.py"
 
-$ ddflow next                                  # exit 2 = nothing actionable
+$ ddflow next                                  # exit 2 = nothing ready or held
 Ready (1 ready, 0 running, 0 blocked):
   P1.T1  Tax rules
 
