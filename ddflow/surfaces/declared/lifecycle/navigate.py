@@ -28,13 +28,29 @@ from ._shared import (
 )
 
 
+def _tags(a) -> tuple[str, ...]:
+    """The `--tag` values plus `--wave N` as the ``wave:N`` tag (NV-next-tag-filter)."""
+    tags = [str(t) for t in (a.get("tag") or ())]
+    wave = a.get("wave")
+    if wave is not None and wave != "":
+        tags.append(f"wave:{int(wave)}")
+    return tuple(tags)
+
+
 def _next(repo, a, agent):
     """`next`, or with `--lane` the pull answer for that lane."""
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     phase_only = bool(a.get("phase_only", False))
+    tags = _tags(a)
     if lane := a.get("lane", ""):
         out = _api().next_lane(
-            repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
+            repo,
+            lane=lane,
+            kind=kind,
+            phase=phase,
+            phase_only=phase_only,
+            agent=agent,
+            tags=tags,
         )
         token = _lane_token(
             lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
@@ -42,7 +58,9 @@ def _next(repo, a, agent):
         return _cap(repo, out, token, a)  # its footer names the lane call
     return _cap(
         repo,
-        _api().next_item(repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only),
+        _api().next_item(
+            repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only, tags=tags
+        ),
         "next",
         a,
     )
@@ -92,6 +110,21 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="with --phase: the phase's own ready items only (skip its ready "
                 "blocking-dependencies)",
                 default=False,
+            ),
+            Param(
+                "tag",
+                repeat=True,
+                help="Only items with this tag, e.g. wave:3; repeat: all must match.",
+                cli_help="only items carrying this tag (repeatable: all must match); "
+                "exit 1 if no item carries it",
+                default=None,
+            ),
+            Param(
+                "wave",
+                type="integer",
+                help="Shorthand for tag wave:N.",
+                cli_help="shorthand for --tag wave:N",
+                default=None,
             ),
             Param(
                 "kind",

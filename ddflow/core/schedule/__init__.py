@@ -73,6 +73,7 @@ from ._parallel import _words as _words
 from ._parallel import parallel_line as parallel_line
 from ._plan import _cut_ready as _cut_ready
 from ._plan import plan as plan
+from ._plan import with_tags as with_tags
 from ._readiness import Blocked as Blocked
 from ._readiness import Plan as Plan
 from ._readiness import Unpickable as Unpickable
