@@ -558,6 +558,45 @@ def test_an_agent_approve_is_not_accepted_by_policy_for_a_person_only_partial(re
     assert answered == []
 
 
+def test_retry_rule_never_answers_a_person_only_partial_predicate():
+    """B1bc4733e43: the retry-threshold rule (`auto-after-retries`) spans `approve.partial` and
+    `complete.force` but must step aside, through `gate_accept.person_only`, when the target
+    names a measured baseline-red partial only a person accepts. A gate `gate run` auto-accepted
+    or a plain partial is not person-only and stays answerable."""
+    rec = _person_only_record()
+    po = rec({"accepted": False, "why": "item reaches tests/t.py"})
+    auto = rec({"accepted": True, "ids": ["tests/t.py::test_x"]})
+    assert PO.person_only_target(po, "approve.partial", "unit_tests") is True
+    assert PO.person_only_target(po, "complete.force", "ci,unit_tests") is True
+    assert PO.person_only_target(auto, "approve.partial", "unit_tests") is False
+    assert PO.person_only_target(po, "claim.force", "unit_tests") is False
+
+
+def test_an_agent_filing_approve_twice_is_not_auto_approved_for_a_person_only_partial(
+    repo, monkeypatch
+):
+    """B1bc4733e43 end to end: with `auto_approve_after_retries = 2` and NO window rule, an agent
+    shell (CLAUDECODE=1, no --agent) that runs `approve T1 unit_tests` over a person-only
+    baseline-red partial stays refused however many times it files; `policy:auto-after-retries`
+    never answers it."""
+    _person_only_baseline_red(repo)
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(
+        cfg_path.read_text().replace(
+            'policy = ["complete_unavailable"]', "policy = []\nauto_approve_after_retries = 2"
+        )
+    )
+    monkeypatch.setenv("CLAUDECODE", "1")
+    for _ in range(4):
+        code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "agent retries")
+        assert code != 0, (out, err)
+        assert "ACCEPTED" not in out + err
+    answered = [
+        r for r in asks_of(_state(repo)).values() if r["answered_by"] == "policy:auto-after-retries"
+    ]
+    assert answered == []
+
+
 def test_a_person_accepted_baseline_red_partial_is_not_refused_for_the_agent_complete(repo):
     """B-complete-self-approves-over-person-only-partial, round-2: once a PERSON accepts the
     measured baseline-red partial (`ddflow approve T1 unit_tests`), the verdict settles that
