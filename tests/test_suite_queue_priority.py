@@ -29,7 +29,11 @@ def names(waiting, **kw):
 
 
 def test_a_red_main_fix_overtakes_older_item_runs():
-    queue = [W("item1", cost=600, waited=300), W("item2", cost=600, waited=200), W("fix", "red_main", cost=600, waited=1)]
+    queue = [
+        W("item1", cost=600, waited=300),
+        W("item2", cost=600, waited=200),
+        W("fix", "red_main", cost=600, waited=1),
+    ]
     assert names(queue)[0] == "fix"
 
 
@@ -79,10 +83,14 @@ def test_a_lone_agent_is_never_held_back_by_its_own_share():
 
 def test_the_estimate_counts_the_cost_ahead_over_the_slots():
     waiting = [W("a", cost=600), W("b", cost=300), W("me", cost=60)]
-    ahead = SQ.estimate(waiting, "me", slots=1, running_left_s=0.0)
+    ahead = SQ.estimate(waiting, "me", free_in_s=[0.0])
     assert ahead == {"position": 3, "ahead": 2, "wait_s": 900.0, "predicted_s": 60.0}
-    two = SQ.estimate(waiting, "me", slots=2, running_left_s=0.0)
-    assert two["wait_s"] == 450.0
+    two = SQ.estimate(waiting, "me", free_in_s=[0.0, 0.0])
+    assert two["wait_s"] == 300.0  # the shorter of the two ahead frees a slot first
+    busy = SQ.estimate(waiting, "me", free_in_s=[120.0])
+    assert busy["wait_s"] == 1020.0  # the running suite has 120 s left, then both ahead
+    unknown = [W("a", cost=0.0), W("me", cost=0.0)]
+    assert SQ.estimate(unknown, "me", free_in_s=[0.0], default_cost_s=60.0)["wait_s"] == 60.0
 
 
 def test_the_estimate_is_said_in_the_busy_line():
@@ -189,3 +197,25 @@ def test_the_new_knobs_exist():
     s = Config().suites
     assert s.max_wait_factor > 0 and 0 < s.agent_share <= 1 and s.default_cost_s > 0
     assert s.cost_runs >= 1 and "red_main" in s.class_patterns
+
+
+def test_an_overdue_run_is_not_deferred_by_the_fair_share():
+    a1 = W("A1", cost=10, agent="a", waited=100)
+    a2 = W("A2", cost=10, agent="a", waited=90)
+    others = [W(f"o{i}", cost=1000, agent=f"o{i}", waited=0) for i in range(3)]
+    got = names([a1, a2, *others], factor=1.0, share=0.2, default=10.0)
+    assert got[:2] == ["A1", "A2"]
+
+
+def test_a_malformed_or_costless_holder_note_does_not_break_the_estimate(tmp_path: Path):
+    import json as _json
+
+    slots = tmp_path
+    (slots / "suites.0.lock").touch()
+    from ddflow.infra import fsio
+
+    with fsio.file_lock(slots / "suites.0.lock", 0):
+        for body in ("{}", '{"cost_s": 100}', "not json", _json.dumps({"at": time.time() - 1})):
+            (slots / "suites.0.holder").write_text(body)
+            line = [W("me", cost=60.0)]
+            assert "estimated wait" in SL._eta(line, "me", 1, slots, 600.0)

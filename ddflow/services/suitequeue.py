@@ -68,8 +68,11 @@ def order(
     def cost(w: Waiting) -> float:
         return w.cost_s if w.cost_s > 0 else default_cost_s
 
+    def overdue(w: Waiting) -> bool:
+        return w.waited_s >= max_wait_factor * max(cost(w), 1.0)
+
     def key(w: Waiting) -> tuple:
-        if w.waited_s >= max_wait_factor * max(cost(w), 1.0):  # overdue: first, oldest first
+        if overdue(w):  # first, oldest first
             return (0, 0, 0.0, -w.waited_s)
         return (1, _rank(w.klass), cost(w), -w.waited_s)
 
@@ -81,20 +84,33 @@ def order(
     kept: list[Waiting] = []
     deferred: list[Waiting] = []
     for w in ranked:
+        if overdue(w):  # the aging bound outranks the share: an overdue run is never deferred
+            kept.append(w)
+            continue
         seen[w.agent] = seen.get(w.agent, 0) + 1
         (kept if seen[w.agent] <= cap else deferred).append(w)
     return kept + deferred
 
 
-def estimate(ordered: list[Waiting], name: str, *, slots: int, running_left_s: float) -> dict:
-    """Where ``name`` stands: its place, the tickets ahead, the seconds it should wait (the cost
-    ahead spread over the slots, plus what the running suite has left) and its own predicted run."""
+def estimate(
+    ordered: list[Waiting], name: str, *, free_in_s: list[float], default_cost_s: float = 600.0
+) -> dict:
+    """Where ``name`` stands: its place, the tickets ahead, the seconds it should wait and its own
+    predicted run. ``free_in_s`` is when each slot frees (0 for an idle one, the running suite's
+    remaining seconds for a held one); the tickets ahead take the earliest-free slot in turn, and
+    ``name`` waits for the earliest that is left. An unknown cost counts as ``default_cost_s``."""
     names = [w.name for w in ordered]
     at = names.index(name) if name in names else len(names)
-    ahead = ordered[:at]
-    mine = ordered[at].cost_s if at < len(ordered) else 0.0
-    wait = sum(w.cost_s for w in ahead) / max(1, slots) + max(0.0, running_left_s)
-    return {"position": at + 1, "ahead": len(ahead), "wait_s": wait, "predicted_s": mine}
+
+    def cost(w: Waiting) -> float:
+        return w.cost_s if w.cost_s > 0 else default_cost_s
+
+    free = sorted(max(0.0, t) for t in free_in_s) or [0.0]
+    for w in ordered[:at]:
+        free.sort()
+        free[0] += cost(w)
+    mine = cost(ordered[at]) if at < len(ordered) else 0.0
+    return {"position": at + 1, "ahead": at, "wait_s": min(free), "predicted_s": mine}
 
 
 def _minutes(seconds: float) -> str:

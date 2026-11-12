@@ -351,18 +351,35 @@ def _ordered(cfg: Any, queue: Path, names: list[str]) -> list[SQ.Waiting]:
     )
 
 
-def _eta(line: list[SQ.Waiting], name: str, slots_n: int, directory: Path) -> str:
+def _default_cost(cfg: Any) -> float:
+    return float(cfg.suites.default_cost_s) if hasattr(cfg, "suites") else 600.0
+
+
+def _eta(
+    line: list[SQ.Waiting], name: str, slots_n: int, directory: Path, cfg_default: float = 600.0
+) -> str:
     """``estimated wait 14m (3 ahead, predicted 31m)`` for ``name``'s place in ``line``."""
     if not any(w.name == name for w in line):
         return ""
     now = CLOCK.wall()
-    left = []
+    free = [0.0] * slots_n  # an idle slot is free now
+    busy = []
     for i in _slot_indexes(directory, slots_n):
-        with contextlib.suppress(OSError, ValueError, TypeError):
-            if _held(directory, i):
-                held = json.loads(_note(directory, i).read_text())
-                left.append(max(0.0, float(held.get("cost_s") or 0.0) - (now - float(held["at"]))))
-    est = SQ.estimate(line, name, slots=slots_n, running_left_s=min(left, default=0.0))
+        if not _held(directory, i):
+            continue
+        left = float(cfg_default)
+        with contextlib.suppress(OSError, ValueError, TypeError, KeyError):
+            held = json.loads(_note(directory, i).read_text())
+            if held.get("cost_s"):  # no predicted cost: the default, never "about to finish"
+                left = float(held["cost_s"])
+            left = max(0.0, left - (now - float(held["at"])))
+        busy.append(left)
+    free = (
+        (busy + free)[: max(slots_n, len(busy))]
+        if len(busy) >= slots_n
+        else [*busy, *free[len(busy) :]]
+    )
+    est = SQ.estimate(line, name, free_in_s=free, default_cost_s=cfg_default)
     return SQ.say_estimate(est)
 
 
@@ -464,7 +481,7 @@ def hold(
                     CLOCK.monotonic() - start,
                     position,
                     reason,
-                    _eta(line, name, slots_n, directory),
+                    _eta(line, name, slots_n, directory, _default_cost(cfg)),
                 )
                 say(str(busy))
             # The default wait limit counts time IN LINE, not progress
@@ -482,15 +499,17 @@ def hold(
                     CLOCK.monotonic() - start,
                     position,
                     reason,
-                    _eta(line, name, slots_n, directory),
+                    _eta(line, name, slots_n, directory, _default_cost(cfg)),
                 )
             time.sleep(QUEUE_POLL_S)
             _beat(ticket.path)
         # Placed: hand the place on (the ticket goes with this block), then hold.
         note = _note(directory, slot.index)
         now = CLOCK.wall()
-        body = {"holder": holder, "pid": os.getpid(), "at": now, "cost_s": (mine or ("", 0.0))[1],
+        body = {"holder": holder, "pid": os.getpid(), "at": now,
                 "at_iso": datetime.fromtimestamp(now).astimezone().strftime("%H:%M:%S")}  # fmt: skip
+        if mine is not None:  # without a predicted cost the note says none (unknown, not zero)
+            body["cost_s"] = mine[1]
         with contextlib.suppress(OSError):
             ticket.path.unlink()  # the next in line may try the slots now
         fsio.replace_text(note, json.dumps(body), fsync=False)
