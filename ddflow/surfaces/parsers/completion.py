@@ -35,7 +35,7 @@ def _do_install(a: argparse.Namespace) -> int:
     text = _install.install_text(sh, current)
     if not a.yes:
         print(f"would append one guarded block to {path}:")
-        print(text[len(current) :].rstrip() or "(already installed)")
+        print(text[len(current) :] or "(already installed)")
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     if text == current:

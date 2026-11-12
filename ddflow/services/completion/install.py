@@ -35,11 +35,15 @@ def _activate_line(shell: str) -> str:
 
 
 def install_text(shell: str, current: str) -> str:
-    """``current`` plus one activation block, appended only when absent (idempotent)."""
-    if _BEGIN in current:
+    """``current`` plus one activation block, appended only when the activation line is
+    absent (idempotent). Append-only: trailing newlines stay exactly as they were."""
+    line = _activate_line(shell)
+    if line in current:
         return current
-    block = f"{_BEGIN}\n{_activate_line(shell)}\n{_END}\n"
-    return (current.rstrip("\n") + "\n" if current else "") + block
+    block = f"{_BEGIN}\n{line}\n{_END}\n"
+    if not current or current.endswith("\n"):
+        return current + block
+    return current + "\n" + block
 
 
 def uninstall_text(shell: str, current: str) -> str:
