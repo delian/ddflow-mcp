@@ -86,7 +86,7 @@ def tokens_list(repo: Path, args: dict, agent: str = "") -> O.Outcome:
         f"{r['name']}  {r['role']}  {r['state']}  until {r['expires_at']}  ({r['id']}, by {r['by']})"
         for r in rows
     )
-    if notes := AU.disagreements(repo, rows):
+    if notes := AU.disagreements(repo, AU.rows(st, everything=True)):
         text = f"{text}\n" if text else text
         text += "\n".join(notes)
     return O.ok("tokens.list", tokens=rows, text=text or "no tokens")

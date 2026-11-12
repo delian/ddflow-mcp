@@ -476,35 +476,33 @@ def disagreements(repo: Path | str, logged: list[dict[str, Any]]) -> list[str]:
     """Where `tokens list` (the log) and `verify` (the store) part company. `redeem` and
     `revoke` write the store first and the log second, so a crash between the two leaves one
     side ahead and a list derived from the log alone would lie. One note for each, said next
-    to the rows; the list itself stays "... is derived from the log", the notes are how it is
+    to the rows; the list itself stays "... is derived from the log", and these are how it is
     reconciled against what actually verifies.
 
-    A store `_read` refuses (unreadable, unsafe permissions) is not this: every token verifies
-    against nothing then, and `_read` already names it loudly; there is no ordering divergence
-    to reconcile."""
+    ``logged`` is every row the log knows (all states), so "has no log record" means none, not
+    "none still active". A store `_read` refuses (unreadable, unsafe permissions) is not this:
+    `verify` refuses every token then and `_read` already names it loudly; there is no
+    ordering divergence to reconcile."""
     try:
         stored = _read(_store(repo))["tokens"]
     except AuthRefused:
         return []
-    now = CLOCK.wall()
     by_id = {r["id"]: r for r in logged}
     notes: list[str] = []
-    for token_id, row in sorted(stored.items()):
-        if token_id in by_id:
-            continue
-        if not isinstance(row, dict) or row.get("expires", 0) <= now:
-            continue  # a row verify would refuse, or already expired in the store too
+    for token_id in sorted(set(stored) - set(by_id)):
+        row = stored[token_id]
+        if not isinstance(row, dict):
+            continue  # a row verify would refuse; nothing this can say
         notes.append(
-            f"unrecorded: token {token_id} of {row.get('name')} is live in the store but has "
-            f"no log record (a crash between the store and the log); `tokens revoke "
+            f"unrecorded: token {token_id} of {row.get('name')} is in the store but has no "
+            f"log record (a crash between the store and the log); `tokens revoke "
             f"{row.get('name')}` ends it"
         )
-    for token_id, row in by_id.items():
-        if token_id in stored:
+    for token_id, row in sorted(by_id.items()):
+        if token_id in stored or row["state"] != ACTIVE:
             continue
-        if row["state"] == ACTIVE:
-            notes.append(
-                f"unrecorded: token {token_id} of {row['name']} is ended in the store but the "
-                "log still lists it active; it will not verify"
-            )
+        notes.append(
+            f"unrecorded: token {token_id} of {row['name']} is ended in the store but the "
+            "log still lists it active; it will not verify"
+        )
     return notes
