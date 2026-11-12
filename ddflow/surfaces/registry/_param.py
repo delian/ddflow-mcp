@@ -88,6 +88,14 @@ class Param:
     replacement: str = ""
     #: A one-letter CLI spelling of the flag (``-m`` for ``--message``), CLI only.
     short: str = ""
+    #: The shell-completion value kind of this argument (`id:<record kind>` for record ids,
+    #: ``phase``/``gate``/``agent``/``state``/``kind``, ``path``/``dir``, ``enum`` from
+    #: ``choices``, or ``none`` for free text). Unset: inferred from the name, the choices
+    #: and the type by `services.completion.kinds.infer` (`ddflow/services/completion/kinds.py`).
+    #: Short record-kind spellings are normalized (``complete="phase"`` -> ``id:phase``) and
+    #: attached onto the argparse action, which the completion engine reads when it builds
+    #: the argument's completers.
+    complete: str = ""
 
     def __post_init__(self) -> None:
         if self.positional and any(a.startswith("-") for a in self.aliases):
@@ -222,6 +230,14 @@ class Param:
                 groups[self.exclusive] = parser.add_mutually_exclusive_group()
             target = groups[self.exclusive]
         action = target.add_argument(*args, **kwargs)
+        # The declared completion value kind, normalized to its canonical spelling
+        # (`complete="phase"` -> `id:phase`), attached onto the action for the completion
+        # engine to read. Empty: inferred from the name/choices/type at walk time, and never
+        # attached, so a hand-written `add_argument` cannot collide with it.
+        if self.complete:
+            from ...services.completion import kinds
+
+            action.complete = kinds.normalize(self.complete)  # type: ignore[attr-defined]
         # An old flag is the SAME action under another option string: parsing finds it,
         # `--help` (which prints the action's own strings) does not.
         for option, alias in self.flag_aliases().items():

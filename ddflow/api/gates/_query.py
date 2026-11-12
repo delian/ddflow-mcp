@@ -159,7 +159,12 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         )
     try:
         s = G.status(
-            st, cfg, item, gates, diff=lambda: changed_paths(repo, it), stale_notes=stale_notes,
+            st,
+            cfg,
+            item,
+            gates,
+            diff=lambda: changed_paths(repo, it),
+            stale_notes=stale_notes,
             repo=repo,
         )
     except KeyError:

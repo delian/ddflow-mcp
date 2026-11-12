@@ -48,20 +48,29 @@ def at(tree: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any] | None:
 
 
 def _node(
-    parser: argparse.ArgumentParser, help_: str, inherited: tuple[argparse.Action, ...]
+    parser: argparse.ArgumentParser,
+    help_: str,
+    inherited: tuple[argparse.Action, ...],
+    record_kind: str | None = None,
 ) -> dict[str, Any]:
+    from . import kinds  # local, so tree stays import-light until a tree is walked
+
     own = tuple(_visible_options(parser, inherited))
     subs = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
     commands: dict[str, Any] = {}
     seen = (*inherited, *own)
+    id_words = kinds.id_kinds()
     for sub in subs:
         helps = {c.dest: c.help or "" for c in sub._choices_actions}
         for name, child in sub.choices.items():  # iteration: the aliases are not here
-            commands[name] = _node(child, _plain(helps.get(name, "")), seen)
+            # the record kind a child path names is its first record-kind word (``bug show``
+            # narrows its ``id`` positional to ``id:bug``); deeper words keep the parent's
+            rk = name if record_kind is None and name in id_words else record_kind
+            commands[name] = _node(child, _plain(helps.get(name, "")), seen, rk)
     return {
         "help": _plain(help_),
         "options": [_option(a) for a in own],
-        "positionals": [_positional(a) for a in parser._actions if _is_positional(a)],
+        "positionals": [_positional(a, record_kind) for a in parser._actions if _is_positional(a)],
         "exclusive": _groups(parser),
         "commands": commands,
     }
@@ -94,16 +103,34 @@ def _arity(a: argparse.Action) -> str:
     return "1" if a.nargs is None else str(a.nargs)
 
 
-def _value(a: argparse.Action) -> dict[str, Any]:
+def _value(a: argparse.Action, record_kind: str | None = None) -> dict[str, Any]:
     t = getattr(a, "type", None)
     meta = a.metavar
     return {
         "arity": _arity(a),
         "choices": None if a.choices is None else [str(c) for c in a.choices],
+        "kind": _complete(a, record_kind),
         "type": None if t is None else getattr(t, "__name__", type(t).__name__),
         "metavar": meta if meta is None or isinstance(meta, str) else list(meta),
         "dest": a.dest,
     }
+
+
+def _complete(a: argparse.Action, record_kind: str | None = None) -> str:
+    """The value kind declared on the action (`Param.complete`), else inferred from its own
+    name / choices / metavar by `kinds.infer` (the engine reads this one string per
+    argument; free text is ``"none"``)."""
+    from . import kinds  # local, so tree stays import-light until a tree is walked
+
+    metavar = a.metavar if isinstance(a.metavar, str) else None
+    declared = getattr(a, "complete", "") or ""
+    return declared or kinds.infer(
+        a.dest or "",
+        choices=a.choices,
+        metavar=metavar,
+        positional=not a.option_strings,
+        record_kind=record_kind,
+    )
 
 
 def _repeats(a: argparse.Action) -> bool:
@@ -132,8 +159,8 @@ def _option(a: argparse.Action) -> dict[str, Any]:
     }
 
 
-def _positional(a: argparse.Action) -> dict[str, Any]:
-    return {"help": _plain(a.help), **_value(a)}
+def _positional(a: argparse.Action, record_kind: str | None = None) -> dict[str, Any]:
+    return {"help": _plain(a.help), **_value(a, record_kind)}
 
 
 def _groups(parser: argparse.ArgumentParser) -> list[list[str]]:
