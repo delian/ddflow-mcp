@@ -193,6 +193,7 @@ current_line = "current"
 port_strategy = "forward-merge"
 environments = []
 auto_promote = []
+pr_body_template = ""
 version_files = {}
 
 [gates]

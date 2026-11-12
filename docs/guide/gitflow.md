@@ -82,6 +82,13 @@ recorded (`pr status` lists it under `back_merges`) and every later `pr sync` re
 forge until it merges ("back_merge: merged into develop") or is closed without merging,
 which is refused loudly: develop would not have a fix production already ships.
 
+**Pull-request description.** With `integration = "pr"` the request body is rendered from a
+template (`[flow].pr_body_template`, a path; empty means `.ddflow/prompts/pr_body.md`, else the
+shipped one -- `ddflow prompts eject pr_body` copies it). It lists every gate with its outcome,
+review rounds and triage counts, the bugs fixed with their regression tests and the changelog
+entry, all from recorded data, and the finished text is secret-redacted before it goes to the
+forge.
+
 **Version files.** `[flow.version_files]` maps a path to a regex with exactly one capture
 group, the version text — `'pyproject.toml' = '^version = "([^"]*)"$'` — and `version cut`
 replaces that group with the new version (no tag prefix) and commits it as `chore: bump
