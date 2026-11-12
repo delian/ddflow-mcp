@@ -22,6 +22,8 @@ from .approvals.canon import Canon
 VERB = "merge.force"
 #: The merge gate is the one this very merge records, so it is never "unmet" by the merge.
 _SELF = "merge"
+#: said when the gate run recorded no reason of its own (a measurement made before the automatic acceptance)
+NO_REASON = "[gates].baseline_red_auto is off or the measurement predates it"
 
 
 @dataclass
@@ -80,7 +82,7 @@ def why_not_accepted(it: Any, gates: Any) -> dict[str, str]:
     for g in gates:
         rec = it.gates.get(g)
         base = LB.full((rec.evidence or {}) if rec else {}).get("baseline") or {}
-        out[g] = str((base.get("auto") or {}).get("why") or "")
+        out[g] = str((base.get("auto") or {}).get("why") or NO_REASON)
     return out
 
 
