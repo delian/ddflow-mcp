@@ -124,3 +124,13 @@ stored `failed` is served only with `[resultcache].reuse_failed` (a rerun is how
 from a failure); an entry that does not read back whole is a miss. The cache is per project under
 `.ddflow/local/resultcache`, bounded by `[resultcache].keep_days` and `max_mb`;
 `[resultcache].enabled = false` turns it off.
+
+## A full pass survives main moving when the move reaches no test
+
+A phase closes on a full-suite pass newer than its last merge. When main moved since the pass (it
+records the commit it ran on), `ddflow complete` asks `revalidate.assess`: the paths that differ,
+minus `.ddflow/` and documents, are looked up in the test closure. None reached: the pass still
+counts, recorded as a pass with the note `unchanged by delta`. Some reached with no hub: only those
+tests are needed, recorded as `full on A plus selected on delta B` (partial when the selection
+fell back, never a silent pass). A hub or test infrastructure in the delta, or git or the selector
+unable to say: the full run is needed.
