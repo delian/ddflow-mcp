@@ -31,7 +31,10 @@ def _cell(text: object, cell_max: int) -> str:
     flat = " ".join(str(text or "").split())
     out = flat.replace("\\", "\\\\").replace("|", "\\|")
     if len(out) > cell_max:
-        out = out[: cell_max - 1] + "\u2026"
+        cut = out[: cell_max - 1]
+        if (len(cut) - len(cut.rstrip("\\"))) % 2:  # never end on a dangling escape
+            cut = cut[:-1]
+        out = cut + "\u2026"
     return out
 
 

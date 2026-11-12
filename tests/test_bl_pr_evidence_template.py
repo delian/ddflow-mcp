@@ -177,4 +177,11 @@ def test_the_smallest_bounds_are_still_bounds(cell_max):
     from ddflow.services.flow.pr_template import _cell
 
     assert len(_cell("hello world", cell_max)) == cell_max
+    assert len(_cell("a|b|c|d", cell_max)) <= cell_max
     assert _cell("hi", 5) == "hi"
+
+
+def test_a_cut_never_ends_on_a_dangling_escape():
+    from ddflow.services.flow.pr_template import _cell
+
+    assert _cell("a|b", 3) == "a\u2026"  # `a\|` cut after the backslash would dangle
