@@ -100,11 +100,7 @@ def next_(
     )
     p.blocking_deps = with_tags(p.blocking_deps, tags)
     held = _take_cap_held(p, st, ignore_cap)
-    excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
-    if exclude_leased and held:
-        # A cap-held item whose files another agent holds is not claimable either.
-        held, more = _drop_leased_overlap(held, st, cfg, me)
-        excluded += more
+    excluded, held = _offer_ready(p, st, cfg, me, held, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
@@ -210,16 +206,19 @@ def _wants_pr_sync(cfg, st) -> bool:
     )
 
 
-def _offer_ready(p, st, cfg, agent, *, flat: bool, exclude_leased: bool) -> list[Blocked]:
-    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``)
-    and group the rest by wave (``flat`` keeps the flat optimizer order). Returns the
-    dropped items, so `next_` reports them distinctly from ``blocked``."""
+def _offer_ready(p, st, cfg, agent, held, *, flat: bool, exclude_leased: bool):
+    """Shape the plan's offers for the caller: drop leased-overlap items (``exclude_leased``,
+    cap-held ones too: their files are as taken) and group the rest by wave (``flat`` keeps
+    the flat optimizer order). Returns ``(dropped, held)``, so `next_` reports the dropped
+    distinctly from ``blocked``."""
     dropped: list[Blocked] = []
     if exclude_leased:
         p.ready, dropped = _drop_leased_overlap(p.ready, st, cfg, agent)
+        held, more = _drop_leased_overlap(held, st, cfg, agent)
+        dropped += more
     if not flat:
         p.ready.sort(key=_group_key(bug_items(st, cfg)))
-    return dropped
+    return dropped, held
 
 
 def _drop_leased_overlap(items, st, cfg, agent):
