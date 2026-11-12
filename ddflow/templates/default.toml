@@ -717,6 +717,12 @@ burn_rate_exhaust_s = 3600.0
 stale_index_days = 7.0
 index_touch_s = 86400.0
 
+[suites]
+max_concurrent = 0
+cores_per_suite = 96
+load_ceiling_per_core = 0.35
+load_poll_s = 2.0
+
 [swarm]
 w_critical = 3.0
 w_fit = 2.0
