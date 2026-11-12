@@ -49,6 +49,7 @@ class MergeRow:
     held: int = 0  #: of those, the ones the selection holds (all of them when `full`)
     blind: list[str] = field(default_factory=list)  #: missed, subprocess-driven (not routable)
     missed: list[str] = field(default_factory=list)  #: missed, with an import or name route
+    hub: bool = False  #: the whole-suite answer is a changed hub (not test infrastructure)
     narrow_selected: int | None = None  #: at a hub: tests a hub-unbounded selection runs
     narrow_held: int | None = None  #: at a hub: of the co-changed tests, how many that holds
 
@@ -94,13 +95,14 @@ class Probe:
         return sum(len(r.blind) for r in self.rows)
 
     def hub_rows(self) -> list[MergeRow]:
-        return [r for r in self.rows if r.full and r.narrow_selected is not None]
+        return [r for r in self.rows if r.hub and r.narrow_selected is not None]
 
     def hub_narrow_share(self) -> float:
         hubs = self.hub_rows()
         if not hubs:
             return 0.0
-        return statistics.median(r.narrow_selected / r.suite for r in hubs if r.suite)
+        shares = [r.narrow_selected / r.suite for r in hubs if r.suite]
+        return statistics.median(shares) if shares else 0.0
 
     def hub_narrow_recall(self) -> float:
         hubs = [r for r in self.hub_rows() if r.co]
@@ -177,9 +179,12 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
             unrouted=not full and not got, co=len(co),
         )  # fmt: skip
         _score(raw, row, co, got, src)
-        if full:  # what a choice narrower than the whole suite would have held at the hub
+        row.hub = full and sel.full.startswith("a hub module changed")
+        if row.hub:  # what a choice narrower than the whole suite would have held at the hub
             narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
             assert narrow is not None
+            if narrow.full:  # still the whole suite for another reason: no narrower choice exists
+                return row
             held = {t.path for t in narrow.tests}
             row.narrow_selected = len(held)
             row.narrow_held = sum(1 for c in co if c in held)
@@ -202,7 +207,21 @@ def probe(root: Path, shas: list[str], limits: dict, workers: int = 4) -> Probe:
 
 
 def _g(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    # hermetic: the user's global git config (signing, hooks) must not reach the fixture
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+    )
 
 
 def _write(repo: Path, rel: str, text: str) -> None:
@@ -331,3 +350,17 @@ if __name__ == "__main__":
     for r in result.rows:
         if r.missed or r.blind:
             print(r.sha, "missed", r.missed, "blind", r.blind)
+
+
+def test_a_hub_share_with_an_empty_suite_does_not_crash():
+    row = MergeRow(
+        sha="a", source=1, suite=0, selected=0, full=True, unrouted=False,
+        hub=True, narrow_selected=0, narrow_held=0,
+    )  # fmt: skip
+    assert "hub narrowed share 0.000" in Probe([row]).report()
+
+
+def test_a_non_hub_whole_suite_answer_is_not_a_hub_row():
+    row = MergeRow(sha="a", source=1, suite=5, selected=5, full=True, unrouted=False)
+    p = Probe([row])
+    assert p.fallback_rate == 1.0 and p.hub_rows() == []
