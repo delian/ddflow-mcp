@@ -1,0 +1,2 @@
+{"agent":"v2-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e8da46bdb6718b6cced3d16ff","kind":"ddflow.seen","lamport":180163,"schema":1,"subject":"ddflow","ts":"2026-11-12T05:02:21.256298Z"}
+{"agent":"v2-kilo","data":{"path":".ddflow/worktrees/fix-Bci-gitleaks-over-the-pushed-commi-858efc87b3-eaaba9f"},"id":"ed1967c5af278ad25db39d64f","kind":"worktree.removed","lamport":180164,"schema":1,"subject":"fix-Bci-gitleaks-over-the-pushed-commi-858efc87b3-eaaba9f","ts":"2026-11-12T05:02:21.389654Z"}
