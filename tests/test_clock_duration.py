@@ -145,7 +145,8 @@ def test_a_huge_alias_is_reported_not_raised(tmp_path):
 def test_the_cap_notice_is_only_given_to_a_caller_that_will_wait(repo):
     seen: list[str] = []
     out = W.wait(repo, item="", timeout_s=10**6, poll_s=1, on_progress=seen.append)
-    assert out.exit == 2  # nothing to wait for: it answers at once
+    # nothing to wait for: refused at once as hopeless (no other agent holds anything)
+    assert out.exit == 3 and out.data["waitable"] is False, out.data
     assert not any("ask again" in m for m in seen), seen
 
 
