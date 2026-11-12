@@ -63,6 +63,7 @@ class MergeRow:
 @dataclass
 class Probe:
     rows: list[MergeRow]
+    skipped: int = 0  #: merges that changed no source file (nothing to select), kept visible
     errors: list[str] = field(default_factory=list)  #: merges the selector raised on, loudly kept
 
     @property
@@ -125,7 +126,7 @@ class Probe:
             f"unrouted rate {self.unrouted_rate:.3f}; "
             f"hub narrowed share {self.hub_narrow_share():.3f} at recall "
             f"{self.hub_narrow_recall():.3f}; subprocess-blind misses {self.blind_total}; "
-            f"errors {len(self.errors)}"
+            f"no-source merges skipped {self.skipped}; errors {len(self.errors)}"
         )
 
 
@@ -222,7 +223,9 @@ def probe(root: Path, shas: list[str], limits: dict, workers: int = 4) -> Probe:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             rows = list(pool.map(_safe, jobs))
     return Probe(
-        [r for r in rows if isinstance(r, MergeRow)], [r for r in rows if isinstance(r, str)]
+        [r for r in rows if isinstance(r, MergeRow)],
+        sum(r is None for r in rows),
+        [r for r in rows if isinstance(r, str)],
     )
 
 
@@ -422,3 +425,14 @@ def test_a_merge_the_selector_raises_on_is_reported_not_fatal(tmp_path):
     repo, shas = make_repo(tmp_path)
     p = probe(repo, [shas["leaf"], "0" * 40], LIMITS, workers=1)
     assert len(p.rows) == 1 and len(p.errors) == 1 and "errors 1" in p.report()
+
+
+def test_a_merge_with_no_source_change_is_counted_as_skipped(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(
+        repo,
+        [shas["leaf"], _merge(repo, "docsonly", {"tests/test_leaf.py": "x = 1\n"})],
+        LIMITS,
+        workers=1,
+    )
+    assert len(p.rows) == 1 and p.skipped == 1 and "skipped 1" in p.report()
