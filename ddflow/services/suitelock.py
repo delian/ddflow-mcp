@@ -368,7 +368,7 @@ def _eta(
         if not _held(directory, i):
             continue
         left = float(cfg_default)
-        with contextlib.suppress(OSError, ValueError, TypeError, KeyError):
+        with contextlib.suppress(OSError, ValueError, TypeError, KeyError, AttributeError):
             held = json.loads(_note(directory, i).read_text())
             if held.get("cost_s"):  # with a predicted cost: what is left of it
                 left = max(0.0, float(held["cost_s"]) - (now - float(held["at"])))

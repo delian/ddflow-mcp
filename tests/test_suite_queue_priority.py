@@ -219,7 +219,15 @@ def test_a_malformed_or_costless_holder_note_does_not_break_the_estimate(tmp_pat
     from ddflow.infra import fsio
 
     with fsio.file_lock(slots / "suites.0.lock", 0):
-        for body in ("{}", '{"cost_s": 100}', "not json", _json.dumps({"at": time.time() - 1})):
+        for body in (
+            "{}",
+            "[]",
+            "null",
+            '"x"',
+            '{"cost_s": 100}',
+            "not json",
+            _json.dumps({"at": time.time() - 1}),
+        ):
             (slots / "suites.0.holder").write_text(body)
             line = [W("me", cost=60.0)]
             assert "estimated wait" in SL._eta(line, "me", 1, slots, 600.0)
