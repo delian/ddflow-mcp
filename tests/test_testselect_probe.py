@@ -63,6 +63,7 @@ class MergeRow:
 @dataclass
 class Probe:
     rows: list[MergeRow]
+    errors: list[str] = field(default_factory=list)  #: merges the selector raised on, loudly kept
 
     @property
     def scored(self) -> list[MergeRow]:
@@ -87,6 +88,10 @@ class Probe:
     @property
     def fallback_rate(self) -> float:
         return sum(r.full for r in self.rows) / len(self.rows) if self.rows else 0.0
+
+    @property
+    def hub_rate(self) -> float:
+        return sum(r.hub for r in self.rows) / len(self.rows) if self.rows else 0.0
 
     @property
     def unrouted_rate(self) -> float:
@@ -116,9 +121,11 @@ class Probe:
             f"merges {len(self.rows)} (scored {len(self.scored)}); "
             f"recall {self.recall:.3f} (routable {self.routable_recall:.3f}); "
             f"median selected share {self.median_share:.3f}; "
-            f"hub-fallback rate {self.fallback_rate:.3f}; unrouted rate {self.unrouted_rate:.3f}; "
+            f"whole-suite rate {self.fallback_rate:.3f} (hub-fallback rate {self.hub_rate:.3f}); "
+            f"unrouted rate {self.unrouted_rate:.3f}; "
             f"hub narrowed share {self.hub_narrow_share():.3f} at recall "
-            f"{self.hub_narrow_recall():.3f}; subprocess-blind misses {self.blind_total}"
+            f"{self.hub_narrow_recall():.3f}; subprocess-blind misses {self.blind_total}; "
+            f"errors {len(self.errors)}"
         )
 
 
@@ -199,14 +206,24 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
         shutil.rmtree(raw, ignore_errors=True)
 
 
+def _safe(job: tuple[str, str, dict]) -> MergeRow | str | None:
+    """A merge the selector raises on is reported, never taken for a pass or a whole-window abort."""
+    try:
+        return replay_one(job)
+    except Exception as exc:
+        return f"{job[1][:8]}: {type(exc).__name__}: {exc}"
+
+
 def probe(root: Path, shas: list[str], limits: dict, workers: int = 4) -> Probe:
     jobs = [(str(root), s, limits) for s in shas]
     if workers <= 1:
-        rows = [replay_one(j) for j in jobs]
+        rows = [_safe(j) for j in jobs]
     else:
         with ProcessPoolExecutor(max_workers=workers) as pool:
-            rows = list(pool.map(replay_one, jobs))
-    return Probe([r for r in rows if r is not None])
+            rows = list(pool.map(_safe, jobs))
+    return Probe(
+        [r for r in rows if isinstance(r, MergeRow)], [r for r in rows if isinstance(r, str)]
+    )
 
 
 # ---- fixture repository ------------------------------------------------------------------
@@ -317,7 +334,7 @@ def test_a_hub_merge_falls_back_to_the_whole_suite_and_reports_a_narrower_choice
     p = probe(repo, [shas["hub"]], LIMITS, workers=1)
     (row,) = p.rows
     assert row.full and row.selected == row.suite  # safety: a hub change selects everything
-    assert p.fallback_rate == 1.0 and p.recall == 1.0
+    assert p.fallback_rate == 1.0 and p.hub_rate == 1.0 and p.recall == 1.0
     # the hub-unbounded choice: the three importers, fewer than the whole suite, and it holds
     # the co-changed test
     assert row.narrow_selected is not None and 3 <= row.narrow_selected < row.suite
@@ -347,7 +364,13 @@ def test_the_report_names_every_measure(tmp_path):
     repo, shas = make_repo(tmp_path)
     p = probe(repo, list(shas.values()), LIMITS, workers=1)
     text = p.report()
-    for word in ("recall", "median selected share", "hub-fallback rate", "subprocess-blind"):
+    for word in (
+        "recall",
+        "median selected share",
+        "hub-fallback rate",
+        "errors",
+        "subprocess-blind",
+    ):
         assert word in text
     assert len(p.rows) == 4
 
@@ -392,4 +415,10 @@ def test_a_hub_share_with_an_empty_suite_does_not_crash():
 def test_a_non_hub_whole_suite_answer_is_not_a_hub_row():
     row = MergeRow(sha="a", source=1, suite=5, selected=5, full=True, unrouted=False)
     p = Probe([row])
-    assert p.fallback_rate == 1.0 and p.hub_rows() == []
+    assert p.fallback_rate == 1.0 and p.hub_rate == 0.0 and p.hub_rows() == []
+
+
+def test_a_merge_the_selector_raises_on_is_reported_not_fatal(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["leaf"], "0" * 40], LIMITS, workers=1)
+    assert len(p.rows) == 1 and len(p.errors) == 1 and "errors 1" in p.report()
