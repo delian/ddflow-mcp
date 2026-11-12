@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "roles.reviewer_rules"
+new = "[\"Try to refute the change; a tool or reviewer that could not run is recorded unavailable, never passed.\", \"Prefer a reviewer from another model family; the author's own model never counts.\", \"Never edit files; record each finding with its location and severity; only a new confirmed HIGH stops a merge.\"]"
+why = "CO-brief-roles: role packs for `ddflow brief --role R`."
+impact = "additive"

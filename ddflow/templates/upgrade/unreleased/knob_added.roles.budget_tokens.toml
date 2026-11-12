@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "roles.budget_tokens"
+new = '600'
+why = "CO-brief-roles: role packs for `ddflow brief --role R`."
+impact = "additive"

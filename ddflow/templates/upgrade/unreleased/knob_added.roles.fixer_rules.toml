@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "roles.fixer_rules"
+new = "[\"Tests first: a regression test that fails against the unfixed code, then the fix; a bug is filed before it is fixed.\", \"Never skip or weaken a test, raise a limit or add a ratchet baseline entry; read ratchet offenders by name.\", \"Claim before you edit and lease only the files you need; if a claim is refused, report who holds what and take the next item.\", \"Never push; finish means nothing ahead of main for your worktree and your event log committed.\"]"
+why = "CO-brief-roles: role packs for `ddflow brief --role R`."
+impact = "additive"

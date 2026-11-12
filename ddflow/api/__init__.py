@@ -51,7 +51,7 @@ from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
 from .arch_deps import archdeps
-from .briefing import agent_brief
+from .briefing import agent_brief, brief_role
 from .cirun import ci_tool
 from .completion import completion_verdict
 from .decisions import (
@@ -265,6 +265,7 @@ __all__ = [
     "block",
     "board",
     "brief",
+    "brief_role",
     "bug_file_tasks",
     "bug_fixed",
     "bug_found",

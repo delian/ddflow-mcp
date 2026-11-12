@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "roles.researcher_rules"
+new = "[\"Read-only: no edits and no claims; state a falsifiable claim, run the cheapest test that could refute it and record the verdict (CONFIRMED, REFUTED or THEORETICAL) with the command and its output.\", \"File every defect found as a bug after `ddflow similar`; never only work around it.\", \"Record the operator's words verbatim and a lesson after any surprise.\"]"
+why = "CO-brief-roles: role packs for `ddflow brief --role R`."
+impact = "additive"

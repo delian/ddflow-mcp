@@ -16,6 +16,10 @@ def call(repo, a, agent, called_from=None, shell_cwd=None):
     rather than ignored: a brief that quietly is not about the item asked for is worse than none.
     """
     item = a.get("target") or a.get("item") or ""
+    if a.get("role") and not a.get("for_agent"):
+        return _api().brief_role(
+            repo, role=a["role"], item=item, phase=a.get("phase", "") or "", agent=agent
+        )
     if not a.get("for_agent"):
         if a.get("note"):
             return O.failed("brief", "--note belongs to --for-agent", text="")
@@ -35,7 +39,12 @@ def call(repo, a, agent, called_from=None, shell_cwd=None):
     if a.get("phase"):
         return O.failed("brief", "--phase belongs to the session pack, not --for-agent", text="")
     return _api().agent_brief(
-        repo, item=item, for_agent=a["for_agent"], note=a.get("note") or "", agent=agent
+        repo,
+        item=item,
+        for_agent=a["for_agent"],
+        note=a.get("note") or "",
+        role=a.get("role") or "",
+        agent=agent,
     )
 
 
