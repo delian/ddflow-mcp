@@ -349,3 +349,13 @@ def test_a_live_handshake_after_a_cached_one_cancels_the_deferred_notice(tmp_pat
     S.path(repo).unlink()  # the next handshake (a second one, or an expired snapshot) is live
     assert NOTICE in _init(srv)["instructions"]
     assert not any(NOTICE in t for t in _tool_texts(srv)), "said once, in the handshake"
+
+
+@pytest.mark.parametrize("drop", ["instructions", "digest", "tools"])
+def test_a_snapshot_missing_a_field_is_rendered_live_not_a_crash(tmp_path, renders, drop):
+    repo = _repo(tmp_path)
+    _write_snapshot(repo)
+    data = json.loads(S.path(repo).read_text())
+    del data[drop]
+    S.path(repo).write_text(json.dumps(data))
+    assert _init(Server(repo))["instructions"] != SNAP_TEXT and renders
