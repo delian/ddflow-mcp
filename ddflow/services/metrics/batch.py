@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from ...core import progress as PR
+from . import overlap as OV
 from .providers import Context
 from .stats import rate, stat
 from .summary import RAN
@@ -134,7 +135,12 @@ def build(ctx: Context, group_by: str = "") -> dict:
     tiny = [r for r in rows if r["runs"] and r["elapsed"]["n"] < max(minimum, 1)]
     for r in tiny:
         unavailable[f"elapsed:{r['bucket']}"] = f"{r['elapsed']['n']} timed runs, need {minimum}"
-    return {"group_by": "size", "buckets": rows, "unavailable": unavailable}
+    return {
+        "group_by": "size",
+        "buckets": rows,
+        "overlap": OV.build(ctx, size),
+        "unavailable": unavailable,
+    }
 
 
 def has_figures(data: dict) -> bool:
@@ -169,6 +175,8 @@ def text(data: dict) -> str:
             f"with a finding {_pct(r['runs_with_finding'])}  "
             f"confirmed {_pct(r['confirmed_rate'])}"
         )
+    if data.get("overlap"):
+        lines.append(OV.text(data["overlap"]))
     if data["unavailable"]:
         lines.append("unavailable (not zero):")
         lines += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]
