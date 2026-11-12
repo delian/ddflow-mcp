@@ -40,5 +40,5 @@ class OutputConfig:
     )
     json_envelope: bool = knob(
         False,
-        doc="Answer a `--json` command whose body is a bare array (`progress`, `loops`, ...) as `{\"schema\": \"<command>@<n>\", \"rows\": [...]}` instead, so every `--json` body carries a schema id and version (MP-schema-all). Off by default: the bare array is the shape callers index today and stays so (D-compat); no schema version is bumped for it. An object body, a refusal body and the MCP bodies are the same either way.",
+        doc='Answer a `--json` command whose body is a bare array (`progress`, `loops`, ...) as `{"schema": "<command>@<n>", "rows": [...]}` instead, so every `--json` body carries a schema id and version (MP-schema-all). Off by default: the bare array is the shape callers index today and stays so (D-compat); no schema version is bumped for it. An object body, a refusal body and the MCP bodies are the same either way.',
     )

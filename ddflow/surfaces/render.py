@@ -18,9 +18,8 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, TextIO
-
 from pathlib import Path
+from typing import Any, TextIO
 
 from ..config import Config
 from .registry import tag_body
