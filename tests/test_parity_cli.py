@@ -39,14 +39,25 @@ def test_blocking_is_the_first_unverified_row():
         assert answer[blocked] == "unverified"
 
 
-def test_json_round_trips_per_agent_answers():
+def test_json_round_trips_the_full_report():
     payload = json.loads(P.harness_parity(as_json=True))
-    matrix = P.rows()
-    assert payload == {h.id: matrix[h.id] for h in HR.load()}
+    assert set(payload) == {"matrix", "summary"}
+    for h in HR.load():
+        assert h.id in payload["matrix"]
+        assert set(payload["summary"][h.id]) == {"in_agent", "orchestrator"}
 
 
-def test_render_one_line_per_agent_per_axis():
+def test_render_one_line_per_agent_per_axis_shows_the_matrix():
     text = P.render()
     lines = text.splitlines()
     assert len(lines) == len(HR.load()) * 2
     assert "first_blocking=" in lines[0]
+    assert "=" in lines[0]  # a feature=status cell, so the matrix is printed
+
+
+def test_the_view_pins_that_grok_declares_mcp_but_not_capabilities():
+    # golden: grok's descriptor declares [mcp] (documented) and has no [capabilities]
+    payload = json.loads(P.harness_parity(as_json=True))
+    grok = payload["matrix"]["grok"]
+    assert grok["mcp-config"] == "documented"
+    assert grok["model-visibility"] in ("none", "unverified")
