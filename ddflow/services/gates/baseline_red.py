@@ -52,6 +52,18 @@ ROUNDS = 3
 NOT_PYTEST = "the gate's command does not run pytest"
 _NOT_FOUND = re.compile(r"^ERROR: (?:file or directory )?not found: (.+)$", re.M)
 _PARAM = re.compile(r"^(.*?::[^\[]*)\[.*\]$")
+#: The memory address held in an object repr, and only that: `` at 0x...>``. A repr address is
+#: the one ``0x`` sequence that is BOTH preceded by `` at `` and followed by the repr's closing
+#: ``>``; a hex inside an assertion value (``assert got == 0x10``, ``assert '0x10>' == '0xff>'``)
+#: is not. Two runs of one test print a different ``0x...`` for the same object, so an
+#: address-only difference is the same failure, not a new offender (B9252d46a4b).
+_ADDR = re.compile(r"(?<=\bat )0x[0-9a-f]+(?=>)")
+
+
+def _norm(text: str) -> str:
+    """``text`` with a memory address in an object repr blanked to ``0x``: a hex inside an
+    assertion value is left alone, so a genuine value change still reads as a new offender."""
+    return _ADDR.sub("0x", text)
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:
@@ -157,7 +169,7 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    return branch != base
+    return _norm(branch) != _norm(base)
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
