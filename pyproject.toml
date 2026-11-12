@@ -46,6 +46,7 @@ classifiers = [
 # the second: it edits config files without losing comments. Everything else is stdlib
 # plus `git`; each optional extra below that is in use is reached through one adapter.
 dependencies = [
+    "argcomplete>=3.7.2",
     "jinja2>=3.1.6",
     "tomlkit>=0.13",
 ]
