@@ -433,7 +433,9 @@ def _remember_command(
     """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
     git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
     try:
-        root = repo_root(Path(getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+        root = repo_root(
+            Path(getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd())
+        )
     except Exception:
         try:
             root = repo_root(Path.cwd())
