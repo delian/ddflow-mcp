@@ -63,3 +63,4 @@
 {"agent":"record-correct","data":{"at":1794468500.1711748,"holder":"record-correct"},"id":"ea32cf47d4f755599a854d074","kind":"lease.renewed","lamport":180909,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:28:20.302129Z"}
 {"agent":"record-correct","data":{"at":1794469120.2839122,"holder":"record-correct"},"id":"e7fd64a6f5f71ba8b5d914e1b","kind":"lease.renewed","lamport":180967,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:38:40.415533Z"}
 {"agent":"record-correct","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e26d7bffabe5cca3b9a6dfee0","kind":"cadence.ran","lamport":180968,"schema":1,"subject":"recall_recheck:REC-correct-event","ts":"2026-11-12T07:38:48.080009Z"}
+{"agent":"record-correct","data":{"at":1794469738.9959457,"holder":"record-correct"},"id":"e5bf7f4db9b95fcbad6e65de1","kind":"lease.renewed","lamport":181070,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:48:59.128856Z"}
