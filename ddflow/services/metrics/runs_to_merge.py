@@ -207,9 +207,7 @@ def rollup(
         "per_gate": per_gate,
         "rollups": rollups,
         "unavailable": (
-            {}
-            if n >= minimum
-            else {"first_pass_rate": f"{n} merged items, need {minimum}"}
+            {} if n >= minimum else {"first_pass_rate": f"{n} merged items, need {minimum}"}
         ),
     }
 
@@ -220,7 +218,11 @@ def provider(ctx: Context) -> list[dict]:
     Computed from the one fold ``Context.facts`` without re-folding; only the aggregate
     figures the summary needs, never a per-item row (that is ``rollup``)."""
     cfg = ctx.cfg
-    floor = ctx.since if ctx.since is not None else ctx.now - float(cfg.metrics.runs_window_days) * DAY_S
+    floor = (
+        ctx.since
+        if ctx.since is not None
+        else ctx.now - float(cfg.metrics.runs_window_days) * DAY_S
+    )
     merged = merged_spans(ctx.facts, ctx.facts.state, ctx.phase, floor)
     by_item: dict[str, list[Outcome]] = defaultdict(list)
     for o in ctx.facts.outcomes:
@@ -249,5 +251,10 @@ def provider(ctx: Context) -> list[dict]:
             "n": n,
             "value": runs_total / n if n >= minimum else None,
         },
-        {"metric": "runs.total_runs", "group": "", "n": n, "value": runs_total if n >= minimum else None},
+        {
+            "metric": "runs.total_runs",
+            "group": "",
+            "n": n,
+            "value": runs_total if n >= minimum else None,
+        },
     ]
