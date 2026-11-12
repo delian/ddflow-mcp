@@ -85,3 +85,4 @@
 {"agent":"lane-next-view","data":{"at":1794500980.5998764,"holder":"lane-next-view"},"id":"eb377c03bdbd6c5b84abc68f1","kind":"lease.renewed","lamport":185537,"schema":1,"subject":"NV-next-cap-independent","ts":"2026-11-12T16:29:40.749822Z"}
 {"agent":"lane-next-view","data":{"at":1794501110.29182,"holder":"lane-next-view"},"id":"ef7aeebe8a6045f58c4bc3947","kind":"lease.renewed","lamport":185562,"schema":1,"subject":"NV-next-cap-independent","ts":"2026-11-12T16:31:50.439970Z"}
 {"agent":"lane-next-view","data":{"at":1794501231.094632,"holder":"lane-next-view"},"id":"ebab0e97c2776174674a16146","kind":"lease.renewed","lamport":185588,"schema":1,"subject":"NV-next-cap-independent","ts":"2026-11-12T16:33:51.239879Z"}
+{"agent":"lane-next-view","data":{"at":1794501369.855656,"holder":"lane-next-view"},"id":"e00371a72eea3ea373edd0cbc","kind":"lease.renewed","lamport":185626,"schema":1,"subject":"NV-next-cap-independent","ts":"2026-11-12T16:36:10.025525Z"}
