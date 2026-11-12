@@ -95,9 +95,12 @@ def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
         assert list(node["commands"]) == _subcommand_names(p), path
         # options: exactly the engine's visible flags -- a dropped option would leave a
         # flag out of the set, an extra one a flag in (nothing missing, nothing extra)
+        actions = list(_visible(p, inherited))
         offered = {f for o in node["options"] for f in o["flags"]}
-        expected = {s for a in _visible(p, inherited) for s in a.option_strings}
+        expected = {s for a in actions for s in a.option_strings}
         assert offered == expected, path
+        # one option entry per action: a duplicate entry would change the length
+        assert len(node["options"]) == len(actions), path
         # each offered option is one argparse action: its flags and choices are that
         # action's own (a multi-flag option still has exactly the action's choices)
         for o in node["options"]:
