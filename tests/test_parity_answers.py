@@ -31,11 +31,11 @@ def test_a_row_with_no_descriptor_field_is_not_applicable():
     assert got["key-by-env-name"] == "none"
 
 
-def test_a_declared_section_reads_supported_and_absent_reads_unverified():
+def test_a_declared_section_reads_documented_and_absent_reads_unverified():
     h = HR.get("grok")
     got = A.answers(h)
-    # grok declares [mcp]; it does not declare [capabilities]
-    assert got["mcp-config"] == "verified"
+    # grok declares [mcp] (documented, never over-claimed verified); it has no [capabilities]
+    assert got["mcp-config"] == "documented"
     assert got["model-visibility"] in ("none", "unverified")
 
 
