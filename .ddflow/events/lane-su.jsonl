@@ -323,3 +323,6 @@
 {"agent":"lane-su","data":{"at":1794494318.5608377,"holder":"lane-su"},"id":"ec988c9823b7b0211e88fc48b","kind":"lease.renewed","lamport":184094,"schema":1,"subject":"SU-shim","ts":"2026-11-12T14:38:38.712987Z"}
 {"agent":"lane-su","data":{"at":1794494596.8559675,"holder":"lane-su"},"id":"eca8cb54eb9094a9449479516","kind":"lease.renewed","lamport":184169,"schema":1,"subject":"SU-shim","ts":"2026-11-12T14:43:17.038670Z"}
 {"agent":"lane-su","data":{"at":1794494953.5343266,"holder":"lane-su"},"id":"ea67aaf96d2ff74a2de357e87","kind":"lease.renewed","lamport":184264,"schema":1,"subject":"SU-shim","ts":"2026-11-12T14:49:13.691407Z"}
+{"agent":"lane-su","data":{"at":1794495502.650775,"holder":"lane-su"},"id":"eb318d696f79555e0acc7310f","kind":"lease.renewed","lamport":184409,"schema":1,"subject":"SU-shim","ts":"2026-11-12T14:58:22.815710Z"}
+{"agent":"lane-su","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e7b088be7c60e2232b40db9a1","kind":"cadence.ran","lamport":184426,"schema":1,"subject":"recall_recheck:SU-shim","ts":"2026-11-12T14:59:47.290398Z"}
+{"agent":"lane-su","data":{"at":1794496199.0726519,"holder":"lane-su"},"id":"e636ac712dc07d9a50444a46f","kind":"lease.renewed","lamport":184514,"schema":1,"subject":"SU-shim","ts":"2026-11-12T15:09:59.219897Z"}
