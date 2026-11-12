@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -166,6 +167,18 @@ def _widget_index(d: Path) -> str:
     return str(d / "index.db-wwwwwwww")
 
 
+def _activation_defined(shell: str, text: str) -> bool:
+    """The template really DEFINES the activation function, anchored at the start of a
+    line, so an echo or comment that merely mentions the name does not pass."""
+    name = f"_ddflow_activate_{shell}"
+    header = (
+        rf"^function\s+{name}\b"
+        if shell == "fish"
+        else rf"^(?:function\s+)?{name}\s*\(\s*\)"
+    )
+    return re.search(header, text, re.MULTILINE) is not None
+
+
 @pytest.mark.parametrize("shell", scripts.SHELLS)
 def test_every_shell_script_parses(shell, tmp_path):
     """Each activation template parses under its own shell -- a pure syntax check, with
@@ -177,10 +190,10 @@ def test_every_shell_script_parses(shell, tmp_path):
     flags = {"bash": ["-n"], "zsh": ["-f", "-n"], "fish": ["--no-execute", "--no-config"]}
     env = {**os.environ, "BASH_ENV": "", "ENV": ""}  # bash reads these at startup
     text = scripts.for_shell(shell)
-    # a degenerate or placeholder script would still parse clean, so also require the real
-    # activation function DEFINITION (bash/zsh name the function followed by "()", fish by
-    # "function <name>") -- a bare echo or comment of the name does not pass
-    assert f"_ddflow_activate_{shell}()" in text or f"function _ddflow_activate_{shell}" in text
+    # a degenerate or placeholder script would still parse clean, so also require the
+    # real activation function DEFINITION, anchored at line start -- an echo, comment
+    # or mention of the name alone does not pass
+    assert _activation_defined(shell, text)
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
     result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True, env=env)
