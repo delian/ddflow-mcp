@@ -61,7 +61,9 @@ def test_an_agent_requests_a_person_only_partial_by_hand(repo):
 
 def test_a_failed_or_unmeasured_gate_cannot_be_requested(repo):
     _partial(repo, red=False)
-    out = API.approvals_request(repo, "approve.partial", item="T1", target="unit_tests", agent="bot")
+    out = API.approvals_request(
+        repo, "approve.partial", item="T1", target="unit_tests", agent="bot"
+    )
     assert out.exit != 0 and "baseline-red" in str(out)
     run_cli(repo, "gate", "record", "T1", "critic", "--outcome", "failed", "--reason", "f")
     out = API.approvals_request(repo, "approve.partial", item="T1", target="critic", agent="bot")
@@ -75,16 +77,20 @@ def test_no_rule_or_window_grants_the_requested_partial(repo):
     cfg_path = repo / ".ddflow" / "config.toml"
     cfg_path.write_text(
         cfg_path.read_text()
-        + '\n[approvals]\nstanding_window_s = 86400\nauto_approve_after_retries = 1\n'
+        + "\n[approvals]\nstanding_window_s = 86400\nauto_approve_after_retries = 1\n"
         'policy = ["accept_baseline_red", "complete_unavailable", "skip_after_unavailable"]\n'
     )
     for _ in range(3):
-        out = API.approvals_request(repo, "approve.partial", item="T1", target="unit_tests", agent="bot")
+        out = API.approvals_request(
+            repo, "approve.partial", item="T1", target="unit_tests", agent="bot"
+        )
         assert out.exit == 0, out
     from ddflow.api._base import _load_fresh
 
     log, cfg, st = _load_fresh(repo, "bot")
-    assert cfg.approvals.standing_window_s == 86400 and "accept_baseline_red" in cfg.approvals.policy
+    assert (
+        cfg.approvals.standing_window_s == 86400 and "accept_baseline_red" in cfg.approvals.policy
+    )
     it = st.items["T1"]
     canon = Canon(verb="approve.partial", agent="bot", item="T1", target="unit_tests",
                   state=GA.digest(it, "unit_tests"))  # fmt: skip
