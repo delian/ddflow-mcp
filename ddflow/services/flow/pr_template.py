@@ -80,7 +80,7 @@ def _bugs(st: State, it: Item) -> list[dict[str, Any]]:
         {
             "id": b.id,
             "summary": _first_line(b.summary),
-            "regression_tests": list(
+            "regression_tests": ", ".join(
                 b.regression_tests or ([b.regression_test] if b.regression_test else [])
             ),
         }

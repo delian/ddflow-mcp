@@ -172,7 +172,7 @@ class FlowConfig:
     )
     pr_body_template: str = knob(
         "",
-        doc='Path to the template that renders a pull request\'s description (`integration = "pr"`). Empty (default): `.ddflow/prompts/pr_body.md` if the project has one, else the shipped template, which lists every gate with its outcome, the review rounds and triage, the bugs fixed with their regression tests and the changelog entry. Placeholders come from recorded data only, and the finished text is secret-redacted before it goes to the forge. `ddflow prompts eject pr_body` writes an editable copy.',
+        doc='Path to the template that renders a pull request\'s description (`integration = "pr"`). Empty (default): `.ddflow/prompts/pr_body.md` if the project has one, else the shipped template, which lists every gate with its outcome, the review rounds and triage, the bugs fixed with their regression tests. Placeholders come from recorded data only, and the finished text is secret-redacted before it goes to the forge. `ddflow prompts eject pr_body` writes an editable copy.',
     )
     pr_body_cell_max: int = knob(
         200,

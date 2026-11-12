@@ -85,8 +85,7 @@ which is refused loudly: develop would not have a fix production already ships.
 **Pull-request description.** With `integration = "pr"` the request body is rendered from a
 template (`[flow].pr_body_template`, a path; empty means `.ddflow/prompts/pr_body.md`, else the
 shipped one -- `ddflow prompts eject pr_body` copies it). It lists every gate with its outcome,
-review rounds and triage counts, the bugs fixed with their regression tests and the changelog
-entry, all from recorded data, and the finished text is secret-redacted before it goes to the
+review rounds and triage counts and the bugs fixed with their regression tests, all from recorded data, and the finished text is secret-redacted before it goes to the
 forge.
 
 **Version files.** `[flow.version_files]` maps a path to a regex with exactly one capture

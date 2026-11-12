@@ -2,7 +2,8 @@
   The pull-request description (`[flow].pr_body_template`, BL-pr-evidence-template). Rendered only from
   derived records and passed through the secret redactor. Variables: item, title, body, stacked_on,
   stacked_on_url, gates (gate, outcome, note, rounds, triage_confirmed, triage_refuted),
-  bugs (id, summary, regression_tests), changelog (category, line).
+  bugs (id, summary, regression_tests as one string), changelog (category, line: recorded when the
+  item completes, so empty in a request opened before completion; available to project templates).
     ddflow prompts eject pr_body   -> .ddflow/prompts/pr_body.md
 #}
 {{ body }}
@@ -16,6 +17,4 @@
 {% endif %}{% if bugs %}Bugs fixed:
 {% for b in bugs %}- {{ b.id }}: {{ b.summary }}{% if b.regression_tests %} -- regression test: {{ b.regression_tests }}{% else %} -- NO regression test recorded{% endif %}
 {% endfor %}
-{% endif %}{% if changelog %}Changelog: {{ changelog.category }}: {{ changelog.line }}
-
 {% endif %}Item: {{ item }}

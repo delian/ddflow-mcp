@@ -61,7 +61,7 @@ def pre_merge_blockers(
 def pr_body(
     st: State, it: Item, *, on: Item | None, cfg: Config | None = None, repo: Path | None = None
 ) -> str:
-    """The request body: the layered `[flow].pr_body_template` (`flow/pr_body.py`)."""
+    """The request body: the layered `[flow].pr_body_template` (`flow/pr_template.py`)."""
     if cfg is None:  # the layered project config, not the bare defaults
         cfg = Config.load(repo) if repo is not None else Config()
     return render_body(st, it, on=on, cfg=cfg, repo=repo)
