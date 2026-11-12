@@ -75,6 +75,8 @@ def _per_item(
         before = [o for o in by_item.get(s.item, ()) if o.at <= done]
         failed = sum(o.kind == "failed" for o in before)
         weak = sum(o.kind in _NOT_PASS for o in before)
+        runs = sum(1 for o in before if o.kind in RAN)
+        passes = sum(1 for o in before if o.kind == "passed")
         at, author = next(((t, a) for t, a in reversed(s.claims) if t <= done), (0.0, ""))
         model = _author_model(s.item, author, at, sessions, leases) if author else ""
         rows.append(
@@ -83,8 +85,11 @@ def _per_item(
                 "phase": PR.phase_of(state, s.item) if state else "",
                 "model": model,
                 "kind": s.kind,
-                "runs": sum(1 for o in before if o.kind in RAN),
-                "passes": sum(1 for o in before if o.kind == "passed"),
+                "runs": runs,
+                "passes": passes,
+                #: the share of its runs that passed: 1/1 = 100% for a first-pass item,
+                #: 1/3 = 33% for an item that needed three runs (the acceptance's two rates).
+                "first_pass_rate": passes / runs if runs else None,
                 "first_pass": not failed and not weak,
                 "outlier": False,  # filled by caller once the run count is known
             }
@@ -177,6 +182,13 @@ def rollup(
         r["outlier"] = outliers > 0 and r["runs"] >= outliers
     first_pass_items = sum(r["first_pass"] for r in rows)
     n = len(rows)
+    per_phase = _rollups(rows, "phase", minimum)
+    per_model = _rollups(rows, "model", minimum)
+    per_gate = _per_gate(facts, merged, minimum)
+    #: The grouping knob: `group_by` selects WHICH rollup is the report's summary; the
+    #: other two stay present so one read serves every grouping (a before/after reads the
+    #: same merged set several ways without a second fold).
+    rollups = {"phase": per_phase, "model": per_model, "gate": per_gate}[group_by]
     return {
         "group_by": group_by,
         "window": {
@@ -189,9 +201,10 @@ def rollup(
         "first_pass_rate": _rate(first_pass_items, n, minimum),
         "outliers": sorted(r["item"] for r in rows if r["outlier"]),
         "per_item": rows,
-        "per_phase": _rollups(rows, "phase", minimum),
-        "per_model": _rollups(rows, "model", minimum),
-        "per_gate": _per_gate(facts, merged, minimum),
+        "per_phase": per_phase,
+        "per_model": per_model,
+        "per_gate": per_gate,
+        "rollups": rollups,
         "unavailable": (
             {}
             if n >= minimum
@@ -215,6 +228,7 @@ def provider(ctx: Context) -> list[dict]:
     runs_total = 0
     first_pass_items = 0
     n = len(merged)
+    minimum = max(int(cfg.metrics.min_samples), 1)
     for it, at_done in done.items():
         before = [o for o in by_item.get(it, ()) if o.at <= at_done]
         failed = sum(o.kind == "failed" for o in before)
@@ -222,12 +236,17 @@ def provider(ctx: Context) -> list[dict]:
         runs_total += sum(1 for o in before if o.kind in RAN)
         first_pass_items += not failed and not weak
     return [
-        {"metric": "runs.first_pass_rate", "group": "", "n": n, "value": first_pass_items / n if n else None},
+        {
+            "metric": "runs.first_pass_rate",
+            "group": "",
+            "n": n,
+            "value": _rate(first_pass_items, n, minimum),
+        },
         {
             "metric": "runs.runs_per_merge",
             "group": "",
             "n": n,
-            "value": runs_total / n if n else None,
+            "value": runs_total / n if n >= minimum else None,
         },
         {"metric": "runs.total_runs", "group": "", "n": n, "value": runs_total if n else None},
     ]

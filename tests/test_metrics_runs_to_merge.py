@@ -60,12 +60,12 @@ def test_a_first_time_pass_reports_one_run_and_a_three_run_item_three():
     a, b = item(report, "alpha"), item(report, "beta")
     assert a["runs"] == 1
     assert b["runs"] == 3
-    # first-pass: alpha passed first time; beta did not.
+    # the pass share of runs: 100% (1 of 1) vs 33% (1 of 3) first-pass rate per item.
+    assert a["passes"] == 1 and a["first_pass_rate"] == pytest.approx(1.0)
+    assert b["passes"] == 1 and b["first_pass_rate"] == pytest.approx(1 / 3)
+    # first-pass FLAG: alpha passed first time; beta did not.
     assert a["first_pass"] is True
     assert b["first_pass"] is False
-    # the pass share of runs: 100% (1 of 1) vs 33% (1 of 3).
-    assert a["passes"] == 1
-    assert b["passes"] == 1
     assert report["first_pass_rate"] == pytest.approx(0.5)  # one first pass of two items
     assert report["runs"] == 4
 
@@ -77,25 +77,34 @@ def test_the_window_knob_excludes_an_item_completed_before_it():
     # a since AFTER alpha completed drops it: the window selects by completion time.
     after_alpha = run(g, since=T0 + 400)
     assert [r["item"] for r in after_alpha["per_item"]] == ["beta"]
-    # the config knob narrows the whole window in days back from now (not a hard since).
-    st, cfg, now = frozen(g)
+    # the runs_window_days knob moves the floor itself: at days=30 with now set so the
+    # floor lands between alpha's and beta's completion, alpha is left out.
+    st, cfg, _ = frozen(g)
     cfg.metrics.min_samples = 1
     cfg.metrics_runs.runs_window_days = 30
-    assert rollup(g.events, st, cfg, now)["window"]["days"] == 30
+    report = rollup(g.events, st, cfg, now=T0 + 30 * 86400 + 500)
+    assert [r["item"] for r in report["per_item"]] == ["beta"]
 
 
 def test_the_grouping_knob_changes_the_rollup():
     report = run(log(), group_by="model")
-    assert report["per_model"] == [{"group": "m-alpha", "items": 2, "first_pass": 1, "first_pass_rate": pytest.approx(0.5), "runs": 4}]
-    by_phase = run(log(), group_by="phase")
-    assert [r["group"] for r in by_phase["per_phase"]] == ["P1"]
+    assert [r["group"] for r in report["rollups"]] == ["m-alpha"]
     assert report["group_by"] == "model"
+    by_gate = run(log(), group_by="gate")
+    assert [r["gate"] for r in by_gate["rollups"]] == ["unit_tests"]
 
 
 def test_a_review_gate_is_labelled_a_model_gate_and_others_deterministic():
-    report = run(log())
-    (gate,) = [r for r in report["per_gate"] if r["gate"] == "unit_tests"]
-    assert gate["gate_kind"] == "deterministic"
+    g = Log()
+    g.add("task.added", "gamma", "lead", T0 - 1000, title="g", body="")
+    g.claim("a1", "gamma", T0 + 100, "g.py")
+    g.add("gate.passed", "gamma", "a1", T0 + 200, gate="unit_tests", by="a1", evidence={})
+    g.add("gate.passed", "gamma", "a1", T0 + 300, gate="rubber_duck", by="r1", evidence={"model": "m-beta"})
+    g.complete("a1", "gamma", T0 + 400)
+    g.release("a1", "gamma", T0 + 401)
+    by_gate = {r["gate"]: r for r in run(g)["per_gate"]}
+    assert by_gate["unit_tests"]["gate_kind"] == "deterministic"
+    assert by_gate["rubber_duck"]["gate_kind"] == "model"
 
 
 def test_provider_reports_headline_rows_for_the_summary():
