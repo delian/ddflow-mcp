@@ -174,10 +174,14 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
         full = bool(sel.full) and not sel.neutral
         got = {t.path for t in sel.tests}
         row = MergeRow(
-            sha=sha[:8], source=len(src), suite=len(suite),
-            selected=len(suite) if full else len(got), full=full,
-            unrouted=not full and not got, co=len(co),
-        )  # fmt: skip
+            sha=sha[:8],
+            source=len(src),
+            suite=len(suite),
+            selected=len(suite) if full else len(got),
+            full=full,
+            unrouted=not full and not got,
+            co=len(co),
+        )
         _score(raw, row, co, got, src)
         row.hub = full and sel.full.startswith("a hub module changed")
         if row.hub:  # what a choice narrower than the whole suite would have held at the hub
@@ -252,7 +256,11 @@ def make_repo(tmp: Path) -> tuple[Path, dict[str, str]]:
     _write(tmp, "pkg/tool.py", "print('tool')\n")
     _write(tmp, "tests/test_leaf.py", "from pkg import leaf\n\n\ndef test_a():\n    assert leaf\n")
     for i in range(3):
-        _write(tmp, f"tests/test_use{i}.py", f"from pkg import hub\n\n\ndef test_{i}():\n    assert hub\n")  # fmt: skip
+        _write(
+            tmp,
+            f"tests/test_use{i}.py",
+            f"from pkg import hub\n\n\ndef test_{i}():\n    assert hub\n",
+        )
     _write(
         tmp,
         "tests/test_smoke.py",
@@ -261,20 +269,32 @@ def make_repo(tmp: Path) -> tuple[Path, dict[str, str]]:
     _g(tmp, "add", "-A")
     _g(tmp, "commit", "-q", "-m", "base")
     shas = {
-        "leaf": _merge(tmp, "leaf", {
-            "pkg/leaf.py": "def leaf():\n    return 2\n",
-            "tests/test_leaf.py": "from pkg import leaf\n\n\ndef test_a():\n    assert leaf()\n",
-        }),
-        "hub": _merge(tmp, "hub", {
-            "pkg/hub.py": "def hub():\n    return 2\n",
-            "tests/test_use0.py": "from pkg import hub\n\n\ndef test_0():\n    assert hub()\n",
-        }),
-        "tool": _merge(tmp, "tool", {
-            "pkg/tool.py": "print('tool 2')\n",
-            "tests/test_smoke.py": "import subprocess\n\n\ndef test_t():\n    subprocess.run(['python', 'pkg/tool.py'], check=True)\n",  # fmt: skip
-        }),
+        "leaf": _merge(
+            tmp,
+            "leaf",
+            {
+                "pkg/leaf.py": "def leaf():\n    return 2\n",
+                "tests/test_leaf.py": "from pkg import leaf\n\n\ndef test_a():\n    assert leaf()\n",
+            },
+        ),
+        "hub": _merge(
+            tmp,
+            "hub",
+            {
+                "pkg/hub.py": "def hub():\n    return 2\n",
+                "tests/test_use0.py": "from pkg import hub\n\n\ndef test_0():\n    assert hub()\n",
+            },
+        ),
+        "tool": _merge(
+            tmp,
+            "tool",
+            {
+                "pkg/tool.py": "print('tool 2')\n",
+                "tests/test_smoke.py": "import subprocess\n\n\ndef test_t():\n    subprocess.run(['python', 'pkg/tool.py'], check=True)\n",
+            },
+        ),
         "data": _merge(tmp, "data", {"notes/unmapped.txt": "x\n"}),
-    }  # fmt: skip
+    }
     return tmp, shas
 
 
@@ -354,9 +374,16 @@ if __name__ == "__main__":
 
 def test_a_hub_share_with_an_empty_suite_does_not_crash():
     row = MergeRow(
-        sha="a", source=1, suite=0, selected=0, full=True, unrouted=False,
-        hub=True, narrow_selected=0, narrow_held=0,
-    )  # fmt: skip
+        sha="a",
+        source=1,
+        suite=0,
+        selected=0,
+        full=True,
+        unrouted=False,
+        hub=True,
+        narrow_selected=0,
+        narrow_held=0,
+    )
     assert "hub narrowed share 0.000" in Probe([row]).report()
 
 
