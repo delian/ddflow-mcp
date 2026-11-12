@@ -10,6 +10,7 @@ PRIMARY checkout (worktrees of one project share it), bounded by ``keep_days`` a
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import os
 import sys
@@ -23,6 +24,7 @@ from ..core.globs import inside
 from ..infra import fsio
 from ..infra import git as G
 from ..infra import worktree as W
+from .cmdrunner import CommandRunner, Declared
 
 DIR = ("resultcache",)
 STORED = ("passed", "failed")
@@ -61,13 +63,20 @@ def _code_entries(cwd: Path) -> dict[str, str] | None:
         return None
     for rel in {*changed, *untracked}:
         path = cwd / rel
-        if not path.is_file():
+        if not path.exists():
             entries.pop(rel, None)
+            continue
+        if path.is_dir():  # a submodule: the commit it is at now
+            head = G.run(path, "rev-parse", "HEAD")
+            if not head.ok or not head.out.strip():
+                return None
+            entries[rel] = f"submodule {head.out.strip()}"
             continue
         blob = G.run(cwd, "hash-object", "--", rel)
         if not blob.ok or not blob.out.strip():
             return None
-        entries[rel] = f"worktree {blob.out.strip()}"
+        mode = "x" if path.stat().st_mode & 0o111 else "-"  # the mode is part of the code
+        entries[rel] = f"worktree {mode} {blob.out.strip()}"
     return entries
 
 
@@ -83,18 +92,28 @@ def code_key(cwd: Path, doc_globs: list[str]) -> str | None:
     return _digest(*rows)
 
 
-def _env(cwd: Path, cfg: Any) -> str:
+@functools.cache
+def _probe(command: str) -> str:
+    """What ``command`` prints (a tool's version), or ``unavailable`` when it cannot run."""
+    p = CommandRunner().run(Declared(command, "[resultcache].probe_commands"), timeout_s=10)
+    return _digest(p.output) if p.ran and p.code == 0 else "unavailable"
+
+
+def _env(cwd: Path, cfg: Any) -> str | None:
+    """Digest of the environment a result depends on; None when a lock file that exists cannot
+    be read (then nothing is cached: no guess)."""
     locks = []
     for name in LOCKFILES:
         p = Path(cwd) / name
-        with contextlib.suppress(OSError):
-            locks.append(
-                f"{name}={_digest(p.read_text('utf-8', 'replace'))}" if p.is_file() else ""
-            )
-    names = sorted(cfg.resultcache.env_vars)
-    return _digest(
-        _python(), sys.platform, *locks, *(f"{n}={os.environ.get(n, '')}" for n in names)
-    )
+        if not p.is_file():
+            continue
+        try:
+            locks.append(f"{name}={_digest(p.read_text('utf-8', 'replace'))}")
+        except OSError:
+            return None
+    tools = [f"{c}={_probe(c)}" for c in cfg.resultcache.probe_commands]
+    envs = [f"{n}={os.environ.get(n, '')}" for n in sorted(cfg.resultcache.env_vars)]
+    return _digest(_python(), sys.platform, *locks, *tools, *envs)
 
 
 def key(gate: str, command: str, cwd: Path, cfg: Any) -> str | None:
@@ -108,7 +127,10 @@ def key(gate: str, command: str, cwd: Path, cfg: Any) -> str | None:
     extra = ""
     if gate == "ci":  # a ci result is about the merge with the base: its tip is part of the key
         extra = W.rev(Path(cwd), W.default_branch(Path(cwd))) or ""
-    return _digest("v1", gate, command, tree, _env(cwd, cfg), extra, ",".join(cfg.ci.always_tests))
+    env = _env(cwd, cfg)
+    if env is None:
+        return None
+    return _digest("v1", gate, command, tree, env, extra, ",".join(cfg.ci.always_tests))
 
 
 def _dir(cwd: Path) -> Path:

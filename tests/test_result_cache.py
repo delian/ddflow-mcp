@@ -24,7 +24,20 @@ def git(repo: Path, *args: str) -> str:
         "GIT_COMMITTER_EMAIL": "t@t",
     }
     return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env
+        [
+            "git",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-C",
+            str(repo),
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
     ).stdout
 
 
@@ -194,6 +207,11 @@ def test_a_worktree_shares_the_projects_cache(tmp_path: Path):
     wt = tmp_path / "wt"
     git(repo, "worktree", "add", "-q", "-b", "side", str(wt))
     assert RC.entry_path(repo, "k").parent == RC.entry_path(wt, "k").parent
+    c = cfg()
+    k_main, k_wt = key(repo, c=c), key(wt, c=c)
+    assert k_main == k_wt  # the same tree under another path is the same key
+    RC.store(repo, k_main, "passed", {"exit": 0}, c)
+    assert RC.lookup(wt, k_wt, c) is not None
 
 
 def test_the_off_switch_stores_and_hits_nothing(tmp_path: Path):
@@ -249,7 +267,7 @@ def test_a_hit_is_recorded_with_its_source_and_never_claims_the_old_log(tmp_path
 
 
 def _gate(tmp_path: Path) -> GateDef:
-    return GateDef(id="unit_tests", title="ut", command=f"echo ran >> {tmp_path}/count.txt")
+    return GateDef(id="unit_tests", title="ut", command=f"echo ran >> '{tmp_path}/count.txt'")
 
 
 def test_the_gate_runner_runs_the_command_once_for_one_tree(tmp_path: Path, monkeypatch):
@@ -269,7 +287,7 @@ def test_the_gate_runner_runs_the_command_once_for_one_tree(tmp_path: Path, monk
 
 def test_a_failed_run_is_never_reported_as_passed_by_the_cache(tmp_path: Path):
     repo = project(tmp_path)
-    gdef = GateDef(id="unit_tests", title="ut", command=f"echo ran >> {tmp_path}/c2.txt; exit 1")
+    gdef = GateDef(id="unit_tests", title="ut", command=f"echo ran >> '{tmp_path}/c2.txt'; exit 1")
     c = Config()
     c.resultcache.reuse_failed = True
     a = GR.run_command_gate(gdef, repo, cfg=c)
@@ -279,3 +297,43 @@ def test_a_failed_run_is_never_reported_as_passed_by_the_cache(tmp_path: Path):
     c2 = Config()  # default: a failed gate reruns on the same tree
     GR.run_command_gate(gdef, repo, cfg=c2)
     assert (tmp_path / "c2.txt").read_text().count("ran") == 2
+
+
+def test_a_changed_tool_version_misses(tmp_path: Path, monkeypatch):
+    repo = project(tmp_path)
+    c = cfg(probe_commands=["mytool --version"])
+    monkeypatch.setattr(RC, "_probe", lambda cmd: "v1")
+    before = key(repo, c=c)
+    monkeypatch.setattr(RC, "_probe", lambda cmd: "v2")
+    assert key(repo, c=c) != before
+
+
+def test_an_unreadable_lock_file_means_no_key(tmp_path: Path):
+    repo = project(tmp_path)
+    commit(repo, "uv.lock", "v = 1\n")
+    (repo / "uv.lock").chmod(0)
+    try:
+        if os.access(repo / "uv.lock", os.R_OK):  # running as a user that ignores modes
+            return
+        assert key(repo) is None
+    finally:
+        (repo / "uv.lock").chmod(0o644)
+
+
+def test_a_file_mode_is_part_of_the_code(tmp_path: Path):
+    repo = project(tmp_path)
+    (repo / "run.sh").write_text("echo hi\n")
+    plain = key(repo)
+    (repo / "run.sh").chmod(0o755)
+    assert key(repo) != plain
+
+
+def test_a_submodule_at_another_commit_misses(tmp_path: Path):
+    lib = project(tmp_path, "lib")
+    repo = project(tmp_path, "main")
+    git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(lib), "lib")
+    git(repo, "commit", "-q", "-m", "add lib")
+    before = key(repo)
+    commit(lib, "b.py", "y = 1\n")
+    git(repo / "lib", "-c", "protocol.file.allow=always", "pull", "-q", "origin", "main")
+    assert key(repo) not in (None, before)

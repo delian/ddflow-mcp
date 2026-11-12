@@ -283,4 +283,5 @@ def test_a_block_can_queue_its_holds_as_a_class(tmp_path: Path):
             _until(lambda: len(list(q.glob("*.ticket"))) == 1)
         note = SQ.read_note(next(q.glob("*.ticket")))
     t.join(10)
+    assert got == ["agent-y"]  # the queued hold really ran
     assert note.get("class") == "integrator"

@@ -32,6 +32,10 @@ class ResultCacheConfig:
         False,
         doc="Whether a stored `failed` result is served again for the same key (reported failed, never passed). Off by default: a rerun of a failed gate on an unchanged tree is how a flake is told from a real failure (`gate run --rerun-failed`, the flake log), and a served failure would hide it. A `failed` result is stored either way.",
     )
+    probe_commands: list[str] = knob(
+        factory=lambda: ["pytest --version", "uv --version"],
+        doc="Commands whose output is part of the cache key, so a different tool version never hits: each is run (10 s limit) and its output hashed once per process; one that cannot run counts as 'unavailable' in the key. Add the tools your gates use (`ruff --version`, `node --version`).",
+    )
     env_vars: list[str] = knob(
         factory=list,
         doc="Names of environment variables whose values are part of the cache key (a variable that changes what the tests do). Empty by default.",
