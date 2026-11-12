@@ -5,7 +5,9 @@ interrupted recovery, an open bug and a phase-less task were offered behind gene
 ready work. The fill order is now an explicit, testable selection:
 
   1. recover  -- interrupted/orphaned items (RUNNING with no live lease): recover --plan,
-                 then claim --force, so a crash's uncommitted work is salvaged first;
+                 then claim --force, so a crash's uncommitted work is salvaged first. They
+                 are reported under `running`, never offered a ready slot (Bcec3b3229f), so
+                 `ddflow next` leads with the bug fixes and `fill_order` ranks them first;
   2. bug      -- open-bug fixes (bugs-first);
   3. unphased -- tasks under no phase;
   4. ready    -- the remaining ready items, by priority then id.
@@ -51,7 +53,9 @@ def _ready_ids(st, cfg):
 
 def test_interrupted_bug_unphased_generic_are_offered_in_fill_order(log, cfg):
     st = _state(log)
-    assert _ready_ids(st, cfg) == ["STALLED", "FIXBUG", "LOOSE", "FEAT"]
+    p = plan(st, cfg)
+    assert [i.id for i in p.ready] == ["FIXBUG", "LOOSE", "FEAT"]
+    assert "STALLED" in [i.id for i in p.running], "the interrupted item is in flight, not ready"
 
 
 def test_fill_order_is_the_same_policy_as_a_named_function(log, cfg):
@@ -67,7 +71,8 @@ def test_fill_order_is_the_same_policy_as_a_named_function(log, cfg):
 
 
 def test_bugs_first_off_still_offers_bugs_by_priority(log, cfg):
-    """`bugs_first = false` only drops tier 2; recovery and unphased still lead."""
+    """`bugs_first = false` only drops tier 2; unphased still leads (an interrupted item is
+    in flight, reported under `running`, not offered)."""
     cfg.schedule.bugs_first = False
     st = _state(log)
-    assert _ready_ids(st, cfg) == ["STALLED", "LOOSE", "FEAT", "FIXBUG"]
+    assert _ready_ids(st, cfg) == ["LOOSE", "FEAT", "FIXBUG"]

@@ -1,0 +1,2 @@
+{"agent":"Monster3-TS-impact-probe-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"edded0ed010e157942ff3e37e","kind":"ddflow.seen","lamport":182420,"schema":1,"subject":"ddflow","ts":"2026-11-12T12:00:33.489475Z"}
+{"agent":"Monster3-TS-impact-probe-7267fe","data":{"gate":"rubber_duck"},"id":"ea703a7a0ab56a9f4252c0366","kind":"gate.started","lamport":182421,"schema":1,"subject":"TS-impact-probe","ts":"2026-11-12T12:00:33.548034Z"}

@@ -134,6 +134,9 @@ def test_a_fixed_confirmed_finding_is_not_called_refuted(repo, tmp_path):
         return fold(EventLog(repo).read_all(), strict=False).items["T1"]
 
     _cg_setup(repo, tmp_path)
+    # a delta converges on the floor (B-review-delta-rounds-do-not-converge): #2 is MEDIUM, so
+    # it must hold the gate here by the floor being LOW, not by default
+    assert run_cli(repo, "config", "--set", "review.converge_floor", "LOW")[0] == OK
     _failed_and_confirmed(repo)  # R1 full: #1 confirmed
     _commit(repo, "x.py", "x = 1\n")  # fix #1, so the next delta clears it
     _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # new finding #2

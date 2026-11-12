@@ -23,6 +23,7 @@ from ..mcp_protocol import modern_check as _modern_check
 from ..mcp_protocol import modernize as _modernize
 from ._offload import _offload, _offloaded
 from ._server import Server
+from ._snapfast import write_after as _write_snapshot
 
 
 def serve(
@@ -75,6 +76,9 @@ def serve(
         return True
 
     def after() -> None:
+        if srv.snapshot_due is not None:  # a live handshake was answered: cache it
+            text, srv.snapshot_due = srv.snapshot_due, None
+            _write_snapshot(srv, text)
         if srv.kill_pending and _reexec_ready(inp, relays):
             _lifecycle.exit_process()  # a kill (local) or a reboot (remote): never returns
         elif srv.reexec_pending and _reexec_ready(inp, relays):
