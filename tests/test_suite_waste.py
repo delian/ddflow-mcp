@@ -200,6 +200,9 @@ def test_whole_suite_command_detection():
     assert whole("python -m pytest tests")
     assert whole("pytest --ff tests/")
     assert whole("pytest --junitxml tests/out.xml tests/")
+    assert whole("pytest --lfnf=all tests/")
+    assert not whole("pytest --basetemp tests/ tests/test_a.py")
+    assert not whole("pytest --rootdir tests/ tests/unit/test_a.py")
     assert whole("pytest tests/test_a.py tests/")  # a root collects everything beneath it
     assert not whole("pytest tests -k test_one")
     assert not whole("pytest tests/ --ignore=tests/test_slow.py")
@@ -213,15 +216,18 @@ def test_a_ci_verdict_without_a_command_is_still_a_suite_run():
     assert _report(ev, {"aaaaaaa1": "T"})["runs"] == 1
 
 
-def test_untimed_runs_are_counted_beside_the_minutes():
+def test_a_class_with_an_untimed_run_has_no_total_minutes():
     ev = _log(
         ("A", "ci", "passed", _ev("aaaaaaa1")),
         ("A", "ci", "passed", _ev("aaaaaaa2")),
-        ("B", "ci", "passed", {"tree_sha": "aaaaaaa3+clean"}),
+        ("A", "ci", "passed", {"tree_sha": "aaaaaaa3+clean"}),
     )
-    cl = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"})["classes"]
-    rerun = cl["rerun_same_tree_same_item"]
-    assert (rerun["runs"], rerun["suite_minutes"], rerun["untimed"]) == (1, 10.0, 0)
-    other = cl["rerun_same_tree_other_item"]
-    assert (other["runs"], other["suite_minutes"], other["untimed"]) == (1, None, 1)
-    assert "1 untimed" in SW.text(_report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"}))
+    keys = {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"}
+    rep = _report(ev, keys)
+    rerun = rep["classes"]["rerun_same_tree_same_item"]
+    assert rerun["runs"] == 2
+    assert rerun["suite_minutes"] is None  # [600 s, untimed]: a partial sum is not the total
+    assert rerun["suite_minutes_timed"] == 10.0
+    assert rerun["untimed"] == 1
+    assert rep["avoidable_suite_minutes"] is None
+    assert "1 untimed" in SW.text(rep)

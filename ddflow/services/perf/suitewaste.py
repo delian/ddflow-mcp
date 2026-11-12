@@ -50,7 +50,22 @@ AVOIDABLE = ("rerun_same_tree_same_item", "rerun_same_tree_other_item")
 #: The research's bound: avoidable runs under this share refute the cache-first order.
 FALSIFIER_SHARE = 0.25
 #: Pytest options that narrow a run to part of the suite.
-_NARROWING = ("-k", "--deselect", "--ignore", "--lf", "--last-failed", "--sw", "--stepwise", "-m")
+_NARROWING = (
+    "-k",
+    "--deselect",
+    "--ignore",
+    "--ignore-glob",
+    "--lf",
+    "--last-failed",
+    "--sw",
+    "--stepwise",
+    "-m",
+)
+#: Pytest options whose next argument is their value, not a path.
+_VALUE_OPTIONS = (
+    "-n", "-p", "-c", "-o", "-W", "--basetemp", "--rootdir", "--junitxml", "--timeout",
+    "--maxfail", "--durations", "--confcutdir", "--dist", "--cache-dir", "--tb", "--color",
+)  # fmt: skip
 _ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
 
@@ -87,10 +102,29 @@ def _whole_command(command: str) -> bool:
     # Only the arguments after the pytest program: ``python -m pytest`` has its own ``-m``.
     cut = next((i for i, t in enumerate(tokens) if t.rsplit("/", 1)[-1] == "pytest"), -1)
     args = tokens[cut + 1 :]
-    if any(a.startswith(n) for a in args for n in _NARROWING):
+    if any(_narrows(a) for a in args):
         return False
     # A root path collects everything beneath it, so a file path beside it adds nothing.
-    return any(_ROOT.match(a) for a in args)
+    return any(_ROOT.match(a) for a in _positionals(args))
+
+
+def _narrows(arg: str) -> bool:
+    name = arg.split("=", 1)[0]
+    # ``-k expr`` may be written ``-kexpr`` and ``-m`` likewise; a long option is exact.
+    return name in _NARROWING or (arg[:2] in ("-k", "-m") and not arg.startswith("--"))
+
+
+def _positionals(args: list[str]) -> list[str]:
+    """The arguments that are paths: not an option, and not the value of one that takes one."""
+    out, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in _VALUE_OPTIONS:
+            skip = True
+        elif not a.startswith("-"):
+            out.append(a)
+    return out
 
 
 def _is_suite(gate: str, ev: dict) -> bool:
@@ -160,10 +194,13 @@ def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
     return out
 
 
-def _minutes(values: list[float | None]) -> float | None:
-    """Minutes of the runs that recorded a time; None when none did. The count of runs that
-    did not is reported beside it (``untimed``), so a partial sum is never read as the total."""
+def _minutes(values: list[float | None], *, whole: bool = False) -> float | None:
+    """Minutes of the runs that recorded a time; None when none did, and with ``whole`` also None
+    when any run did not (a partial sum is never the total). The count of runs without a time is
+    reported beside it (``untimed``)."""
     known = [v for v in values if v is not None]
+    if whole and len(known) < len(values):
+        return None
     return round(sum(known) / 60.0, 2) if known else None
 
 
@@ -192,7 +229,9 @@ def build(
     classes = {
         c: {
             "runs": len(by[c]),
-            "suite_minutes": _minutes([r["suite_s"] for r in by[c]]),
+            #: None when any run of the class recorded no time: a partial sum is not the total.
+            "suite_minutes": _minutes([r["suite_s"] for r in by[c]], whole=True),
+            "suite_minutes_timed": _minutes([r["suite_s"] for r in by[c]]),
             "queue_minutes": _minutes([r["queue_s"] for r in by[c]]),
             "untimed": sum(r["suite_s"] is None for r in by[c]),
         }
@@ -220,7 +259,9 @@ def build(
         "avoidable": avoidable,
         "avoidable_share": share,
         "avoidable_share_max": upper,
-        "avoidable_suite_minutes": _minutes([r["suite_s"] for c in AVOIDABLE for r in by[c]]),
+        "avoidable_suite_minutes": _minutes(
+            [r["suite_s"] for c in AVOIDABLE for r in by[c]], whole=True
+        ),
         "classes": classes,
         "falsifier": _falsifier(share, upper),
         "unavailable": unavailable,
@@ -263,7 +304,11 @@ def text(data: dict) -> str:
         lines.append(
             f"  {c:<28} runs {v['runs']:>4}  suite {_fmt(v['suite_minutes'])}  "
             f"queue {_fmt(v['queue_minutes'])}"
-            + (f"  ({v['untimed']} untimed, not in the minutes)" if v["untimed"] else "")
+            + (
+                f"  ({v['untimed']} untimed; the timed runs alone {_fmt(v['suite_minutes_timed'])})"
+                if v["untimed"]
+                else ""
+            )
         )
     f = data["falsifier"]
     lines.append(f"falsifier (avoidable under {f['threshold'] * 100:.0f}%): {f['verdict']}")
