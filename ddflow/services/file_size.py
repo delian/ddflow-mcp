@@ -81,6 +81,49 @@ def violations(repo: Path, limit: int) -> list[str]:
     return bad
 
 
+def _base_size(repo: Path, base: str, rel: str) -> int | None:
+    """Bytes of ``rel`` at ``base``; None when the base does not have the file."""
+    r = G.run(repo, "cat-file", "-s", f"{base}:{rel}")
+    return int(r.out.strip()) if r.ok and r.out.strip().isdigit() else None
+
+
+def growth(repo: Path, changed: list[str], limit: int, base: str) -> list[str]:
+    """What a change adds to the size problem, for the files it touches (r-small-files).
+
+    A changed ``.py`` file that is over ``limit`` now is refused when the base did not have
+    it over the limit (a new oversized file, or one that crossed it), and when it was over
+    already and is BIGGER than on the base. A shrink, an untouched offender and a file under
+    the limit pass. The baseline never licenses growth: it records today's exceptions, and a
+    ratchet that lets an exempt file grow is not one. The limit and the baseline are only
+    read. Sizes are bytes on disk, as `oversized` measures them (so a checkout that rewrites line
+    endings is measured as it sits). RuntimeError when ``base`` is not a commit the repository can read: a check that
+    could not run is never a pass. ``limit`` 0 turns it off."""
+    if limit <= 0:
+        return []
+    if not G.run(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
+        raise RuntimeError(f"cannot measure growth: git cannot read the base {base!r}")
+    bad = []
+    for rel in sorted(set(changed)):
+        if not rel.endswith(".py"):
+            continue
+        try:
+            size = (repo / rel).stat().st_size
+        except FileNotFoundError:
+            if not (repo / rel).is_symlink():  # deleted (a path that is gone is no growth)
+                continue
+            raise RuntimeError(f"cannot measure {rel}: a dangling link") from None
+        except OSError as exc:  # unreadable is not "deleted": the check did not see the bytes
+            raise RuntimeError(f"cannot measure {rel}: {exc.strerror or exc}") from exc
+        if size <= limit:
+            continue
+        before = _base_size(repo, base, rel)
+        if before is None or before <= limit:
+            bad.append(f"{rel} is {size} bytes, over the {limit} limit: split it into a package")
+        elif size > before:
+            bad.append(f"{rel} grew to {size} bytes (on {base}: {before}): split it")
+    return bad
+
+
 def doctor_notes(repo: Path, limit: int) -> list[str]:
     """One note listing the files over the limit (largest first); [] when there are none."""
     try:
