@@ -55,6 +55,7 @@ def dedupe_bugs(
             clusters=[],
             count=0,
             applied=[],
+            failed=[],
             floor=fl,
             semantic=None,  # every declared key set, so --json and MCP are byte-identical
             scanned=None,
