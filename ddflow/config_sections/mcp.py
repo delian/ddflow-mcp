@@ -134,8 +134,8 @@ class McpConfig:
     )
 
     init_snapshot_max_age_s: float = knob(
-        3600.0,
-        doc="`initialize` and `server/discover` answer from the cached interface snapshot (`.ddflow/local/mcp-interface.json`, written by a server after a handshake it rendered) when it is fresh: written by this ddflow version, for this connection's tool tier and interface digest, and at most this many seconds old. The instruction template is then not rendered, so the handshake costs milliseconds instead of seconds; the volatile upgrade notice is said on the first tool result instead of in the handshake. A snapshot that is not fresh, or is unreadable, is ignored and the handshake is rendered live (and the snapshot rewritten). 0 turns it off: every handshake is rendered live. Read once per connection.",
+        300.0,
+        doc="`initialize` and `server/discover` answer from the cached interface snapshot (`.ddflow/local/mcp-interface.json`, written by a server after a handshake it rendered) when it is fresh: written by this ddflow version, for this connection's tool tier and interface digest, and at most this many seconds old. The instruction template is then not rendered, so the handshake costs milliseconds instead of seconds; the queue, companion and rules lines of the instruction text are those of the handshake that wrote the snapshot, so they may lag by up to this many seconds until the handshake text is made byte-stable (B-mcp-instructions-volatile-prefix), which is why the default is short; the volatile upgrade notice is said on the first tool result instead of in the handshake. A snapshot that is not fresh, or is unreadable, is ignored and the handshake is rendered live (and the snapshot rewritten). 0 turns it off: every handshake is rendered live. Read once per connection.",
         check=lambda v: (
             ""
             if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v < float("inf")

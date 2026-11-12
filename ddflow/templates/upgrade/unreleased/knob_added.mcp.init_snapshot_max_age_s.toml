@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "mcp.init_snapshot_max_age_s"
-new = "3600.0"
+new = "300.0"
 why = "Seconds a cached MCP interface snapshot may be served for initialize and server/discover (SU-init-fast-hook); 0 renders every handshake live."
 impact = "additive"
