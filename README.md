@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2a4ef277e98e -->
-<details><summary>All 687 knobs across 62 sections</summary>
+<!-- ddflow:begin README/knobs sha=b0c2a7fc7073 -->
+<details><summary>All 698 knobs across 63 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1342,6 +1342,17 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `premerge.enabled` | `true` |  |
+| `premerge.stages` | `["pre-commit"]` |  |
+| `premerge.budget_s` | `120` |  |
+| `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
+| `premerge.fix` | `true` |  |
+| `premerge.max_fix_rounds` | `1` |  |
+| `premerge.precommit_command` | `"pre-commit"` |  |
+| `premerge.skip_hooks` | `[]` |  |
+| `premerge.generic_hooks` | `true` |  |
+| `premerge.large_file_kb` | `500` |  |
+| `premerge.test_command` | `"python -m pytest -q -x"` |  |
 | `prices.limit` | `{}` |  |
 | `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
