@@ -10,13 +10,9 @@ function _ddflow_activate_fish
     echo "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')" >&2
     return 0
   end
-  set -l _out (register-python-argcomplete --shell fish ddflow 2>/dev/null)
-  if test $status -ne 0; or test -z "$_out"
-    echo "ddflow: argcomplete could not register completion for ddflow" >&2
-    return 0
-  end
-  echo -n "$_out" | source 2>/dev/null
-  or return 0
+  register-python-argcomplete --shell fish ddflow | source
+  or echo "ddflow: argcomplete could not register completion for ddflow" >&2
+  return 0
 end
 
 _ddflow_activate_fish

@@ -37,7 +37,7 @@ def test_script_parses_in_its_shell(shell, syntax):
 
 
 def test_script_without_argcomplete_returns_0_with_a_message(tmp_path):
-    """Without `register-python-argcomplete` on PATH the script prints a message, returns 0."""
+    """Sourced (as activation is) the script prints a message and the shell survives."""
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("bash not installed")
@@ -45,7 +45,7 @@ def test_script_without_argcomplete_returns_0_with_a_message(tmp_path):
     empty.mkdir()
     env = dict(os.environ, PATH=str(empty))
     probe = subprocess.run(
-        [bash],
+        [bash, "-c", "source /dev/stdin; printf 'SURVIVED:%d\\n' $?"],
         input=scripts.for_shell("bash"),
         text=True,
         capture_output=True,
@@ -53,3 +53,4 @@ def test_script_without_argcomplete_returns_0_with_a_message(tmp_path):
     )
     assert probe.returncode == 0
     assert "argcomplete" in probe.stderr
+    assert "SURVIVED:0" in probe.stdout
