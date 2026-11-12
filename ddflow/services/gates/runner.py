@@ -299,7 +299,9 @@ def run_command_gate(
         return "unavailable", {"reason": f"working directory {cwd} does not exist"}
 
     conf = cfg if cfg is not None else Config.load(cwd)
-    rc_key = RC.key(gdef.id, gdef.command, cwd, conf)
+    rc_key = RC.key(
+        gdef.id, f"{gdef.command}\0timeout={gdef.timeout_s}", cwd, conf
+    )  # a shorter limit may fail
     if (hit := RC.lookup(cwd, rc_key, conf)) is not None:  # same tree, command, environment
         return hit["outcome"], {
             **RC.hit_evidence(hit, rc_key or ""),

@@ -337,3 +337,17 @@ def test_a_submodule_at_another_commit_misses(tmp_path: Path):
     commit(lib, "b.py", "y = 1\n")
     git(repo / "lib", "-c", "protocol.file.allow=always", "pull", "-q", "origin", "main")
     assert key(repo) not in (None, before)
+
+
+def test_a_shorter_gate_timeout_does_not_inherit_a_pass(tmp_path: Path):
+    repo = project(tmp_path)
+    c = Config()
+    one = GateDef(
+        id="unit_tests", title="ut", command=f"echo ran >> '{tmp_path}/t.txt'", timeout_s=600
+    )
+    two = GateDef(
+        id="unit_tests", title="ut", command=f"echo ran >> '{tmp_path}/t.txt'", timeout_s=5
+    )
+    GR.run_command_gate(one, repo, cfg=c)
+    GR.run_command_gate(two, repo, cfg=c)
+    assert (tmp_path / "t.txt").read_text().count("ran") == 2
