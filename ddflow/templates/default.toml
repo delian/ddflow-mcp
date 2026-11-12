@@ -612,6 +612,13 @@ chunk_max_tokens = 0
 split_rounds = 2
 degraded_cooldown_s = 3600
 
+[roles]
+budget_tokens = 600
+phase_closer_rules = ["Tests first: a regression test that fails against the unfixed code, then the change.", "Ratchet offenders are read by name (architecture interfaces, constants ratchet, every family of the dependency guard); never add a baseline entry.", "Run the suite detached with the maximum timeout: DDFLOW_CI_SUITE_WAIT_S=21600 setsid nohup ddflow gate run ID ci --timeout 21600, with a heartbeat loop you stop by pid; commit nothing while it runs.", "Approvals: file the request from your directory, report its Q id to the coordinator and stop on that item; re-run with --approval once relayed (single use, bound to the command, state and directory). Never approve anything yourself.", "Pins: one pins recipe per approval, each fresh after the previous is committed; audit each diff and commit only what your work caused.", "Docs-wave stop: when the phase's remaining work is inherited docs-wave needs, stop and report; do not lift the need.", "Never push. Finish means nothing ahead of main for your worktree and your event log committed."]
+fixer_rules = ["Tests first: a regression test that fails against the unfixed code, then the fix; a bug is filed before it is fixed.", "Never skip or weaken a test, raise a limit or add a ratchet baseline entry; read ratchet offenders by name.", "Claim before you edit and lease only the files you need; if a claim is refused, report who holds what and take the next item.", "Never push; finish means nothing ahead of main for your worktree and your event log committed."]
+researcher_rules = ["Read-only: no edits and no claims; state a falsifiable claim, run the cheapest test that could refute it and record the verdict (CONFIRMED, REFUTED or THEORETICAL) with the command and its output.", "File every defect found as a bug after `ddflow similar`; never only work around it.", "Record the operator's words verbatim and a lesson after any surprise."]
+reviewer_rules = ["Try to refute the change; a tool or reviewer that could not run is recorded unavailable, never passed.", "Prefer a reviewer from another model family; the author's own model never counts.", "Never edit files; record each finding with its location and severity; only a new confirmed HIGH stops a merge."]
+
 [rules]
 max_rules = 200
 max_size_bytes = 50000
