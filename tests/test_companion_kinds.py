@@ -318,6 +318,7 @@ def test_the_handshake_never_tells_an_agent_to_register_a_cli_tool(repo):
     # companion state lines are per-session state, so they render in the brief, not in
     # the byte-stable handshake (B-mcp-instructions-volatile-prefix).
     assert "not wired up" not in _instructions(repo)
+    assert "clitool" not in _instructions(repo)
     text = _brief_lines(repo)
     assert "clitool" in text, "the companion is not mentioned at all; the test proves nothing"
     block = text[max(0, text.index("clitool") - 400) : text.index("clitool") + 400]
@@ -348,6 +349,7 @@ def test_the_handshake_calls_an_unprobed_companion_UNCHECKED_not_missing(repo):
     # where it proposes.
 
     assert "not wired up" not in _instructions(repo)  # moved to the brief
+    assert "[not checked]" not in _instructions(repo)
     text = _brief_lines(repo)
     assert "[not checked]" in text, text[-900:]
     assert "[not installed]" not in text, "an unprobed companion was rendered as known-absent"

@@ -430,7 +430,7 @@ def test_the_offer_counts_every_source_not_three_of_them(repo):
     history is an engineering journal and a cross-session memory store was told
     nothing, which is exactly the project the offer exists for.
     """
-    from ddflow.surfaces.mcp import _instruction_vars
+    from ddflow.surfaces.mcp import _instruction_vars, _instructions
 
     (repo / "docs" / "log").mkdir(parents=True)
     (repo / ".agent_memory").mkdir()
@@ -442,6 +442,7 @@ def test_the_offer_counts_every_source_not_three_of_them(repo):
     # handshake (B-mcp-instructions-volatile-prefix).
     from ddflow.services import brief_volatile
 
+    assert "queue is empty" not in _instructions(repo).lower()
     text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import" in text, text[-800:]
     assert "queue is empty" in text.lower(), text[-800:]

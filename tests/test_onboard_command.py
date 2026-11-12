@@ -127,6 +127,7 @@ def test_an_adopted_project_with_unimported_history_is_offered_it_too(tmp_path):
 
     text = _instructions(tmp_path)
     assert "queue is empty" not in text  # moved to the brief
+    assert "`onboard` prompt also cuts the workflow over" not in text
     brief = brief_volatile.volatile_lines(_instruction_vars(tmp_path))
     assert "queue is empty" in brief
     assert "`onboard` prompt also cuts the workflow over" in brief

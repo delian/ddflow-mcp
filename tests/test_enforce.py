@@ -272,6 +272,8 @@ def test_an_adopted_repo_names_its_remaining_setup_gaps(repo):
     assert "ddflow_brief" in text and "Claim before you edit" in text
     # The setup gaps are per-session state, so they render in the brief, not in the
     # byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    assert "No test command is configured" not in text
+    assert "No cross-family reviewer is configured" not in text
     brief = _brief_lines(repo)
     assert "No test command is configured" in brief
     assert "No cross-family reviewer is configured" in brief
