@@ -107,14 +107,14 @@ def _submodule_dirt(path: Path) -> str | None:
     parts = []
     for rel in sorted(others):
         try:
-            parts.append(f"{rel}={_digest((path / rel).read_bytes().decode('utf-8', 'replace'))}")
+            parts.append(f"{rel}={_digest((path / rel).read_bytes().decode('latin-1'))}")
         except OSError:
             return None
     return _digest(diff.out, *parts) if diff.out or parts else ""
 
 
 @functools.cache
-def _probe(command: str, cwd: str) -> str:
+def _probe(command: str, cwd: str, path_env: str) -> str:
     """What ``command`` prints (a tool's version) in ``cwd``, or ``unavailable`` when it cannot
     run. Remembered per process for that command and project."""
     p = CommandRunner().run(
@@ -132,10 +132,13 @@ def _env(cwd: Path, cfg: Any) -> str | None:
         if not p.is_file():
             continue
         try:
-            locks.append(f"{name}={_digest(p.read_text('utf-8', 'replace'))}")
+            locks.append(f"{name}={_digest(p.read_bytes().decode('latin-1'))}")
         except OSError:
             return None
-    tools = [f"{c}={_probe(c, str(cwd))}" for c in cfg.resultcache.probe_commands]
+    tools = [
+        f"{c}={_probe(c, str(cwd), os.environ.get('PATH', ''))}"
+        for c in cfg.resultcache.probe_commands
+    ]
     envs = [f"{n}={os.environ.get(n, '')}" for n in sorted(cfg.resultcache.env_vars)]
     return _digest(_python(), sys.platform, *locks, *tools, *envs)
 

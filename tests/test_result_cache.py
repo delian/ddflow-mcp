@@ -66,6 +66,7 @@ def commit(repo: Path, rel: str, text: str) -> None:
 
 def cfg(**kw) -> Config:
     c = Config()
+    c.resultcache.probe_commands = []  # a real tool probe per tmp project is slow; one test uses it
     for k, v in kw.items():
         setattr(c.resultcache, k, v)
     return c
@@ -303,23 +304,23 @@ def test_a_failed_run_is_never_reported_as_passed_by_the_cache(tmp_path: Path):
 def test_a_changed_tool_version_misses(tmp_path: Path, monkeypatch):
     repo = project(tmp_path)
     c = cfg(probe_commands=["mytool --version"])
-    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd: "v1")
+    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd, path: "v1")
     before = key(repo, c=c)
-    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd: "v2")
+    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd, path: "v2")
     assert key(repo, c=c) != before
 
 
 def test_an_unreadable_lock_file_means_no_key(tmp_path: Path, monkeypatch):
     repo = project(tmp_path)
     commit(repo, "uv.lock", "v = 1\n")
-    real = Path.read_text
+    real = Path.read_bytes
 
     def refuse(self, *a, **k):
         if self.name == "uv.lock":
             raise PermissionError("denied")
         return real(self, *a, **k)
 
-    monkeypatch.setattr(Path, "read_text", refuse)
+    monkeypatch.setattr(Path, "read_bytes", refuse)
     assert key(repo) is None
 
 
@@ -378,3 +379,34 @@ def test_a_new_plain_directory_is_keyed_by_its_files_not_the_superproject_head(t
     one = key(repo)
     (repo / "newdir" / "t.py").write_text("a = 2\n")
     assert one not in (None, plain) and key(repo) not in (None, one)
+
+
+def test_the_real_probe_depends_on_the_project_and_the_path(tmp_path: Path):
+    RC._probe.cache_clear()
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    assert RC._probe("pwd", str(a), "p1") != RC._probe("pwd", str(b), "p1")  # another project
+    calls = []
+    real = RC.CommandRunner.run
+
+    def spy(self, *args, **kw):
+        calls.append(1)
+        return real(self, *args, **kw)
+
+    RC.CommandRunner.run = spy
+    try:
+        RC._probe("pwd", str(a), "p1")
+        RC._probe("pwd", str(a), "p2")  # another PATH: probed again
+        RC._probe("pwd", str(a), "p2")  # same: remembered
+    finally:
+        RC.CommandRunner.run = real
+    assert len(calls) == 1  # p1 was already remembered; only p2 ran, once
+
+
+def test_binary_lock_content_is_hashed_without_loss(tmp_path: Path):
+    repo = project(tmp_path)
+    (repo / "uv.lock").write_bytes(b"\xff")
+    one = key(repo)
+    (repo / "uv.lock").write_bytes(b"\xfe")
+    assert key(repo) not in (None, one)
