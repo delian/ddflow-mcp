@@ -95,7 +95,8 @@ def growth(repo: Path, changed: list[str], limit: int, base: str) -> list[str]:
     already and is BIGGER than on the base. A shrink, an untouched offender and a file under
     the limit pass. The baseline never licenses growth: it records today's exceptions, and a
     ratchet that lets an exempt file grow is not one. The limit and the baseline are only
-    read. RuntimeError when ``base`` is not a commit the repository can read: a check that
+    read. Sizes are bytes on disk, as `oversized` measures them (so a checkout that rewrites line
+    endings is measured as it sits). RuntimeError when ``base`` is not a commit the repository can read: a check that
     could not run is never a pass. ``limit`` 0 turns it off."""
     if limit <= 0:
         return []
@@ -107,8 +108,10 @@ def growth(repo: Path, changed: list[str], limit: int, base: str) -> list[str]:
             continue
         try:
             size = (repo / rel).stat().st_size
-        except OSError:  # deleted
+        except FileNotFoundError:  # deleted (a path that is gone is no growth)
             continue
+        except OSError as exc:  # unreadable is not "deleted": the check did not see the bytes
+            raise RuntimeError(f"cannot measure {rel}: {exc.strerror or exc}") from exc
         if size <= limit:
             continue
         before = _base_size(repo, base, rel)

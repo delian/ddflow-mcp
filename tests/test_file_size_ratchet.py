@@ -131,7 +131,7 @@ def test_growth_rejects_a_new_oversized_file(tmp_path):
     repo = _based(tmp_path, {"a.py": 10})
     (repo / "big.py").write_text("#" * (FIXTURE_LIMIT + 1))
     [msg] = FS.growth(repo, ["big.py"], FIXTURE_LIMIT, "HEAD")
-    assert "big.py" in msg
+    assert "big.py" in msg and "split it into a package" in msg
 
 
 def test_growth_rejects_a_file_already_over_the_limit_that_grew_baselined_or_not(tmp_path):
@@ -142,8 +142,10 @@ def test_growth_rejects_a_file_already_over_the_limit_that_grew_baselined_or_not
     assert "grew" in msg and str(size) in msg
     base = repo / FS.BASELINE  # a baseline line does not license growth either
     base.parent.mkdir(parents=True)
-    base.write_text(f"old.py | {size} | legacy\n")
+    base.write_text(f"old.py | {size - 50} | legacy\n")  # a baseline LOWER than the base's size
+    before = base.read_text()
     assert "grew" in FS.growth(repo, ["old.py"], FIXTURE_LIMIT, "HEAD")[0]
+    assert base.read_text() == before, "a rejection never edits the baseline"
 
 
 def test_growth_allows_a_shrink_an_untouched_offender_and_a_small_change(tmp_path):
@@ -169,3 +171,12 @@ def test_growth_with_an_unreadable_base_is_an_error_not_a_pass(tmp_path):
     (repo / "a.py").write_text("#" * (FIXTURE_LIMIT + 1))
     with pytest.raises(RuntimeError, match="cannot measure"):
         FS.growth(repo, ["a.py"], FIXTURE_LIMIT, "no-such-ref")
+
+
+def test_a_touched_file_that_cannot_be_statted_is_an_error_not_a_pass(tmp_path):
+    import pytest
+
+    repo = _based(tmp_path, {"a.py": 10})
+    (repo / "loop.py").symlink_to("loop.py")  # ELOOP on stat, not a deletion
+    with pytest.raises(RuntimeError, match=r"cannot measure loop\.py"):
+        FS.growth(repo, ["loop.py"], FIXTURE_LIMIT, "HEAD")
