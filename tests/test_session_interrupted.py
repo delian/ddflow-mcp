@@ -335,3 +335,15 @@ def test_a_late_expiry_record_does_not_hide_writes_made_after_the_real_lapse():
         _ev("lease.released", "T1", 10, NOW - 90, agent="b2", holder="a1"),
     )
     assert _dead(evs) == []
+
+
+def test_the_previous_session_is_the_latest_closed_one_even_with_only_a_summary(repo: Path):
+    log = EventLog(repo, "a1")
+    cfg = Config.load(repo)
+    S.capture_prompt(log, cfg, "older", "older words")
+    S.end(log, S.harness_session_id("older"), summary="")
+    log.append("session.started", "plain", {})
+    S.end(log, "plain", summary="finished the cleanup")
+    events = log.read_all()
+    lines = S.previous_lines(events, fold(events, strict=False), "a1", "cur", cfg)
+    assert "plain" in lines[0] and "finished the cleanup" in "\n".join(lines)

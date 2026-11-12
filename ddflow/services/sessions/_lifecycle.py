@@ -244,7 +244,10 @@ def previous_lines(events: list, st: Any, agent: str, current: str, cfg: Config)
     closed = [
         s
         for s in st.sessions.values()
-        if s.agent == agent and s.ended_at and s.id != current and (s.prompts or s.notes)
+        if s.agent == agent
+        and s.ended_at
+        and s.id != current
+        and (s.prompts or s.notes or s.summary)
     ]
     if not closed:
         return []
