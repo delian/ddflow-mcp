@@ -20,6 +20,9 @@ DOC = Path(NAL.PKG).parent / "docs" / "ddflow" / "research" / "driver-inventory.
 
 #: ids shorter than this are not counted as substrings (`pi`, `amp` hit ordinary words)
 MIN_ID_LEN = 4
+#: ordinary words that contain an id (`decline` holds `cline`): removed before the match, so a
+#: word is not read as an agent name. The agent literal itself (`cline`, `Cline`) still counts.
+INNOCENT_WORDS = re.compile(r"decline[ds]?|declining")
 #: the substring total may not jump past this (report-only below it); lower it as sites move
 #: into descriptors. grok.toml (DX-grok-hook-descriptor) added 'grok' substring matches: 171 today.
 SUBSTRING_CEILING = 180
@@ -37,7 +40,8 @@ def substring_sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
         v = n.value
         if NAL.sites(f"x = {v!r}\n", ids, roots):
             continue  # already counted by the exact ratchet
-        if any(w in v.lower() for w in words) or any(r in v for r in roots):
+        low = INNOCENT_WORDS.sub("", v.lower())
+        if any(w in low for w in words) or any(r in v for r in roots):
             found.append(n.lineno)
     return found
 
@@ -63,6 +67,10 @@ def test_the_substring_detector_can_fail():
     assert substring_sites('x = "claude"\n', ids, roots) == []  # exact: the ratchet's
     assert substring_sites('x = "Claude Code"\n', ids, roots) == [1]  # case-insensitive
     assert substring_sites('"""run claude"""\nx = 1\n', ids, roots) == []  # docstring
+    # an ordinary word that holds an id is no agent name; the agent itself still counts
+    assert substring_sites('x = "the source declined it"\n', {"cline"}, set()) == []
+    assert substring_sites('x = "install cline, then decline"\n', {"cline"}, set()) == [1]
+    assert substring_sites('x = "CLAUDECODE"\n', {"claude"}, set()) == [1]
 
 
 def test_the_substring_total_is_reported_and_bounded():

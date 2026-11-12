@@ -12,10 +12,7 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 | File | Sites | Class | Replacing descriptor field |
 |---|---|---|---|
 | `ddflow/mcpshim/clients.py` | 31 | data | `[client] names` (clientInfo.name strings per harness) |
-| `ddflow/services/hookio.py` | 20 | data | `[hooks] normalizer` / `emitter` (dialect registry key) |
 | `ddflow/services/harnessreg.py` | 6 | data | `[session] env` and `[hooks] style` vocabulary |
-| `ddflow/services/compat_refs.py` | 5 | data | `[commands] dir`, `[skills] dir`, `[instructions] file` |
-| `ddflow/config_sections/approvals.py` | 2 | data | `[transcripts] root` |
 | `ddflow/services/adopt/_adopt.py` | 1 | data | `[instructions] file` |
 | `ddflow/services/adopt/_docs.py` | 1 | data | `[instructions] file` |
 | `ddflow/services/swarm/lanehooks.py` | 3 | data | `[swarm] lanes` doors key |
@@ -25,8 +22,7 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 | `ddflow/surfaces/declared/hooks.py` | 2 | compat | `harness` argument of ddflow_hooks |
 | `ddflow/surfaces/parsers/workflow.py` | 1 | compat | `hooks run --harness` default from descriptors |
 | `ddflow/services/legacy.py` | 1 | compat | `[commands] dir` glob |
-| `ddflow/services/review/model.py` | 2 | model-axis | route `kind` (models/routes/<id>.toml) |
-| `ddflow/services/review/engine.py` | 1 | model-axis | route `kind` (models/routes/<id>.toml) |
+| `ddflow/adapters/reviewer_clients.py` | 1 | model-axis | route `kind` (models/routes/<id>.toml) |
 | `ddflow/services/hookwriters/__init__.py` | 2 | driver | `[hooks] style` |
 | `ddflow/services/hookwriters/flatlist.py` | 2 | driver | `[hooks] style` |
 | `ddflow/services/mcpconfig.py` | 2 | driver | `[mcp] shape` |
@@ -36,12 +32,15 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 | `ddflow/services/importer_harness.py` | 1 | driver | `[memory] store` |
 | `ddflow/services/harness.py` | 1 | driver | `[instructions] file` (site deleted by B-hx-onboard-generic) |
 | `ddflow/core/bookkeeping.py` | 1 | driver | `[worktrees] dir` |
+| `ddflow/services/export/kind_security.py` | 1 | driver | none: GitHub's own `.github/SECURITY.md` path |
+| `ddflow/surfaces/declared/capflags.py` | 1 | driver | none: the paging `cursor` argument, not the Cursor harness |
+| `ddflow/views/output_caps.py` | 2 | driver | none: the paging `cursor` key, not the Cursor harness |
 
-Totals: data 69, compat 26, model-axis 3, driver 14 (112: the source's 111 plus grok's client row).
+Totals: data 42, compat 26, model-axis 1, driver 18 (87; rows leave as sites move into descriptors).
 
 ## Substring surface (report only)
 
 The exact ratchet misses constants that merely contain a name (`"run prompt --harness claude"`).
 `test_agent_literals_substring.py` counts them (case-insensitive, ids of 4+ characters;
 `MIN_ID_LEN`) and prints the total; a ceiling `SUBSTRING_CEILING` (180: a margin over today's 171) only stops a silent jump.
-Today: 171 constants in 56 files. Lower the ceiling as sites move.
+Today: 171 constants in 59 files (ordinary words such as `decline` are not counted). Lower the ceiling as sites move.
