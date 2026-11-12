@@ -347,3 +347,11 @@ def test_the_previous_session_is_the_latest_closed_one_even_with_only_a_summary(
     events = log.read_all()
     lines = S.previous_lines(events, fold(events, strict=False), "a1", "cur", cfg)
     assert "plain" in lines[0] and "finished the cleanup" in "\n".join(lines)
+
+
+def test_a_write_inside_the_lease_grace_does_not_exempt_a_dead_session():
+    # TTL ended at NOW-7500, grace [lease].grace_s later it stopped holding; the session
+    # wrote inside the grace and then died: it is dead.
+    grace = Config().lease.grace_s
+    evs = _seed(_ev("session.note", "s1", 8, NOW - 7500 + grace // 2, text="last gasp"))
+    assert [d.session for d in _dead(evs)] == ["s1"]

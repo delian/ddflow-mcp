@@ -328,7 +328,8 @@ def _on_lifecycle(
     st = fold(events, strict=False)
     if sid not in st.sessions:
         log.append("session.started", sid, {"tool": "hook", "cwd": str(Path.cwd())})
-        events, st = log.read_all(), fold(log.read_all(), strict=False)
+        events = log.read_all()
+        st = fold(events, strict=False)
     if ending:
         return _HookResult(
             result=S.close_ended(log, cfg, sid, events, st, str(p.raw.get("reason") or ""))

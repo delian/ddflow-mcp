@@ -128,8 +128,9 @@ def _lapses(events: list, st: Any, agent: str, now: float, grace_s: int) -> list
     leases (a reclaim replaces the lease in state, the event stays in the log).
 
     A `lease.expired` is often written by a reaper long after the lease ran out, so its own
-    time is only the latest the lapse can be: the lapse is the TTL end of the holder's last
-    acquisition or renewal of that item before the event, when the log has one."""
+    time is only the latest the lapse can be: the lapse is the end of the holder's last
+    acquisition or renewal of that item before the event, TTL plus grace (the moment
+    `Lease.live` stops saying it holds), when the log has one."""
     last_ttl_end: dict[str, float] = {}  # item -> end of the holder's latest known TTL
     out: list[float] = []
     for e in events:
@@ -143,11 +144,15 @@ def _lapses(events: list, st: Any, agent: str, now: float, grace_s: int) -> list
                 last_ttl_end[e.subject] = max(prior, end) if e.kind == "lease.renewed" else end
         elif e.kind == "lease.expired" and d.get("holder") == agent:
             wrote = _epoch(e.ts)
-            out.append(min(wrote, last_ttl_end[e.subject]) if e.subject in last_ttl_end else wrote)
+            out.append(
+                min(wrote, last_ttl_end[e.subject] + grace_s)
+                if e.subject in last_ttl_end
+                else wrote
+            )
     for it in st.items.values():
         lease = it.lease
         if lease is not None and lease.holder == agent and not lease.live(now, grace_s):
-            out.append(lease.renewed_at + lease.ttl_s)
+            out.append(lease.renewed_at + lease.ttl_s + grace_s)
     return out
 
 
