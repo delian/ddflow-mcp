@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "suites.load_poll_s"
+new = '2.0'
+why = "SL-suite-load-budget: the suite lock admits by a core-derived cap and a load budget."
+impact = "additive"
