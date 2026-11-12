@@ -95,3 +95,9 @@ def test_the_launch_brief_can_include_a_role(proj):
 
 def test_the_service_lists_its_roles():
     assert BR.ROLES == ROLES
+
+
+def test_a_budget_smaller_than_the_notice_still_holds(proj):
+    _config(proj, "[roles]\nbudget_tokens = 1")
+    code, out, _ = run_cli(proj, "brief", "--role", "fixer")
+    assert code == 0 and approx_tokens(out) <= 4 and out.startswith("# Role: fixer")
