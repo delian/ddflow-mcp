@@ -171,6 +171,7 @@ def test_unavailable_partial_and_unknown_outcomes_are_never_stored(tmp_path: Pat
     for bad in ("unavailable", "partial", "skipped", "", "weird"):
         RC.store(repo, k, bad, {"exit": 0}, c)
         assert RC.lookup(repo, k, c) is None, bad
+        assert not RC.entry_path(repo, k).exists(), bad  # nothing was written at all
 
 
 def test_a_corrupt_or_tampered_entry_is_a_miss(tmp_path: Path):
@@ -302,22 +303,24 @@ def test_a_failed_run_is_never_reported_as_passed_by_the_cache(tmp_path: Path):
 def test_a_changed_tool_version_misses(tmp_path: Path, monkeypatch):
     repo = project(tmp_path)
     c = cfg(probe_commands=["mytool --version"])
-    monkeypatch.setattr(RC, "_probe", lambda cmd: "v1")
+    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd: "v1")
     before = key(repo, c=c)
-    monkeypatch.setattr(RC, "_probe", lambda cmd: "v2")
+    monkeypatch.setattr(RC, "_probe", lambda cmd, cwd: "v2")
     assert key(repo, c=c) != before
 
 
-def test_an_unreadable_lock_file_means_no_key(tmp_path: Path):
+def test_an_unreadable_lock_file_means_no_key(tmp_path: Path, monkeypatch):
     repo = project(tmp_path)
     commit(repo, "uv.lock", "v = 1\n")
-    (repo / "uv.lock").chmod(0)
-    try:
-        if os.access(repo / "uv.lock", os.R_OK):  # running as a user that ignores modes
-            return
-        assert key(repo) is None
-    finally:
-        (repo / "uv.lock").chmod(0o644)
+    real = Path.read_text
+
+    def refuse(self, *a, **k):
+        if self.name == "uv.lock":
+            raise PermissionError("denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", refuse)
+    assert key(repo) is None
 
 
 def test_a_file_mode_is_part_of_the_code(tmp_path: Path):
@@ -336,7 +339,14 @@ def test_a_submodule_at_another_commit_misses(tmp_path: Path):
     before = key(repo)
     commit(lib, "b.py", "y = 1\n")
     git(repo / "lib", "-c", "protocol.file.allow=always", "pull", "-q", "origin", "main")
-    assert key(repo) not in (None, before)
+    assert before is not None
+    moved = key(repo)
+    assert moved not in (None, before)
+    (repo / "lib" / "dirty.py").write_text("z = 1\n")  # same commit, an untracked file inside
+    dirty = key(repo)
+    assert dirty not in (None, moved)
+    (repo / "lib" / "dirty.py").write_text("z = 2\n")
+    assert key(repo) not in (None, dirty)  # other content in the submodule, other key
 
 
 def test_a_shorter_gate_timeout_does_not_inherit_a_pass(tmp_path: Path):
@@ -351,3 +361,10 @@ def test_a_shorter_gate_timeout_does_not_inherit_a_pass(tmp_path: Path):
     GR.run_command_gate(one, repo, cfg=c)
     GR.run_command_gate(two, repo, cfg=c)
     assert (tmp_path / "t.txt").read_text().count("ran") == 2
+
+
+def test_a_broken_symlink_is_code(tmp_path: Path):
+    repo = project(tmp_path)
+    plain = key(repo)
+    (repo / "run.sh").symlink_to(repo / "missing-target")
+    assert key(repo) not in (None, plain)

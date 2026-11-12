@@ -63,19 +63,25 @@ def _code_entries(cwd: Path) -> dict[str, str] | None:
         return None
     for rel in {*changed, *untracked}:
         path = cwd / rel
-        if not path.exists():
+        if not os.path.lexists(path):  # a broken symlink is still something
             entries.pop(rel, None)
             continue
         if path.is_dir():  # a submodule: the commit it is at now
             head = G.run(path, "rev-parse", "HEAD")
             if not head.ok or not head.out.strip():
                 return None
-            entries[rel] = f"submodule {head.out.strip()}"
+            dirt = _submodule_dirt(path)
+            if dirt is None:
+                return None
+            entries[rel] = f"submodule {head.out.strip()} {dirt}"
+            continue
+        if path.is_symlink():  # the link itself is the code, not what it points at
+            entries[rel] = f"symlink {_digest(os.readlink(path))}"
             continue
         blob = G.run(cwd, "hash-object", "--", rel)
         if not blob.ok or not blob.out.strip():
             return None
-        mode = "x" if path.stat().st_mode & 0o111 else "-"  # the mode is part of the code
+        mode = "x" if os.lstat(path).st_mode & 0o111 else "-"  # the mode is part of the code
         entries[rel] = f"worktree {mode} {blob.out.strip()}"
     return entries
 
@@ -92,10 +98,28 @@ def code_key(cwd: Path, doc_globs: list[str]) -> str | None:
     return _digest(*rows)
 
 
+def _submodule_dirt(path: Path) -> str | None:
+    """A digest of a submodule's uncommitted edits and untracked files ('' when clean)."""
+    diff = G.run(path, "diff", "HEAD")
+    others = G.paths(path, "ls-files", "--others", "--exclude-standard")
+    if not diff.ok or others is None:
+        return None
+    parts = []
+    for rel in sorted(others):
+        try:
+            parts.append(f"{rel}={_digest((path / rel).read_bytes().decode('utf-8', 'replace'))}")
+        except OSError:
+            return None
+    return _digest(diff.out, *parts) if diff.out or parts else ""
+
+
 @functools.cache
-def _probe(command: str) -> str:
-    """What ``command`` prints (a tool's version), or ``unavailable`` when it cannot run."""
-    p = CommandRunner().run(Declared(command, "[resultcache].probe_commands"), timeout_s=10)
+def _probe(command: str, cwd: str) -> str:
+    """What ``command`` prints (a tool's version) in ``cwd``, or ``unavailable`` when it cannot
+    run. Remembered per process for that command and project."""
+    p = CommandRunner().run(
+        Declared(command, "[resultcache].probe_commands"), cwd=cwd or None, timeout_s=10
+    )
     return _digest(p.output) if p.ran and p.code == 0 else "unavailable"
 
 
@@ -111,7 +135,7 @@ def _env(cwd: Path, cfg: Any) -> str | None:
             locks.append(f"{name}={_digest(p.read_text('utf-8', 'replace'))}")
         except OSError:
             return None
-    tools = [f"{c}={_probe(c)}" for c in cfg.resultcache.probe_commands]
+    tools = [f"{c}={_probe(c, str(cwd))}" for c in cfg.resultcache.probe_commands]
     envs = [f"{n}={os.environ.get(n, '')}" for n in sorted(cfg.resultcache.env_vars)]
     return _digest(_python(), sys.platform, *locks, *tools, *envs)
 
