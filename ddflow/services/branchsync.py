@@ -14,7 +14,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..core.model import ABANDONED, DONE
 from ..infra import git as G
 from ..infra import worktree as W
 from . import drift as D
@@ -54,7 +53,7 @@ def tree_item(st, repo: Path, tree: Path):
         for it in st.items.values()
         if it.worktree and not it.removed and W.load_path(repo, it.worktree).resolve() == tree
     ]
-    found.sort(key=lambda it: it.state in (DONE, ABANDONED))  # a live item wins (drift.item_base)
+    found.sort(key=lambda it: it.terminal)  # a live item wins (drift.item_base)
     return found[0] if found else None
 
 
