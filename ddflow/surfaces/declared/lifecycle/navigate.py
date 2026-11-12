@@ -52,7 +52,9 @@ def _next(repo, a, agent):
         return _cap(repo, out, token, a)  # its footer names the lane call
     return _cap(
         repo,
-        _api().next_item(repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only, tags=tags),
+        _api().next_item(
+            repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only, tags=tags
+        ),
         "next",
         a,
     )

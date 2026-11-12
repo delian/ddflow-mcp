@@ -14,9 +14,48 @@ def _queue(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "M", "--title", "m")
     run_cli(repo, "phase", "add", "N", "--title", "n")
-    run_cli(repo, "task", "add", "M.A", "--title", "a", "--phase", "M", "--globs", "a.py", "--tags", "wave:0,x")
-    run_cli(repo, "task", "add", "M.B", "--title", "b", "--phase", "M", "--globs", "b.py", "--tags", "wave:1,x")
-    run_cli(repo, "task", "add", "N.C", "--title", "c", "--phase", "N", "--globs", "c.py", "--tags", "wave:0")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "M.A",
+        "--title",
+        "a",
+        "--phase",
+        "M",
+        "--globs",
+        "a.py",
+        "--tags",
+        "wave:0,x",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "M.B",
+        "--title",
+        "b",
+        "--phase",
+        "M",
+        "--globs",
+        "b.py",
+        "--tags",
+        "wave:1,x",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "N.C",
+        "--title",
+        "c",
+        "--phase",
+        "N",
+        "--globs",
+        "c.py",
+        "--tags",
+        "wave:0",
+    )
     run_cli(repo, "task", "add", "N.D", "--title", "d", "--phase", "N", "--globs", "d.py")
 
 
