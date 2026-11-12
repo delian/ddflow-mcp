@@ -31,13 +31,13 @@ SNAP_TEXT = "FROM THE SNAPSHOT"
 NOTICE = "UPGRADE-NOTICE-PENDING"
 
 
-def _repo(tmp_path: Path, config: str = "") -> Path:
+def _repo(tmp_path: Path, config: str = "", *, adopted: bool = True) -> Path:
     repo = tmp_path / "r"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    if config:
+    if adopted:  # a handshake writes the snapshot only into a project that has been set up
         (repo / ".ddflow").mkdir()
-        (repo / ".ddflow" / "config.toml").write_text(config)
+        (repo / ".ddflow" / "config.toml").write_text(config or "# adopted\n")
     return repo
 
 
@@ -240,7 +240,6 @@ def test_a_handshake_served_from_the_snapshot_does_not_rewrite_it(tmp_path):
 
 def test_an_unwritable_snapshot_location_never_breaks_the_handshake(tmp_path):
     repo = _repo(tmp_path)
-    (repo / ".ddflow").mkdir()
     (repo / ".ddflow" / "local").write_text("a file where the directory should be")
     replies = _run_serve(repo, "initialize", "tools/list")
     assert "instructions" in replies[0]["result"] and "tools" in replies[1]["result"]
@@ -359,3 +358,10 @@ def test_a_snapshot_missing_a_field_is_rendered_live_not_a_crash(tmp_path, rende
     del data[drop]
     S.path(repo).write_text(json.dumps(data))
     assert _init(Server(repo))["instructions"] != SNAP_TEXT and renders
+
+
+def test_a_handshake_in_an_unadopted_repository_writes_nothing(tmp_path):
+    repo = _repo(tmp_path, adopted=False)
+    before = sorted(p.name for p in repo.iterdir())
+    _run_serve(repo, "initialize", "tools/list")
+    assert sorted(p.name for p in repo.iterdir()) == before and not (repo / ".ddflow").exists()

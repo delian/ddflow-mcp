@@ -13,6 +13,7 @@ from typing import Any
 
 from ...config import Config
 from ...core import clock
+from ...core.version import running
 from ...mcpshim import snapshot as S
 from .. import ifacedigest as D
 from .. import ifacesnap
@@ -34,8 +35,6 @@ def served(server: Any) -> dict[str, Any] | None:
         data = S.read(server.repo)
         if data is None or data.get("tier") != server.tier:
             return None
-        from ...core.version import running
-
         if not S.fresh(data, running()):
             return None
         written = data.get("written_at")
@@ -51,7 +50,11 @@ def served(server: Any) -> dict[str, Any] | None:
 
 
 def write_after(server: Any, instructions: str) -> bool:
-    """Write the snapshot for `server`'s tier with `instructions`; False when it could not."""
+    """Write the snapshot for `server`'s tier with `instructions`; False when it could not, or
+    when the project is not adopted: a handshake is a read and must leave nothing behind in a
+    repository ddflow was only connected to."""
+    if not (server.repo / ".ddflow" / "config.toml").is_file():
+        return False
     try:
         return ifacesnap.write(server, instructions=instructions)
     except Exception:
