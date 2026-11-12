@@ -43,6 +43,8 @@ def complete(
         return CI.complete_ids(prefix, index=index)
     if kind.startswith("id:"):
         return CI.complete_ids(prefix, kind[3:], state, index=index)
+    if kind == "phase":  # the short spelling `normalize` canonicalizes, but not every tree built it
+        return CI.phases(prefix, index=index)
     if kind == "state":
         return _prefixed(CI.states(index=index), prefix)
     if kind == "kind":
