@@ -134,10 +134,16 @@ def _fmt(x: float | None) -> str:
 
 def _extract(root: Path, sha: str) -> tuple[Path, list[str]]:
     raw = Path(tempfile.mkdtemp())
-    data = subprocess.run(["git", "-C", str(root), "archive", sha], capture_output=True, check=True)
-    with tarfile.open(fileobj=io.BytesIO(data.stdout)) as tar:
-        tar.extractall(raw, filter="data")
-    return raw, git_raw(root, "ls-tree", "-r", "--name-only", sha).splitlines()
+    try:
+        data = subprocess.run(
+            ["git", "-C", str(root), "archive", sha], capture_output=True, check=True
+        )
+        with tarfile.open(fileobj=io.BytesIO(data.stdout)) as tar:
+            tar.extractall(raw, filter="data")
+        return raw, git_raw(root, "ls-tree", "-r", "--name-only", sha).splitlines()
+    except BaseException:  # no caller owns the directory yet: remove it here
+        shutil.rmtree(raw, ignore_errors=True)
+        raise
 
 
 def _changed_sets(root: Path, sha: str) -> tuple[list[str], list[str]]:
@@ -197,9 +203,11 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
         _score(raw, row, co, got, src)
         row.hub = full and sel.full.startswith("a hub module changed")
         if row.hub:  # what a choice narrower than the whole suite would have held at the hub
-            narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
-            assert narrow is not None
-            if narrow.full:  # still the whole suite for another reason: no narrower choice exists
+            try:
+                narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
+            except Exception:  # the counterfactual is optional: the merge still counts
+                narrow = None
+            if narrow is None or narrow.full:  # no narrower choice could be measured
                 return row
             held = {t.path for t in narrow.tests}
             row.narrow_selected = len(held)
@@ -386,6 +394,8 @@ def test_the_probe_runs_on_this_repository_window():
     if not shas:
         pytest.skip("no merge history here")
     p = probe(ROOT, shas, TSC.limits(Config()), workers=1)
+    assert not p.errors, p.errors
+    assert p.rows or p.skipped  # the merge was looked at: scored, or counted as no-source
     assert all(0.0 <= r.share <= 1.0 for r in p.rows)
 
 

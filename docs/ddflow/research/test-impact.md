@@ -15,8 +15,8 @@ the 0.85 floor, or a median share near 1.
 | measure | value |
 |---|---|
 | merges replayed (with source) | 85 (72 scored: a test changed beside the source) |
-| recall, all co-changed tests | 0.683 (about 94 of 138 co-changed tests held) |
-| recall, routable (subprocess-driven tests set aside) | 0.864 |
+| recall, all co-changed tests | 0.683 (about 95 of 139 co-changed tests held) |
+| recall, routable (subprocess-driven tests set aside) | 0.864 (95 of 110) |
 | median selected share of the suite | 0.022 |
 | whole-suite answer rate | 0.071 (6 merges: 5 changed hubs, 1 test infrastructure) |
 | hub-fallback rate | 0.059 (5 merges) |
@@ -27,7 +27,7 @@ the 0.85 floor, or a median share near 1.
 Verdict: CONFIRMED for fast feedback (median 2 percent of the suite), with two gaps that the
 unit_tests/ci whole run must keep covering:
 
-1. Recall is 0.683 overall (about 94 of 138 co-changed tests); the 44 missed tests split into 29 that drive the program in a
+1. Recall is 0.683 overall (about 95 of 139 co-changed tests); the 44 missed tests split into 29 that drive the program in a
    subprocess (no import route: what TS-cover-deps' recorded dependencies add) and about
    15 with a route the selector did not draw (re-exporting `__init__`, template/doc text
    readers, farther than two hops).
