@@ -45,3 +45,36 @@ class SuitesConfig:
         doc="Seconds between two readings of the host load by a suite waiting for admission (the queue itself is polled more often). 0 reads it at every poll; at most 600.",
         check=_poll_seconds,
     )
+    max_wait_factor: float = knob(
+        3.0,
+        doc="The aging bound of the suite queue: a waiting run that has waited this many times its own predicted cost goes first, whatever the class or cost of the others, so a long run is never starved by short ones or by higher classes. Must be above 0.",
+        check=_positive_float,
+    )
+    agent_share: float = knob(
+        0.5,
+        doc="The most of the waiting suite runs one agent may lead, as a share of the queue (rounded up, at least one): the agent's other runs wait behind everybody else's, never dropped. A lone agent keeps its own order. Between 0 and 1.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int | float) and not isinstance(v, bool) and 0 < v <= 1
+            else "must be a number above 0 and at most 1"
+        ),
+    )
+    default_cost_s: float = knob(
+        600.0,
+        doc="The predicted cost, in seconds, of a suite run no measurement of its kind exists for yet: it orders the run among others and sets when it counts as overdue. A finished run teaches its kind's cost (the median of the newest `cost_runs`).",
+        check=_positive_float,
+    )
+    cost_runs: int = knob(
+        20,
+        doc="How many of the newest measured runs of one kind (its gate and scope) the predicted cost is the median of. At least 1.",
+        check=int_at_least(1),
+    )
+    class_patterns: dict[str, list[str]] = knob(
+        factory=lambda: {
+            "red_main": ["fix-Bmain-red", "main-red", "red-main"],
+            "integrator": ["merge[ _-]?queue", "queue run", "integrator"],
+            "phase": ["^P-", "phase[ _-]?(close|suite)"],
+            "baseline": ["baseline"],
+        },
+        doc="How a suite run's class is read from its holder label when its caller names none: regular expressions per class (red_main, integrator, phase, baseline; anything else is an item run). Classes go first in that order: a fix of red main and the merge-queue integrator, then a phase's closing run, then an item's run, then a baseline measurement.",
+    )
