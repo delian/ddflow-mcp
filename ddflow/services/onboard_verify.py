@@ -260,7 +260,9 @@ def _has_imports(repo: Path) -> bool | None:
     """
     try:
         state = fold(
-            EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log, cache_writes=False).read_all(),
+            EventLog(
+                repo, "onboard-verify", log_cfg=Config.load(repo).log, cache_writes=False
+            ).read_all(),
             strict=False,
         )
     except Exception:

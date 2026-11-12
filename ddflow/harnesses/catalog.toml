@@ -191,6 +191,34 @@ descriptor_fields = ["orchestration.loop", "orchestration.keepalive"]
 checks = ["lane"]
 note = "The swarm conformance ladder grades the lane's launch/claim/heartbeat/gate_record/hook/lease_stop/tool_accuracy."
 
+[[orchestrator]]
+feature = "model-visibility"
+title = "Model visibility"
+descriptor_fields = ["capabilities.model_visibility", "capabilities.model_visibility_source"]
+checks = ["capabilities"]
+note = "How much of the model and its use the agent exposes; capabilities.model_visibility_source is the file and key that set it. A verified value cites its source, unverified stays unknown (never guessed). Survey R-orchestrators-2026-11-09."
+
+[[orchestrator]]
+feature = "cost-exposed"
+title = "Cost exposed"
+descriptor_fields = ["capabilities.cost_exposed", "capabilities.cost_exposed_source"]
+checks = ["capabilities"]
+note = "Where the agent exposes per-run/per-turn cost (none = documented absence); capabilities.cost_exposed_source is the file and key that set it. Survey R-orchestrators-2026-11-09."
+
+[[orchestrator]]
+feature = "subagent-model-control"
+title = "Subagent model control"
+descriptor_fields = ["capabilities.subagent_model_control", "capabilities.subagent_model_control_source"]
+checks = ["capabilities"]
+note = "How the model is picked for a spawned subagent (none = documented absence); capabilities.subagent_model_control_source is the file and key that set it. Survey R-orchestrators-2026-11-09."
+
+[[orchestrator]]
+feature = "patterns"
+title = "Orchestration patterns"
+descriptor_fields = ["capabilities.patterns", "capabilities.patterns_source"]
+checks = ["capabilities"]
+note = "The orchestration patterns the agent offers (router|planner_executor|subagents|best_of_n|council); capabilities.patterns_source is the file and key that set each. Survey R-orchestrators-2026-11-09."
+
 [[history]]
 feature = "instruction-file"
 action = "add"
@@ -346,3 +374,27 @@ feature = "conformance-levels-1-7"
 action = "add"
 date = "2026-11-10"
 note = "Initial catalog row."
+
+[[history]]
+feature = "model-visibility"
+action = "add"
+date = "2026-11-12"
+note = "Orchestration capability field (R-orchestrators-2026-11-09)."
+
+[[history]]
+feature = "cost-exposed"
+action = "add"
+date = "2026-11-12"
+note = "Orchestration capability field (R-orchestrators-2026-11-09)."
+
+[[history]]
+feature = "subagent-model-control"
+action = "add"
+date = "2026-11-12"
+note = "Orchestration capability field (R-orchestrators-2026-11-09)."
+
+[[history]]
+feature = "patterns"
+action = "add"
+date = "2026-11-12"
+note = "Orchestration capability field (R-orchestrators-2026-11-09)."

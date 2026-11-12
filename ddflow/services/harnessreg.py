@@ -222,6 +222,7 @@ class Harness:
     caps: harnessv2.Caps | None = None
     autonomy: harnessv2.Autonomy | None = None
     telemetry: harnessv2.Telemetry | None = None
+    capabilities: harnessv2.Capabilities | None = None
     reserved: dict[str, Reserved] = field(default_factory=dict)  #: RESERVED_SECTIONS present
     facts: dict[str, dict[str, Any]] = field(default_factory=dict)  #: provenance (harnessfacts)
     given: tuple[str, ...] = ()  #: `section.key` of every key the file wrote, even a zero

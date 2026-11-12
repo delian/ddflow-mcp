@@ -80,7 +80,9 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
             f"{event.replace('_', '-')}-{h.id}",
             hk.events[event],
             hk.file,
-            CH.PRETOOL_MATCHER if event == "pre_tool" and hk.events[event] == PRETOOL_WRITE_EVENT else None,
+            CH.PRETOOL_MATCHER
+            if event == "pre_tool" and hk.events[event] == PRETOOL_WRITE_EVENT
+            else None,
             f"the {event.replace('_', ' ')} event reaches ddflow",
             run=f"run {event} --harness {h.id}",
         )

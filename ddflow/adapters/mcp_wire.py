@@ -120,8 +120,12 @@ def response_in(line: str | bytes, want_id: Any) -> dict | None:
     if (
         isinstance(msg, dict)
         and msg.get("jsonrpc") == "2.0"
-        and not isinstance(msg.get("id"), bool)  # `True == 1`: a boolean id never matches a numeric one
-        and not isinstance(want_id, bool)  # and a boolean `want_id` never matches a numeric id either
+        and not isinstance(
+            msg.get("id"), bool
+        )  # `True == 1`: a boolean id never matches a numeric one
+        and not isinstance(
+            want_id, bool
+        )  # and a boolean `want_id` never matches a numeric id either
         and msg.get("id") == want_id
         and "method" not in msg
         and ("result" in msg or "error" in msg)

@@ -37,6 +37,7 @@ from .render import retro as text_retro
 from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
+from .runs_to_merge import provider as runs_provider
 from .skips import audit
 from .slo import assess as slo_assess
 from .slo import ok as slo_ok
@@ -60,6 +61,7 @@ def _swarm_rows(ctx: Context) -> Any:
 
 
 register("swarm", _swarm_rows)
+register("runs", runs_provider)
 
 
 @dataclass
