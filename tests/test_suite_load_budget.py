@@ -244,6 +244,7 @@ def test_the_ci_run_budget_starts_at_admission_after_a_load_wait(tmp_path: Path,
 
     def execute(cfg, tree, cmd, scope, budget, tick=None, holding_suite=False, used=None):
         seen["budget"] = budget
+        seen["load_reads"] = src.calls  # the run starts only after the last load reading
         began = time.monotonic()
         time.sleep(0.01)
         return NS(kind="", ran=True), "", time.monotonic() - began
@@ -268,5 +269,6 @@ def test_the_ci_run_budget_starts_at_admission_after_a_load_wait(tmp_path: Path,
         t.start()
         t.join(15)
     assert seen["budget"] == 7200  # the whole timeout, whatever the wait
+    assert seen["load_reads"] == 4  # the run began after all four readings: after admission
     assert out["waited"] >= 0.4  # it queued for the load (three polls of 0.25 s)
     assert out["elapsed"] < out["waited"]  # the run's own seconds exclude the queue
