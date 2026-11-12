@@ -59,11 +59,13 @@ KNOWN_UNREAD: dict[str, str] = {
     # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
     "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
     "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
-    # Read through the section's own accessors: `PricesConfig.limit_of` / `reset_of` read
-    # `self.limit` / `self.reset`, and `services/limit_routing.headroom` calls them, so no
-    # source line spells `.prices.limit`. Pinned by tests/test_limit_routing.py.
-    "prices.limit": "read via PricesConfig.limit_of (self.limit), used by services/limit_routing",
-    "prices.reset": "read via PricesConfig.reset_of (self.reset), used by services/limit_routing",
+    # Declared for TE-limit-aware-routing: read by the section's own accessors
+    # (`PricesConfig.limit_of` / `reset_of` read `self.limit` / `self.reset`), so no source
+    # line spells `.prices.limit`. `services/limit_routing` has no production caller yet, the
+    # same standing as `pins.mergiraf_keep_pct`; `test_the_prices_accessors_read_the_knobs`
+    # proves the accessors do read them.
+    "prices.limit": "read via PricesConfig.limit_of (self.limit); services/limit_routing has no production caller yet",
+    "prices.reset": "read via PricesConfig.reset_of (self.reset); services/limit_routing has no production caller yet",
 }
 
 
@@ -269,3 +271,13 @@ def test_the_scan_is_not_vacuous():
 #: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
 #: code base, so no import closure can know a change breaks it.
 ALWAYS = True
+
+
+def test_the_prices_accessors_read_the_knobs():
+    """The `KNOWN_UNREAD` reason for `prices.limit` / `prices.reset`: the accessors really read
+    them, so an exemption cannot outlive the read."""
+    cfg = Config()
+    cfg.prices.limit = {"m": "5"}
+    cfg.prices.reset = {"m": "1d"}
+    assert cfg.prices.limit_of("m") == 5.0
+    assert cfg.prices.reset_of("m") == "1d"
