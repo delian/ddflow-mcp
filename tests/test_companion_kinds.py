@@ -320,7 +320,7 @@ def test_the_handshake_never_tells_an_agent_to_register_a_cli_tool(repo):
     assert "not wired up" not in _instructions(repo)
     text = _brief_lines(repo)
     assert "clitool" in text, "the companion is not mentioned at all; the test proves nothing"
-    block = text[text.index("clitool") - 400 : text.index("clitool") + 400]
+    block = text[max(0, text.index("clitool") - 400) : text.index("clitool") + 400]
     assert "companions_add" not in block, f"the handshake offers to register a cli tool:\n{block}"
 
 
