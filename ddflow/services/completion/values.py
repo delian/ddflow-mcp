@@ -52,9 +52,9 @@ def complete(
     if kind == "gate":
         return _prefixed(_gate_names(root), prefix)
     if kind == "path":
-        return _paths(prefix, dirs=False)
+        return _paths(prefix, dirs_only=False)
     if kind == "dir":
-        return _paths(prefix, dirs=True)
+        return _paths(prefix, dirs_only=True)
     return []
 
 
@@ -66,9 +66,9 @@ def _prefixed(names: list[str], prefix: str) -> list[str]:
     return [n for n in names if n.startswith(prefix)]
 
 
-def _paths(prefix: str, *, dirs: bool) -> list[str]:
-    """File (or directory) paths under ``prefix``, from the filesystem (``glob``): the tree
-    names them as ``path``/``dir`` kinds."""
+def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
+    """Paths under ``prefix`` from the filesystem (``glob``): a directory kind offers
+    directories; a path kind offers files AND the directories you traverse to reach them."""
     import glob as _g
     import os as _os
 
@@ -76,7 +76,10 @@ def _paths(prefix: str, *, dirs: bool) -> list[str]:
         return []
     pat = _g.escape(prefix) + "*"
     try:
-        return sorted(f for f in _g.glob(pat) if _os.path.isdir(f) == dirs)[: _PATH_MAX]
+        matches = sorted(_g.glob(pat))
+        if dirs_only:
+            matches = [f for f in matches if _os.path.isdir(f)]
+        return matches[:_PATH_MAX]
     except (OSError, ValueError):
         return []
 

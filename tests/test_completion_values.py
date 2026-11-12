@@ -60,3 +60,5 @@ def test_path_and_dir_complete_paths(tmp_path, monkeypatch):
     assert V.complete("path", "a") == ["a.txt"]
     assert V.complete("dir", "proj") == ["proj"]
     assert V.complete("dir", "zzz") == []
+    # a path kind offers directories too, so `--globs src/**` can traverse into them
+    assert V.complete("path", "proj") == ["proj"]
