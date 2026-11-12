@@ -231,3 +231,27 @@ def test_a_class_with_an_untimed_run_has_no_total_minutes():
     assert rerun["untimed"] == 1
     assert rep["avoidable_suite_minutes"] is None
     assert "1 untimed" in SW.text(rep)
+
+
+def test_the_view_scopes_by_phase_through_the_service():
+    from metrics_fixture import frozen
+
+    from ddflow.services import metrics as M
+
+    log = Log()
+    log.add("phase.added", "Pa", "lead", T0 - 3000, title="a", body="")
+    log.add("phase.added", "Pb", "lead", T0 - 3000, title="b", body="")
+    log.add("task.added", "A", "lead", T0 - 2000, title="A", body="", parent="Pa")
+    log.add("task.added", "B", "lead", T0 - 2000, title="B", body="", parent="Pb")
+    for i, item in enumerate(("B", "A")):
+        log.add(
+            "gate.passed", item, "a1", T0 + 100 * i, gate="ci", by="a1", evidence=_ev("aaaaaaa1")
+        )
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    probe = Tree({"aaaaaaa1": "T"})
+    whole = M.run(log.events, st, cfg, now, view="suitewaste", probes=probe)
+    only_a = M.run(log.events, st, cfg, now, view="suitewaste", phase="Pa", probes=probe)
+    assert whole.metrics["runs"] == 2
+    assert only_a.metrics["runs"] == 1  # phase Pa has A's run only
+    assert only_a.metrics["classes"]["rerun_same_tree_other_item"]["runs"] == 1
