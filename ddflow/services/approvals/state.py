@@ -21,3 +21,15 @@ PROVIDERS: Registry[Callable[[Any, str, str, dict[str, str]], str]] = Registry(
 
 def register(verb: str, provider: Callable[[Any, str, str, dict[str, str]], str]) -> None:
     PROVIDERS.register(provider, verb)
+
+
+def _approve_partial(st: Any, item: str, target: str, args: dict[str, str]) -> str:
+    """`approve.partial` (a person accepting a baseline-red partial): the provider lives with the
+    acceptance (`gate_accept.provider`); imported here on first use, which keeps this module
+    free of the approvals-consume cycle."""
+    from .. import gate_accept
+
+    return gate_accept.provider(st, item, target, args)
+
+
+register("approve.partial", _approve_partial)
