@@ -60,6 +60,21 @@ ORCHESTRATION_KEEPALIVES = frozenset(
 )
 
 
+#: How much of the model and its use the agent exposes. ``unknown`` is the fallback for a
+#: field nobody has verified -- a descriptor must not guess a value it has not sourced.
+MODEL_VISIBILITIES = frozenset({"visible", "hidden", "unknown"})
+
+#: Where the agent exposes per-use/per-run cost. ``none`` is a documented absence.
+COST_EXPOSURES = frozenset({"per_run", "per_turn", "none", "unknown"})
+
+#: How the model is chosen for a spawned subagent. ``env`` is a shared environment knob;
+#: ``none`` is a documented absence.
+SUBMODEL_CONTROLS = frozenset({"per_spawn", "per_file", "env", "none", "unknown"})
+
+#: The orchestration patterns the agent offers an orchestrator.
+PATTERNS = frozenset({"router", "planner_executor", "subagents", "best_of_n", "council"})
+
+
 @dataclass(frozen=True)
 class Detect:
     """How a running agent is recognised."""
@@ -150,6 +165,23 @@ class Telemetry:
 
 
 @dataclass(frozen=True)
+class Capabilities:
+    """What the agent exposes and offers an orchestrator, as data. Each ``*_source`` is the
+    file and key that set the field; a field nobody verified stays ``unknown`` (``patterns``
+    empty) and is never guessed. Verified values must cite their ``*_source``."""
+
+    none: bool = False
+    model_visibility: str = "unknown"  #: one of MODEL_VISIBILITIES
+    model_visibility_source: str = ""  #: file and key that set it (e.g. settings.json@model)
+    cost_exposed: str = "unknown"  #: one of COST_EXPOSURES
+    cost_exposed_source: str = ""
+    subagent_model_control: str = "unknown"  #: one of SUBMODEL_CONTROLS
+    subagent_model_control_source: str = ""
+    patterns: tuple[str, ...] = ()  #: subset of PATTERNS
+    patterns_source: str = ""
+
+
+@dataclass(frozen=True)
 class Reserved:
     """A section whose name is reserved; its owner task defines the keys. Until then it
     holds ``none`` or free string values."""
@@ -168,6 +200,7 @@ V2_SECTIONS: dict[str, type] = {
     "caps": Caps,
     "autonomy": Autonomy,
     "telemetry": Telemetry,
+    "capabilities": Capabilities,
 }
 
 #: Reserved names, one definition each; the owner fills them (see the task's note).
@@ -216,6 +249,29 @@ def check_table(table: Any, name: str, where: str) -> None:
     _membership(
         name, table.get("keepalive"), "orchestration.keepalive", ORCHESTRATION_KEEPALIVES, where
     )
+    _membership(
+        name,
+        table.get("model_visibility"),
+        "capabilities.model_visibility",
+        MODEL_VISIBILITIES,
+        where,
+    )
+    _membership(name, table.get("cost_exposed"), "capabilities.cost_exposed", COST_EXPOSURES, where)
+    _membership(
+        name,
+        table.get("subagent_model_control"),
+        "capabilities.subagent_model_control",
+        SUBMODEL_CONTROLS,
+        where,
+    )
+    if name == "capabilities":
+        patterns = table.get("patterns")
+        if patterns is not None and (
+            not isinstance(patterns, list) or not all(p in PATTERNS for p in patterns)
+        ):
+            raise DescriptorError(
+                f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}"
+            )
     if name == "orchestration" and keys and table.get("loop") is None:
         raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
     if name == "orchestration":
@@ -292,3 +348,19 @@ def validate(sections: dict[str, Any], where: str) -> None:
     orch = sections.get("orchestration")
     if orch and orch.loop:
         _membership("orchestration", orch.loop, "orchestration.loop", ORCHESTRATION_LOOPS, where)
+    cap = sections.get("capabilities")
+    if cap:
+        for field_name in ("model_visibility", "cost_exposed", "subagent_model_control"):
+            value = getattr(cap, field_name)
+            source = getattr(cap, f"{field_name}_source")
+            # a verified (non-unknown) value must cite the file and key that set it, never guess.
+            if value not in ("", "unknown") and not source:
+                raise DescriptorError(
+                    f"{where}: capabilities.{field_name} is {value!r} but "
+                    f"capabilities.{field_name}_source names no file and key that set it"
+                )
+        if cap.patterns and not cap.patterns_source:
+            raise DescriptorError(
+                f"{where}: capabilities.patterns is {list(cap.patterns)!r} but "
+                "capabilities.patterns_source names no file and key that set it"
+            )
