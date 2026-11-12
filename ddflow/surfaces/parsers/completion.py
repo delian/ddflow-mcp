@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import os
 
+from ...adapters.env import DEFAULT as _ENV
 from ...adapters.fsio import replace_text
 from ...api import completion_scripts
 from ...api.completion import install as _install
@@ -22,7 +22,7 @@ def _cmd_completion(a: argparse.Namespace, c: Ctx) -> int:
 
 
 def _home() -> str:
-    return os.path.expanduser("~")
+    return _ENV.get("HOME") or "~"
 
 
 def _do_install(a: argparse.Namespace) -> int:
