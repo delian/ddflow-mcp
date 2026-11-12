@@ -67,6 +67,7 @@ def test_two_abandoned_needs_leave_no_stuck_edge_and_drop_only_the_abandoned_edg
     code, _, err = run_cli(repo, "abandon", "D1", "--reason", "x", "--drop-edges")
     assert code == 0, err
     assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["needs"] == ["D2"]
+    assert json.loads(run_cli(repo, "--json", "show", "D1")[1])["state"] == "abandoned"
     code, _, err = run_cli(repo, "abandon", "D2", "--reason", "x", "--drop-edges")
     assert code == 0, err
     assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["needs"] == []
