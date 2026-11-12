@@ -9,6 +9,7 @@ spellings, and assert the registration is there afterwards.
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -30,13 +31,14 @@ def shim(tmp_path):
     exe = bin_dir / "ddflow"
     exe.write_text(
         "#!/bin/sh\n"
-        f'exec "{sys.executable}" -c \'import sys; sys.path.insert(0, "{ROOT}"); '
+        f"exec {shlex.quote(sys.executable)} -c 'import os, sys; "
+        'sys.path.insert(0, os.environ["DDFLOW_SRC"]); '
         "from ddflow.services import completion_shell as C; "
         'sys.stdout.write(C.for_shell(sys.argv[2]))\' "$@"\n'
     )
     exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
     env = {k: v for k, v in os.environ.items() if k not in ("BASH_ENV", "ENV", "ZDOTDIR")}
-    env.update(PATH=f"{bin_dir}:{os.environ['PATH']}", HOME=str(tmp_path))
+    env.update(PATH=f"{bin_dir}:{os.environ['PATH']}", HOME=str(tmp_path), DDFLOW_SRC=str(ROOT))
     return env
 
 
@@ -109,7 +111,8 @@ def test_fish_registers_under_every_spelling(shim, spelling):
 def test_without_argcomplete_line_runs_and_says_so(shell, monkeypatch):
     """The message line is valid in the real shell (no inner quote ends its string)."""
     monkeypatch.setitem(sys.modules, "argcomplete", None)
-    probe = _run(shell, CS.for_shell(shell), dict(os.environ))
+    clean = {k: v for k, v in os.environ.items() if k not in ("BASH_ENV", "ENV", "ZDOTDIR")}
+    probe = _run(shell, CS.for_shell(shell), clean)
     assert probe.returncode == 0, probe.stderr
     assert "argcomplete" in probe.stderr
 
