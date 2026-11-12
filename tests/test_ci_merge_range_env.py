@@ -69,3 +69,25 @@ def test_a_command_run_as_written_after_a_merge_still_sees_the_merged_range(repo
     cfg.ci.command = "pre-commit run --hook-stage pre-push --all-files"
     res = CI.run(repo, cfg, ref="HEAD", command=cfg.ci.command, changed_from=before)
     assert res.status == "passed", (res.status, res.reason, res.output_tail)
+
+
+def test_the_after_merge_check_without_a_start_uses_the_merge_commits_first_parent(
+    repo, monkeypatch
+):
+    """`check_after_merge(sha=...)` with no `since` (a caller that never knew where the merge
+    began) scans from the first parent, not whatever the hook falls back to."""
+    from ddflow.api.ci import check_after_merge
+
+    run_cli(repo, "init")
+    (repo / ".pre-commit-config.yaml").write_text(CONFIG)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "adopt", "--no-verify")
+    default = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(repo, "switch", "-q", "-c", "work")
+    _commit(repo, {"ok.txt": "fine\n"}, "work")
+    before = _git(repo, "rev-parse", default)
+    _git(repo, "switch", "-q", default)
+    _git(repo, "merge", "-q", "--no-ff", "work", "-m", "merge work")
+    monkeypatch.setenv("WANT_FROM", before)
+    out = check_after_merge(repo, sha=_git(repo, "rev-parse", "HEAD"))
+    assert out.get("status") == "passed", out
