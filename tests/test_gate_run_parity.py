@@ -5,8 +5,7 @@ one command to its tool at the ARGUMENT level, because a lane that scripts the g
 its brief and passes a flag one surface silently refuses loses the run if it does not read
 the exit code. The only arguments one surface has and the other does not must be declared
 (`Param.cli_only` / `Param.mcp_only`): a difference in the *public* set is drift, and the
-reported `--full` gap (the MCP tool once documented `full` while the CLI refused it as
-unrecognized) is exactly the drift this pins out.
+reported `--full` gap is exactly the drift this pins out.
 """
 
 from __future__ import annotations
@@ -26,24 +25,22 @@ def _mcp_props() -> set[str]:
 
 
 def test_gate_run_cli_and_mcp_expose_the_same_arguments():
-    # The MCP properties are exactly the CLI arguments that are not declared CLI-only.
-    # A public argument one surface has and the other does not (like `full` used to be)
-    # fails this, so neither surface may grow one unilaterally.
-    public = {p.name for p in _gate_run_params() if not p.cli_only}
-    assert _mcp_props() == public
+    # The MCP properties are exactly the declared parameters that are not `cli_only`;
+    # the CLI arguments are exactly those that are not `mcp_only`. A parameter not on
+    # the CLI must be `mcp_only` and one not on the MCP tool must be `cli_only`, and a
+    # mismatch needs no special case because each declaration is both surfaces at once.
+    params = {p.name: p for p in _gate_run_params()}
+    assert _mcp_props() == {n for n, p in params.items() if not p.cli_only}
 
-
-def test_a_cli_only_argument_is_declared_not_drift():
-    # `--force`/`--reason`/`--rerun-failed` are CLI-only on purpose (they mutate lease and
-    # evidence handling a remote script has no stake in). `full` is on NEITHER surface:
-    # it must not reappear on the MCP tool while the CLI has no `--full` flag.
-    cli_only = {p.name for p in _gate_run_params() if p.cli_only}
+    cli_names = {n for n, p in params.items() if not p.mcp_only}
+    cli_only = {n for n, p in params.items() if p.cli_only}
     assert {"force", "reason", "rerun_failed"} <= cli_only
-    assert "full" not in _mcp_props() and "full" not in cli_only
 
 
-def test_the_detector_can_fail_on_a_one_sided_full():
-    # A `full` MCP property with no CLI twin would diverge the surfaces: name the drift so
-    # the assertion that catches it is not vacuously true.
-    mcp_only = _mcp_props() - {p.name for p in _gate_run_params()}
-    assert "full" not in mcp_only
+def test_full_is_carried_by_both_surfaces_or_neither():
+    # The intent allows either resolution -- both surfaces accept `full`, or the MCP
+    # argument goes -- so once `full` is one surface's argument it must be the other's
+    # too. One-sided is the drift the report found, and this fails on it without forcing
+    # a choice between the two resolutions the item leaves open.
+    cli_names = {p.name for p in _gate_run_params() if not p.mcp_only}
+    assert ("full" in _mcp_props()) == ("full" in cli_names)
