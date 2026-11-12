@@ -151,6 +151,17 @@ def declare(section: str) -> Callable[[type], type]:
     """Class decorator, above `@dataclass`: register each `knob()` field of `[section]`."""
 
     def register(cls: type) -> type:
+        tables = (SECTION_CLASSES, KNOB_DOCS, DECLARED, DECLARED_IN, RENAMED)
+        saved = [dict(t) for t in tables]
+        try:
+            return _register(cls)
+        except ValueError:  # a refused declaration leaves no half-registered section behind
+            for table, before in zip(tables, saved, strict=True):
+                table.clear()
+                table.update(before)
+            raise
+
+    def _register(cls: type) -> type:
         if section in SECTION_CLASSES:
             raise ValueError(
                 f"section {section} is declared twice ({SECTION_CLASSES[section].__module__} "

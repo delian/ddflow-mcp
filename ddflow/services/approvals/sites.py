@@ -35,6 +35,13 @@ INFRASTRUCTURE: dict[str, int] = {
     "ddflow/services/actors.py:_role": 1,  # resolves an identity to a role for the ask engine
     "ddflow/api/surf_setup.py:reviewer_agent_marker": 1,
     "ddflow/services/approvals/answer.py:why_not_a_person": 1,  # the answer verbs' early refusal  # a shim over reviewer_trust
+    # A refusal with NO approval route: an agent may not merge an item a same-clone peer holds
+    # live (the operator recovering a crashed item is not an agent), so there is no verb to digest.
+    "ddflow/api/lifecycle/merge.py:merge": 1,
+    # `output_budget.is_agent` reads the harness marker only to choose the OUTPUT form (bounded
+    # for an agent, whole for a person); it refuses nothing and gates no verb.
+    "ddflow/services/output_budget.py:apply": 1,
+    "ddflow/services/output_budget.py:wants_bounded": 1,
 }
 
 #: Marker calls per enclosing function ("module:function" -> number of AST `Call` nodes naming
@@ -69,6 +76,8 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup/config.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
+    "ddflow/api/pin_files.py:_regenerate_tail": 1,  # routes an agent's regenerate to the approval
+    "ddflow/services/leases/claim.py:_take_over": 1,  # names the claim take-over route owed
     "ddflow/services/repairs/accepted.py:gate": 1,
 }
 
@@ -244,7 +253,10 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the pin files as recorded before the re-record",
-        ("ddflow/api/pin_files.py:_regenerate_approval",),
+        (
+            "ddflow/api/pin_files.py:_regenerate_approval",
+            "ddflow/api/pin_files.py:_regenerate_tail",
+        ),
         "ddflow pins regenerate [--only NAME] --approval request|ID",
     ),
     Site(
@@ -284,6 +296,7 @@ SITES: tuple[Site, ...] = (
         (
             "ddflow/api/lifecycle/claim.py:_claim_by_approval",
             "ddflow/api/lifecycle/claim.py:_agent_marker_of",
+            "ddflow/services/leases/claim.py:_take_over",
         ),
         "ddflow claim <id> --approval request|ID",
     ),

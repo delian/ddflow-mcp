@@ -89,7 +89,7 @@ def queue_ids(repo: Path, cfg: Config) -> set[str]:
         state = fold(log.read_all(), strict=False)
     except OSError as exc:
         raise QueueUnreadable(f"reading {log.dir} failed: {exc}") from exc
-    return {it.id for it in state.items.values() if not it.removed}
+    return {it.id for it in state.live_items()}
 
 
 def _near_ids(value: str, ids: set[str], limit: int = 3) -> list[str]:
