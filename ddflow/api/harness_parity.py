@@ -12,8 +12,8 @@ from __future__ import annotations
 import json
 from collections import Counter
 
-from ..services import harnessreg as HR
 from ..services import facts
+from ..services import harnessreg as HR
 from ..services.parity import answers as AN
 from ..services.parity import catalog as CAT
 
