@@ -115,3 +115,4 @@
 {"agent":"lane-coord","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ec51cd26b712996778f487b72","kind":"cadence.ran","lamport":178887,"schema":1,"subject":"recall_recheck:CO-lanes-coordinator","ts":"2026-11-11T23:52:29.319389Z"}
 {"agent":"lane-coord","data":{"at":1794441761.8440914,"holder":"lane-coord"},"id":"efee4618b8afa1a094947c718","kind":"lease.renewed","lamport":178916,"schema":1,"subject":"CO-lanes-coordinator","ts":"2026-11-12T00:02:41.979072Z"}
 {"agent":"lane-coord","data":{"at":1794442380.0229635,"holder":"lane-coord"},"id":"e5809210fccc3a6bcc3c73ca0","kind":"lease.renewed","lamport":178948,"schema":1,"subject":"CO-lanes-coordinator","ts":"2026-11-12T00:13:00.156326Z"}
+{"agent":"lane-coord","data":{"at":1794442997.848904,"holder":"lane-coord"},"id":"e4d6faaa9c1ced882709f4cb4","kind":"lease.renewed","lamport":178982,"schema":1,"subject":"CO-lanes-coordinator","ts":"2026-11-12T00:23:17.981907Z"}
