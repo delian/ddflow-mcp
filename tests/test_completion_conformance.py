@@ -168,13 +168,18 @@ def _widget_index(d: Path) -> str:
 
 
 def _registers_a_completer(shell: str, text: str) -> bool:
-    """The text really registers the engine's completer (the argcomplete function for bash
-    and zsh, the fish completion function), not a placeholder that merely parses."""
-    name = "__fish_ddflow_complete" if shell == "fish" else "_python_argcomplete"
-    pattern = rf"function {name}\b" if shell == "fish" else rf"(?:^|[;\n]|\\n){name}\(\) \{{"
-    registered = "complete --command ddflow" if shell == "fish" else "-F _python_argcomplete ddflow"
-    registers = registered in text or "compdef _python_argcomplete ddflow" in text
-    return re.search(pattern, text) is not None and registers
+    """The text defines the engine's completer function AND registers it with its own
+    shell's command (``complete`` for bash and fish, ``compdef`` for zsh)."""
+    if shell == "fish":
+        return bool(
+            re.search(r"function\s+__fish_ddflow_complete\b", text)
+            and re.search(r"complete\s+--command\s+ddflow\b", text)
+        )
+    defined = re.search(r"(?:^|[;\n{}\s]|\\n)_python_argcomplete\s*\(\)\s*\{", text)
+    register = (
+        "compdef _python_argcomplete ddflow" if shell == "zsh" else "-F _python_argcomplete ddflow"
+    )
+    return bool(defined and register in text)
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)

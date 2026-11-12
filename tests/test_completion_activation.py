@@ -109,7 +109,8 @@ def test_without_argcomplete_one_harmless_line(monkeypatch):
     for shell in CS.SHELLS:
         text = CS.for_shell(shell)
         assert text.count("\n") == 1
-        assert "argcomplete" in text
+        assert "needs the 'argcomplete' package" in text
+        assert "_python_argcomplete" not in text and "__fish_ddflow_complete" not in text
 
 
 def test_unknown_shell_refused():
