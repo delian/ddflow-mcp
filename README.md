@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b97cc6f47826 -->
-<details><summary>All 678 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=97c622746689 -->
+<details><summary>All 682 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1150,6 +1150,8 @@ long default is left to `ddflow config --explain`.
 | `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
+| `lanes.idle_s` | `1800` |  |
+| `lanes.coordinator_max_rows` | `15` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
 | `lanes.stop_grace_s` | `10` |  |
@@ -1263,6 +1265,8 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.auto_run_max_parallel` | `1` |  |
 | `metrics.min_samples` | `10` |  |
 | `metrics.top` | `5` |  |
+| `metrics.runs_window_days` | `30` |  |
+| `metrics.outlier_runs` | `0` |  |
 | `metrics.forecast_runs` | `1000` |  |
 | `metrics.forecast_seed` | `0` |  |
 | `metrics.forecast_low_pct` | `50` |  |
