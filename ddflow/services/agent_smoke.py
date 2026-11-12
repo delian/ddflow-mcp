@@ -23,6 +23,7 @@ from typing import Any
 
 from ..adapters import git as G
 from ..adapters.fsio import scratch_dir
+from ..core import outcome as O
 from ..core.redact import Redactor
 from ..infra.fsio import atomic_write
 from ..infra.log import EventLog
@@ -32,8 +33,8 @@ from . import harnessreg
 PASS, FAIL, UNAVAILABLE = "pass", "fail", "unavailable"
 KIND = "agent.smoke"
 RUNNER_IDENTITY = "smoke-runner"
-EXIT_FOR = {PASS: 0, FAIL: 1, UNAVAILABLE: 2}
-EXIT_REFUSED = 3
+EXIT_FOR = {PASS: O.OK, FAIL: O.FAIL, UNAVAILABLE: O.NOTHING}
+EXIT_REFUSED = O.REFUSED
 PROMPT = (
     "Call ddflow_brief, claim the one task, add a file, run the gates you can, and complete it "
     "(or release it honestly if you cannot)."
