@@ -22,4 +22,5 @@ VIEWS: tuple[str, ...] = (
     "swarm",
     "slo",
     "batch",
+    "suitewaste",
 )

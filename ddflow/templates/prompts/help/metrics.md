@@ -25,6 +25,11 @@ records), so there is nothing to record and nothing to drift. It writes no event
                                      conflict and red-main rates; says when a falsifier
                                      (`[metrics] lock_falsifier_*_pct`) tripped and the call that
                                      switches back to strict locking (`lock_revert_key/value`).
+    ddflow metrics suitewaste        why whole-suite runs happen: first run on a code tree, reruns on an
+                                     equal tree (same item or another; `.ddflow/` state and
+                                     `[gates].doc_globs` documents do not make trees differ), after a
+                                     baseline-red verdict, unplaced; runs, suite and queue minutes and
+                                     the avoidable share. A figure the log cannot give is n/a, never 0.
     ddflow metrics swarm             the baseline a lane fleet must beat: merged items per hour,
                                      rework rate, agent-hours per item, dollars when events carry
                                      `cost_usd`, critical-path slack and parallelism; `--phase` and

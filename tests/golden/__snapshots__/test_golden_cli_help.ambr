@@ -1980,12 +1980,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths, variants, swarm, slo or batch
+                          tiny, paths, variants, swarm, slo, batch or suitewaste
     item                  with retro: the item id
   
   options:
