@@ -365,3 +365,19 @@ def test_a_handshake_in_an_unadopted_repository_writes_nothing(tmp_path):
     before = sorted(p.name for p in repo.iterdir())
     _run_serve(repo, "initialize", "tools/list")
     assert sorted(p.name for p in repo.iterdir()) == before and not (repo / ".ddflow").exists()
+
+
+def test_an_unstatable_project_directory_never_breaks_the_handshake(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    real = Path.is_file
+
+    def denied(self):
+        if self.name == "config.toml":
+            raise PermissionError(13, "denied", str(self))
+        return real(self)
+
+    srv = Server(repo)
+    monkeypatch.setattr(Path, "is_file", denied)
+    from ddflow.surfaces.mcp import _snapfast
+
+    assert _snapfast.write_after(srv, "x") is False

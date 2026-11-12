@@ -53,9 +53,9 @@ def write_after(server: Any, instructions: str) -> bool:
     """Write the snapshot for `server`'s tier with `instructions`; False when it could not, or
     when the project is not adopted: a handshake is a read and must leave nothing behind in a
     repository ddflow was only connected to."""
-    if not (server.repo / ".ddflow" / "config.toml").is_file():
-        return False
     try:
+        if not (server.repo / ".ddflow" / "config.toml").is_file():
+            return False
         return ifacesnap.write(server, instructions=instructions)
     except Exception:
         return False
