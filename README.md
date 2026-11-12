@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=457932232902 -->
-<details><summary>All 686 knobs across 62 sections</summary>
+<!-- ddflow:begin README/knobs sha=2a4ef277e98e -->
+<details><summary>All 687 knobs across 62 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1250,6 +1250,7 @@ long default is left to `ddflow config --explain`.
 | `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
 | `mcp.stale_check_every_s` | `60.0` |  |
 | `mcp.progress_s` | `20.0` |  |
+| `mcp.init_snapshot_max_age_s` | `300.0` |  |
 | `memory.max_chars` | `280` |  |
 | `memory.brief_items` | `12` |  |
 | `merge.require_gates` | `"warn"` | `warn` \| `refuse` |
@@ -1389,10 +1390,10 @@ long default is left to `ddflow config --explain`.
 | `review.split_rounds` | `2` |  |
 | `review.degraded_cooldown_s` | `3600` |  |
 | `roles.budget_tokens` | `600` |  |
-| `roles.phase_closer_rules` | (long: see `ddflow config --explain`) |  |
-| `roles.fixer_rules` | (long: see `ddflow config --explain`) |  |
-| `roles.researcher_rules` | (long: see `ddflow config --explain`) |  |
-| `roles.reviewer_rules` | (long: see `ddflow config --explain`) |  |
+| `roles.phase_closer_rules` | `[]` |  |
+| `roles.fixer_rules` | `[]` |  |
+| `roles.researcher_rules` | `[]` |  |
+| `roles.reviewer_rules` | `[]` |  |
 | `rules.max_rules` | `200` |  |
 | `rules.max_size_bytes` | `50000` |  |
 | `rules.tags_allowed` | `[]` |  |
