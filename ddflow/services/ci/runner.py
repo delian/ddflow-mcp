@@ -90,6 +90,7 @@ def _plan(cfg, repo, cmd, tree, sha, base, changed_from, *, full, override, for_
     cmd = _default_on_the_diff(
         repo, cfg, cmd, tree, sha, base, changed_from, full=full, override=override
     )
+    cmd = _with_merged_range(cmd, tree, changed_from)
     scope = None
     if for_item and not override:
         asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
@@ -441,6 +442,20 @@ def _default_on_the_diff(
     # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
     return scope_to_diff(cmd, tree, since)
+
+
+def _with_merged_range(cmd: str, tree: Path, changed_from: str) -> str:
+    """``cmd`` with the range a merge added exported as ``PRE_COMMIT_FROM_REF``/``TO_REF``, when
+    it runs pre-commit unscoped (`--all-files`: a whole-suite or operator-written command),
+    for pre-commit then exports no range and a hook that scans commits (gitleaks-pushed.sh)
+    would fall back to `origin/main..HEAD`, every unpushed local commit. A command already
+    scoped (`--from-ref`) carries its own range."""
+    if not changed_from or "pre-commit run" not in cmd or "--from-ref" in cmd:
+        return cmd
+    since = W.rev(tree, changed_from)
+    if not since:
+        return cmd
+    return f"PRE_COMMIT_FROM_REF={since} PRE_COMMIT_TO_REF=HEAD {cmd}"
 
 
 def _worker_log(scope) -> dict[str, dict]:
