@@ -55,6 +55,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/lifecycle/complete/approval.py:_ask_hint": 1,
     "ddflow/services/merge_force.py:authorise": 1,
     "ddflow/services/phase_complete.py:complete_phase": 1,
+    "ddflow/api/record_correct.py:_permission": 1,
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
@@ -325,6 +326,15 @@ SITES: tuple[Site, ...] = (
         "the phase and the settled state of every task under it",
         ("ddflow/services/phase_complete.py:complete_phase",),
         "ddflow phase complete <id> --approval request|ID",
+    ),
+    Site(
+        "record.correct",
+        "C",
+        T2,
+        L1,
+        "the record, the fields replaced and the reason (never the new text: the ask would then carry it)",
+        ("ddflow/api/record_correct.py:_permission",),
+        "ddflow correct <id> --field NAME --text TEXT --reason WHY --approval request|ID",
     ),
 )
 
