@@ -271,3 +271,5 @@
 {"agent":"lane-guard","data":{"at":1794490139.9148123,"holder":"lane-guard"},"id":"ef587a295dcbaa5ced7b70a02","kind":"lease.renewed","lamport":183302,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T13:29:00.060272Z"}
 {"agent":"lane-guard","data":{"tags":["no-deps","wave:0"]},"id":"eaedf7749adb449f809da43d6","kind":"task.updated","lamport":183307,"schema":1,"subject":"SPLIT-tests-test-gate-baseline-red","ts":"2026-11-12T13:29:31.184930Z"}
 {"agent":"lane-guard","data":{"at":1794490178.5484502,"holder":"lane-guard"},"id":"ed708c0fee7f974408fe52a94","kind":"lease.renewed","lamport":183308,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T13:29:38.687563Z"}
+{"agent":"lane-guard","data":{"at":1794490786.7046006,"holder":"lane-guard"},"id":"e947b211d0c2fd47ae6d3fce9","kind":"lease.renewed","lamport":183419,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T13:39:46.858793Z"}
+{"agent":"lane-guard","data":{"at":1794490800.456604,"holder":"lane-guard"},"id":"e673335787e4685ddb7c076e0","kind":"lease.renewed","lamport":183423,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T13:40:00.594010Z"}
