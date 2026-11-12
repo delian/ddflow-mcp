@@ -30,7 +30,7 @@ no item carries is refused (exit 1) with the nearest ones, never an empty answer
 
 With the parallelism cap full, `next` still says what is otherwise unblocked: items held
 ONLY by the cap are listed under "Ready but held by the cap" (JSON `held_by_cap`, with
-their globs), and exit stays 2. A named `ddflow claim <id>` is not capped, so it grants
+their globs). Exit is 0 then (the one case where the exit code changed); it stays 2 only when nothing is ready and nothing is held. A named `ddflow claim <id>` is not capped, so it grants
 one now; `ddflow next --ignore-cap` offers them as ready for the call. Merged items that
 still need `ddflow complete` are their own list (JSON `needs_complete`), and
 dependency-blocked items are a count unless `--blocked`.

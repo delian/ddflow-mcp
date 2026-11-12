@@ -126,12 +126,14 @@ def next_(
         data["contested"] = contested
     if _actionable(p):
         return O.ok("next", **data)
+    if held:
+        # Operator ruling: unblocked work exists and a named claim grants it, so this is
+        # exit 0, not 2. Exit 2 stays for "nothing ready and nothing held".
+        data["headline"] = f"No free slot under the cap ({p.summary()}).{_held_hint(held)}"
+        return O.ok("next", **data)
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
-    if held:
-        # Not 'nothing actionable': unblocked work exists, only the cap withholds it.
-        head = "No free slot under the cap"
     return O.nothing(
         "next", f"{head} ({p.summary()}).{_held_hint(held)}{_wait_hint(p)}{p.close_note()}", **data
     )

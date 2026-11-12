@@ -33,7 +33,7 @@ def _next(repo, *argv):
 def test_cap_held_items_are_a_section_with_their_globs(repo, monkeypatch):
     _full_cap(repo, monkeypatch)
     code, d = _next(repo)
-    assert code == 2 and d["ready"] == [], d
+    assert code == 0 and d["ready"] == [], d
     held = {r["id"]: r for r in d["held_by_cap"]}
     assert set(held) == {"M.A", "M.B"}, held
     assert held["M.A"]["globs"] == ["a.py"], held["M.A"]
@@ -43,7 +43,8 @@ def test_cap_held_items_are_a_section_with_their_globs(repo, monkeypatch):
 def test_text_names_the_held_items_not_just_nothing_actionable(repo, monkeypatch):
     _full_cap(repo, monkeypatch)
     code, out, _ = run_cli(repo, "next", agent="lane2")
-    assert code == 2, out
+    assert code == 0, out
+    assert out.startswith("No free slot under the cap"), out
     assert (
         "ready but held by the parallelism cap" in out.lower() and "M.A" in out and "a.py" in out
     ), out
@@ -107,3 +108,16 @@ def test_a_cut_needs_complete_list_still_leaves_the_blocked_list_free_of_merged_
     _, out, _ = run_cli(repo, "next", agent="lane2")
     assert "Merged, not completed (5)" in out, out
     assert "but not completed" not in out, out
+
+
+def test_exit_stays_2_when_nothing_is_ready_and_nothing_is_held(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "M", "--title", "m")
+    code, out, _ = run_cli(repo, "next")
+    assert code == 2 and "No free slot" not in out, (code, out)
+
+
+def test_all_lists_the_dependency_blocked_rows_too(repo, monkeypatch):
+    _full_cap(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "next", "--all", agent="lane2")
+    assert "M.D" in out, out

@@ -42,6 +42,8 @@ def _next(repo, a, agent):
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     phase_only = bool(a.get("phase_only", False))
     tags = _tags(a)
+    if a.get("all"):  # `--all` is `--blocked --full`
+        a = {**a, "blocked": True, "full": True}
     if lane := a.get("lane", ""):
         out = _api().next_lane(
             repo,
@@ -89,7 +91,7 @@ def _next_text(out, a, ctx):
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
-        summary="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
+        summary="what may start now (exit 2 = nothing ready or held, exit 1 = unknown --phase)",
         tool="ddflow_next",
         description="What may be started RIGHT NOW, and why the rest may not. Independent "
         "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
@@ -144,6 +146,14 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="List every blocked item.",
                 cli_help="list every blocked item, dependency-blocked ones too (text view)",
+                default=False,
+                cli_only=True,
+            ),
+            Param(
+                "all",
+                type="boolean",
+                help="List every blocked item.",
+                cli_help="same as --blocked --full: every blocked row, output caps lifted",
                 default=False,
                 cli_only=True,
             ),

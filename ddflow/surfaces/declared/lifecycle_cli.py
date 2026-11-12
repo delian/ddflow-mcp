@@ -280,23 +280,28 @@ def next_text(out, a, ctx) -> str | None:
     flat = bool(a.get("flat", False))
     clusters = out.data.get("co_location_hints") or []
     excluded = out.data.get("excluded_leased") or []
-    lines = [] if (p.ready or bdeps) else [out.reason]
-    if p.ready or bdeps:
-        lines += _next_ready_lines(p, flat, clusters) if p.ready else []
-        if clusters:
-            lines += _co_locate_lines(clusters)
+    lines = _lead_lines(out, p, bdeps, flat, clusters)
     lines += _excluded_lines(excluded)
     if bdeps:
         lines += _blocking_dep_lines(bdeps)
     own = out.data["_render"].get("own_sections") or {}
     lines += _held_lines(out.data.get("held_by_cap") or [], p.cap_note, own.get("held", 0))
     lines += _needs_complete_lines(out.data.get("needs_complete") or [], own.get("complete", 0))
-    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked", False)))
+    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked") or a.get("all")))
     if p.finished and (p.ready or bdeps):
         lines.append(p.close_note())
     if note := out.data.get("_footer"):
         lines.append(note)
     return "\n".join(lines)
+
+
+def _lead_lines(out, p, bdeps, flat, clusters) -> list[str]:
+    """The top of `next`'s text: the ready list with its co-location advice, or, with
+    nothing to start, the headline (`No free slot under the cap`, or the refusal reason)."""
+    if not (p.ready or bdeps):
+        return [out.data.get("headline") or out.reason]
+    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
+    return lines + (_co_locate_lines(clusters) if clusters else [])
 
 
 def _held_lines(held, cap_note, total) -> list[str]:
