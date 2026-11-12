@@ -64,3 +64,5 @@
 {"agent":"record-correct","data":{"at":1794469120.2839122,"holder":"record-correct"},"id":"e7fd64a6f5f71ba8b5d914e1b","kind":"lease.renewed","lamport":180967,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:38:40.415533Z"}
 {"agent":"record-correct","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e26d7bffabe5cca3b9a6dfee0","kind":"cadence.ran","lamport":180968,"schema":1,"subject":"recall_recheck:REC-correct-event","ts":"2026-11-12T07:38:48.080009Z"}
 {"agent":"record-correct","data":{"at":1794469738.9959457,"holder":"record-correct"},"id":"e5bf7f4db9b95fcbad6e65de1","kind":"lease.renewed","lamport":181070,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:48:59.128856Z"}
+{"agent":"record-correct","data":{"ahead":["rubber_duck"],"gate":"critic","policy":"warn"},"id":"e65baa1d77d2022c8cf8c5b86","kind":"gate.out_of_order","lamport":181096,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:50:29.389082Z"}
+{"agent":"record-correct","data":{"gate":"critic"},"id":"e8307bbf70b22e31ebccdb2c3","kind":"gate.started","lamport":181097,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T07:50:29.907495Z"}
