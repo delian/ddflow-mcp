@@ -38,7 +38,12 @@ def _wave_tags(repo, iid) -> set[str]:
 
 
 def _tag_events(repo) -> int:
-    return sum(1 for e in EventLog(repo, "probe").read_all() if e.kind == "task.updated")
+    """The updates that set tags (dropping an edge is a task.updated too, and not a stamp)."""
+    return sum(
+        1
+        for e in EventLog(repo, "probe").read_all()
+        if e.kind == "task.updated" and "tags" in e.data
+    )
 
 
 def _chain(repo):
@@ -107,7 +112,8 @@ def test_stamping_is_the_default_and_incremental(repo):
     run_cli(repo, "task", "add", "C", "--globs", "c.py", "--needs", "B", "--title", "C")
     assert _waves(repo)["C"] == "wave:2"
     before = _tag_events(repo)
-    run_cli(repo, "abandon", "A", "--reason", "x")  # B becomes free, C moves with it
+    # B becomes free (its edge to A dropped), C moves with it
+    assert run_cli(repo, "abandon", "A", "--reason", "x", "--drop-edges")[0] == 0
     assert _waves(repo) == {"B": "wave:0", "C": "wave:1"}
     assert _tag_events(repo) == before + 2  # B and C only
 
