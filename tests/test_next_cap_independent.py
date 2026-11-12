@@ -44,7 +44,9 @@ def test_text_names_the_held_items_not_just_nothing_actionable(repo, monkeypatch
     _full_cap(repo, monkeypatch)
     code, out, _ = run_cli(repo, "next", agent="lane2")
     assert code == 2, out
-    assert "ready but held by the parallelism cap" in out.lower() and "M.A" in out and "a.py" in out, out
+    assert (
+        "ready but held by the parallelism cap" in out.lower() and "M.A" in out and "a.py" in out
+    ), out
     assert "named `ddflow claim`" in out, out
 
 
@@ -75,3 +77,14 @@ def test_dependency_blocked_rows_are_a_count_unless_asked(repo, monkeypatch):
     assert "M.D" not in out and "blocked on dependencies" in out, out
     _, out, _ = run_cli(repo, "next", "--blocked", agent="lane2")
     assert "M.D" in out, out
+
+
+def test_exclude_leased_drops_a_cap_held_item_whose_files_are_held(repo, monkeypatch):
+    monkeypatch.setenv("DDFLOW_SCHEDULE_READY_POLICY", "deps_only")
+    _full_cap(repo, monkeypatch)
+    run_cli(repo, "task", "add", "M.C", "--title", "c", "--phase", "M", "--globs", "r.py")
+    from ddflow.api import next_item
+
+    d = next_item(Path(repo), agent="lane2", exclude_leased=True).data
+    assert "M.C" not in {r["id"] for r in d["held_by_cap"]}, d["held_by_cap"]
+    assert "M.C" in {e["item"] for e in d["excluded_leased"]}, d["excluded_leased"]

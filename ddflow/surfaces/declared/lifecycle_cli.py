@@ -33,10 +33,6 @@ MAX_LISTED_FILES = 10
 _BLOCKED_SHOWN_NO_READY = 10
 _BLOCKED_SHOWN_WITH_READY = 6
 
-#: How many cap-held and merged-uncompleted rows `next`'s text lists before saying how many more.
-_HELD_SHOWN = 15
-_COMPLETE_SHOWN = 10
-
 
 def waiting(rows: list, head: str) -> str:
     """One line per registered waiter, under ``head``; "" when nobody waits."""
@@ -311,24 +307,20 @@ def _held_lines(held, cap_note) -> list[str]:
         f"\nReady but held by {cap_note or 'the parallelism cap'} "
         f"({len(held)}; a named `ddflow claim` is not capped and grants one now):"
     ]
-    for r in held[:_HELD_SHOWN]:
+    for r in held:
         wave = f"  [wave:{r['wave']}]" if r.get("wave") is not None else ""
         lines.append(f"  {r['id']}  {r['title']}{wave}")
         if r.get("globs"):
             lines.append(f"      writes: {', '.join(r['globs'])}")
-    if len(held) > _HELD_SHOWN:
-        lines.append(f"  ... and {len(held) - _HELD_SHOWN} more (--json holds them all)")
     return lines
 
 
 def _needs_complete_lines(ids) -> list[str]:
     if not ids:
         return []
-    shown = ids[:_COMPLETE_SHOWN]
-    more = f" ... and {len(ids) - len(shown)} more" if len(ids) > len(shown) else ""
     return [
         f"\nMerged, not completed ({len(ids)}): `ddflow complete <id>` records each: "
-        f"{', '.join(shown)}{more}"
+        f"{', '.join(ids)}"
     ]
 
 

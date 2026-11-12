@@ -101,6 +101,10 @@ def next_(
     p.blocking_deps = with_tags(p.blocking_deps, tags)
     held = _take_cap_held(p, st, ignore_cap)
     excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
+    if exclude_leased and held:
+        # A cap-held item whose files another agent holds is not claimable either.
+        held, more = _drop_leased_overlap(held, st, cfg, me)
+        excluded += more
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
@@ -128,6 +132,9 @@ def next_(
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
+    if held:
+        # Not 'nothing actionable': unblocked work exists, only the cap withholds it.
+        head = "No free slot under the cap"
     return O.nothing(
         "next", f"{head} ({p.summary()}).{_held_hint(held)}{_wait_hint(p)}{p.close_note()}", **data
     )
