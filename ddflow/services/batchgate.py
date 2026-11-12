@@ -13,10 +13,10 @@ member whose outcome cannot be recorded stops all of them. A gate that did not r
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ..adapters import digest as DG
 from ..config import Config
 from ..core.model import GATE_OUTCOMES, fold
 from ..infra.log import EventLog
@@ -91,16 +91,14 @@ def gate_started(
                 "gate": gate,
                 "tree_sha": tree_sha,
                 "run": run,
-                "command_digest": hashlib.sha256(command.encode()).hexdigest()[:16]
-                if command
-                else "",
+                "command_digest": DG.hasher(command.encode()).hexdigest()[:16] if command else "",
             },
         )
     return run
 
 
 def _run_id(batch: str, gate: str, tree_sha: str) -> str:
-    return hashlib.sha256(f"{batch}\0{gate}\0{tree_sha}".encode()).hexdigest()[:12]
+    return DG.hasher(f"{batch}\0{gate}\0{tree_sha}".encode()).hexdigest()[:12]
 
 
 def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them recorded
