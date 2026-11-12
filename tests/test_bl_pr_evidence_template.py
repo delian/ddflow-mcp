@@ -9,7 +9,6 @@ changelog entry. Outward text is secret-redacted (r-consent-outward).
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from conftest import run_cli
@@ -102,7 +101,7 @@ def test_a_stacked_request_names_what_it_is_stacked_on(item):
 
 
 def test_a_pipe_or_newline_in_a_gate_cell_does_not_split_its_row(item):
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append(
         "gate.failed",
@@ -123,7 +122,7 @@ def test_a_pipe_or_newline_in_a_gate_cell_does_not_split_its_row(item):
 
 
 def test_a_bug_without_a_recorded_regression_test_is_said_so(item):
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append("bug.found", "B1", {"summary": "race", "item": "T1"})
     st = fold(log.read_all(), strict=False)
@@ -148,7 +147,7 @@ def test_pr_body_without_a_config_reads_the_project_layers(item):
 
 
 def test_a_backslash_before_a_pipe_cannot_unescape_the_delimiter(item):
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append("gate.failed", "T1", {"gate": "standards", "reason": "x \\| y", "evidence": {}})
     st = fold(log.read_all(), strict=False)
@@ -159,7 +158,7 @@ def test_a_backslash_before_a_pipe_cannot_unescape_the_delimiter(item):
 
 
 def test_a_cell_is_bounded_after_escaping_by_the_knob(item):
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append("gate.failed", "T1", {"gate": "standards", "reason": "|" * 500, "evidence": {}})
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
@@ -190,7 +189,7 @@ def test_a_cut_never_ends_on_a_dangling_escape():
 
 
 def test_a_secret_is_redacted_before_a_cut_or_an_escape_can_hide_it(item):
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append(
         "gate.failed",
@@ -228,7 +227,7 @@ def test_the_shipped_template_renders_identically_without_the_template_engine(it
     from ddflow.services import prompts as P
     from ddflow.services.flow.pr_template import variables
 
-    repo, st, it = item
+    repo, st, _it = item
     log = EventLog(repo, "tester")
     log.append("bug.found", "B2", {"summary": "race", "item": "T1"})
     log.append("bug.fixed", "B2", {"regression_test": "tests/test_race.py::test_it"})
