@@ -66,3 +66,4 @@ def test_the_same_mid_review_edit_makes_the_review_unavailable_with_the_guard_li
     out = api.review(repo, gate="critic", item="T1", full=True)
     assert out.data["outcome"] == "unavailable", (out.data["outcome"], out.reason)
     assert "changed git state" in out.reason, out.reason
+    assert _state(repo).gates["critic"].outcome == "unavailable", "recorded as a pass or fail"
