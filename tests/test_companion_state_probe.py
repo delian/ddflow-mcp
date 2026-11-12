@@ -38,7 +38,9 @@ def _companion(**over) -> CO.Companion:
 def _ran(monkeypatch, stdout: str, stderr: str = "") -> None:
     # `is_installed` probes through `P.capture` (its `run` seam is behind the proc shim who
     # is reached, not the adapter's module-global `capture` patches), so patch `capture`.
-    monkeypatch.setattr(CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(0, stdout, stderr))
+    monkeypatch.setattr(
+        CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(0, stdout, stderr)
+    )
 
 
 # -- B87d456f1cd: a cli companion is never "registered" -----------------------------------
