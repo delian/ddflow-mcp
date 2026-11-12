@@ -15,7 +15,9 @@ from pathlib import Path
 from ddflow.services.review.engine import parse
 from ddflow.services.review.model import finding_digest
 
-CONTRACT = Path(__file__).resolve().parents[1] / "docs" / "ddflow" / "drivers" / "review-contract.md"
+CONTRACT = (
+    Path(__file__).resolve().parents[1] / "docs" / "ddflow" / "drivers" / "review-contract.md"
+)
 
 
 def _digest(f) -> str:
@@ -36,10 +38,10 @@ def test_the_contract_states_the_stop_rule():
 def test_a_repeat_of_a_closed_finding_is_the_same_id():
     """A round that repeats a closed finding word-for-word is the SAME id, not a new one."""
     first = parse(
-        "FINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input\nSTATUS: FINDINGS 1\n"  # noqa: E501
+        "FINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input\nSTATUS: FINDINGS 1\n"
     )[0]
     repeat = parse(
-        "STATUS: FINDINGS 1\nFINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input\n"  # noqa: E501
+        "STATUS: FINDINGS 1\nFINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input\n"
     )[0]
     assert _digest(repeat[0]) == _digest(first[0]), "a repeated finding is not the same id"
 
@@ -49,10 +51,14 @@ def test_the_same_spot_with_different_words_is_a_different_id():
     so identity cannot be the location alone."""
     a = parse("FINDING HIGH ddflow/core/nope.py:1\nreturns None\nSTATUS: FINDINGS 1\n")[0]
     b = parse("FINDING HIGH ddflow/core/nope.py:1\nreturns the wrong type\nSTATUS: FINDINGS 1\n")[0]
-    assert _digest(a[0]) != _digest(b[0]), "same location, different words, same id: id is not full text"
+    assert _digest(a[0]) != _digest(b[0]), (
+        "same location, different words, same id: id is not full text"
+    )
 
 
 def test_an_off_contract_reply_is_flagged():
     """A round with no STATUS: block is off contract, never a clean review."""
     findings, on_contract = parse("FINDING MEDIUM ddflow/core/nope.py:2\nno status here\n")
-    assert findings and not on_contract, "a reply with no STATUS: block was not flagged off contract"
+    assert findings and not on_contract, (
+        "a reply with no STATUS: block was not flagged off contract"
+    )

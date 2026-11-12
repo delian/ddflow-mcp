@@ -2488,7 +2488,8 @@
    "text",
    "fleet",
    "fleet_total",
-   "resume"
+   "resume",
+   "coordinator"
   ],
   "output_schema": {
    "type": "object",
@@ -2507,6 +2508,7 @@
     "fleet": {},
     "fleet_total": {},
     "resume": {},
+    "coordinator": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
