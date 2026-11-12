@@ -548,8 +548,9 @@ def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(
 def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(
     repo, monkeypatch
 ) -> None:
-    """The governs exclusion must not leak to a guard whose declared ``GOVERNS`` globs do NOT
-    match the changed path: reaching this file by import may then have caused its failure."""
+    """The governs exclusion must not leak to a guard reached by import whose declared
+    ``GOVERNS`` globs do NOT match a changed path: reaching this file by import may have
+    caused its failure, so auto-accept still declines."""
     from ddflow.services.testselect import Selected, Selection
 
     guard = "tests/test_layout.py"
@@ -568,6 +569,30 @@ def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(
     auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
     assert auto["accepted"] is False, auto
     assert "test_layout.py" in auto["why"]
+
+
+def test_a_narrow_governs_guard_reached_by_import_is_also_excluded(repo, monkeypatch) -> None:
+    """A guard with a NARROW ``GOVERNS`` that matches the changed file (not whole-tree) is also
+    excluded when it is reached by import: the base comparison is whole-vs-whole, so a new
+    offender in it would not be ``red``. Asserts the intended direction for the declared-scope
+    exclusion -- the recorded reason ("imports ...") must not re-block it."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_family_schema.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text(
+        'GOVERNS = ("ddflow/api/family_schema.py",)\ndef test_index():\n    pass\n'
+    )
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_index"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
 
 
 def test_a_file_reached_by_import_that_is_not_an_always_guard_still_blocks(

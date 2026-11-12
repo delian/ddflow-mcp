@@ -269,11 +269,14 @@ def auto_decision(
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
     reached = {t.path for t in (*sel.tests, *sel.cut)}
     files = test_files_of(ids)
-    # A whole-tree guard is reached trivially whatever testselect recorded: an architecture
-    # guard declares ``GOVERNS = ("ddflow/**", ...)`` AND imports ddflow modules, so testselect
-    # records it "imports ..." (that pick ran before ``governed``, and the first reason stays),
-    # not "governs ..." (B6450ce772f). Its declared ``GOVERNS`` globs are the signal, read from
-    # the failing files themselves, so the recorded reason never decides the exclusion.
+    # A guard that DECLARES it governs the changed path is reached via its declared scope, not
+    # just by import: an architecture guard declares ``GOVERNS = ("ddflow/**", ...)`` AND
+    # imports ddflow modules, so testselect records it "imports ..." (that pick ran before
+    # ``governed``, and the first reason stays), not "governs ..." (B6450ce772f). Its declared
+    # ``GOVERNS`` globs -- any scope, whole-tree or a single file -- are the signal, read from
+    # the failing files themselves, so the recorded reason never decides the exclusion. A new
+    # offender in such a guard is already not ``red`` (the base comparison elsewhere in
+    # ``baseline_red`` is whole-vs-whole), so it is never accepted.
     governs |= set(TS.governed(tree, sorted(changed), files))
     excluded = governs | _always_guard_files(cfg, files)
     # The non-full path has the reach guard the `full` branch lacks, so it does NOT also consult
