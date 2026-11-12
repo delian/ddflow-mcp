@@ -81,6 +81,9 @@ def evaluate(
     """Per declared window; empty for an unlimited or unknown profile (never pauses)."""
     if profile.state != "limited":
         return ()
+    for w in profile.windows:
+        if not w.limit > 0:
+            raise ValueError(f"{w.window}: a limit must be positive (declare unlimited instead)")
     return tuple(_one(w, readings, now, harness) for w in profile.windows)
 
 
@@ -89,12 +92,13 @@ def _over(evals: Sequence[WindowEval], pause_at: float) -> list[WindowEval]:
 
 
 def _resume_at(over: Sequence[WindowEval], now: float, recheck_s: float) -> float:
-    """When to look again: the latest reset among the windows over the line, else after
-    ``recheck_s``. A reset already past is no reason to wait: look again now."""
+    """When to look again: the latest reset among the windows over the line, if every one of
+    them names a reset still ahead; else ``recheck_s`` from now. A reset already past with
+    the window still over the line is stale news, and waiting for it would loop at once."""
     resets = [clock.epoch(e.resets_at, default=0.0) for e in over if e.resets_at]
-    if not resets or len(resets) < len(over):
+    if len(resets) < len(over) or min(resets) <= now:
         return now + recheck_s
-    return max(now, *resets)
+    return max(resets)
 
 
 def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: float) -> Decision:

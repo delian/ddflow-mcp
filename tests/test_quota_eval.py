@@ -88,9 +88,21 @@ def test_no_known_reset_rechecks_after_the_interval():
     assert Q.decide(ev, 0.9, NOW, 300).resume_at == NOW + 300
 
 
-def test_a_reset_already_past_looks_again_now():
+def test_a_reset_already_past_rechecks_after_the_interval_not_at_once():
     ev = Q.evaluate(profile(W5H), [reading(value=95.0, resets="2026-11-12T11:00:00+00:00")], NOW)
-    assert Q.decide(ev, 0.9, NOW, 300).resume_at == NOW
+    assert Q.decide(ev, 0.9, NOW, 300).resume_at == NOW + 300
+
+
+def test_a_window_over_the_line_with_no_reset_ahead_of_it_rechecks_too():
+    w2 = quota.Window("week", 100, "percent")
+    rs = [reading(value=95.0), reading("week", value=99.0, resets="")]
+    d = Q.decide(Q.evaluate(profile(W5H, w2), rs, NOW), 0.9, NOW, 300)
+    assert d.resume_at == NOW + 300
+
+
+def test_a_zero_limit_is_refused_not_divided_by():
+    with pytest.raises(ValueError):
+        Q.evaluate(profile(quota.Window("day", 0, "tokens")), [reading("day", "tokens", 0.0)], NOW)
 
 
 def test_the_latest_reset_among_the_windows_over_the_line_wins():
