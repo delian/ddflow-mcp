@@ -19,6 +19,7 @@ from conftest import run_cli
 A = "agent-a"
 #: Commands whose `--json` body is a bare array today.
 ARRAYS = (("progress",), ("loops",))
+SCHEMA = {"progress": "progress@1", "loops": "loops@1"}
 
 
 def _setup(repo: Path) -> None:
@@ -44,8 +45,7 @@ def test_with_the_envelope_on_every_array_carries_a_schema_id_and_version(repo, 
     assert run_cli(repo, "config", "output.json_envelope", "true", agent=A)[0] == 0
     body = _body(repo, *argv)
     assert isinstance(body, dict), "the falsifier: an untagged array is still returned"
-    schema, _, version = body["schema"].partition("@")
-    assert schema and version.isdigit()
+    assert body["schema"] == SCHEMA[argv[0]], "the id names the command, with its version"
     assert isinstance(body["rows"], list)
 
 
@@ -58,16 +58,17 @@ def test_the_envelope_holds_exactly_the_rows_the_array_held(repo):
 
 def test_an_object_body_is_the_same_with_the_envelope_on(repo):
     _setup(repo)
-    before = _body(repo, "board")
+    before = _body(repo, "show", "T1")
     run_cli(repo, "config", "output.json_envelope", "true", agent=A)
-    assert _body(repo, "board")["schema"] == before["schema"]
+    assert _body(repo, "show", "T1") == before
 
 
-def test_a_refusal_body_is_never_wrapped(repo):
+def test_a_refusal_body_is_the_same_with_the_envelope_on(repo):
     _setup(repo)
+    before = _body(repo, "show", "NOPE")
     run_cli(repo, "config", "output.json_envelope", "true", agent=A)
-    body = _body(repo, "show", "NOPE")
-    assert "refusal" in body and "rows" not in body
+    after = _body(repo, "show", "NOPE")
+    assert "refusal" in after and after == before
 
 
 def test_an_unrecognised_value_does_not_turn_it_on(repo):
