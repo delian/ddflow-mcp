@@ -28,7 +28,8 @@ def _first_line(text: object) -> str:
     return (str(text or "").strip().splitlines() or [""])[0]
 
 
-_BARE_PIPE = re.compile(r"(?<!\\)\|")
+#: A pipe preceded by an EVEN run of backslashes (zero included) is a live cell delimiter.
+_BARE_PIPE = re.compile(r"(?<!\\)((?:\\\\)*)\|")
 
 
 def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
@@ -40,7 +41,7 @@ def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
         " ".join(scrub(str(text or "")).split())
     )  # folding can CREATE a match: scrub again
     out = scrub(flat.replace("\\", "\\\\").replace("|", "\\|"))  # escaping can create a match too
-    out = _BARE_PIPE.sub(r"\\|", out)  # a scrub that ate an escape must not leave a delimiter
+    out = _BARE_PIPE.sub(r"\1\\|", out)  # a scrub that ate an escape must not leave a delimiter
     if len(out) > cell_max:
         cut = out[: cell_max - 1]
         if (len(cut) - len(cut.rstrip("\\"))) % 2:  # never end on a dangling escape

@@ -263,3 +263,13 @@ def test_a_scrub_that_removes_the_escape_still_leaves_no_bare_delimiter():
     scrub = lambda t: t.replace("foo\\", "[REDACTED]")  # noqa: E731
     out = _cell("foo|bar", 50, scrub)
     assert "|" not in out.replace("\\|", ""), out
+
+
+def test_a_scrub_that_leaves_an_even_backslash_run_before_a_pipe_is_still_escaped():
+    from ddflow.services.flow.pr_template import _cell
+
+    scrub = lambda t: t.replace("\\" * 3, "[REDACTED]")  # noqa: E731
+    out = _cell("\\\\|", 50, scrub)  # two backslashes then a pipe
+    # after the scrub two backslashes remain before the pipe: they are an escaped backslash, so the
+    # pipe must carry its own escape (three backslashes before it)
+    assert out.endswith("\\\\\\|"), out
