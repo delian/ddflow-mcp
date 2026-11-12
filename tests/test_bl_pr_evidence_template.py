@@ -114,9 +114,11 @@ def test_a_pipe_or_newline_in_a_gate_cell_does_not_split_its_row(item):
     st = fold(log.read_all(), strict=False)
     text = _body(repo, st, st.items["T1"])
     rows = [ln for ln in text.splitlines() if ln.startswith("| ") and not ln.startswith("| gate")]
-    assert rows and "next line" not in text, text
+    assert rows, text
+    standards = next(r for r in rows if r.startswith("| standards"))
+    assert "bad \\| see log next line" in standards, standards  # folded, escaped, nothing dropped
     for row in rows:  # every row has exactly the three cells: 4 unescaped bars
-        assert row.replace("\\|", "").count("|") == 4, row
+        assert row.replace("\\\\", "").replace("\\|", "").count("|") == 4, row
     assert any(r.startswith("| lint\\|bad | not run") for r in rows), rows
 
 
@@ -143,3 +145,14 @@ def test_pr_body_without_a_config_reads_the_project_layers(item):
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
         fh.write(f"\n[flow]\npr_body_template = {json.dumps(str(custom))}\n")
     assert FS.pr_body(st, it, on=None, repo=repo) == "LAYERED T1"
+
+
+def test_a_backslash_before_a_pipe_cannot_unescape_the_delimiter(item):
+    repo, st, it = item
+    log = EventLog(repo, "tester")
+    log.append("gate.failed", "T1", {"gate": "standards", "reason": "x \\| y", "evidence": {}})
+    st = fold(log.read_all(), strict=False)
+    row = next(
+        r for r in _body(repo, st, st.items["T1"]).splitlines() if r.startswith("| standards")
+    )
+    assert "x \\\\\\| y" in row, row  # backslash doubled, then the pipe escaped

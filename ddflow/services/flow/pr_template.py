@@ -25,9 +25,17 @@ def _first_line(text: object) -> str:
     return (str(text or "").strip().splitlines() or [""])[0]
 
 
+#: Longest one table cell is, in characters; the full reason stays in the log (`gate list`).
+CELL_MAX = 200
+
+
 def _cell(text: object) -> str:
-    """One Markdown table cell: its first line, with the cell delimiter escaped."""
-    return _first_line(text).replace("|", "\\|")
+    """One Markdown table cell: lines folded to spaces (nothing dropped but the tail past
+    ``CELL_MAX``), backslashes escaped first, then the cell delimiter."""
+    flat = " ".join(str(text or "").split())
+    if len(flat) > CELL_MAX:
+        flat = flat[: CELL_MAX - 1] + "\u2026"
+    return flat.replace("\\", "\\\\").replace("|", "\\|")
 
 
 def _triage_counts(it: Item, gate: str) -> dict[str, int]:
