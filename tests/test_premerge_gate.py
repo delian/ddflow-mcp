@@ -247,6 +247,7 @@ def test_disabled_runs_nothing(tmp_path):
     assert (tree / "a.txt").read_text(encoding="utf-8") == "a   \n"
 
 
+@needs_precommit
 def test_a_hook_that_prints_the_could_not_run_phrase_still_fails_as_a_hook(tmp_path):
     cfg = (
         "repos:\n- repo: local\n  hooks:\n  - id: noisy\n    name: noisy\n"
@@ -257,6 +258,23 @@ def test_a_hook_that_prints_the_could_not_run_phrase_still_fails_as_a_hook(tmp_p
     rep = run(tree)
     assert rep.outcome == PM.FAILED
     assert [r.name for r in rep.failing] == ["noisy"]
+
+
+def test_a_pre_commit_error_after_a_passed_hook_is_unavailable_not_passed(tmp_path):
+    fake = tmp_path / "fakepc.sh"
+    tmp_path = tmp_path / "w"
+    tmp_path.mkdir()
+    fake.write_text(
+        "#!/bin/sh\necho 'first....................................................Passed'\n"
+        "echo 'An error has occurred: CalledProcessError: clone failed'\n"
+        "echo 'Check the log at /tmp/pre-commit.log'\nexit 1\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    cfg = "repos:\n- repo: local\n  hooks:\n  - id: first\n    name: first\n    entry: true\n    language: system\n"
+    tree = make(tmp_path, cfg, {}, {"a.txt": "a\n"})
+    rep = run(tree, precommit_command=str(fake))
+    assert rep.outcome == PM.UNAVAILABLE
 
 
 def test_an_unreadable_changed_file_is_unavailable_not_a_traceback(tmp_path, monkeypatch):
@@ -274,6 +292,7 @@ def test_an_unreadable_changed_file_is_unavailable_not_a_traceback(tmp_path, mon
     assert {r.name: r.outcome for r in rep.results}["hooks"] == PM.UNAVAILABLE
 
 
+@needs_precommit
 def test_fix_without_commit_leaves_the_fix_in_the_tree_uncommitted(tmp_path):
     tree = make(tmp_path, STRIP, {}, {"a.txt": "hello   \n"})
     head = git(tree, "rev-parse", "HEAD")

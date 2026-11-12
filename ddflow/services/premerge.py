@@ -45,6 +45,7 @@ _HOOK_LINE = re.compile(
 )
 #: What pre-commit prints when it could not run a hook at all (config, clone, install).
 _COULD_NOT_RUN = ("An error has occurred", "Failed to clone", "InvalidConfigError")
+_OWN_ERROR_MARK = "Check the log at"
 _KEY_HEADER = re.compile("-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?" + "PRIVATE KEY")
 _TRAILING = re.compile(rb"[ \t]+(?=\r?\n|\Z)")
 
@@ -190,8 +191,10 @@ def _precommit_round(tree: Path, files: list[str], pm, budget: _Budget) -> list[
             return [*out, HookResult("hooks", UNAVAILABLE, why)]
         text = done.stdout + done.stderr
         found = [m for ln in text.splitlines() if (m := _HOOK_LINE.match(ln))]
-        # pre-commit's own failure phrase counts only when no hook ran: a hook may print it too.
-        could_not = not found and any(m in text for m in _COULD_NOT_RUN)
+        # pre-commit's own failure phrase counts when no hook ran, or when it is followed by its
+        # own "Check the log at" line (a hook printing the bare phrase is still just a hook).
+        phrase = any(m in text for m in _COULD_NOT_RUN)
+        could_not = phrase and (not found or _OWN_ERROR_MARK in text)
         if done.returncode not in (0, 1) or could_not:
             return [
                 *out,
