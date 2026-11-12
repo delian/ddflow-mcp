@@ -79,7 +79,7 @@ def test_the_audit_entry_names_who_why_and_digests_never_the_old_value(
 ):
     old = getattr(getattr(_st(seeded), book)[rid], field)
     _correct(log, rid, kind, {field: "the clean text"}, reason="removed a credential")
-    entry = getattr(_st(seeded), book)[rid].corrections[-1]
+    entry = _st(seeded).corrections[f"{kind}:{rid}"][-1]
     assert entry["by"] == "agent-test"
     assert entry["reason"] == "removed a credential"
     (row,) = entry["fields"]
@@ -104,7 +104,7 @@ def test_the_event_line_never_carries_the_old_value(seeded, log):
 def test_a_short_old_value_gets_no_digest(repo, log):
     log.append("bug.found", "B2", {"summary": "pw1", "title": "t"})
     _correct(log, "B2", "bug", {"summary": "a long enough clean text"}, min_chars=8)
-    (row,) = _st(repo).bugs["B2"].corrections[-1]["fields"]
+    (row,) = _st(repo).corrections["bug:B2"][-1]["fields"]
     assert row["old"] == ""
     assert row["new"]
 
@@ -114,7 +114,7 @@ def test_two_corrections_keep_two_entries_in_order(seeded, log):
     _correct(log, "B1", "bug", {"summary": "two"}, reason="second")
     bug = _st(seeded).bugs["B1"]
     assert bug.summary == "two"
-    assert [c["reason"] for c in bug.corrections] == ["first", "second"]
+    assert [c["reason"] for c in _st(seeded).corrections["bug:B1"]] == ["first", "second"]
 
 
 def test_replay_gives_the_same_state(seeded, log):

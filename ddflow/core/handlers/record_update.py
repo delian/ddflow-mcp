@@ -137,8 +137,7 @@ def _correct(st: State, ev: Event) -> None:
                 f"{kind}.updated", ev.subject, {"fields": dict(fields)}, ev.agent, ev.lamport, ev.ts
             ),
         )
-    rec = _record_of(st, kind, ev.subject)
-    rec.corrections.append(
+    st.corrections.setdefault(f"{kind}:{ev.subject}", []).append(
         {"at": ev.ts, "by": ev.agent, "lamport": ev.lamport, "reason": reason, "fields": rows}
     )
 

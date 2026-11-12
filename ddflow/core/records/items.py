@@ -148,9 +148,6 @@ class Item:
     title: str = ""
     parent: str = ""  # a task's phase; "" for a phase
     needs: list[str] = field(default_factory=list)
-    #: `record.corrected` audit entries, oldest first: who, why and digests of the old and the
-    #: new value of each field, never the old value (REC-correct-event).
-    corrections: list[dict[str, Any]] = field(default_factory=list)
     globs: list[str] = field(default_factory=list)
     #: True once an `updated` event named the globs (even to none): the item's own say, so a
     #: fix task with no globs of its own stops taking its bug's at claim (B5df7832d0a).

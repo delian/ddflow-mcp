@@ -747,6 +747,16 @@
    },
    "v": 1
   },
+  "record.corrected": {
+   "fields": {
+    "digest_chars": ["int"],
+    "fields": ["dict"],
+    "kind": ["str"],
+    "min_chars": ["int"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
   "record.extended": {
    "fields": {
     "auto": ["bool"],
