@@ -232,3 +232,24 @@ def test_two_tickets_of_one_holder_without_notes_are_one_agent(tmp_path: Path):
         (q / f"{ts}-same.ticket").touch()
     rows = SL._ordered(cfg(), q, sorted(p.name for p in q.glob("*.ticket")))
     assert len({w.agent for w in rows}) == 1
+
+
+def test_an_overdue_run_counts_against_its_agents_share():
+    a1 = W("a1", cost=10, agent="a", waited=10)  # overdue
+    a2 = W("a2", cost=1, agent="a", waited=0)
+    b = W("b", cost=1, agent="b", waited=0)
+    c = W("c", cost=1, agent="c", waited=0)
+    got = names([a1, a2, b, c], factor=1.0, share=0.2, default=10.0)
+    assert got[0] == "a1" and got.index("a2") > got.index("b") and got.index("a2") > got.index("c")
+
+
+def test_a_costless_holder_that_has_run_long_is_not_about_to_finish(tmp_path: Path):
+    import json as _json
+
+    from ddflow.infra import fsio
+
+    (tmp_path / "suites.0.lock").touch()
+    with fsio.file_lock(tmp_path / "suites.0.lock", 0):
+        (tmp_path / "suites.0.holder").write_text(_json.dumps({"at": time.time() - 7200}))
+        line = [W("me", cost=60.0)]
+        assert "estimated wait 10m" in SL._eta(line, "me", 1, tmp_path, 600.0)

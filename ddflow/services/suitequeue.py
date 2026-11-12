@@ -84,11 +84,10 @@ def order(
     kept: list[Waiting] = []
     deferred: list[Waiting] = []
     for w in ranked:
-        if overdue(w):  # the aging bound outranks the share: an overdue run is never deferred
-            kept.append(w)
-            continue
         seen[w.agent] = seen.get(w.agent, 0) + 1
-        (kept if seen[w.agent] <= cap else deferred).append(w)
+        # The aging bound outranks the share: an overdue run is never deferred, but it counts
+        # against its agent's cap, so the agent's other runs wait behind everybody else's.
+        (kept if overdue(w) or seen[w.agent] <= cap else deferred).append(w)
     return kept + deferred
 
 

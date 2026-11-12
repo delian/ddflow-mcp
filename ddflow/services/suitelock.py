@@ -370,9 +370,9 @@ def _eta(
         left = float(cfg_default)
         with contextlib.suppress(OSError, ValueError, TypeError, KeyError):
             held = json.loads(_note(directory, i).read_text())
-            if held.get("cost_s"):  # no predicted cost: the default, never "about to finish"
-                left = float(held["cost_s"])
-            left = max(0.0, left - (now - float(held["at"])))
+            if held.get("cost_s"):  # with a predicted cost: what is left of it
+                left = max(0.0, float(held["cost_s"]) - (now - float(held["at"])))
+            # no predicted cost: the default, however long it has run -- never "about to finish"
         busy.append(left)
     free = (
         (busy + free)[: max(slots_n, len(busy))]
