@@ -10,6 +10,7 @@ missing reason all refuse and change nothing."""
 
 from __future__ import annotations
 
+import importlib
 import time
 from pathlib import Path
 
@@ -26,8 +27,6 @@ def _refuse(reason: str, item: str) -> O.Outcome:
 
 def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outcome:
     """Adopt ``item``'s expired lease for the caller; see the module docstring."""
-    import importlib
-
     CL = importlib.import_module(
         "ddflow.api.lifecycle.claim"
     )  # lazy: lifecycle.claim imports the reporting package

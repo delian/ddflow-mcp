@@ -8,6 +8,8 @@ commands (`declared/setup.py`); `identify` has no command line and stays a hand-
 
 from __future__ import annotations
 
+import importlib
+
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ...views.output_caps import cut_text as _cut_text
 from ...views.output_caps import footer_of as _footer_of
@@ -54,11 +56,9 @@ def _status_handler(a, c):
 def _recover_call(repo, a, agent):
     """`recover`: the sweep or plan, or with `--adopt` one expired lease taken over."""
     if a.get("adopt"):
-        from ...api import recover_adopt
-
         return _cap(
             repo,
-            recover_adopt.adopt(
+            importlib.import_module("ddflow.api.recover_adopt").adopt(
                 repo, a.get("item", "") or "", reason=a.get("reason", "") or "", agent=agent
             ),
             "recover",

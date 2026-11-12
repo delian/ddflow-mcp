@@ -2573,7 +2573,7 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--adopt] [--reason REASON] [--full] [--cursor CURSOR]
   
   options:
     -h, --help       show this help message and exit
@@ -2581,6 +2581,8 @@
     --apply
     --all
     --plan
+    --adopt
+    --reason REASON
     --full           print everything: lift the default output caps ([output] max_rows, max_chars)
                      for this call
     --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
