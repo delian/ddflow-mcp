@@ -28,7 +28,9 @@ def test_uninstall_removes_only_the_guard_block(tmp_path):
     assert "export X=1\n" in gone  # the line install did not write stays
 
 
-def test_target_file_per_shell(tmp_path):
+def test_target_file_per_shell(tmp_path, monkeypatch):
+    monkeypatch.delenv("ZDOTDIR", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     assert install.target_file("fish", tmp_path) == tmp_path / ".config" / "fish" / "config.fish"
     assert install.target_file("zsh", tmp_path) == tmp_path / ".zshrc"
     assert install.target_file("bash", tmp_path) == tmp_path / ".bashrc"
