@@ -108,6 +108,8 @@ def test_a_cut_needs_complete_list_still_leaves_the_blocked_list_free_of_merged_
     _, out, _ = run_cli(repo, "next", agent="lane2")
     assert "Merged, not completed (5)" in out, out
     assert "but not completed" not in out, out
+    _, every, _ = run_cli(repo, "next", "--blocked", agent="lane2")
+    assert "but not completed" not in every, every
 
 
 def test_exit_stays_2_when_nothing_is_ready_and_nothing_is_held(repo):
