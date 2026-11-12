@@ -23,7 +23,10 @@ VERB = "merge.force"
 #: The merge gate is the one this very merge records, so it is never "unmet" by the merge.
 _SELF = "merge"
 #: said when the gate run recorded no reason of its own (a measurement made before the automatic acceptance)
-NO_REASON = "[gates].baseline_red_auto is off or the measurement predates it"
+NO_REASON = (
+    "the gate run recorded no reason: check [gates].baseline_red_auto, or re-run the gate "
+    "(the measurement may predate the automatic acceptance)"
+)
 
 
 @dataclass
