@@ -199,7 +199,9 @@ def _ci_partial_here(it, tree: Path | None) -> bool:
     if tree is None or ci is None or ci.outcome != "partial":
         return False
     ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
-    return bool(ran) and ran.endswith("+clean") and ran == G.normal_fingerprint(G.tree_identity(tree))
+    return (
+        bool(ran) and ran.endswith("+clean") and ran == G.normal_fingerprint(G.tree_identity(tree))
+    )
 
 
 def _ci_failed_selected(it) -> bool:
