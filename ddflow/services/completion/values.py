@@ -62,6 +62,8 @@ def complete(
 
 #: How many file/directory matches one TAB offers (a listing must stay bounded).
 _PATH_MAX = 200
+#: How many filesystem entries a path TAB scans before sorting (bounded work).
+_PATH_SCAN = 2000
 
 
 def _prefixed(names: list[str], prefix: str) -> list[str]:
@@ -78,10 +80,12 @@ def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
         return []
     pat = _g.escape(prefix) + "*"
     try:
-        matches = sorted(_g.glob(pat))
+        from itertools import islice as _islice
+
+        found = sorted(_islice(_g.iglob(pat), _PATH_SCAN))  # bounded scan, then s?sort
         if dirs_only:
-            matches = [f for f in matches if _os.path.isdir(f)]
-        return matches[:_PATH_MAX]
+            found = [f for f in found if _os.path.isdir(f)]
+        return found[:_PATH_MAX]
     except (OSError, ValueError):
         return []
 
