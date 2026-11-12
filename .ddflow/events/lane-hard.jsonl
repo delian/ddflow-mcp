@@ -257,3 +257,6 @@
 {"agent":"lane-hard","data":{"at":1794478052.9695592,"holder":"lane-hard"},"id":"e1a6fa65b39ed39bc9786673e","kind":"lease.renewed","lamport":181951,"schema":1,"subject":"AU-agent-id","ts":"2026-11-12T10:07:33.109020Z"}
 {"agent":"lane-hard","data":{"at":1794478677.2416575,"holder":"lane-hard"},"id":"ee5a86a8f9b5d9c4e0925336e","kind":"lease.renewed","lamport":181988,"schema":1,"subject":"AU-agent-id","ts":"2026-11-12T10:17:57.362384Z"}
 {"agent":"lane-hard","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e67462b4dd9553ba5391065eb","kind":"cadence.ran","lamport":181989,"schema":1,"subject":"recall_recheck:AU-agent-id","ts":"2026-11-12T10:18:09.690636Z"}
+{"agent":"lane-hard","data":{"at":1794479303.8395002,"holder":"lane-hard"},"id":"ed1b27a2e14cc6410579c9eb7","kind":"lease.renewed","lamport":182030,"schema":1,"subject":"AU-agent-id","ts":"2026-11-12T10:28:23.991734Z"}
+{"agent":"lane-hard","data":{"at":1794479929.9144447,"holder":"lane-hard"},"id":"ed357ee6d146c89e9c3675ec3","kind":"lease.renewed","lamport":182058,"schema":1,"subject":"AU-agent-id","ts":"2026-11-12T10:38:50.067129Z"}
+{"agent":"lane-hard","data":{"at":1794480553.605148,"holder":"lane-hard"},"id":"e4f58bd9542f038578eb2b094","kind":"lease.renewed","lamport":182072,"schema":1,"subject":"AU-agent-id","ts":"2026-11-12T10:49:13.751167Z"}
