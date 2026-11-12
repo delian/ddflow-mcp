@@ -44,6 +44,24 @@ class _Acc:
     entries: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _apply_started(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
+    s.started = s.started or ev.ts
+    s.agent = ev.agent
+    s.model = d.get("model", "") or s.model
+    s.tool = d.get("tool", "") or s.tool
+    s.implicit = s.implicit or bool(d.get("implicit"))
+    if d.get("resumed"):  # a prompt on an ended session reopens it
+        s.ended = ""
+
+
+def _apply_ended(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
+    how, last = d.get("how") or "", d.get("last_active") or ""
+    # A session found dead ended when it last wrote (the fold's rule, `_h_session_ended`).
+    s.ended = last if how == "interrupted" and last else ev.ts
+    # Trimmed, and an empty one never blanks an earlier summary (B194).
+    s.summary = (d.get("summary") or "").strip() or s.summary
+
+
 def _gather(events: list) -> dict[str, _Acc]:
     adopted = {(e.data or {})["adopted_from"] for e in events if (e.data or {}).get("adopted_from")}
     out: dict[str, _Acc] = {}
@@ -54,19 +72,9 @@ def _gather(events: list) -> dict[str, _Acc]:
         s.last = max(s.last, ev.ts)
         d = ev.data or {}
         if ev.kind == "session.started":
-            s.started = s.started or ev.ts
-            s.agent = ev.agent
-            s.model = d.get("model", "") or s.model
-            s.tool = d.get("tool", "") or s.tool
-            s.implicit = s.implicit or bool(d.get("implicit"))
-            if d.get("resumed"):
-                s.ended = ""
+            _apply_started(s, ev, d)
         elif ev.kind == "session.ended":
-            how, last = d.get("how") or "", d.get("last_active") or ""
-            s.ended = last if how == "interrupted" and last else ev.ts
-            # The fold's rule (core/model `_h_session_ended`): trimmed, and an empty one
-            # never blanks an earlier summary (B194).
-            s.summary = (d.get("summary") or "").strip() or s.summary
+            _apply_ended(s, ev, d)
         else:
             s.entries.append(
                 {
