@@ -83,6 +83,23 @@ When the ready set is larger than the free slots, **bug fixes get them first**
 `flow.hotfix_tags`, or named by an open bug record, is offered before any feature, and
 priority orders each group. `bugs_first = false` orders by priority alone.
 
+## Whole suites queue, and wait for load
+
+Full test suites share one host-wide lock (`[ci].suite_wait_s` is how long a run waits). The
+number that may run at once is `[suites].max_concurrent`; 0 (default) derives it from the cores
+(`[suites].cores_per_suite` each, never under `[ci].max_concurrent_suites`). A second suite is
+also held while the host load is over `[suites].load_ceiling_per_core` (a lone suite never is),
+and the wait says why and shows the load. The wait is queue time: the per-test timeout starts
+when the suite is admitted, never before.
+
+The queue is not plain first in, first out: a fix of red main and the merge-queue integrator go
+first, then a phase's closing run, then an item's run, then a baseline measurement; within a class
+the shortest predicted run (the median of the measured runs of its kind) goes first. A run that has
+waited `[suites].max_wait_factor` times its own cost goes first whatever arrives, and one agent
+leads at most `[suites].agent_share` of the waiting runs. The wait line reads `you are #4 in the
+queue, estimated wait 14m (3 ahead, predicted 31m)`. A class is read from the holder label by
+`[suites].class_patterns` unless the caller names one.
+
 ## The log never conflicts
 
 Each agent appends to its own shard, so two agents writing at the same moment produce no
@@ -94,3 +111,26 @@ wrongly.
 
 Its lease expires and its worktree is still there, with its work in it. See
 `ddflow help recovery` — nothing is stolen, and nothing is thrown away.
+
+## A gate result is reused for the same tree
+
+A `ci` or `unit_tests` command gate that already ran on the same code tree, command and
+environment is not run again: it is recorded with the same outcome and the evidence `cached from
+run <key> of <time>` (`cached: true`, the original seconds in `cached_elapsed_s`). The key is the
+tracked files minus `.ddflow/` and `[gates].doc_globs` documents (a dirty tree by its content),
+the gate, the command, the Python version, the dependency lock files and `[resultcache].env_vars`;
+any change misses. Only `passed` and `failed` are stored, never `unavailable` or `partial`; a
+stored `failed` is served only with `[resultcache].reuse_failed` (a rerun is how a flake is told
+from a failure); an entry that does not read back whole is a miss. The cache is per project under
+`.ddflow/local/resultcache`, bounded by `[resultcache].keep_days` and `max_mb`;
+`[resultcache].enabled = false` turns it off.
+
+## A full pass survives main moving when the move reaches no test
+
+A phase closes on a full-suite pass newer than its last merge. When main moved since the pass (it
+records the commit it ran on), `ddflow complete` asks `revalidate.assess`: the paths that differ,
+minus `.ddflow/` and documents, are looked up in the test closure. None reached: the pass still
+counts, recorded as a pass with the note `unchanged by delta`. Some reached with no hub: only those
+tests are needed, recorded as `full on A plus selected on delta B` (partial when the selection
+fell back, never a silent pass). A hub or test infrastructure in the delta, or git or the selector
+unable to say: the full run is needed.
