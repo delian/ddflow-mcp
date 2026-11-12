@@ -28,3 +28,5 @@
 {"agent":"lane-comp-engine","data":{"gate":"rubber_duck"},"id":"e05f7595a5d7beee29a3e618f","kind":"gate.started","lamport":184548,"schema":1,"subject":"fix-comp-activation-script","ts":"2026-11-12T15:12:30.646193Z"}
 {"agent":"lane-comp-engine","data":{"gate":"ci"},"id":"ecccb7451e35522deff5feb7b","kind":"gate.started","lamport":184549,"schema":1,"subject":"fix-comp-activation-script","ts":"2026-11-12T15:12:33.012210Z"}
 {"agent":"lane-comp-engine","data":{"at":1794496658.15714,"holder":"lane-comp-engine"},"id":"e05f8171b692897df6c0ff624","kind":"lease.renewed","lamport":184625,"schema":1,"subject":"fix-comp-activation-script","ts":"2026-11-12T15:17:38.342695Z"}
+{"agent":"lane-comp-engine","data":{"at":1794496855.934861,"holder":"lane-comp-engine"},"id":"edcea861df89f3aaef046e471","kind":"lease.renewed","lamport":184670,"schema":1,"subject":"fix-comp-activation-script","ts":"2026-11-12T15:20:56.084252Z"}
+{"agent":"lane-comp-engine","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ec227068cc80e88b90dfaffd6","kind":"cadence.ran","lamport":184671,"schema":1,"subject":"recall_recheck:fix-comp-activation-script","ts":"2026-11-12T15:21:04.966725Z"}
