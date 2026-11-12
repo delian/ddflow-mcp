@@ -218,3 +218,5 @@
 {"agent":"lane-guard","data":{"at":1794473966.2813697,"holder":"lane-guard"},"id":"e844ed1633b1a3d28242d6ae9","kind":"lease.renewed","lamport":181605,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T08:59:26.422352Z"}
 {"agent":"lane-guard","data":{"at":1794474006.5424385,"holder":"lane-guard"},"id":"ee53bd776f515e3fdd1a21054","kind":"lease.renewed","lamport":181609,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T09:00:06.679380Z"}
 {"agent":"lane-guard","data":{"at":1794474586.0923254,"holder":"lane-guard"},"id":"eef2408953bc35b42051694b5","kind":"lease.renewed","lamport":181672,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T09:09:46.196973Z"}
+{"agent":"lane-guard","data":{"at":1794474631.837255,"holder":"lane-guard"},"id":"e55d2513829e52ce9ded87d0f","kind":"lease.renewed","lamport":181679,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T09:10:31.981401Z"}
+{"agent":"lane-guard","data":{"tags":["skip-followup","wave:0"]},"id":"e04ae290afe9983a47ee20529","kind":"task.updated","lamport":181682,"schema":1,"subject":"gskip-fix-Bmain-red-tool-diet-problem-1","ts":"2026-11-12T09:10:50.066050Z"}
