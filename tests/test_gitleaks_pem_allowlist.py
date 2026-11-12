@@ -16,15 +16,30 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILE = "tests/test_critic_findings.py"
 
 
+def _applies_to_private_key(a: dict) -> bool:
+    """An allowlist with no `targetRules` applies to every rule; one that lists it, to it."""
+    return "targetRules" not in a or "private-key" in a["targetRules"]
+
+
 def _entry() -> dict:
     cfg = tomllib.loads((ROOT / ".gitleaks.toml").read_text("utf-8"))
+    applying = [a for a in cfg["allowlists"] if _applies_to_private_key(a)]
     hits = [
         a
-        for a in cfg["allowlists"]
+        for a in applying
         if a.get("targetRules") == ["private-key"]
         and any(re.search(p, FIXTURE_FILE) for p in a.get("paths", []))
     ]
     assert len(hits) == 1, "exactly one private-key allowlist entry covers the fixture file"
+    # no OTHER entry that can apply to private-key may excuse this block, nor be path-free
+    # with a regex that matches the placeholder's body (that would excuse it in every file)
+    for a in applying:
+        if a is hits[0]:
+            continue
+        if not a.get("paths"):
+            assert not any(
+                re.search(rx, "MIIEowIBAAKCAQEAsecretbodyhere") for rx in a.get("regexes", [])
+            ), f"a path-free allowlist excuses the placeholder body everywhere: {a}"
     return hits[0]
 
 
