@@ -1,0 +1,317 @@
+"""TS-impact-probe: replay recent merges against the EXISTING selector (`services/testselect`).
+
+`probe(root, shas, limits)` answers, per merge and over all of them: the recall of the tests
+the merge changed next to its source, the share of the suite the selection runs (a whole-suite
+answer is 1.0), how often the hub fallback fires, what a narrower choice at a hub would have
+held, and how many misses are subprocess-driven tests that only recorded dependencies
+(TS-cover-deps) could route. The read-out lives in docs/ddflow/research/test-impact.md.
+
+Run it on this repository:  ``uv run python tests/test_testselect_probe.py 100``
+(about seven seconds a merge, a few processes, no network). The tests below replay a small
+fixture repository, so the suite stays fast.
+"""
+
+from __future__ import annotations
+
+import io
+import shutil
+import statistics
+import subprocess
+import sys
+import tarfile
+import tempfile
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from helpers import git_proc, git_raw
+from test_testselect_recall import drives_subprocess, merge_log
+
+from ddflow.config import Config
+from ddflow.services import testidents as TI
+from ddflow.services import testscope as TSC
+from ddflow.services import testselect as T
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass
+class MergeRow:
+    sha: str
+    source: int  #: changed non-test files (outside .ddflow)
+    suite: int  #: test files in the tree at the merge
+    selected: int  #: tests the selection runs (the whole suite when `full`)
+    full: bool  #: the selector answered "the whole suite" (hub or test infrastructure)
+    unrouted: bool  #: source changed, nothing selected, no fallback: only the later full run looks
+    co: int = 0  #: tests changed alongside the source that still exist
+    held: int = 0  #: of those, the ones the selection holds (all of them when `full`)
+    blind: list[str] = field(default_factory=list)  #: missed, subprocess-driven (not routable)
+    missed: list[str] = field(default_factory=list)  #: missed, with an import or name route
+    narrow_selected: int | None = None  #: at a hub: tests a hub-unbounded selection runs
+    narrow_held: int | None = None  #: at a hub: of the co-changed tests, how many that holds
+
+    @property
+    def share(self) -> float:
+        return self.selected / self.suite if self.suite else 1.0
+
+
+@dataclass
+class Probe:
+    rows: list[MergeRow]
+
+    @property
+    def scored(self) -> list[MergeRow]:
+        return [r for r in self.rows if r.co]
+
+    @property
+    def recall(self) -> float:
+        total = sum(r.co for r in self.scored)
+        return sum(r.held for r in self.scored) / total if total else 1.0
+
+    @property
+    def routable_recall(self) -> float:
+        """Recall once subprocess-driven misses are set aside (they have no import route)."""
+        total = sum(r.co - len(r.blind) for r in self.scored)
+        held = sum(r.held for r in self.scored)
+        return held / total if total else 1.0
+
+    @property
+    def median_share(self) -> float:
+        return statistics.median(r.share for r in self.rows) if self.rows else 0.0
+
+    @property
+    def fallback_rate(self) -> float:
+        return sum(r.full for r in self.rows) / len(self.rows) if self.rows else 0.0
+
+    @property
+    def unrouted_rate(self) -> float:
+        return sum(r.unrouted for r in self.rows) / len(self.rows) if self.rows else 0.0
+
+    @property
+    def blind_total(self) -> int:
+        return sum(len(r.blind) for r in self.rows)
+
+    def hub_rows(self) -> list[MergeRow]:
+        return [r for r in self.rows if r.full and r.narrow_selected is not None]
+
+    def hub_narrow_share(self) -> float:
+        hubs = self.hub_rows()
+        if not hubs:
+            return 0.0
+        return statistics.median(r.narrow_selected / r.suite for r in hubs if r.suite)
+
+    def hub_narrow_recall(self) -> float:
+        hubs = [r for r in self.hub_rows() if r.co]
+        total = sum(r.co for r in hubs)
+        return sum(r.narrow_held or 0 for r in hubs) / total if total else 1.0
+
+    def report(self) -> str:
+        return (
+            f"merges {len(self.rows)} (scored {len(self.scored)}); "
+            f"recall {self.recall:.3f} (routable {self.routable_recall:.3f}); "
+            f"median selected share {self.median_share:.3f}; "
+            f"hub-fallback rate {self.fallback_rate:.3f}; unrouted rate {self.unrouted_rate:.3f}; "
+            f"hub narrowed share {self.hub_narrow_share():.3f} at recall "
+            f"{self.hub_narrow_recall():.3f}; subprocess-blind misses {self.blind_total}"
+        )
+
+
+def _extract(root: Path, sha: str) -> tuple[Path, list[str]]:
+    raw = Path(tempfile.mkdtemp())
+    data = subprocess.run(["git", "-C", str(root), "archive", sha], capture_output=True, check=True)
+    with tarfile.open(fileobj=io.BytesIO(data.stdout)) as tar:
+        tar.extractall(raw, filter="data")
+    return raw, git_raw(root, "ls-tree", "-r", "--name-only", sha).splitlines()
+
+
+def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
+    """One merge against the existing selector; None when it changed no source."""
+    root_s, sha, limits = args
+    root = Path(root_s)
+    names = git_raw(root, "diff", "--name-only", "--no-renames", f"{sha}^1", sha).splitlines()
+    names = [n for n in names if n and not n.startswith(".ddflow/")]
+    src = [n for n in names if not T.is_test_file(n)]
+    co_all = [n for n in names if T.is_test_file(n)]
+    if not src:
+        return None
+    raw, listed = _extract(root, sha)
+    try:
+        py = [f for f in src if f.endswith(".py")]
+        idents = TI.changed_identifiers(root, f"{sha}^1", py, tip=sha, source=raw)
+        phrases = TI.changed_phrases(root, f"{sha}^1", py, tip=sha, source=raw)
+        added = git_raw(
+            root, "diff", "--name-only", "--no-renames", "--diff-filter=AD", f"{sha}^1", sha
+        ).splitlines()
+        stand_in = {"changed": src, "listed": listed, "idents": idents, "membership": added,
+                    "phrases": phrases}  # fmt: skip
+        sel = T.select(raw, "x", **stand_in, **limits)
+        assert sel is not None
+        suite = [p for p in listed if T.is_test_file(p) and (raw / p).is_file()]
+        co = [c for c in co_all if (raw / c).exists()]
+        full = bool(sel.full) and not sel.neutral
+        got = {t.path for t in sel.tests}
+        row = MergeRow(
+            sha=sha[:8], source=len(src), suite=len(suite),
+            selected=len(suite) if full else len(got), full=full,
+            unrouted=not full and not got, co=len(co),
+        )  # fmt: skip
+        row.held = len(co) if full else sum(1 for c in co if c in got)
+        for c in (c for c in co if not full and c not in got):
+            blind = drives_subprocess((raw / c).read_text("utf-8", "replace"), src)
+            (row.blind if blind else row.missed).append(c)
+        if full:  # what a choice narrower than the whole suite would have held at the hub
+            narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
+            assert narrow is not None
+            held = {t.path for t in narrow.tests}
+            row.narrow_selected = len(held)
+            row.narrow_held = sum(1 for c in co if c in held)
+        return row
+    finally:
+        shutil.rmtree(raw, ignore_errors=True)
+
+
+def probe(root: Path, shas: list[str], limits: dict, workers: int = 4) -> Probe:
+    jobs = [(str(root), s, limits) for s in shas]
+    if workers <= 1:
+        rows = [replay_one(j) for j in jobs]
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            rows = list(pool.map(replay_one, jobs))
+    return Probe([r for r in rows if r is not None])
+
+
+# ---- fixture repository ------------------------------------------------------------------
+
+
+def _g(repo: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def _write(repo: Path, rel: str, text: str) -> None:
+    p = repo / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def _merge(repo: Path, name: str, files: dict[str, str]) -> str:
+    _g(repo, "checkout", "-q", "-b", name)
+    for rel, text in files.items():
+        _write(repo, rel, text)
+    _g(repo, "add", "-A")
+    _g(repo, "commit", "-q", "-m", f"work {name}")
+    _g(repo, "checkout", "-q", "main")
+    _g(repo, "merge", "-q", "--no-ff", "-m", f"merge {name}: x", name)
+    return git_proc(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def make_repo(tmp: Path) -> tuple[Path, dict[str, str]]:
+    """A package with a leaf, a hub three tests import, an unmapped data file, a subprocess test."""
+    _g(tmp, "init", "-q", "-b", "main")
+    _g(tmp, "config", "user.email", "t@t")
+    _g(tmp, "config", "user.name", "t")
+    _write(tmp, "pkg/__init__.py", "")
+    _write(tmp, "pkg/leaf.py", "def leaf():\n    return 1\n")
+    _write(tmp, "pkg/hub.py", "def hub():\n    return 1\n")
+    _write(tmp, "pkg/tool.py", "print('tool')\n")
+    _write(tmp, "tests/test_leaf.py", "from pkg import leaf\n\n\ndef test_a():\n    assert leaf\n")
+    for i in range(3):
+        _write(tmp, f"tests/test_use{i}.py", f"from pkg import hub\n\n\ndef test_{i}():\n    assert hub\n")  # fmt: skip
+    _write(
+        tmp,
+        "tests/test_smoke.py",
+        "import subprocess\n\n\ndef test_t():\n    subprocess.run(['python', 'pkg/tool.py'])\n",
+    )
+    _g(tmp, "add", "-A")
+    _g(tmp, "commit", "-q", "-m", "base")
+    shas = {
+        "leaf": _merge(tmp, "leaf", {
+            "pkg/leaf.py": "def leaf():\n    return 2\n",
+            "tests/test_leaf.py": "from pkg import leaf\n\n\ndef test_a():\n    assert leaf()\n",
+        }),
+        "hub": _merge(tmp, "hub", {
+            "pkg/hub.py": "def hub():\n    return 2\n",
+            "tests/test_use0.py": "from pkg import hub\n\n\ndef test_0():\n    assert hub()\n",
+        }),
+        "tool": _merge(tmp, "tool", {
+            "pkg/tool.py": "print('tool 2')\n",
+            "tests/test_smoke.py": "import subprocess\n\n\ndef test_t():\n    subprocess.run(['python', 'pkg/tool.py'], check=True)\n",  # fmt: skip
+        }),
+        "data": _merge(tmp, "data", {"notes/unmapped.txt": "x\n"}),
+    }  # fmt: skip
+    return tmp, shas
+
+
+LIMITS = {"max_files": 100, "hub_importers": 3, "max_hops": 2, "name_max_tests": 30}
+
+
+def test_a_leaf_merge_selects_its_tests_only_and_keeps_recall(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["leaf"]], LIMITS, workers=1)
+    (row,) = p.rows
+    assert not row.full and row.selected < row.suite
+    assert row.held == row.co == 1
+    assert p.recall == 1.0 and p.median_share < 1.0 and p.fallback_rate == 0.0
+
+
+def test_a_hub_merge_falls_back_to_the_whole_suite_and_reports_a_narrower_choice(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["hub"]], LIMITS, workers=1)
+    (row,) = p.rows
+    assert row.full and row.selected == row.suite  # safety: a hub change selects everything
+    assert p.fallback_rate == 1.0 and p.recall == 1.0
+    # the hub-unbounded choice: the three importers, fewer than the whole suite, and it holds
+    # the co-changed test
+    assert row.narrow_selected is not None and 3 <= row.narrow_selected < row.suite
+    assert row.narrow_held == row.co == 1
+    assert p.hub_narrow_share() < 1.0 and p.hub_narrow_recall() == 1.0
+
+
+def test_a_subprocess_only_test_is_a_blind_miss_the_recorded_dependencies_would_route(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["tool"]], LIMITS, workers=1)
+    (row,) = p.rows
+    assert row.co == 1 and row.held == 0
+    assert row.blind == ["tests/test_smoke.py"] and row.missed == []
+    assert p.blind_total == 1 and p.recall == 0.0
+
+
+def test_an_unmapped_file_is_counted_as_unrouted_not_as_a_pass(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["data"]], LIMITS, workers=1)
+    (row,) = p.rows
+    assert row.unrouted and not row.full and row.selected == 0
+    assert p.unrouted_rate == 1.0
+    assert "unrouted rate 1.000" in p.report()
+
+
+def test_the_report_names_every_measure(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, list(shas.values()), LIMITS, workers=1)
+    text = p.report()
+    for word in ("recall", "median selected share", "hub-fallback rate", "subprocess-blind"):
+        assert word in text
+    assert len(p.rows) == 4
+
+
+def test_the_probe_runs_on_this_repository_window():
+    """A thin live smoke: the newest merge only (the full 100-merge read-out is the script)."""
+    shas = merge_log(ROOT)[:1]
+    if not shas:
+        return
+    p = probe(ROOT, shas, TSC.limits(Config()), workers=1)
+    assert all(0.0 <= r.share <= 1.0 for r in p.rows)
+
+
+if __name__ == "__main__":
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 100
+    import test_testselect_recall as R
+
+    R.SCAN = n
+    window = merge_log(ROOT)
+    result = probe(ROOT, window, TSC.limits(Config()))
+    print(result.report())
+    for r in result.rows:
+        if r.missed or r.blind:
+            print(r.sha, "missed", r.missed, "blind", r.blind)
