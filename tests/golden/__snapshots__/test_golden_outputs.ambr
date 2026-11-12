@@ -702,6 +702,12 @@
           engine's own writes, so it has no approval route. A person at a terminal is
           unaffected. An agent's edit of this knob is a `config.set`, which needs a
           person's approval.
+      baseline.keep = 14   [default]
+          Days the baseline store keeps a measured base sha (`.ddflow/local/baseline-
+          store/`, git-ignored, per project). An entry older than this is pruned the
+          next time the store is written; a base sha not in the store is measured once
+          under the suite lock and stored. 0 keeps nothing: every run measures the
+          base again.
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
           `fix-<bug id>`, tagged as a bug fix, under the found item's own OPEN phase
