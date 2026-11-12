@@ -22,6 +22,7 @@ from ...core.schedule import (
     critical_path,
     glob_conflict,
     wave_of,
+    with_tags,
 )
 from ...core.tier import tier_of
 from ...services import flow as FS
@@ -62,7 +63,7 @@ def next_(
     unknown = _unknown_phase(st, phase)
     if unknown:
         return O.failed("next", unknown, phase=phase)
-    tags = tuple(dict.fromkeys(t.strip() for t in tags if t and t.strip()))
+    tags = _clean_tags(tags)
     if unknown_tag := _unknown_tag(st, tags):
         return O.failed("next", unknown_tag, tags=list(tags))
     promoted: list[str] = []
@@ -94,8 +95,7 @@ def next_(
     p = plan_for_offer(
         repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only, tags=tags
     )
-    if tags:
-        p.blocking_deps = [i for i in p.blocking_deps if set(tags) <= set(i.tags)]
+    p.blocking_deps = with_tags(p.blocking_deps, tags)
     excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
@@ -123,6 +123,11 @@ def next_(
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
     return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
+
+
+def _clean_tags(tags: Sequence[str]) -> tuple[str, ...]:
+    """``tags`` stripped of blanks and repeats, in the order given."""
+    return tuple(dict.fromkeys(t.strip() for t in tags if t and t.strip()))
 
 
 def _unknown_tag(st, tags: Sequence[str]) -> str:

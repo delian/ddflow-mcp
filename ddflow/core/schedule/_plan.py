@@ -240,6 +240,11 @@ def _blocking_dependency_items(state: State, cfg: Config, phase: str, ctx: PlanC
     return dp.ready
 
 
+def with_tags(items: list[Item], tags: Sequence[str]) -> list[Item]:
+    """``items`` carrying EVERY one of ``tags`` (all of them when there are none)."""
+    return [i for i in items if set(tags) <= set(i.tags)] if tags else items
+
+
 def plan(
     state: State,
     cfg: Config,
@@ -284,8 +289,7 @@ def plan(
             for i in state.items.values()
             if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
         ]
-    if tags:
-        candidates = [i for i in candidates if set(tags) <= set(i.tags)]
+    candidates = with_tags(candidates, tags)
     p.cycles = find_cycles(state.live_by_id())
     in_cycle = {n for c in p.cycles for n in c}
     live = state.active_leases(now, grace)
