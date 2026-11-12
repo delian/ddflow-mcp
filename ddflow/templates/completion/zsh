@@ -1,0 +1,17 @@
+# Shell activation for ddflow completion: zsh.
+#
+# Registers the ONE completion engine (argcomplete over the ddflow parser) for this
+# shell; no command, option or choice name is spelled here. Without argcomplete there is
+# no completion: a clear message, then a normal return, never a broken prompt.
+
+function _ddflow_activate_zsh() {
+  if ! command -v register-python-argcomplete >/dev/null 2>&1; then
+    print -u2 "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')"
+    return 0
+  fi
+  autoload -Uz bashcompinit && bashcompinit 2>/dev/null
+  eval "$(register-python-argcomplete ddflow)" 2>/dev/null
+}
+
+_ddflow_activate_zsh
+unfunction _ddflow_activate_zsh 2>/dev/null
