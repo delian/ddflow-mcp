@@ -77,6 +77,19 @@ def primary_checkout(tree: Path) -> Path | None:
     return primary
 
 
+def detached_worktree(tree: Path | str) -> bool:
+    """Whether ``tree`` is a LINKED worktree checked out detached (its HEAD names a commit, not
+    a branch), read from the files git keeps. A lane's tree sits on its branch; a throwaway
+    scratch tree is detached. False for anything else, and for what cannot be read."""
+    pointer = _pointer(tree)
+    if pointer is None:
+        return False
+    try:
+        return not (pointer[0] / "HEAD").read_text("utf-8").startswith("ref:")
+    except OSError:
+        return False
+
+
 def _pointer(path: Path | str) -> tuple[Path, Path | None] | None:
     """(gitdir, commondir or None) from the `.git` FILE of a linked worktree or submodule at
     ``path``; None when there is no such file, or it is unreadable (a non-UTF-8 or NUL byte

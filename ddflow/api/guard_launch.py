@@ -18,6 +18,23 @@ from ..infra import worktree as W
 from ..services import install_info as I
 
 
+def _deliberate_outside_launch(foreign: I.ForeignLaunch) -> bool:
+    """A launcher put the tree on PYTHONPATH itself and the caller stands outside this
+    checkout's family: the code was chosen on purpose and no lane of this checkout is running
+    it by accident (a test's sandbox runs the tree under test from its own temp repository).
+
+    Both halves are needed. A tree that came through the shared editable install is the
+    redirect this guard exists for, and a caller inside the checkout (the primary, any lane)
+    running another lane's tree by PYTHONPATH is still running another lane's code.
+    """
+    try:
+        return I.named_on_pythonpath(foreign.worktree) and not I.in_checkout_family(
+            Path(os.getcwd()), foreign.primary
+        )
+    except OSError:
+        return False
+
+
 def guard_foreign_launch() -> int:
     """The command's exit status: ``OK`` to run, ``FAIL`` after refusing a foreign import."""
     try:
@@ -35,7 +52,7 @@ def guard_foreign_launch() -> int:
         # is the caller's own tree. Refuse, and repoint nothing: a heal on an unproven
         # foreignity would strand the caller's own tree if git merely misread it.
         print(
-            "ddflow: imported from the linked worktree"
+            f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL}"
             f" {I.normalise_path(foreign.worktree)}, but the caller's own tree cannot be"
             " identified; refusing to run code that may be another lane's — re-run once"
             " the checkout is reachable",
@@ -44,12 +61,14 @@ def guard_foreign_launch() -> int:
         return FAIL
     if own is not None and own.path.resolve() == foreign.worktree.resolve():
         return OK  # the very tree this code came from: legitimate, not foreign
+    if _deliberate_outside_launch(foreign):
+        return OK
     try:
         I.repoint_shared_editable(foreign.worktree, foreign.primary)
     except Exception:
         pass
     print(
-        "ddflow: imported from the linked worktree"
+        f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL}"
         f" {I.normalise_path(foreign.worktree)}, not the primary or your own tree;"
         " the shared editable install was reset to"
         f" {I.normalise_path(foreign.primary)} — re-run the command",

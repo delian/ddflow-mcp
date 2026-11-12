@@ -335,7 +335,9 @@ def _descriptors():
 def _settings_files() -> tuple[str, ...]:
     """The settings files a hook writer merges into, from each harness's ``[hooks].file``: the
     settings JSON (not a dedicated hooks file) is the one ddflow edits in place."""
-    outs = sorted(h.hooks.file for h in _descriptors() if h.hooks and h.hooks.file.endswith("/settings.json"))
+    outs = sorted(
+        h.hooks.file for h in _descriptors() if h.hooks and h.hooks.file.endswith("/settings.json")
+    )
     return tuple(outs)
 
 
@@ -654,7 +656,9 @@ def rewrite(
             continue
         try:
             new = (
-                _rewrite_settings(text, vocab) if rel in _settings_files() else _rewrite_text(text, wanted)
+                _rewrite_settings(text, vocab)
+                if rel in _settings_files()
+                else _rewrite_text(text, wanted)
             )
         except (NewerContent, RegionError) as exc:
             done.append(f"kept {rel}: {exc}")

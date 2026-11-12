@@ -98,7 +98,9 @@ def test_a_settled_task_readd_under_a_closed_phase_is_not_refused(repo):
     assert st.items["P9.T1"].removed and st.items["P9.T1"].state == DONE
 
     # A readd that restores a still-settled task adds no OPEN work: allowed, not refused.
-    code, _o, err = run_cli(repo, "task", "add", "P9.T1", "--title", "one", "--parent", "P9", "--readd")
+    code, _o, err = run_cli(
+        repo, "task", "add", "P9.T1", "--title", "one", "--parent", "P9", "--readd"
+    )
     assert code == 0, (code, err)
 
     st = _state(repo)
