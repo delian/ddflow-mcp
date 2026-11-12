@@ -41,8 +41,13 @@ def run_metrics(
         since=since or "",
         group_by=group_by or "",
         probes=(
-            GitProbes(repo, cfg.locks.probe_timeout_s, cfg.locks.probe_merge_tree_min_git)
-            if view == "locks"
+            GitProbes(
+                repo,
+                cfg.locks.probe_timeout_s,
+                cfg.locks.probe_merge_tree_min_git,
+                cfg.gates.doc_globs,
+            )
+            if view in ("locks", "suitewaste")
             else None
         ),
     )

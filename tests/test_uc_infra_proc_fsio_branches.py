@@ -150,6 +150,7 @@ def test_roborev_that_cannot_be_asked_is_a_note_not_a_crash(monkeypatch, tmp_pat
 def test_onboard_probes_let_a_timeout_through_or_report_it(monkeypatch, tmp_path):
     hooks = tmp_path / ".git" / "hooks"
     hooks.mkdir(parents=True)
+    (tmp_path / ".ddflow").mkdir()  # an unadopted repo is not asked (Ba126c86130)
     hook = hooks / "commit-msg"
     hook.write_text("#!/bin/sh\nexit 1\n")
     hook.chmod(hook.stat().st_mode | stat.S_IEXEC)

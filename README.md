@@ -204,7 +204,7 @@ the same implementation, so neither drifts from the other.
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` · `ddflow lanes lead` (read-only; see [Lanes](docs/guide/parallelism.md#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
-| **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
+| **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` · `ddflow metrics suitewaste` (why whole-suite runs happen and the avoidable share) (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs, schedules, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--source S] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](docs/guide/knowledge.md#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`, `source`) |
@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2a4ef277e98e -->
-<details><summary>All 687 knobs across 62 sections</summary>
+<!-- ddflow:begin README/knobs sha=ea3bc0df9605 -->
+<details><summary>All 691 knobs across 63 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1475,6 +1475,10 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
 | `store.index_touch_s` | `86400.0` |  |
+| `suites.max_concurrent` | `0` |  |
+| `suites.cores_per_suite` | `96` |  |
+| `suites.load_ceiling_per_core` | `0.35` |  |
+| `suites.load_poll_s` | `2.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
