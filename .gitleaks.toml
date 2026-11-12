@@ -139,3 +139,16 @@ useDefault = true
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
   regexes = ['''^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJhbGljZSJ9\.$''']
+
+[[allowlists]]
+  # The committed event-log shard lane-hard.jsonl quotes ddflow's synthetic gitlab PAT
+  # filler sample (`glpat-` plus the "Fk3Zq9Lm" filler body, itself built at run time in
+  # tests/test_secret_shapes_table.py) while a critic finding for the AU-redact-shapes work
+  # argues the provider-sample test misses a changed first character. It is synthetic
+  # filler, not a credential. Named by exact value, exactly the gitlab-pat rule, exactly
+  # the event-log shard files: a real `glpat-` token anywhere else still fires.
+  description = "Synthetic gitlab PAT filler sample quoted in a committed event-log detail"
+  targetRules = ["gitlab-pat"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^glpat-Xk3Zq9LmFk3Zq9LmFk3Z$''']
