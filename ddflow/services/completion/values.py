@@ -82,14 +82,11 @@ def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
     try:
         from itertools import islice as _islice
 
-        found: list[str] = []
-        for f in _islice(_g.iglob(pat), _PATH_SCAN):
-            if dirs_only and not _os.path.isdir(f):
-                continue  # a directory kind filters as it scans, before the cap drops it
-            found.append(f)
-            if len(found) >= _PATH_MAX:
-                break
-        return sorted(found)
+        found = [
+            f for f in _islice(_g.iglob(pat), _PATH_SCAN) if not dirs_only or _os.path.isdir(f)
+        ]
+        found.sort()
+        return found[:_PATH_MAX]
     except (OSError, ValueError):
         return []
 
