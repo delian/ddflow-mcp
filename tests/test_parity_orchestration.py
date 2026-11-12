@@ -29,6 +29,8 @@ def test_a_default_capabilities_record_is_unknown_not_a_fact():
     assert cap.subagent_model_control == "unknown"
     assert cap.patterns == ()
     assert ORC.verified(cap) == frozenset()
+    # a record that somehow carried a value with no source is NOT verified, never guessed
+    assert ORC.verified(HV.Capabilities(model_visibility="visible")) == frozenset()
 
 
 def test_a_verified_value_cites_its_source_and_is_verified():

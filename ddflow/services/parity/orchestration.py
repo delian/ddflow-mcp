@@ -29,9 +29,13 @@ def record(h: HR.Harness) -> HV.Capabilities:
 
 def verified(cap: HV.Capabilities) -> frozenset[str]:
     """The capability fields ``cap`` declares VERIFIED: a scalar whose value is not ``unknown``
-    (so, by ``harnessv2``, it cites a source) plus ``patterns`` when non-empty."""
-    out: set[str] = {n for n in VALUE_FIELDS if getattr(cap, n) not in ("", "unknown")}
-    if cap.patterns:
+    AND whose ``*_source`` names a file and key, plus ``patterns`` when non-empty and sourced.
+    A value with no source is not verified -- never guessed."""
+    out: set[str] = set()
+    for n in VALUE_FIELDS:
+        if getattr(cap, n) not in ("", "unknown") and getattr(cap, f"{n}_source").strip():
+            out.add(n)
+    if cap.patterns and cap.patterns_source.strip():
         out.add("patterns")
     return frozenset(out)
 
