@@ -20,6 +20,7 @@ from ...services import gates as G
 from ...services import identity as ID
 from ...services import leases as LS
 from ...services import merge_force as MF
+from ...services import mergequeue as MQ
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
@@ -84,10 +85,13 @@ def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
 
 
-def _queued_by_holder(held, queued_by: str) -> bool:
+def _queued_by_holder(repo: Path, item: str, held) -> bool:
     """The merge queue's integrator lands an entry its own holder put in line: that request is
-    the holder's consent to end their lease at the landing (``queued_by`` names who asked)."""
-    return bool(queued_by) and held.holder == queued_by
+    the holder's consent to end their lease at the landing. Read off the queue itself, never
+    off an argument a caller names: the entry must be the one the integrator is running now,
+    queued by the lease's holder."""
+    entry = MQ.get(repo, item)
+    return entry is not None and entry.state == MQ.RUNNING and entry.agent == held.holder
 
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
@@ -196,7 +200,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     force: bool = False,
     approval: str = "",
     on_progress=None,
-    queued_by: str = "",
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -247,7 +250,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     if ID.is_agent(agent):
         held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
-        if held is not None and not _queued_by_holder(held, queued_by):
+        if held is not None and not _queued_by_holder(repo, item, held):
             # A same-clone peer agent's live lease: refuse like a foreign one (the
             # operator recovering a crashed agent's item is exempt -- not is_agent).
             who = held.holder

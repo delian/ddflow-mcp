@@ -176,7 +176,7 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
         return MQ.PARKED, why, ""
     out = land(
         repo, it.id, message=f"merge {it.id}: {it.title}", agent=agent,
-        called_from=where[0], shell_cwd=where[1], queued_by=e.agent,
+        called_from=where[0], shell_cwd=where[1],
     )  # fmt: skip
     if out.exit != O.OK:
         return (
