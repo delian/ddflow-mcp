@@ -151,3 +151,14 @@ def test_a_stale_reading_with_a_past_reset_gives_way_to_the_fixed_boundary():
 def test_a_nan_recheck_is_refused():
     with pytest.raises(ValueError):
         Q.decide((), 0.9, NOW, float("nan"))
+
+
+def test_the_run_reason_does_not_claim_a_measurement_that_never_happened():
+    unmeasured = Q.evaluate(profile(W5H), [], NOW)
+    measured = Q.evaluate(profile(W5H), [reading(value=10.0)], NOW)
+    assert "nothing" in Q.decide(unmeasured, 0.9, NOW, 60).reason
+    assert Q.decide(measured, 0.9, NOW, 60).reason == "every measured window is below the line"
+
+
+def test_a_subject_with_no_windows_may_resume():
+    assert Q.resume((), 0.9) is True

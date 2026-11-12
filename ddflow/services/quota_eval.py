@@ -111,7 +111,13 @@ def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: 
         raise ValueError(f"recheck_s must be positive, got {recheck_s!r}")
     over = _over(evals, pause_at)
     if not over:
-        return Decision("run", None, (), "every measured window is below the line")
+        measured = [e for e in evals if e.fraction is not None]
+        why = (
+            "every measured window is below the line"
+            if measured
+            else "nothing limits or measures this subject, so nothing is over the line"
+        )
+        return Decision("run", None, (), why)
     names = tuple(e.window for e in over)
     worst = max(over, key=lambda e: e.fraction or 0.0)
     why = f"{worst.window} is at {worst.fraction:.0%} of its limit (pause at {pause_at:.0%})"
@@ -120,5 +126,6 @@ def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: 
 
 def resume(evals: Sequence[WindowEval], pause_at: float) -> bool:
     """May a paused subject resume? Only when every window has a fresh figure below the line:
-    a stale or missing one is not evidence that the quota came back."""
+    a stale or missing one is not evidence that the quota came back. No windows at all means
+    the profile no longer limits (unlimited or unknown), which is nothing to wait for."""
     return all(e.fraction is not None and not e.stale and e.fraction < pause_at for e in evals)
