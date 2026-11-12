@@ -8,9 +8,9 @@ model are `api/record_correct.py` (D-correction-permissions-2).
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
-from ...api import record_correct as RC
 from ...core import outcome as O
 from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
@@ -34,6 +34,8 @@ def _text_of(a: dict, nearest: str) -> tuple[str | None, str]:
 
 
 def correct_call(repo, a: dict, agent: str):
+    # By name at call time: the tool table must load without the api (test_declared_commands).
+    RC = importlib.import_module("ddflow.api.record_correct")
     text, why = _text_of(a, RC.NEAREST)
     if text is None:
         return O.failed(RC.VERB, why)
