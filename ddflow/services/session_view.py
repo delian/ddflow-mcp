@@ -56,13 +56,12 @@ def _apply_started(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
 
 
 def _apply_ended(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
-    how, last = d.get("how") or "", d.get("last_active") or ""
-    # A session found dead ended when it last wrote (the fold's rule, `_h_session_ended`);
-    # a bare later end (a summary) keeps how it ended.
-    if how or not s.how:
+    # The fold's rule (`_h_session_ended`): the first end wins its time and how; a later one
+    # only updates the summary, and an empty one never blanks an earlier summary (B194).
+    if not s.ended:
+        how, last = d.get("how") or "", d.get("last_active") or ""
         s.ended = last if how == "interrupted" and last else ev.ts
         s.how = how
-    # Trimmed, and an empty one never blanks an earlier summary (B194).
     s.summary = (d.get("summary") or "").strip() or s.summary
 
 

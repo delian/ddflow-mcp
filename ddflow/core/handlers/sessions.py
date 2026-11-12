@@ -238,10 +238,13 @@ def _h_repair_applied(st: State, ev: Event) -> None:
 
 
 def _h_session_ended(st: State, ev: Event) -> None:
+    """The FIRST end of a session wins its end time and how it ended; a later end (a summary
+    added by `session end --summary`, a hook racing the interrupted close) only updates the
+    summary. A `resumed` start reopens the session, and the next end is a first end again."""
     sess = _session(st, ev)
-    how = str(ev.data.get("how") or "")
-    last = str(ev.data.get("last_active") or "")
-    if how or not sess.how:  # a bare later end (a summary) keeps how the session ended
+    if not sess.ended_at:
+        how = str(ev.data.get("how") or "")
+        last = str(ev.data.get("last_active") or "")
         # A session found dead ended when it last wrote, not when somebody noticed.
         sess.ended_at = last if how == "interrupted" and last else ev.ts
         sess.how, sess.last_active = how, last

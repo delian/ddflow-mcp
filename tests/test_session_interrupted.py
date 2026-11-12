@@ -355,3 +355,24 @@ def test_a_write_inside_the_lease_grace_does_not_exempt_a_dead_session():
     grace = Config().lease.grace_s
     evs = _seed(_ev("session.note", "s1", 8, NOW - 7500 + grace // 2, text="last gasp"))
     assert [d.session for d in _dead(evs)] == ["s1"]
+
+
+def test_a_duplicate_prompt_firing_does_not_reopen_an_ended_session(repo: Path):
+    log = EventLog(repo, "a1")
+    cfg = Config.load(repo)
+    assert S.capture_prompt(log, cfg, "raw", "same words") == "recorded"
+    sid = S.harness_session_id("raw")
+    S.end(log, sid, summary="")
+    assert S.capture_prompt(log, cfg, "raw", "same words") == "duplicate"
+    assert fold(log.read_all(), strict=False).sessions[sid].ended_at
+    assert S.open_sessions(log.read_all(), "a1") == []
+
+
+def test_the_first_end_wins_its_time_and_how_a_later_end_only_adds_a_summary(repo: Path):
+    log = EventLog(repo, "a1")
+    log.append("session.started", "s1", {})
+    log.append("session.ended", "s1", {"summary": ""})
+    first = fold(log.read_all(), strict=False).sessions["s1"].ended_at
+    log.append("session.ended", "s1", {"summary": "later words", "how": "ended"})
+    sess = fold(log.read_all(), strict=False).sessions["s1"]
+    assert sess.ended_at == first and sess.how == "" and sess.summary == "later words"

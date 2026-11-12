@@ -349,6 +349,11 @@ def capture_prompt(
     sid = harness_session_id(harness_id) or resolve(log, model=model, tool=tool)[0]
     clean, n = redact(text, cfg)
     events = log.read_all()
+    now = time.time()
+    fired = now if fired_at is None else min(now, max(fired_at, now - HOOK_START_MAX_S))
+    if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid, now=fired):
+        return "duplicate"
+    # Only a prompt that is accepted opens or reopens its session: a duplicate firing must not.
     if not is_started(events, sid):
         log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
     elif _is_ended(events, sid):  # a prompt on an ended session reopens it
@@ -357,10 +362,6 @@ def capture_prompt(
             sid,
             {"model": model, "tool": tool, "cwd": str(Path.cwd()), "resumed": True},
         )
-    now = time.time()
-    fired = now if fired_at is None else min(now, max(fired_at, now - HOOK_START_MAX_S))
-    if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid, now=fired):
-        return "duplicate"
     log.append("session.prompt", sid, {"text": clean, "item": "", "redactions": n, "auto": True})
     return "recorded"
 
