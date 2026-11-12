@@ -152,6 +152,11 @@ def _plan_driver(mine: Path, tmpl: Path, rel: str) -> str:
     return f"would rewrite {rel}{note}"
 
 
+def _wants_claude_pointer(path, agents) -> bool:
+    """Whether the CLAUDE.md pointer is written: it already exists, or claude is adopted."""
+    return path.exists() or "claude" in agents
+
+
 def _plan_actions(
     repo: Path, docs_dir: str, templates: Path, only: Collection[str] | None
 ) -> list[str]:
@@ -168,10 +173,8 @@ def _plan_actions(
         if only is not None and name not in only:
             continue
         path = repo / name
-        if (
-            name == "CLAUDE.md"
-            and not path.exists()
-            and "claude" not in (adopted_agents(repo, docs_dir=docs_dir))
+        if name == "CLAUDE.md" and not _wants_claude_pointer(
+            path, adopted_agents(repo, docs_dir=docs_dir)
         ):
             continue
         out.append(_plan_block(path, section, name))
@@ -342,7 +345,7 @@ def refresh_docs(
         if only is not None and name not in only:
             continue
         path = repo / name
-        if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
+        if name == "CLAUDE.md" and not _wants_claude_pointer(path, agents):
             continue
         actions.append(_upsert_block(path, section, name))
     for key in agents:
