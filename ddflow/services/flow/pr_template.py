@@ -34,7 +34,7 @@ def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
     flat = scrub(
         " ".join(scrub(str(text or "")).split())
     )  # folding can CREATE a match: scrub again
-    out = flat.replace("\\", "\\\\").replace("|", "\\|")
+    out = scrub(flat.replace("\\", "\\\\").replace("|", "\\|"))  # escaping can create a match too
     if len(out) > cell_max:
         cut = out[: cell_max - 1]
         if (len(cut) - len(cut.rstrip("\\"))) % 2:  # never end on a dangling escape

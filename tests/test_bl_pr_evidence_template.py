@@ -213,3 +213,12 @@ def test_folding_lines_cannot_create_an_unredacted_secret_prefix():
     scrub = lambda t: t.replace(secret, "[REDACTED]")  # noqa: E731
     out = _cell("token\nvalue 1234567890", 12, scrub)
     assert "token value" not in out and "1234" not in out, out
+
+
+def test_escaping_cannot_create_an_unredacted_secret_prefix():
+    from ddflow.services.flow.pr_template import _cell
+
+    secret = "\\|123"  # the escaped form of `|123`
+    scrub = lambda t: t.replace(secret, "[REDACTED]")  # noqa: E731
+    out = _cell("|123", 3, scrub)
+    assert "\\|" not in out and "123" not in out, out
