@@ -81,6 +81,7 @@ def test_the_command_log_still_falls_back_to_a_repository_cwd(repo: Path, monkey
     inside a real repository, the command belongs to that repository's log."""
     plain = repo.parent / "outside"
     plain.mkdir()
+    (repo / ".ddflow").mkdir()  # an unadopted repository gets no log (it would adopt it)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("DDFLOW_REPO", raising=False)
     args = argparse.Namespace(repo=str(plain), agent="me")  # a non-repository target

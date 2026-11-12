@@ -321,7 +321,7 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--role ROLE] [--note NOTE] [target]
   
   positional arguments:
     target                the item id (as --item; required with --for-agent)
@@ -334,6 +334,8 @@
     --for-agent FOR_AGENT
                           render the standard launch brief of subagent NAME for the item (`--item`
                           or the positional id)
+    --role ROLE           the project's rules for a role: phase-closer, fixer, researcher or
+                          reviewer (with --for-agent: appended to the launch brief)
     --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''

@@ -34,3 +34,14 @@ blocked by a named lane's globs, lanes idle beside ready work, and more working 
 the parallelism limit. Over MCP it is `ddflow_lanes` with `view` = `state`, `brief` or
 `advise`. Exit 2 means nothing to show. The `[lanes]` knobs tune the window, the stale
 threshold, the watch interval and the size of advice and briefs.
+
+## Role packs
+
+`ddflow brief --role phase-closer|fixer|researcher|reviewer [--phase ID | --item ID]` prints the
+project's standing rules for that role (tests first, ratchet offenders by name, the detached
+suite recipe with the maximum timeout, the approvals relay protocol, one pins recipe per
+approval, the docs-wave stop, no push), so a coordinator sends one line instead of retyping
+them. The packs are `[roles]` config (`phase_closer_rules` and the like, one line each; a line
+`rule:<id>` is rendered from that rule record), overridable in any config layer and cut at
+`[roles].budget_tokens`. An unknown role refuses and lists the roles. `brief --for-agent NAME
+ITEM --role R` appends the pack to the launch brief; over MCP it is `ddflow_brief` with `role`.
