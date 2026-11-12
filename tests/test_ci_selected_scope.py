@@ -38,7 +38,13 @@ def stubs(tmp_path, monkeypatch):
     bin_dir.mkdir()
     log.mkdir()
     for name, body in (
-        ("pre-commit", f"echo \"SKIP=$SKIP\" >> {log}/precommit\necho 'ruff check....Passed'\n"),
+        (
+            "pre-commit",
+            f"echo \"SKIP=$SKIP\" >> {log}/precommit\necho 'ruff check....Passed'\n"
+            # a full run must report its test hook (a hook skipped for want of a test file is
+            # unavailable, B717b798547): the stub reports it unless SKIP names it
+            "case \",$SKIP,\" in *,tests,*) ;; *) echo 'tests....Passed' ;; esac\n",
+        ),
         ("pytest", f'echo "$@" >> {log}/pytest\n'),
     ):
         f = bin_dir / name
