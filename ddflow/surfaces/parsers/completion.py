@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import os
 
+from ...adapters.env import DEFAULT as _ENV
+from ...adapters.fsio import replace_text
 from ...api import completion_scripts
-from ...services.completion import install as _install
+from ...api.completion import install as _install
 from ..context import Ctx
 
 
@@ -21,7 +22,7 @@ def _cmd_completion(a: argparse.Namespace, c: Ctx) -> int:
 
 
 def _home() -> str:
-    return os.path.expanduser("~")
+    return _ENV.get("HOME") or "~"
 
 
 def _do_install(a: argparse.Namespace) -> int:
@@ -37,7 +38,7 @@ def _do_install(a: argparse.Namespace) -> int:
     if text == current:
         print(f"already installed in {path} (no change)")
         return 0
-    path.write_text(text)
+    replace_text(path, text)
     print(f"installed ddflow completion into {path}")
     return 0
 
@@ -56,7 +57,7 @@ def _do_uninstall(a: argparse.Namespace) -> int:
     if not a.yes:
         print(f"would uninstall the ddflow completion block from {path}")
         return 0
-    path.write_text(text)
+    replace_text(path, text)
     print(f"uninstalled ddflow completion from {path}")
     return 0
 

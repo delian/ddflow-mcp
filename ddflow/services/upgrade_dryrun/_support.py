@@ -125,6 +125,22 @@ def _tool_body(result: dict[str, Any] | None) -> dict[str, Any]:
         return {}
 
 
+def connect_text(session: dict[int, dict[str, Any]]) -> str:
+    """Everything a connect session says to the operator: the handshake instructions plus every
+    tool result's text blocks, joined. The upgrade notice rides the FIRST TOOL RESULT since the
+    handshake answers from the cached interface snapshot (SU-init-fast-hook, eaf0b03f4), not the
+    handshake's own text."""
+    parts = [str((session.get(1) or {}).get("instructions", "") or "")]
+    for at, result in session.items():
+        if at == 1:
+            continue
+        for block in (result or {}).get("content") or []:
+            text = block.get("text") if isinstance(block, dict) else None
+            if isinstance(text, str):
+                parts.append(text)
+    return "\n".join(parts)
+
+
 def _pipeline(shown: P.Captured) -> list[str]:
     """The gates of an item's pipeline that are skipped by hand (`merge` is done by ddflow)."""
     try:
