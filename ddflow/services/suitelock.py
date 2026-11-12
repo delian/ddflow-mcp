@@ -25,6 +25,7 @@ the queue ``position`` as a third argument (default 0, unknown)."""
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import math
 import os
@@ -115,6 +116,20 @@ def load_block(
         f"(~{value * (cores or os.cpu_count() or 1):.0f} on {cores or os.cpu_count() or 1} cores) "
         f"with {running} suite(s) running"
     )
+
+
+_CLASS: contextvars.ContextVar[str | None] = contextvars.ContextVar("suite_class", default=None)
+
+
+@contextlib.contextmanager
+def suite_class(klass: str) -> Iterator[None]:
+    """Every ``hold`` in this block (this thread or task) queues as ``klass`` unless its caller
+    names another: the merge queue's integrator runs its checks as ``integrator``."""
+    token = _CLASS.set(klass)
+    try:
+        yield
+    finally:
+        _CLASS.reset(token)
 
 
 def state_dir() -> Path:
@@ -453,7 +468,7 @@ def hold(
     said: tuple[int, str] = (0, "")
     watch = _Admission(cfg, directory, slots_n, source, cores)
     with contextlib.ExitStack() as stack:
-        mine = _note_of(cfg, directory, holder, klass, scope)
+        mine = _note_of(cfg, directory, holder, klass or _CLASS.get(), scope)
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s, mine))
         name = ticket.name
         head_since: float | None = None  # monotonic when this waiter FIRST reached the head

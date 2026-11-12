@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "resultcache.probe_commands"
+new = '["pytest --version", "uv --version"]'
+why = "RC-tree-result-cache: tool versions are part of the cache key."
+impact = "additive"
