@@ -335,3 +335,7 @@
 {"agent":"lane-guard","data":{"at":1794509695.9900422,"holder":"lane-guard"},"id":"e6ef24465ab0ec9def4311978","kind":"lease.renewed","lamport":186544,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T18:54:56.137866Z"}
 {"agent":"lane-guard","data":{"at":1794510251.173957,"holder":"lane-guard"},"id":"ec1d0828259c464606150455c","kind":"lease.renewed","lamport":186574,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T19:04:11.319584Z"}
 {"agent":"lane-guard","data":{"at":1794510320.19376,"holder":"lane-guard"},"id":"ef82772f99b6f49cfae3a2506","kind":"lease.renewed","lamport":186576,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T19:05:20.350708Z"}
+{"agent":"lane-guard","data":{"at":1794510870.8656433,"holder":"lane-guard"},"id":"e4e0c2b852514cba11afbb004","kind":"lease.renewed","lamport":186607,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T19:14:31.011055Z"}
+{"agent":"lane-guard","data":{"tags":["speed","observation-3","wave:0"]},"id":"e59c981267c9a216f35fc8ed5","kind":"task.updated","lamport":186613,"schema":1,"subject":"RC-file-result-cache","ts":"2026-11-12T19:14:44.990031Z"}
+{"agent":"lane-guard","data":{"tags":["speed","observation-3","wave:0"]},"id":"ec2a1d6bc1303fea2d1b2a320","kind":"task.updated","lamport":186614,"schema":1,"subject":"SV-revalidate-delta","ts":"2026-11-12T19:14:45.094648Z"}
+{"agent":"lane-guard","data":{"tags":["speed","observation-3","wave:1"]},"id":"edbdf6f62d8990a237bc66b04","kind":"task.updated","lamport":186615,"schema":1,"subject":"TS-cover-deps","ts":"2026-11-12T19:14:45.197852Z"}
