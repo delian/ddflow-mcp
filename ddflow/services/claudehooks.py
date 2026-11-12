@@ -53,6 +53,8 @@ CLAUDE_SETTINGS = ".claude/settings.json"
 #: ``Bash`` matcher keeps refusing the forbidden commands (LK-write-hook-wire).
 WRITE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 PRETOOL_MATCHER = f"Bash|{WRITE_MATCHER}"
+#: Seconds a SessionEnd hook may run: the harness default of 1.5 s cannot fit a log fold.
+SESSION_END_TIMEOUT_S = 30
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,11 @@ class HookSpec:
     #: D-compat): the hook's IDENTITY stays `name`, so a hook installed under the old
     #: command is refreshed in place, never orphaned beside a second one.
     run: str = ""
+    #: Seconds the harness lets the hook run (0 = its default). SessionEnd has 1.5 s by
+    #: default, which a log fold cannot fit.
+    timeout: int = 0
+    #: Run it in the background (`async: true`), so a fold does not delay each turn.
+    background: bool = False
 
     @property
     def subcommand(self) -> str:
@@ -123,6 +130,26 @@ HOOKS: tuple[HookSpec, ...] = (
     ),
     HookSpec(
         "claude",
+        "stop",
+        "Stop",
+        CLAUDE_SETTINGS,
+        None,
+        "what the session is doing is recorded after each turn",
+        run="run stop --harness claude",
+        background=True,
+    ),
+    HookSpec(
+        "claude",
+        "session-end",
+        "SessionEnd",
+        CLAUDE_SETTINGS,
+        None,
+        "the session's end is recorded with what it was doing",
+        run="run session_end --harness claude",
+        timeout=SESSION_END_TIMEOUT_S,
+    ),
+    HookSpec(
+        "claude",
         "prompt",
         PROMPT_EVENT,
         CLAUDE_SETTINGS,
@@ -149,6 +176,25 @@ HOOKS: tuple[HookSpec, ...] = (
         None,
         "every operator prompt is recorded",
         run="run prompt --harness gemini",
+    ),
+    HookSpec(
+        "gemini",
+        "pre-compact",
+        "PreCompress",
+        GEMINI_SETTINGS,
+        None,
+        "the session's state is recorded before every compaction",
+        run="run pre_compact --harness gemini",
+    ),
+    HookSpec(
+        "gemini",
+        "session-end",
+        "SessionEnd",
+        GEMINI_SETTINGS,
+        None,
+        "the session's end is recorded with what it was doing",
+        run="run session_end --harness gemini",
+        timeout=SESSION_END_TIMEOUT_S,
     ),
 )
 
@@ -178,6 +224,8 @@ def install_spec(repo: Path, h: HookSpec) -> str:
         matcher=h.matcher,
         rel=h.file,
         purpose=h.purpose,
+        timeout=h.timeout,
+        background=h.background,
     )
 
 
@@ -316,6 +364,40 @@ def state(
     return on, ""
 
 
+#: The entry fields a table row's `timeout` and `background` write.
+_OPTION_KEYS = ("timeout", "async")
+
+
+def _entry_options(timeout: int, background: bool) -> dict[str, Any]:
+    opts: dict[str, Any] = {}
+    if timeout:
+        opts["timeout"] = timeout
+    if background:
+        opts["async"] = True
+    return opts
+
+
+def _same_options(entry: dict[str, Any], opts: dict[str, Any]) -> bool:
+    """Whether the entry carries exactly the options the table row wants."""
+    return all(entry.get(k) == v for k, v in opts.items()) and not any(
+        k in entry and k not in opts for k in _OPTION_KEYS
+    )
+
+
+def _refreshed(
+    region: Managed, have: str, command: str, fresh: str, path: Path, event: str
+) -> tuple[str, bool]:
+    """The command line a refresh writes over `have`, and whether `have` had been edited."""
+    try:
+        owned = region.owns(have)
+        wanted = region.splice(have, command) if owned else fresh
+        return wanted, owned and region.state(have) == "edited"
+    except NewerContent as exc:
+        raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
+    except RegionError as exc:
+        raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
+
+
 def install(
     repo: Path,
     command: str,
@@ -325,6 +407,8 @@ def install(
     matcher: str | None = MATCHER,
     rel: str = CLAUDE_SETTINGS,
     purpose: str = "",
+    timeout: int = 0,
+    background: bool = False,
 ) -> str:
     """Add (or refresh) our hook for `event`, leaving every other hook exactly as it was.
 
@@ -339,25 +423,18 @@ def install(
     if not isinstance(groups, list):
         raise SettingsError(f"{path}: `hooks.{event}` is not a list; not touching it")
     region = _region(marker)
-    entry = {"type": "command", "command": region.render(command)}
+    opts = _entry_options(timeout, background)
+    entry: dict[str, Any] = {"type": "command", "command": region.render(command), **opts}
     for g in groups:
         for i, h in enumerate(_hooks_of(g, path)):
             if _ours(h, marker):
                 have = str(h.get("command", ""))
-                try:
-                    owned = region.owns(have)
-                    wanted = region.splice(have, command) if owned else entry["command"]
-                    edited = owned and region.state(have) == "edited"
-                except NewerContent as exc:
-                    raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
-                except RegionError as exc:
-                    raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
-                if wanted == have and h.get("type") == "command":
+                wanted, edited = _refreshed(region, have, command, entry["command"], path, event)
+                if wanted == have and h.get("type") == "command" and _same_options(h, opts):
                     return f"the ddflow {event} hook is already in {path}"
-                saved = ""
-                if edited:
-                    saved = backup_edited(repo, path, "command")
-                g["hooks"][i] = {**h, "type": "command", "command": wanted}
+                saved = backup_edited(repo, path, "command") if edited else ""
+                kept = {k: v for k, v in h.items() if k not in _OPTION_KEYS}
+                g["hooks"][i] = {**kept, "type": "command", "command": wanted, **opts}
                 _write(path, data)
                 return f"updated the ddflow {event} hook in {path}{saved}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})

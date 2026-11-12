@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.interrupted_close_max"
+new = "20"
+why = "Most dead sessions one SessionStart closes as interrupted (open, agent holds no live lease, a lease lapsed after the session began, nothing written since). 0 turns the close off."
+impact = "additive"

@@ -36,7 +36,7 @@ FLAT_LIST = frozenset(flatlist.LAYOUTS)
 #: The canonical events ddflow installs a hook for; the others have no work to do yet.
 #: ``pre_tool`` carries the write-tool matcher for the PreToolUse event (the Claude Code
 #: json-groups dialect); flat-list layouts have no matcher (the hook fires for every tool).
-INSTALLED = ("session_start", "prompt", "pre_compact", "pre_tool")
+INSTALLED = ("session_start", "prompt", "pre_compact", "pre_tool", "stop", "session_end")
 #: The native pre_tool event name whose group takes the write-tool matcher. Gemini's
 #: BeforeTool carries no matcher, so it keeps none and falls back to the commit-time check.
 PRETOOL_WRITE_EVENT = "PreToolUse"
@@ -85,6 +85,8 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
             else None,
             f"the {event.replace('_', ' ')} event reaches ddflow",
             run=f"run {event} --harness {h.id}",
+            timeout=CH.SESSION_END_TIMEOUT_S if event == "session_end" else 0,
+            background=event == "stop",
         )
         for event in INSTALLED
         if event in hk.events

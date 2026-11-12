@@ -59,8 +59,11 @@ def _gather(events: list) -> dict[str, _Acc]:
             s.model = d.get("model", "") or s.model
             s.tool = d.get("tool", "") or s.tool
             s.implicit = s.implicit or bool(d.get("implicit"))
+            if d.get("resumed"):
+                s.ended = ""
         elif ev.kind == "session.ended":
-            s.ended = ev.ts
+            how, last = d.get("how") or "", d.get("last_active") or ""
+            s.ended = last if how == "interrupted" and last else ev.ts
             # The fold's rule (core/model `_h_session_ended`): trimmed, and an empty one
             # never blanks an earlier summary (B194).
             s.summary = (d.get("summary") or "").strip() or s.summary

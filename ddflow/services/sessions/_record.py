@@ -144,6 +144,19 @@ def is_started(events: Iterable, session_id: str) -> bool:
     return any(e.kind == "session.started" and e.subject == session_id for e in events)
 
 
+def _is_ended(events: Iterable, sid: str) -> bool:
+    """Whether `sid` is closed now: a `resumed` start reopens an ended session."""
+    ended = False
+    for ev in events:
+        if ev.subject != sid:
+            continue
+        if ev.kind == "session.ended":
+            ended = True
+        elif ev.kind == "session.started" and ev.data.get("resumed"):
+            ended = False
+    return ended
+
+
 def open_sessions(events: list, agent: str) -> list[str]:
     """Ids of this agent's sessions that have not ended, the most recently active first.
 
@@ -159,6 +172,10 @@ def open_sessions(events: list, agent: str) -> list[str]:
             continue
         if ev.kind == "session.started" and ev.agent == agent:
             started[ev.subject] = True
+            if ev.data.get("resumed"):
+                ended.discard(ev.subject)
+        elif ev.kind == "session.started" and ev.data.get("resumed"):
+            ended.discard(ev.subject)
         elif ev.kind == "session.ended":
             ended.add(ev.subject)
         last[ev.subject] = max(last.get(ev.subject, (0, "")), (ev.lamport, ev.ts))
@@ -334,6 +351,12 @@ def capture_prompt(
     events = log.read_all()
     if not is_started(events, sid):
         log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
+    elif _is_ended(events, sid):  # a prompt on an ended session reopens it
+        log.append(
+            "session.started",
+            sid,
+            {"model": model, "tool": tool, "cwd": str(Path.cwd()), "resumed": True},
+        )
     now = time.time()
     fired = now if fired_at is None else min(now, max(fired_at, now - HOOK_START_MAX_S))
     if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid, now=fired):
