@@ -84,6 +84,12 @@ def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
 
 
+def _queued_by_holder(held, queued_by: str) -> bool:
+    """The merge queue's integrator lands an entry its own holder put in line: that request is
+    the holder's consent to end their lease at the landing (``queued_by`` names who asked)."""
+    return bool(queued_by) and held.holder == queued_by
+
+
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
     """The `merge.forced` event of a landing that went over unsettled gates (no-op otherwise)."""
     if stamp is not None:
@@ -241,11 +247,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     if ID.is_agent(agent):
         held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
-        # The merge queue's integrator lands an entry its own holder put in line: that request
-        # is the holder's consent to end their lease at the landing (queued_by names who asked).
-        if held is not None and queued_by and held.holder == queued_by:
-            held = None
-        if held is not None:
+        if held is not None and not _queued_by_holder(held, queued_by):
             # A same-clone peer agent's live lease: refuse like a foreign one (the
             # operator recovering a crashed agent's item is exempt -- not is_agent).
             who = held.holder
