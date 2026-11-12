@@ -30,7 +30,9 @@ def _field_status(h: HR.Harness, field: str) -> str:
     section = getattr(h, name, None)
     if section is None:
         return "unverified"
-    if getattr(section, "none", False) or (name == "mcp" and getattr(section, "shape", "") == "none"):
+    if getattr(section, "none", False) or (
+        name == "mcp" and getattr(section, "shape", "") == "none"
+    ):
         return "none"
     return "documented"
 
