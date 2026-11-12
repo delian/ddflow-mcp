@@ -13,3 +13,4 @@
 {"agent":"lane-sw-3","data":{"at":1794494304.402773,"holder":"lane-sw-3"},"id":"e3426efd7c436d141bdc21bca","kind":"lease.renewed","lamport":184091,"schema":1,"subject":"DX-park-and-resume","ts":"2026-11-12T14:38:24.541161Z"}
 {"agent":"lane-sw-3","data":{"at":1794495054.9176123,"holder":"lane-sw-3"},"id":"e721008de582a5ce4bc7fecd1","kind":"lease.renewed","lamport":184281,"schema":1,"subject":"DX-park-and-resume","ts":"2026-11-12T14:50:55.099930Z"}
 {"agent":"lane-sw-3","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"eac953303191c849b341c3b75","kind":"cadence.ran","lamport":184285,"schema":1,"subject":"recall_recheck:DX-park-and-resume","ts":"2026-11-12T14:51:07.762144Z"}
+{"agent":"lane-sw-3","data":{"at":1794495679.9013426,"holder":"lane-sw-3"},"id":"e5da95ae486628f699d2439f6","kind":"lease.renewed","lamport":184441,"schema":1,"subject":"DX-park-and-resume","ts":"2026-11-12T15:01:20.042944Z"}
