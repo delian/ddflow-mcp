@@ -38,7 +38,11 @@ def _gate_run_own_actions():
     gate = group.choices["gate"]
     subparsers = [a for a in gate._actions if isinstance(a, argparse._SubParsersAction)][0]
     run = subparsers.choices["run"]
-    return [a for a in run._actions if a.dest not in GLOBAL_DESTS and a.dest != "help"]
+    return [
+        a
+        for a in run._actions
+        if a.dest not in GLOBAL_DESTS and not isinstance(a, argparse._HelpAction)
+    ]
 
 
 def test_gate_run_mcp_properties_are_the_parameters_not_declared_cli_only():
