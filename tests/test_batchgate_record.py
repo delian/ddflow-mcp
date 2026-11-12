@@ -220,4 +220,12 @@ def test_a_finish_without_an_outcome_still_closes_the_run(formed):
     run = BG.gate_started(formed, "b1", gate="ci", tree_sha="t")
     formed.append("batch.gate_finished", "b1", {"gate": "ci", "run": run})
     formed.append("batch.gate_finished", "b1", {"gate": "ci", "run": run, "outcome": "passed"})
-    assert len(_st(formed).batches["b1"]["gates"]) == 2  # the second is its own entry
+    gates = _st(formed).batches["b1"]["gates"]
+    assert len(gates) == 1 and gates[0].get("finished")  # one run id, one entry; first finish wins
+
+
+def test_fan_out_with_another_gate_or_tree_than_the_started_run_is_refused(formed):
+    run = BG.gate_started(formed, "b1", gate="ci", tree_sha="tree1")
+    for kw in ({"gate": "lint", "tree_sha": "tree1"}, {"gate": "ci", "tree_sha": "tree2"}):
+        with pytest.raises(ValueError, match="never started"):
+            BG.fan_out(formed, Config.load(), "b1", outcome="passed", run=run, **kw)

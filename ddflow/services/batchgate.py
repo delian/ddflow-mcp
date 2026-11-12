@@ -141,7 +141,11 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
         if gdef is not None and gdef.is_human_gate:
             raise ValueError(f"{gate!r} is a human-approval gate: a batch never clears it")
         if outcome != "unavailable" and not any(
-            g["run"] == run and not g.get("finished") for g in b["gates"]
+            g["run"] == run
+            and not g.get("finished")
+            and g["gate"] == gate
+            and g["tree_sha"] == tree_sha
+            for g in b["gates"]
         ):
             raise ValueError(
                 f"batch {batch}: run {run} of {gate} on tree {tree_sha} was never started "

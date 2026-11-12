@@ -83,6 +83,8 @@ def h_batch_gate_finished(st: State, ev: Event) -> None:
     gate = _str(d.get("gate"))
     # The open start of the same run (or, with no run id, of the same gate) is closed; a
     # finish with no start is its own entry, so a run that was never announced still shows.
+    if run and any(g["run"] == run and g.get("finished") for g in b["gates"]):
+        return  # a run closes once; a second finish of the same run id changes nothing
     entry = next(
         (
             g
