@@ -1,7 +1,8 @@
 # Test-impact selection: probe of the existing selector
 
 Item: TS-impact-probe (re-scoped). Replay: the newest 100 `merge <item>:` commits of main
-(85 changed source files), each against the EXISTING selector in `services/testselect.py` with
+(85 of them changed source files; the other 15 changed only tests, docs or events and are
+not in any rate below), each against the EXISTING selector in `services/testselect.py` with
 the project's `[gates]` defaults. Reproduce: `uv run python tests/test_testselect_probe.py 100`.
 
 ## Claim

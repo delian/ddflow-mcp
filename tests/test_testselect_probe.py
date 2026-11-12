@@ -71,9 +71,9 @@ class Probe:
         return [r for r in self.rows if r.co]
 
     @property
-    def recall(self) -> float:
+    def recall(self) -> float | None:
         total = sum(r.co for r in self.scored)
-        return sum(r.held for r in self.scored) / total if total else 1.0
+        return sum(r.held for r in self.scored) / total if total else None
 
     @property
     def routable_recall(self) -> float | None:
@@ -119,7 +119,7 @@ class Probe:
     def report(self) -> str:
         return (
             f"merges {len(self.rows)} (scored {len(self.scored)}); "
-            f"recall {self.recall:.3f} (routable {_fmt(self.routable_recall)}); "
+            f"recall {_fmt(self.recall)} (routable {_fmt(self.routable_recall)}); "
             f"median selected share {self.median_share:.3f}; "
             f"whole-suite rate {self.fallback_rate:.3f} (hub-fallback rate {self.hub_rate:.3f}); "
             f"unrouted rate {self.unrouted_rate:.3f}; "
@@ -459,3 +459,9 @@ def test_routable_recall_is_undefined_when_every_miss_is_blind_and_nothing_else_
     repo, shas = make_repo(tmp_path)
     p = probe(repo, [shas["tool"]], LIMITS, workers=1)
     assert p.routable_recall is None and "routable n/a" in p.report()
+
+
+def test_recall_is_undefined_when_no_merge_changed_a_test_beside_its_source(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["data"]], LIMITS, workers=1)
+    assert p.recall is None and "recall n/a" in p.report()
