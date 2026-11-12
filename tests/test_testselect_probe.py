@@ -52,6 +52,7 @@ class MergeRow:
     blind: list[str] = field(default_factory=list)  #: missed, subprocess-driven (not routable)
     missed: list[str] = field(default_factory=list)  #: missed, with an import or name route
     hub: bool = False  #: the whole-suite answer is a changed hub (not test infrastructure)
+    narrow_error: str = ""  #: the hub counterfactual raised: the merge still counts, this says why
     narrow_selected: int | None = None  #: at a hub: tests a hub-unbounded selection runs
     narrow_held: int | None = None  #: at a hub: of the co-changed tests, how many that holds
 
@@ -125,7 +126,8 @@ class Probe:
             f"unrouted rate {self.unrouted_rate:.3f}; "
             f"hub narrowed share {_fmt(self.hub_narrow_share())} at recall "
             f"{_fmt(self.hub_narrow_recall())}; subprocess-blind misses {self.blind_total}; "
-            f"no-source merges skipped {self.skipped}; errors {len(self.errors)}"
+            f"no-source merges skipped {self.skipped}; errors {len(self.errors)}; "
+            f"hub counterfactual errors {sum(bool(r.narrow_error) for r in self.rows)}"
         )
 
 
@@ -206,7 +208,8 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
         if row.hub:  # what a choice narrower than the whole suite would have held at the hub
             try:
                 narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
-            except Exception:  # the counterfactual is optional: the merge still counts
+            except Exception as exc:  # the counterfactual is optional: the merge still counts
+                row.narrow_error = f"{type(exc).__name__}: {exc}"
                 narrow = None
             if narrow is None or narrow.full:  # no narrower choice could be measured
                 return row
