@@ -173,9 +173,9 @@ def _registers_a_completer(shell: str, text: str) -> bool:
     if shell == "fish":
         return bool(
             re.search(r"function\s+__fish_ddflow_complete\b", text)
-            and re.search(r"complete\s+--command\s+ddflow\b", text)
+            and re.search(r"complete\s+--command\s+ddflow\b.*\(__fish_ddflow_complete\)", text)
         )
-    defined = re.search(r"(?:^|[;\n{}\s]|\\n)_python_argcomplete\s*\(\)\s*\{", text)
+    defined = re.search(r"(?:^|[;\n{}\s']|\\n)_python_argcomplete\s*\(\)\s*\{", text)
     register = (
         "compdef _python_argcomplete ddflow" if shell == "zsh" else "-F _python_argcomplete ddflow"
     )
