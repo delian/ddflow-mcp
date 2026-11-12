@@ -16,22 +16,26 @@ from . import catalog
 
 
 def answer(h: HR.Harness, row) -> str:
-    """The status in ``facts.STATUSES`` for ``h`` on ``row``: ``facts.best`` over the sections
-    its named fields belong to -- declared => verified, ``none = true`` => none, absent =>
-    unverified -- or ``none`` for a row with no descriptor field (a documented gap)."""
+    """The status in ``facts.STATUSES`` for ``h`` on ``row``: SUPPORTED (verified) when every
+    named section is declared, a DOCUMENTED ABSENCE (none) when one says ``none = true``, left
+    out (unverified) otherwise -- or ``none`` for a row with no descriptor field (a documented
+    gap)."""
     if not row.descriptor_fields:
         return "none"
-    sections = sorted({f.partition(".")[0] for f in row.descriptor_fields})
-    have = []
-    for name in sections:
+    statuses = set()
+    for name in sorted({f.partition(".")[0] for f in row.descriptor_fields}):
         record = getattr(h, name, None)
         if record is None:
-            have.append({"s": "unverified"})
+            statuses.add("unverified")
         elif getattr(record, "none", False):
-            have.append({"s": "none"})
+            statuses.add("none")
         else:
-            have.append({"s": "verified"})
-    return facts.best(have)["s"]
+            statuses.add("verified")
+    if "none" in statuses:
+        return "none"
+    if "unverified" in statuses:
+        return "unverified"
+    return "verified"
 
 
 def answers(h: HR.Harness) -> dict[str, str]:
