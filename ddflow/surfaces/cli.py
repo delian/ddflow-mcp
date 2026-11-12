@@ -397,7 +397,7 @@ def _main(argv: list[str] | None = None) -> int:
     # The schema every object body of this run is tagged with (D-compat-json-views).
     tagged = set_command(
         command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args),
-        args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd(),
+        getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd(),
     )
     with remembered_streams() as (out, said):
         try:
@@ -433,7 +433,7 @@ def _remember_command(
     """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
     git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
     try:
-        root = repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+        root = repo_root(Path(getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd()))
     except Exception:
         try:
             root = repo_root(Path.cwd())
