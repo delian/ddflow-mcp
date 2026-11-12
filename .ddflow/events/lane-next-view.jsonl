@@ -6,3 +6,4 @@
 {"agent":"lane-next-view","data":{"at":1794494426.8697724,"holder":"lane-next-view"},"id":"e924f79b8643cb17712207cd4","kind":"lease.renewed","lamport":184124,"schema":1,"subject":"NV-next-tag-filter","ts":"2026-11-12T14:40:27.024302Z"}
 {"agent":"lane-next-view","data":{"at":1794494607.3142364,"holder":"lane-next-view"},"id":"e1c6c8c42c7520a53958e31a5","kind":"lease.renewed","lamport":184173,"schema":1,"subject":"NV-next-tag-filter","ts":"2026-11-12T14:43:27.445047Z"}
 {"agent":"lane-next-view","data":{"at":1794494795.7739284,"holder":"lane-next-view"},"id":"e0d60d1c26feff5c681aedba6","kind":"lease.renewed","lamport":184233,"schema":1,"subject":"NV-next-tag-filter","ts":"2026-11-12T14:46:35.903706Z"}
+{"agent":"lane-next-view","data":{"at":1794494977.7692275,"holder":"lane-next-view"},"id":"ea3759da84d7518d565b3fbf4","kind":"lease.renewed","lamport":184268,"schema":1,"subject":"NV-next-tag-filter","ts":"2026-11-12T14:49:37.923414Z"}
