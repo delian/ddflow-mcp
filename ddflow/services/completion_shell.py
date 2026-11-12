@@ -25,7 +25,7 @@ from importlib import import_module
 SHELLS = ("bash", "zsh", "fish")
 #: The executable the registration is for.
 PROGRAM = "ddflow"
-_NO_ENGINE = "ddflow: shell completion needs the 'argcomplete' package (pip install argcomplete)"
+_NO_ENGINE = "ddflow: shell completion needs the argcomplete package (pip install argcomplete)"
 _ZSH_BOOT = "(( $+functions[compdef] )) || { autoload -Uz compinit; compinit -C; }; "
 _SPACES = re.compile(r" {2,}")
 

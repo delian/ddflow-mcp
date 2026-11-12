@@ -29,9 +29,10 @@ def shim(tmp_path):
     bin_dir.mkdir()
     exe = bin_dir / "ddflow"
     exe.write_text(
-        f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {str(ROOT)!r})\n"
-        "from ddflow.services import completion_shell as C\n"
-        "sys.stdout.write(C.for_shell(sys.argv[2]))\n"
+        "#!/bin/sh\n"
+        f'exec "{sys.executable}" -c \'import sys; sys.path.insert(0, "{ROOT}"); '
+        "from ddflow.services import completion_shell as C; "
+        'sys.stdout.write(C.for_shell(sys.argv[2]))\' "$@"\n'
     )
     exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
     env = {k: v for k, v in os.environ.items() if k not in ("BASH_ENV", "ENV", "ZDOTDIR")}
@@ -104,12 +105,21 @@ def test_fish_registers_under_every_spelling(shim, spelling):
     assert "__fish_ddflow_complete" in probe.stdout, probe.stdout + probe.stderr
 
 
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+def test_without_argcomplete_line_runs_and_says_so(shell, monkeypatch):
+    """The message line is valid in the real shell (no inner quote ends its string)."""
+    monkeypatch.setitem(sys.modules, "argcomplete", None)
+    probe = _run(shell, CS.for_shell(shell), dict(os.environ))
+    assert probe.returncode == 0, probe.stderr
+    assert "argcomplete" in probe.stderr
+
+
 def test_without_argcomplete_one_harmless_line(monkeypatch):
     monkeypatch.setitem(sys.modules, "argcomplete", None)
     for shell in CS.SHELLS:
         text = CS.for_shell(shell)
         assert text.count("\n") == 1
-        assert "needs the 'argcomplete' package" in text
+        assert "needs the argcomplete package" in text
         assert "_python_argcomplete" not in text and "__fish_ddflow_complete" not in text
 
 
