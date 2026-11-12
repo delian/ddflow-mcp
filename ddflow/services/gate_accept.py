@@ -27,6 +27,7 @@ from __future__ import annotations
 from ..core.digest import content_digest
 from ..core.model import Item, State, fold
 from . import approval as AP
+from . import logblobs as LB
 from .approvals import consume as CN
 from .approvals.canon import Canon
 from .gates import baseline_red as BR
@@ -55,7 +56,7 @@ def refusal(it: Item, gate: str) -> str:
             f"{it.id}.{gate} is {got or 'not run'}, not {ACCEPTABLE}: only a partial outcome "
             f"can be accepted by a person. Re-run the gate, or record it honestly"
         )
-    base = (it.gates[gate].evidence or {}).get("baseline")
+    base = LB.full(it.gates[gate].evidence or {}).get("baseline")
     if gate not in BR.GATES or not (isinstance(base, dict) and base.get("red") is True):
         return (
             f"{it.id}.{gate} is partial but was not measured baseline-red (the failing tests "
@@ -70,7 +71,7 @@ def auto_ids(it: Item, gate: str, cfg=None) -> list[str]:
     `[gates].baseline_red_auto` is still on. Needs a measured baseline-red partial."""
     if cfg is None or getattr(cfg.gates, "baseline_red_auto", "on") != "on" or refusal(it, gate):
         return []
-    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
+    auto = (LB.full(it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
     return (
         list(auto.get("ids") or [])
         if isinstance(auto, dict) and auto.get("accepted") is True
@@ -88,7 +89,7 @@ def person_only(it: Item, gate: str) -> bool:
     rec = it.gates.get(gate)
     if rec is None:
         return False
-    base = (rec.evidence or {}).get("baseline") or {}
+    base = LB.full(rec.evidence or {}).get("baseline") or {}
     return base.get("red") is True and (base.get("auto") or {}).get("accepted") is not True
 
 
@@ -198,7 +199,7 @@ def next_step(it: Item, item_id: str, gate: str) -> str:
     other gate): never "request an approval" (D-baseline-red-auto-accept)."""
     if it.gate_outcome(gate) != ACCEPTABLE or refusal(it, gate):
         return ""
-    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto") or {}
+    auto = (LB.full(it.gates[gate].evidence or {}).get("baseline") or {}).get("auto") or {}
     why = auto.get("why") or "[gates].baseline_red_auto is off or the measurement predates it"
     return (
         f"; {gate} is partial and baseline-red but was not accepted automatically ({why}). "

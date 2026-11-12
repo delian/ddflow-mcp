@@ -276,7 +276,7 @@ def _hold(monkeypatch, *reads: float):
         got.append(a[4])
         return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), "", 0.0
 
-    monkeypatch.setattr(runner.time, "monotonic", monotonic)
+    monkeypatch.setattr(runner.CLOCK, "monotonic", monotonic)
     monkeypatch.setattr(runner.SL, "hold", fake_hold)
     monkeypatch.setattr(runner, "_execute", fake_execute)
     return got, waits

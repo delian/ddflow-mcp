@@ -10,6 +10,7 @@ from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
 from ..infra import worktree as W
 from . import gates as G
+from . import logblobs as LB
 from .completion import changed_paths
 from .docsonly import diff_is_trivial
 from .pipeline_diff import effective_pipeline
@@ -119,7 +120,11 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
     ci = it.gates.get("ci")
-    if not failed_sel and not red and (ran := ((ci.evidence or {}) if ci else {}).get("ci_scope")):
+    if (
+        not failed_sel
+        and not red
+        and (ran := LB.full((ci.evidence or {}) if ci else {}).get("ci_scope"))
+    ):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
     trivial = excused or _is_trivial(cfg, it, tree)
     kind = _selectable(cfg, it, lines, trivial=trivial)
@@ -172,7 +177,7 @@ def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     """Whether the item's ci gate is PARTIAL because its failing tests were measured failing on
     the base too (D-baseline-red-auto-accept): that is no reason to refuse to start this gate."""
     ci = it.gates.get("ci")
-    base = (ci.evidence or {}).get("baseline") if ci is not None else None
+    base = LB.full(ci.evidence or {}).get("baseline") if ci is not None else None
     if not (
         ci is not None
         and ci.outcome == "partial"
@@ -193,7 +198,7 @@ def _ci_failed_selected(it) -> bool:
     ci = it.gates.get("ci")
     if ci is None or ci.outcome != "failed":
         return False
-    return ((ci.evidence or {}).get("ci_scope") or {}).get("scope") == "selected"
+    return (LB.full(ci.evidence or {}).get("ci_scope") or {}).get("scope") == "selected"
 
 
 def _ci_not_passed_here(cfg, it, tree: Path) -> str:

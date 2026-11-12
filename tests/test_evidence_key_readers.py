@@ -71,9 +71,16 @@ def test_ci_scope_reader_testscope(repo):
     assert TS._ci_failed_selected(it) is True
 
 
-def test_ci_scope_reader_unit_tests_scope_accessor(repo):
+def test_ci_scope_reader_unit_tests_scope_accessor(repo, monkeypatch):
+    """`unit_tests_scope` reads the ci gate's `ci_scope` inline (the `_ci_scope` accessor it
+    once had is gone): what it hands `_after_ci` must be the value, not the stub."""
     it = _item(repo, "ci", "passed", ci_scope={"scope": "selected", "why": "w"})
-    assert TS._ci_scope(it) == {"scope": "selected", "why": "w"}
+    seen = []
+    monkeypatch.setattr(TS, "changed_lines", lambda tree, base: 1)
+    monkeypatch.setattr(TS, "_ci_excused", lambda *a: ("", False))  # past the tree check
+    monkeypatch.setattr(TS, "_after_ci", lambda *a: seen.append(a[-1]) or TS.Scope("full", "x"))
+    TS.unit_tests_scope(Config.load(repo), SimpleNamespace(bugs={}), it, "pytest", repo)
+    assert seen == [{"scope": "selected", "why": "w"}]
 
 
 def test_reviewed_paths_reader_refine_stale_notes(repo, monkeypatch):

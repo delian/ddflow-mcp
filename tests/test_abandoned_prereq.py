@@ -43,13 +43,15 @@ def test_doctor_reports_a_need_on_a_removed_item_and_ignores_a_done_one(repo):
 
 
 def test_abandon_warns_naming_dependents_and_still_succeeds(repo):
+    """92a8a886d: a dependent can never be left waiting on an abandoned need, so the abandon
+    refuses (exit 3) naming the dependents, `--repoint-to` and `--drop-edges`."""
     _seed(repo)
-    code, out, _ = run_cli(repo, "abandon", "D1", "--reason", "decision")
+    code, _, err = run_cli(repo, "abandon", "D1", "--reason", "decision")
+    assert code == 3, err
+    assert "T1" in err and "--repoint-to" in err and "--drop-edges" in err, err
+    code, out, _ = run_cli(repo, "--json", "abandon", "D2", "--reason", "decision", "--drop-edges")
     assert code == 0
-    assert "T1" in out and "ddflow update T1 --needs" in out
-    code, out, _ = run_cli(repo, "--json", "abandon", "D2", "--reason", "decision")
-    assert code == 0
-    assert json.loads(out)["stranded"] == ["T1"]
+    assert json.loads(out)["stranded"] == []
 
 
 def test_abandon_with_no_dependents_says_nothing_extra(repo):
@@ -59,12 +61,15 @@ def test_abandon_with_no_dependents_says_nothing_extra(repo):
 
 
 def test_two_abandoned_needs_leave_no_stuck_edge_and_drop_only_the_abandoned_edge(repo):
-    """After D1 is abandoned (settled) and D2 is then abandoned, doctor reports no stuck edge,
-    and abandoning D2 offers to drop only the D2 edge -- D1 is settled and stays."""
+    """Abandoning D1 with --drop-edges drops only the D1 edge (T1 keeps needing D2); after D2
+    is abandoned the same way doctor reports no stuck edge."""
     _seed(repo, needs="D1,D2")
-    run_cli(repo, "abandon", "D1", "--reason", "x")
-    _, out, _ = run_cli(repo, "--json", "abandon", "D2", "--reason", "x")
-    assert json.loads(out)["drop_edges"] == ['ddflow update T1 --needs "D1"']
+    code, _, err = run_cli(repo, "abandon", "D1", "--reason", "x", "--drop-edges")
+    assert code == 0, err
+    assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["needs"] == ["D2"]
+    code, _, err = run_cli(repo, "abandon", "D2", "--reason", "x", "--drop-edges")
+    assert code == 0, err
+    assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["needs"] == []
     text = "".join(run_cli(repo, "doctor")[1:])
     assert "T1 needs 'D1'" not in text
     assert "T1 needs 'D2'" not in text
@@ -72,5 +77,6 @@ def test_two_abandoned_needs_leave_no_stuck_edge_and_drop_only_the_abandoned_edg
 
 def test_a_dependent_whose_only_need_is_abandoned_is_still_warned(repo):
     _seed(repo, needs="D1")
-    _, out, _ = run_cli(repo, "abandon", "D1", "--reason", "x")
-    assert "T1" in out and "ddflow update T1 --needs" in out
+    code, _, err = run_cli(repo, "abandon", "D1", "--reason", "x")
+    assert code == 3, err
+    assert "T1" in err and "--drop-edges" in err, err

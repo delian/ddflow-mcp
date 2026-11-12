@@ -80,7 +80,7 @@ def test_launch_due_starts_the_first_idle_approved_lane(monkeypatch):
         return LN.Launched(t, object(), object(), object(), "ok")
 
     monkeypatch.setattr(P, "_load", lambda repo, agent="": (_Log(), cfg, _State()))
-    monkeypatch.setattr(P, "plan_for", lambda *a, **k: object())
+    monkeypatch.setattr(P, "plan_for_offer", lambda *a, **k: object())
     monkeypatch.setattr(P.FL, "limit_for", lambda *a, **k: _Reason())
     monkeypatch.setattr(P, "caps", lambda *a, **k: object())
     monkeypatch.setattr(P, "_candidates", lambda *a, **k: ["A-1"])
@@ -130,7 +130,7 @@ def test_a_refused_lane_does_not_block_the_next_lane(monkeypatch):
         return LN.Launched(t, object(), object(), object(), "ok")
 
     monkeypatch.setattr(P, "_load", lambda repo, agent="": (_Log(), cfg, _State()))
-    monkeypatch.setattr(P, "plan_for", lambda *a, **k: object())
+    monkeypatch.setattr(P, "plan_for_offer", lambda *a, **k: object())
     monkeypatch.setattr(P.FL, "limit_for", lambda *a, **k: _Reason())
     monkeypatch.setattr(P, "caps", lambda *a, **k: object())
     monkeypatch.setattr(P, "_candidates", lambda *a, **k: ["A-1"])
