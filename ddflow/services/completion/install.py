@@ -48,7 +48,7 @@ def install_text(shell: str, current: str) -> str:
     """``current`` plus one activation block, appended only when a ddflow-managed block is
     absent (idempotent). Append-only: trailing newlines stay exactly as they were."""
     line = _activate_line(shell)
-    if any(ln.strip() == _BEGIN for ln in current.splitlines()):
+    if _BEGIN in current.splitlines():  # ddflow writes the marker at column 0, unsplit
         return current
     block = f"{_BEGIN}\n{line}\n{_END}\n"
     if not current or current.endswith("\n"):
