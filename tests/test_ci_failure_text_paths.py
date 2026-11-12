@@ -103,3 +103,12 @@ def test_a_base_tree_and_a_worktree_root_keep_what_follows_them() -> None:
         other = one.replace("tests/data/x.json", "tests/data/y.json")
         new = one.replace("not found", "is not valid json")
         assert FT.digest(one) != FT.digest(other) and FT.digest(one) != FT.digest(new)
+
+
+def test_roots_are_replaced_in_one_pass_and_a_sentence_end_or_bracket_closes_a_path() -> None:
+    assert FT.normalise("/a/b/f", ["/a", "/b"]) == "<tree>/b/f"
+    assert FT.normalise("/b/a/f", ["/a", "/b"]) == "<tree>/a/f"
+    assert FT.normalise("Error: /tmp/ddflow-base.aaa111.") == "Error: <tree>."
+    assert FT.normalise("see /srv/ci/run.", ["/srv/ci/run"]) == "see <tree>."
+    assert FT.normalise("[/tmp/ddflow-ci.aaa/t.py]") == "[<tree>/t.py]"
+    assert FT.normalise("/tmp/ddflow-ci.aaa.bak/x") == "/tmp/ddflow-ci.aaa.bak/x"

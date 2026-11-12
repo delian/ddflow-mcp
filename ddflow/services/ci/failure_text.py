@@ -20,13 +20,15 @@ TREE = "<tree>"
 PYTEST_TMP = "<pytest-tmp>"
 #: Where a path starts and ends inside failure text: not in the middle of another path or word.
 _START = r"(?<![\w.\-/])"
-_END = r"(?=[/\s:'\")\],]|$)"
+_END = r"(?=\.?(?:[/\s:'\")\],]|$))"
 #: A scratch tree ddflow makes: the directory name is the marker, whatever the temp root is.
 _SCRATCH = re.compile(_START + r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+" + _END)
 #: A lane worktree: ``<anything>/.ddflow/worktrees/<item>``.
 _WORKTREE = re.compile(_START + r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+" + _END)
 #: pytest's own temp tree, under a temp root: the user and the run counter differ between runs.
-_PYTEST = re.compile(_START + r"(?:/(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+" + _END)
+_PYTEST = re.compile(
+    _START + r"(?:/(?:private/)?(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+" + _END
+)
 
 
 def normalise(text: str, roots: Iterable[str] = ()) -> str:
@@ -37,8 +39,9 @@ def normalise(text: str, roots: Iterable[str] = ()) -> str:
     named = sorted(
         {str(r).rstrip("/") for r in roots if str(r).strip("/")}, key=lambda r: (-len(r), r)
     )
-    for root in named:
-        text = re.sub(_START + re.escape(root) + _END, TREE, text)
+    if named:  # one pass over every root: a replacement never opens a boundary for the next
+        pattern = "|".join(re.escape(r) for r in named)
+        text = re.sub(_START + "(?:" + pattern + ")" + _END, TREE, text)
     text = _PYTEST.sub(PYTEST_TMP, text)
     return _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
 
