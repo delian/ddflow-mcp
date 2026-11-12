@@ -43,21 +43,23 @@ def install_text(shell: str, current: str) -> str:
 
 
 def uninstall_text(shell: str, current: str) -> str:
-    """``current`` with the activation block it may carry removed. A closed block drops
-    its begin/source/end lines; a dangling begin marker (no end) drops only that marker,
-    never the rest of the file."""
+    """``current`` with the activation block it may carry removed. A begin marker whose
+    end follows drops that begin..end span; a dangling begin (no end before EOF) drops only
+    the marker line -- never the rest of the file."""
     del shell
     lines = current.splitlines(keepends=True)
-    has_end = any(L.strip() == _END for L in lines)
-    kept: list[str] = []
-    inside = False
-    for L in lines:
-        if L.strip() == _BEGIN:
-            inside = has_end  # only a CLOSED block eats following lines
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() == _BEGIN:
+            j = i + 1
+            while j < len(lines) and lines[j].strip() != _END:
+                j += 1
+            if j < len(lines):  # a CLOSED block: skip begin .. end
+                i = j + 1
+                continue
+            i += 1  # a dangling begin: drop only the marker line
             continue
-        if inside:
-            if L.strip() == _END:
-                inside = False
-            continue
-        kept.append(L)
-    return "".join(kept)
+        out.append(lines[i])
+        i += 1
+    return "".join(out)
