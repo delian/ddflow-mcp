@@ -20,11 +20,17 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, TextIO
 
+from pathlib import Path
+
+from ..config import Config
 from .registry import tag_body
 
 #: The command a CLI process is running (``gate_record``), set once by `cli.main`; the schema
 #: tag of an object body is made from it. Empty outside a command, and bodies are not tagged.
 _COMMAND: ContextVar[str] = ContextVar("ddflow_command", default="")
+#: The repository whose `[output].json_envelope` decides whether a bare-array body is wrapped
+#: (MP-schema-all); empty outside a command.
+_REPO: ContextVar[str] = ContextVar("ddflow_repo", default="")
 
 
 def id_cell(ident: str, width: int = 22, *, cut: bool = False) -> str:
@@ -34,15 +40,31 @@ def id_cell(ident: str, width: int = 22, *, cut: bool = False) -> str:
     return f"{ident:<{width}.{width}s}" if cut else f"{ident:<{width}s}"
 
 
-def set_command(name: str) -> Token[str]:
-    """Name the command whose bodies `emit_json` now tags. The token puts the previous name
-    back (`reset_command`): a run that ends must not tag what is printed after it."""
-    return _COMMAND.set(name)
+def set_command(name: str, repo: str | Path = "") -> tuple[Token[str], Token[str]]:
+    """Name the command whose bodies `emit_json` now tags, and the repository whose
+    `[output].json_envelope` is read. The tokens put the previous values back
+    (`reset_command`): a run that ends must not tag what is printed after it."""
+    return _COMMAND.set(name), _REPO.set(str(repo or ""))
 
 
-def reset_command(token: Token[str]) -> None:
-    """Undo the `set_command` that returned ``token``."""
-    _COMMAND.reset(token)
+def reset_command(tokens: tuple[Token[str], Token[str]]) -> None:
+    """Undo the `set_command` that returned ``tokens``."""
+    _COMMAND.reset(tokens[0])
+    _REPO.reset(tokens[1])
+
+
+def _enveloped(data: Any) -> Any:
+    """``data`` as ``{"rows": data}`` when it is a bare array, a command is running and the
+    project opted in with `[output].json_envelope`; any other body is returned as it is. The
+    schema tag is then put first by `tag_body`. The default (off) keeps the bare array: D-compat."""
+    repo = _REPO.get()
+    if not (isinstance(data, list) and _COMMAND.get() and repo):
+        return data
+    try:
+        on = Config.load(Path(repo)).output.json_envelope
+    except Exception:  # a config that cannot load is not an opt-in
+        return data
+    return {"rows": data} if on else data
 
 
 def dumps(data: Any) -> str:
@@ -53,7 +75,7 @@ def dumps(data: Any) -> str:
 
 def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     """Print ``data`` as a ``--json`` body (stdout unless ``file`` is given)."""
-    print(dumps(tag_body(data, _COMMAND.get())), file=file)
+    print(dumps(tag_body(_enveloped(data), _COMMAND.get())), file=file)
 
 
 class _Tee:
