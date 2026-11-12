@@ -73,7 +73,7 @@ SECRET = {
 
 URLS = {
     "mysql": "mysql://root:Tr0ub4dor&3@db.example.org/prod",
-    "postgres": "postgresql://svc:p%40ss@word@10.1.2.3:5432/app",
+    "postgres": "postgresql://svc:p%40ss@word@db.example.org:5432/app",
     "mysql-eq": "mysql://root:s3cret=tail@db.example.org/prod",
     "redis-no-user": "redis://:hunter2hunter2@cache.example.org:6379/0",
     "https": "https://bot:hunter2hunter2@git.example.org/x.git",

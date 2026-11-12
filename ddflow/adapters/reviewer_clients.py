@@ -3,7 +3,7 @@
 Home of the reviewer-client family. The `openai`, `anthropic` and `gemini` reviewer kinds
 are one request/response shape, one auth header and one error/truncation story each -- the
 port is `ReviewerClient`, declared below next to its adapters, each registered in `CLIENTS`
-under its `kind`. The request/response shaping, auth header, error classification (quota, a
+under its `name`. The request/response shaping, auth header, error classification (quota, a
 403 leaked key, a 5xx, a timeout) and truncation detection live HERE, behind that port,
 over the `HttpClient` port (`ddflow.adapters.http`); a Mistral or any new kind is then one
 adapter in this registry, never another `elif` in the review service.
@@ -150,12 +150,11 @@ def truncated_reason(
 @port
 class ReviewerClient(Protocol):
     """One completion to a model endpoint, shaped for its wire protocol. The adapters are
-    `OpenAICompatibleClient`, `AnthropicClient` and `GeminiClient`, registered by `kind` in
-    `CLIENTS`; the fake for tests is `RecordingReviewerClient` in the test module."""
+    `OpenAICompatibleClient`, `AnthropicClient` and `GeminiClient`, registered by `name` in
+    `CLIENTS`; the fake for tests is `FakeReviewerClient` in `ddflow.adapters.fakes`."""
 
-    kind: str
-    #: The environment-variable name the kind defaults to when the reviewer sets none.
-    key_env: str = ""
+    name: str
+    key_env: str
 
     def complete(self, chat: ReviewerChat) -> tuple[str, str]:
         """One completion: returns ``(content, error)``. Never raises."""
@@ -164,7 +163,7 @@ class ReviewerClient(Protocol):
 class OpenAICompatibleClient:
     """The OpenAI-compatible shape most providers and every local server speak."""
 
-    kind = "openai"
+    name = "openai"
     key_env = ""
 
     def complete(self, chat: ReviewerChat) -> tuple[str, str]:
@@ -212,7 +211,7 @@ class OpenAICompatibleClient:
 class AnthropicClient:
     """Anthropic Messages API: system is a TOP-LEVEL field, not a message."""
 
-    kind = "anthropic"
+    name = "anthropic"
     key_env = "ANTHROPIC_API_KEY"
 
     def complete(self, chat: ReviewerChat) -> tuple[str, str]:
@@ -246,7 +245,7 @@ class AnthropicClient:
 class GeminiClient:
     """Google generateContent: the key goes in a header, never the URL."""
 
-    kind = "gemini"
+    name = "gemini"
     key_env = "GEMINI_API_KEY"
 
     def complete(self, chat: ReviewerChat) -> tuple[str, str]:
@@ -281,10 +280,10 @@ class GeminiClient:
         return text, ""
 
 
-#: The wire-protocol clients, keyed by reviewer `kind`. A new kind is one adapter registered
+#: The wire-protocol clients, keyed by reviewer `name`. A new kind is one adapter registered
 #: here -- lazily, so each module stays under the size ceiling -- never an edit to the review
 #: service's dispatch.
-CLIENTS: Registry[ReviewerClient] = Registry("reviewer kind", key=lambda client: client.kind)
+CLIENTS: Registry[ReviewerClient] = Registry("reviewer kind", key=lambda client: client.name)
 CLIENTS.register(OpenAICompatibleClient())
 CLIENTS.register(AnthropicClient())
 CLIENTS.register(GeminiClient())

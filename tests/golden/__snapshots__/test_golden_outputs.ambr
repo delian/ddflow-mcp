@@ -3205,6 +3205,15 @@
           mode under another name.
       metrics.lock_revert_value = 'strict'   [default]
           The value of `lock_revert_key` that is the strict mode.
+      metrics_runs.runs_window_days = 30   [default]
+          The time window `ddflow metrics runs` measures merged items over, in days
+          back from now: an item completed before it does not count. A duration the
+          operator narrows to see the recent trend, or widens to smooth a thin log.
+      metrics_runs.outlier_runs = 0   [default]
+          The outlier flag: a merged item whose run count reaches this many is
+          labelled an outlier in the report instead of silently widening the phase's
+          average. 0 turns the flag off (r-safe-by-default). The label changes no
+          count.
       notify.channel = 'terminal'   [default]
           Where notifications go. 'terminal' writes to the operator's terminal; each
           other choice is one network channel, reach outward (r-consent-outward), and
