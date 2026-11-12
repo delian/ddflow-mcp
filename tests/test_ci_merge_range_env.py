@@ -25,7 +25,7 @@ repos:
       - id: range-scanner
         name: needs the pushed range
         language: system
-        entry: sh -c 'test "$PRE_COMMIT_FROM_REF" = "$WANT_FROM" && test -n "$PRE_COMMIT_TO_REF"'
+        entry: sh -c 'test "$PRE_COMMIT_FROM_REF" = "$WANT_FROM" && test "$PRE_COMMIT_TO_REF" = HEAD'
         always_run: true
         pass_filenames: false
 """
