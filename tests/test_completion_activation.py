@@ -141,3 +141,15 @@ def test_the_cli_serves_the_same_text(shim):
         timeout=120,
     )
     assert probe.stdout == CS.for_shell("zsh"), probe.stderr
+
+
+def test_space_runs_and_tabs_in_the_engine_code_survive_word_splitting(shim, monkeypatch):
+    """The escape for space runs and tabs is real: engine code that carries them still
+    reaches the shell intact through an unquoted eval (which collapses whitespace)."""
+    import argcomplete
+
+    code = "printf '%s' 'a  b\tc'\n"
+    monkeypatch.setattr(argcomplete, "shellcode", lambda *a, **k: code)
+    text = CS.for_shell("bash")
+    probe = _run("bash", f"eval $(printf '%s' {shlex.quote(text)})", shim)
+    assert probe.stdout == "a  b\tc", probe.stdout + probe.stderr
