@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from ddflow.infra import proc as P
-from ddflow.infra import resources as R
+from ddflow.adapters import resources as R
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="rusage is POSIX only")
 
