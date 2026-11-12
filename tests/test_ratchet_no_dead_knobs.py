@@ -59,6 +59,11 @@ KNOWN_UNREAD: dict[str, str] = {
     # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
     "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
     "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
+    # Read through the section's own accessors: `PricesConfig.limit_of` / `reset_of` read
+    # `self.limit` / `self.reset`, and `services/limit_routing.headroom` calls them, so no
+    # source line spells `.prices.limit`. Pinned by tests/test_limit_routing.py.
+    "prices.limit": "read via PricesConfig.limit_of (self.limit), used by services/limit_routing",
+    "prices.reset": "read via PricesConfig.reset_of (self.reset), used by services/limit_routing",
 }
 
 
