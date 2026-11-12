@@ -153,6 +153,10 @@ def test_every_shell_script_parses(shell, tmp_path):
     if exe is None:
         pytest.skip(f"{shell} is not installed: the {shell} template is unexercised")
     path = tmp_path / f"ddflow-completion.{shell}"
-    path.write_text(scripts.for_shell(shell), encoding="utf-8")
+    text = scripts.for_shell(shell)
+    # a degenerate or placeholder script would still parse clean under -n, so also require
+    # the real activation function named for the shell, not an empty/comment-only file
+    assert f"_ddflow_activate_{shell}" in text
+    path.write_text(text, encoding="utf-8")
     result = subprocess.run([exe, "-n", str(path)], capture_output=True, text=True)
     assert result.returncode == 0, (shell, result.stderr)
