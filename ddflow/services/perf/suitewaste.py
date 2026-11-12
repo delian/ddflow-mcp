@@ -43,6 +43,8 @@ CLASSES = (
     "after_baseline_red",
     "unplaced",
 )
+#: The verdicts a result cache stores (an unavailable or partial run is never reused).
+CACHEABLE = ("passed", "failed")
 AVOIDABLE = ("rerun_same_tree_same_item", "rerun_same_tree_other_item")
 #: The research's bound: avoidable runs under this share refute the cache-first order.
 FALSIFIER_SHARE = 0.25
@@ -130,7 +132,8 @@ def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
                 else ("rerun_same_tree_other_item")
             )
         else:
-            seen[key] = r["item"]
+            if r["kind"] in CACHEABLE:  # only a passed/failed result is one a cache could serve
+                seen[key] = r["item"]
             cls = "after_baseline_red" if r["item"] in after_red else "first_on_tree"
         (after_red.add if r["baseline_red"] else after_red.discard)(r["item"])
         out.append({**r, "class": cls})

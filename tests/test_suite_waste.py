@@ -139,3 +139,13 @@ def test_text_mentions_every_class():
     ev = _log(("A", "ci", "passed", _ev("aaaaaaa1")))
     text = SW.text(_report(ev, {"aaaaaaa1": "T"}, min_samples=1))
     assert "first_on_tree" in text and "avoidable" in text
+
+
+def test_an_unavailable_or_partial_run_does_not_cover_its_tree():
+    ev = _log(
+        ("A", "ci", "unavailable", _ev("aaaaaaa1")),
+        ("A", "ci", "partial", _ev("aaaaaaa2")),
+        ("A", "ci", "passed", _ev("aaaaaaa3")),
+    )
+    rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"})
+    assert rep["avoidable"] == 0
