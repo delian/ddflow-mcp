@@ -62,7 +62,7 @@ def _chat(
     return post, client.complete(chat)
 
 
-def test_the_three_wire_kinds_are_registered_by_kind():
+def test_the_three_wire_kinds_are_registered_by_name():
     assert CLIENTS.names() == ["anthropic", "gemini", "openai"]
     assert {c.name for c in CLIENTS.values_list()} == {"openai", "anthropic", "gemini"}
 
