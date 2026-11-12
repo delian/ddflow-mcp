@@ -596,6 +596,14 @@ max_items = 3
 [release]
 manifest_lint = "block"
 
+[resultcache]
+enabled = true
+keep_days = 14
+max_mb = 64
+reuse_failed = false
+probe_commands = ["pytest --version", "uv --version"]
+env_vars = []
+
 [review]
 max_rounds = 2
 settle_all_refuted = true

@@ -111,3 +111,16 @@ wrongly.
 
 Its lease expires and its worktree is still there, with its work in it. See
 `ddflow help recovery` — nothing is stolen, and nothing is thrown away.
+
+## A gate result is reused for the same tree
+
+A `ci` or `unit_tests` command gate that already ran on the same code tree, command and
+environment is not run again: it is recorded with the same outcome and the evidence `cached from
+run <key> of <time>` (`cached: true`, the original seconds in `cached_elapsed_s`). The key is the
+tracked files minus `.ddflow/` and `[gates].doc_globs` documents (a dirty tree by its content),
+the gate, the command, the Python version, the dependency lock files and `[resultcache].env_vars`;
+any change misses. Only `passed` and `failed` are stored, never `unavailable` or `partial`; a
+stored `failed` is served only with `[resultcache].reuse_failed` (a rerun is how a flake is told
+from a failure); an entry that does not read back whole is a miss. The cache is per project under
+`.ddflow/local/resultcache`, bounded by `[resultcache].keep_days` and `max_mb`;
+`[resultcache].enabled = false` turns it off.

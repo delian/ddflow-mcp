@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=94cc889d124e -->
-<details><summary>All 697 knobs across 63 sections</summary>
+<!-- ddflow:begin README/knobs sha=c6e3f29d08af -->
+<details><summary>All 703 knobs across 64 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1374,6 +1374,12 @@ long default is left to `ddflow config --explain`.
 | `reinstruct.every_seconds` | `240` |  |
 | `reinstruct.max_items` | `3` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `resultcache.enabled` | `true` |  |
+| `resultcache.keep_days` | `14` |  |
+| `resultcache.max_mb` | `64` |  |
+| `resultcache.reuse_failed` | `false` |  |
+| `resultcache.probe_commands` | `["pytest --version", "uv --version"]` |  |
+| `resultcache.env_vars` | `[]` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
