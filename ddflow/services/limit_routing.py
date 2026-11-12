@@ -56,4 +56,3 @@ def pick(
         if headroom(prices, model, spent).known:
             return model
     return None
-

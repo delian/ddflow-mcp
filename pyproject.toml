@@ -104,6 +104,8 @@ markers = [
     # Selects the scenarios alone among the slow tests, so the pre-push hook can run them in
     # ONE pytest session with the unit tests: `-m "not slow or scenarios"`.
     "scenarios: the end-to-end scenarios in tests/test_scenarios.py",
+    # Keeps the CLI's foreign-launch guard live in a test; every other test runs it stubbed.
+    "real_foreign_guard: run the real foreign-launch guard under cli.main/_guard_foreign_launch",
 ]
 addopts = "-m 'not slow'"
 

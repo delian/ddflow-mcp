@@ -397,7 +397,7 @@ def test_an_unknown_channel_name_names_those_known(log, repo):
 def test_settings_from_reads_the_notify_knobs_and_marks_committed_addresses(tmp_path):
     (tmp_path / ".ddflow").mkdir()
     (tmp_path / ".ddflow" / "config.toml").write_text(
-        "[notify]\nchannel = \"slack\"\nendpoints = { slack = \"https://hook\" }\nask_channel = \"email\"\n",
+        '[notify]\nchannel = "slack"\nendpoints = { slack = "https://hook" }\nask_channel = "email"\n',
         "utf-8",
     )
     from ddflow.config import Config

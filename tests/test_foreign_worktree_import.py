@@ -63,11 +63,8 @@ def test_ddflows_own_scratch_tree_is_not_foreign(checkout, monkeypatch, tmp_path
     ci pre-push run lives in one). A lane's tree is never a sibling of the temp root."""
     import tempfile
 
-    import ddflow.services.install_info as II
-
     primary, _tree = checkout
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
-    monkeypatch.setattr(II.tempfile, "gettempdir", lambda: str(tmp_path))
     scratch = tmp_path / "ddflow-ci.abc123"
     _git(primary, "worktree", "add", "-q", str(scratch), "--detach")
     monkeypatch.setattr(PATHS, "package_parent", scratch.resolve)
@@ -147,6 +144,7 @@ def test_the_pth_is_repointed_through_a_symlinked_path(tmp_path, monkeypatch):
     assert (site / "_editable_impl_ddflow_mcp.pth").read_text().strip() == str(primary)
 
 
+@pytest.mark.real_foreign_guard
 def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
     """The bug says the caller's OWN tree is legitimate; the guard must not touch it."""
     from ddflow.infra import worktree as W
@@ -160,6 +158,7 @@ def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
     assert CLI._guard_foreign_launch() == CLI.OK
 
 
+@pytest.mark.real_foreign_guard
 def test_the_cli_guard_refuses_a_foreign_tree_and_heals_it(checkout, monkeypatch):
     """Standing in the PRIMARY while importing from a DIFFERENT linked worktree is the
     foreign case this bug records: the guard repoints and refuses instead of running it."""
@@ -173,6 +172,7 @@ def test_the_cli_guard_refuses_a_foreign_tree_and_heals_it(checkout, monkeypatch
     assert CLI._guard_foreign_launch() == CLI.FAIL
 
 
+@pytest.mark.real_foreign_guard
 def test_identifying_the_caller_failing_refuses_without_repointing(checkout, monkeypatch):
     from ddflow.infra import worktree as W
     from ddflow.surfaces import cli as CLI
@@ -186,3 +186,161 @@ def test_identifying_the_caller_failing_refuses_without_repointing(checkout, mon
     monkeypatch.setattr(W, "current", broken)
     monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: True)
     assert CLI._guard_foreign_launch() == CLI.FAIL
+
+
+# --- the guard under a sandboxed TMPDIR, an explicit launch and a genuine foreign launch ---
+
+
+def test_a_scratch_tree_is_not_foreign_when_the_process_has_its_own_tmpdir(
+    checkout, monkeypatch, tmp_path
+):
+    """Bbaaaba1364: ci's tree is made in the real system temp dir, but a test (the swarm
+    pilot's sandbox) runs ddflow with TMPDIR pointed elsewhere, so the process's own temp
+    root is NOT the scratch tree's parent. The tree is ddflow's own scratch all the same."""
+    primary, _tree = checkout
+    system_tmp = tmp_path / "systmp"
+    system_tmp.mkdir()
+    scratch = system_tmp / "ddflow-ci.abc123"
+    _git(primary, "worktree", "add", "-q", str(scratch), "--detach")
+    sandbox_tmp = tmp_path / "sandbox-tmp"
+    sandbox_tmp.mkdir()
+    monkeypatch.setenv("TMPDIR", str(sandbox_tmp))
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (system_tmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", scratch.resolve)
+    assert I.foreign_launch_root() is None
+
+
+def test_a_ddflow_named_lane_tree_outside_the_temp_dirs_is_still_foreign(
+    checkout, monkeypatch, tmp_path
+):
+    """The scratch exemption is the temp dir's direct children only: a `ddflow-` name
+    elsewhere (a lane tree under .ddflow/worktrees) is another lane's code."""
+    primary, _tree = checkout
+    lane = tmp_path / "lanes" / "ddflow-looks-like-scratch"
+    lane.parent.mkdir()
+    _git(primary, "worktree", "add", "-q", str(lane), "--detach")
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (tmp_path / "elsewhere",))
+    monkeypatch.setattr(PATHS, "package_parent", lane.resolve)
+    assert I.foreign_launch_root() is not None
+
+
+def _outsider(tmp_path: Path) -> Path:
+    """A repository unrelated to the ddflow checkout (a test's sandbox)."""
+    box = tmp_path / "sandbox"
+    box.mkdir()
+    _git(box, "init", "-q", "-b", "main")
+    return box
+
+
+def test_an_explicit_pythonpath_launch_from_an_unrelated_repository_is_allowed(
+    checkout, monkeypatch, tmp_path
+):
+    """Bc28808f9c3 / Bbaaaba1364: a launcher that put the tree on PYTHONPATH chose its code
+    on purpose, and a caller in a repository that is not this one's family has no lane the
+    code could be foreign to (the swarm pilot, a pin, an installed-adopt run)."""
+    from ddflow.api.guard_launch import guard_foreign_launch
+    from ddflow.core.outcome import OK
+
+    _primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setenv("PYTHONPATH", str(tree))
+    monkeypatch.chdir(_outsider(tmp_path))
+    assert guard_foreign_launch() == OK
+
+
+def test_a_silent_foreign_launch_is_still_refused_from_an_unrelated_repository(
+    checkout, monkeypatch, tmp_path, capsys
+):
+    """No PYTHONPATH names the tree: it came in through the shared editable install, the
+    very redirect this guard exists for. Where the caller stands does not excuse it."""
+    from ddflow.api.guard_launch import guard_foreign_launch
+    from ddflow.core.outcome import FAIL
+
+    _primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: False)
+    monkeypatch.chdir(_outsider(tmp_path))
+    assert guard_foreign_launch() == FAIL
+    assert "imported from the linked worktree" in capsys.readouterr().err
+
+
+def test_an_explicit_pythonpath_does_not_excuse_a_launch_from_the_checkouts_own_family(
+    checkout, monkeypatch, capsys
+):
+    """A hook or an agent standing in the primary (or another lane) that runs a lane's code
+    by PYTHONPATH is the foreign launch the guard exists for: still refused."""
+    from ddflow.api.guard_launch import guard_foreign_launch
+    from ddflow.core.outcome import FAIL
+
+    primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setenv("PYTHONPATH", str(tree))
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: False)
+    monkeypatch.chdir(primary)
+    assert guard_foreign_launch() == FAIL
+    other = primary.parent / "other-lane"
+    _git(primary, "worktree", "add", "-q", str(other), "-b", "other")
+    monkeypatch.chdir(other)
+    assert guard_foreign_launch() == FAIL
+
+
+def test_a_ddflow_named_tree_on_a_branch_in_the_temp_dir_is_still_foreign(
+    checkout, monkeypatch, tmp_path
+):
+    """A lane's tree checked out on its branch is not scratch however it is named or placed:
+    scratch trees are detached (`git worktree add /tmp/ddflow-x <lane-branch>` is not one)."""
+    primary, _tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    lane = systmp / "ddflow-lane-b"
+    _git(primary, "worktree", "add", "-q", str(lane), "-b", "lane-b")
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lane.resolve)
+    assert I.foreign_launch_root() is not None
+
+
+def test_a_hand_made_detached_tree_named_like_a_generic_scritch_is_still_foreign(
+    checkout, monkeypatch, tmp_path
+):
+    """A detached worktree directly in the temp dir under a generic ``ddflow-`` name (not one
+    of the prefixes ddflow's `scratch_tree` makes) is a lane's unmerged code checked out by
+    hand, not ddflow's own throwaway scratch: detached alone is not unique to scratch trees,
+    so it stays foreign."""
+    primary, _tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    lane = systmp / "ddflow-x"
+    _git(primary, "worktree", "add", "-q", str(lane), "--detach")
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lane.resolve)
+    assert I.foreign_launch_root() is not None
+
+
+def test_a_symlink_named_like_a_scratch_tree_is_still_foreign(checkout, monkeypatch, tmp_path):
+    primary, tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    cover = systmp / "ddflow-cover"
+    cover.symlink_to(tree)
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lambda: cover)
+    assert I.foreign_launch_root() is not None
+
+
+def test_a_forged_git_directory_inside_a_lane_does_not_leave_the_family(
+    checkout, monkeypatch, capsys
+):
+    """A directory with an empty `.git` made inside the primary (or a lane) is not a sandbox
+    repository: standing in it with PYTHONPATH naming a lane is still a foreign launch."""
+    from ddflow.api.guard_launch import guard_foreign_launch
+    from ddflow.core.outcome import FAIL
+
+    primary, tree = checkout
+    nest = primary / "nest"
+    (nest / ".git").mkdir(parents=True)
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setenv("PYTHONPATH", str(tree))
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: False)
+    monkeypatch.chdir(nest)
+    assert guard_foreign_launch() == FAIL

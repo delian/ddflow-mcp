@@ -50,9 +50,7 @@ class Knobs:
     def from_config(cls, cfg: Config) -> Knobs:
         """Read the ``[swarm] remote_*`` knobs; one per field, so a new field needs a knob."""
         sw = cfg.swarm
-        kw = {
-            f.name: getattr(sw, "remote_" + f.name) for f in dataclasses.fields(cls)
-        }
+        kw = {f.name: getattr(sw, "remote_" + f.name) for f in dataclasses.fields(cls)}
         # a config list one is the tuple field (a frozen knob), never a list object in Knobs
         for name in ("exclude", "ssh_argv"):
             kw[name] = tuple(kw[name])

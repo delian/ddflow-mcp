@@ -459,6 +459,8 @@ auto_run_max_parallel = 1
 [metrics]
 min_samples = 10
 top = 5
+runs_window_days = 30
+outlier_runs = 0
 forecast_runs = 1000
 forecast_seed = 0
 forecast_low_pct = 50

@@ -43,9 +43,7 @@ def task() -> Item:
 
 def test_proposes_run_and_record_groups_for_a_task_pipeline():
     data = gate_merge_candidates(None, cfg_with(FULL), task())
-    assert data["run_together"] == [
-        {"gates": ["rubber_duck", "critic"], "input": "review-diff"}
-    ]
+    assert data["run_together"] == [{"gates": ["rubber_duck", "critic"], "input": "review-diff"}]
     record = {tuple(r["gates"]): r for r in data["record_together"]}
     assert tuple(record) == (("research", "rules", "implement"), ("bug_hunt", "dedupe"))
     # the review pair and the bookkeeping groups all carry ONE input class: the falsifier
@@ -102,7 +100,9 @@ def test_evidence_required_drops_bookkeeping_but_not_the_review_pair_or_covered_
     # run_together: a review records its own evidence AND reads the one review diff.
     assert data["run_together"] == [{"gates": ["rubber_duck", "critic"], "input": "review-diff"}]
     # record_together: a bookkeeping member that needs its own evidence is dropped.
-    assert all(tuple(r["gates"]) != ("research", "rules", "implement") for r in data["record_together"])
+    assert all(
+        tuple(r["gates"]) != ("research", "rules", "implement") for r in data["record_together"]
+    )
 
 
 def test_a_refused_group_is_reported_not_silent():
