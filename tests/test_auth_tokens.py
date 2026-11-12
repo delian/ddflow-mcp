@@ -518,7 +518,7 @@ def test_tokens_list_names_a_store_and_log_disagreement(proj, monkeypatch):
     """`redeem` writes the store before the log: a crash between them leaves a live token the
     list (log) never sees, and a list entry the store has already ended. `tokens list` says so
     instead of staying silent."""
-    old = _token(proj, monkeypatch, "gw", "bot")
+    _token(proj, monkeypatch, "gw", "bot")
     _code, out, _err = run_cli(proj, "--json", "tokens", "rotate", "gw")
     log = _log(proj)
 
