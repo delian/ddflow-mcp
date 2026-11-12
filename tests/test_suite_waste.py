@@ -149,3 +149,34 @@ def test_an_unavailable_or_partial_run_does_not_cover_its_tree():
     )
     rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"})
     assert rep["avoidable"] == 0
+
+
+def test_a_rework_by_the_second_item_is_a_same_item_rerun():
+    ev = _log(
+        ("B", "ci", "passed", _ev("aaaaaaa1")),
+        ("A", "ci", "passed", _ev("aaaaaaa2")),
+        ("A", "ci", "passed", _ev("aaaaaaa3")),
+    )
+    cl = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"})["classes"]
+    assert cl["rerun_same_tree_other_item"]["runs"] == 1
+    assert cl["rerun_same_tree_same_item"]["runs"] == 1
+
+
+def test_a_phase_scope_leaves_other_items_out():
+    ev = _log(("A", "ci", "passed", _ev("aaaaaaa1")), ("B", "ci", "passed", _ev("aaaaaaa2")))
+    rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"}, in_scope=lambda i: i == "A")
+    assert rep["runs"] == 1
+    assert rep["avoidable"] == 0
+
+
+def test_unknown_trees_cannot_refute_the_falsifier():
+    # one placed avoidable rerun pair plus unplaced runs: 1 of 5 overall, but 1 of 2 placed.
+    ev = _log(
+        ("A", "ci", "passed", _ev("aaaaaaa1")),
+        ("A", "ci", "passed", _ev("aaaaaaa2")),
+        *[("B", "ci", "passed", _ev(f"bbbbbbb{i}")) for i in range(3)],
+    )
+    rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"}, min_samples=1)
+    assert rep["avoidable_share"] == 0.2
+    assert rep["avoidable_share_of_placed"] == 0.5
+    assert rep["falsifier"]["holds"] is True

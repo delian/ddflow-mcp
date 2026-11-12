@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 from ...adapters.digest import hasher
@@ -113,7 +113,7 @@ def runs(events: Sequence[Event], floor: float | None, now: float) -> list[dict]
 
 def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
     """Each run with its ``class``: the first to cover a code tree is first, a later one a rerun."""
-    seen: dict[str, str] = {}  # code tree key -> the item that first ran it
+    seen: dict[str, set[str]] = {}  # code tree key -> the items whose run covered it
     after_red: set[str] = set()  # items whose last run was baseline-red
     keys: dict[str, str | None] = {}
     out = []
@@ -126,14 +126,13 @@ def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
         if key is None:
             cls = "unplaced"
         elif key in seen:
-            cls = (
-                "rerun_same_tree_same_item"
-                if seen[key] == r["item"]
-                else ("rerun_same_tree_other_item")
-            )
+            same = r["item"] in seen[key]
+            cls = "rerun_same_tree_same_item" if same else "rerun_same_tree_other_item"
+            if r["kind"] in CACHEABLE:
+                seen[key].add(r["item"])
         else:
             if r["kind"] in CACHEABLE:  # only a passed/failed result is one a cache could serve
-                seen[key] = r["item"]
+                seen[key] = {r["item"]}
             cls = "after_baseline_red" if r["item"] in after_red else "first_on_tree"
         (after_red.add if r["baseline_red"] else after_red.discard)(r["item"])
         out.append({**r, "class": cls})
@@ -153,10 +152,12 @@ def build(
     *,
     since: float | None = None,
     min_samples: int | None = None,
+    in_scope: Callable[[str], bool] | None = None,
 ) -> dict:
     """The report as plain data."""
     minimum = max(int(cfg.metrics.min_samples if min_samples is None else min_samples), 1)
-    rows = classify(runs(events, since, now), probe)
+    scoped = [r for r in runs(events, since, now) if in_scope is None or in_scope(r["item"])]
+    rows = classify(scoped, probe)
     by: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by[r["class"]].append(r)
@@ -171,6 +172,10 @@ def build(
     n = len(rows)
     avoidable = sum(classes[c]["runs"] for c in AVOIDABLE)
     share = avoidable / n if n >= minimum else None
+    placed = n - classes["unplaced"]["runs"]
+    #: The unplaced runs are unknown: they may have re-run a tree, so the share over the placed
+    #: runs is the upper bound and the one the falsifier is judged on.
+    upper = avoidable / placed if placed >= minimum else None
     unavailable: dict[str, str] = {
         "baseline_measure": "a baseline measurement of a base leaves no gate event in the log",
         "queue_integrator": "the merge queue's runs are recorded as the item's own gate runs",
@@ -186,12 +191,16 @@ def build(
         "runs": n,
         "avoidable": avoidable,
         "avoidable_share": share,
+        "avoidable_share_of_placed": upper,
         "avoidable_suite_minutes": _minutes([r["suite_s"] for c in AVOIDABLE for r in by[c]]),
         "classes": classes,
         "falsifier": {
             "threshold": FALSIFIER_SHARE,
-            "holds": None if share is None else share >= FALSIFIER_SHARE,
-            "claim": "under 25 percent avoidable refutes the cache-first order",
+            "holds": None if upper is None else upper >= FALSIFIER_SHARE,
+            "claim": (
+                "under 25 percent avoidable, even counting only the runs whose tree is known, "
+                "refutes the cache-first order"
+            ),
         },
         "unavailable": unavailable,
     }
@@ -204,7 +213,12 @@ def has_figures(data: dict) -> bool:
 def text(data: dict) -> str:
     share = data["avoidable_share"]
     head = "n/a" if share is None else f"{share * 100:.0f}%"
-    lines = [f"whole-suite runs {data['runs']}, avoidable {data['avoidable']} ({head})"]
+    upper = data["avoidable_share_of_placed"]
+    placed = "n/a" if upper is None else f"{upper * 100:.0f}%"
+    lines = [
+        f"whole-suite runs {data['runs']}, avoidable {data['avoidable']} ({head}; "
+        f"{placed} of the runs whose tree is known)"
+    ]
     for c, v in data["classes"].items():
         lines.append(
             f"  {c:<28} runs {v['runs']:>4}  suite {_fmt(v['suite_minutes'])}  "

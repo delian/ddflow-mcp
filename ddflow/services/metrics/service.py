@@ -10,6 +10,7 @@ from typing import Any
 from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
+from ...core import progress as PR
 from ...core.events import Event
 from ...core.metrics import VIEWS
 from ...core.model import State
@@ -125,7 +126,8 @@ def _own_fold(
         return SWARM["view"](events, state, cfg, now, phase, floor)
     if probes is None:
         return Answer(False, "suitewaste needs a git probe to compare trees", failed=True)
-    data = SW.build(events, cfg, now, probes, since=floor)
+    scope = (lambda item: PR.phase_of(state, item) == phase) if phase else None
+    data = SW.build(events, cfg, now, probes, since=floor, in_scope=scope)
     ok = SW.has_figures(data)
     why = "" if ok else data["unavailable"].get("avoidable_share", "no whole-suite run in the log")
     return Answer(ok, why, metrics=data, text=SW.text(data))
