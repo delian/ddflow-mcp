@@ -395,7 +395,10 @@ def _main(argv: list[str] | None = None) -> int:
     for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     # The schema every object body of this run is tagged with (D-compat-json-views).
-    tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
+    tagged = set_command(
+        command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args),
+        getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd(),
+    )
     with remembered_streams() as (out, said):
         try:
             code = _run(args)
@@ -430,7 +433,9 @@ def _remember_command(
     """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
     git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
     try:
-        root = repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
+        root = repo_root(
+            Path(getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd())
+        )
     except Exception:
         try:
             root = repo_root(Path.cwd())

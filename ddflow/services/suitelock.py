@@ -41,6 +41,7 @@ from ..adapters.env import DEFAULT as ENV
 from ..infra import fsio
 from ..infra import signals as SIG
 from . import slots as SLOTS
+from . import suitequeue as SQ
 
 NAME = "suites"
 QUEUE = "queue"
@@ -59,7 +60,12 @@ class SuiteBusy(RuntimeError):
     message names the holder's pid and says "you are #k in the queue"."""
 
     def __init__(
-        self, holder: dict[str, Any], waited_s: float, position: int = 0, reason: str = ""
+        self,
+        holder: dict[str, Any],
+        waited_s: float,
+        position: int = 0,
+        reason: str = "",
+        eta: str = "",
     ) -> None:
         who = holder.get("holder") or "another run"
         since = holder.get("at_iso") or "an unknown time"
@@ -68,6 +74,8 @@ class SuiteBusy(RuntimeError):
         line = f"blocked on {by} since {since}"
         if position:
             line += f", you are #{position} in the queue"
+            if eta:
+                line += f", {eta}"
         if reason:
             line += f"; held back: {reason}"
         super().__init__(line)
@@ -256,8 +264,11 @@ def _parked_for(queue: Path, key: str, grace_s: float) -> Path | None:
 class _Ticket:
     """A waiter's place in the queue: a file it holds the flock on."""
 
-    def __init__(self, queue: Path, holder: str, grace_s: float) -> None:
+    def __init__(
+        self, queue: Path, holder: str, grace_s: float, note: tuple[str, float, str] | None = None
+    ) -> None:
         queue.mkdir(parents=True, exist_ok=True)
+        self.note = note
         key = _key(holder)
         self.path = queue / f"{time.time_ns():020d}-{key}.ticket"
         if (parked := _parked_for(queue, key, grace_s)) is not None:
@@ -279,6 +290,8 @@ class _Ticket:
         # A scan that finds an unlocked ticket may hold its lock for an instant (hence LOCK_S);
         # one younger than NEW_S is not removed, so a new owner is never lost in between.
         self._lock.enter_context(fsio.file_lock(self.path, LOCK_S))
+        if self.note is not None:
+            SQ.write_note(self.path, *self.note)
         _beat(self.path)
         return self
 
@@ -294,6 +307,80 @@ class _Ticket:
 
 def _say_default(text: str) -> None:
     print(text, file=sys.stderr, flush=True)
+
+
+def _note_of(
+    cfg: Any, directory: Path, holder: str, klass: str | None, scope: str
+) -> tuple[str, float, str] | None:
+    """The ticket's note: its class, predicted cost and agent; None without a ``[suites]``
+    section (the queue then stays first in, first out)."""
+    if not hasattr(cfg, "suites"):
+        return None
+    kind = klass or SQ.classify(holder, cfg.suites.class_patterns)
+    cost = SQ.predicted_cost(directory, scope, keep=int(cfg.suites.cost_runs))
+    return (kind, cost or float(cfg.suites.default_cost_s), _key(holder))
+
+
+def _ordered(cfg: Any, queue: Path, names: list[str]) -> list[SQ.Waiting]:
+    """The live tickets in the order the slots are offered (``suitequeue.order``); without a
+    ``[suites]`` section, in arrival order."""
+    now = CLOCK.wall()
+    rows = []
+    for n in names:
+        note = SQ.read_note(queue / n)
+        try:
+            waited = max(0.0, now - int(n.split("-", 1)[0]) / 1e9)
+        except ValueError:
+            waited = float("inf")  # no readable arrival: treated as the oldest, never starved
+        rows.append(
+            SQ.Waiting(
+                n,
+                str(note.get("class") or SQ.ITEM),
+                float(note.get("cost_s") or 0.0),
+                str(note.get("agent") or n.split("-", 1)[-1].rsplit(".", 1)[0]),
+                waited,
+            )
+        )
+    if not hasattr(cfg, "suites"):
+        return rows
+    return SQ.order(
+        rows,
+        max_wait_factor=float(cfg.suites.max_wait_factor),
+        agent_share=float(cfg.suites.agent_share),
+        default_cost_s=float(cfg.suites.default_cost_s),
+    )
+
+
+def _default_cost(cfg: Any) -> float:
+    return float(cfg.suites.default_cost_s) if hasattr(cfg, "suites") else 600.0
+
+
+def _eta(
+    line: list[SQ.Waiting], name: str, slots_n: int, directory: Path, cfg_default: float = 600.0
+) -> str:
+    """``estimated wait 14m (3 ahead, predicted 31m)`` for ``name``'s place in ``line``."""
+    if not any(w.name == name for w in line):
+        return ""
+    now = CLOCK.wall()
+    free = [0.0] * slots_n  # an idle slot is free now
+    busy = []
+    for i in _slot_indexes(directory, slots_n):
+        if not _held(directory, i):
+            continue
+        left = float(cfg_default)
+        with contextlib.suppress(OSError, ValueError, TypeError, KeyError, AttributeError):
+            held = json.loads(_note(directory, i).read_text())
+            if held.get("cost_s"):  # with a predicted cost: what is left of it
+                left = max(0.0, float(held["cost_s"]) - (now - float(held["at"])))
+            # no predicted cost: the default, however long it has run -- never "about to finish"
+        busy.append(left)
+    free = (
+        (busy + free)[: max(slots_n, len(busy))]
+        if len(busy) >= slots_n
+        else [*busy, *free[len(busy) :]]
+    )
+    est = SQ.estimate(line, name, free_in_s=free, default_cost_s=cfg_default)
+    return SQ.say_estimate(est)
 
 
 class _Admission:
@@ -333,6 +420,8 @@ def hold(
     wait_s: float | None = None,
     source: SIG.SignalSource | None = None,
     cores: int | None = None,
+    klass: str | None = None,
+    scope: str = "suite",
 ) -> Iterator[None]:
     """Hold a full-suite slot for the block, in arrival order; `SuiteBusy` when none frees
     within the wait. ``say`` receives a line whenever the waiter's place in the queue
@@ -347,7 +436,11 @@ def hold(
 
     ``source`` / ``cores`` (default: this host) are where the load is read: at the head of the
     line a second suite also waits while ``load_block`` says the load is over the ceiling, and
-    says why; all of it is queue time, so the caller's clock starts when this yields."""
+    says why; all of it is queue time, so the caller's clock starts when this yields.
+
+    ``klass`` (default: read from the holder label by ``[suites].class_patterns``) is the
+    priority class and ``scope`` names the kind of run, whose measured seconds predict its cost:
+    the line says ``you are #N, estimated wait 14m (3 ahead, predicted 31m)`` (SQ.order)."""
     directory = Path(directory) if directory else state_dir()
     slots_n = limit(cfg, cores)
     wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
@@ -360,13 +453,15 @@ def hold(
     said: tuple[int, str] = (0, "")
     watch = _Admission(cfg, directory, slots_n, source, cores)
     with contextlib.ExitStack() as stack:
-        ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
+        mine = _note_of(cfg, directory, holder, klass, scope)
+        ticket = stack.enter_context(_Ticket(queue, holder, grace_s, mine))
         name = ticket.name
         head_since: float | None = None  # monotonic when this waiter FIRST reached the head
         overridden = wait_s is not None  # an explicit `wait_s` bounds the WHOLE queue wait
         while True:
-            line = _live(queue, stale_s, grace_s, name)
-            position = (line.index(name) + 1) if name in line else len(line) + 1
+            line = _ordered(cfg, queue, _live(queue, stale_s, grace_s, name))
+            names = [w.name for w in line]
+            position = (names.index(name) + 1) if name in names else len(line) + 1
             if position == 1:
                 if head_since is None:
                     head_since = CLOCK.monotonic()
@@ -382,7 +477,11 @@ def hold(
             if (position, reason) != said:
                 said = (position, reason)
                 busy = SuiteBusy(
-                    _holders(directory, slots_n), CLOCK.monotonic() - start, position, reason
+                    _holders(directory, slots_n),
+                    CLOCK.monotonic() - start,
+                    position,
+                    reason,
+                    _eta(line, name, slots_n, directory, _default_cost(cfg)),
                 )
                 say(str(busy))
             # The default wait limit counts time IN LINE, not progress
@@ -396,7 +495,11 @@ def hold(
             if CLOCK.monotonic() - anchor >= wait:
                 ticket.park = True
                 raise SuiteBusy(
-                    _holders(directory, slots_n), CLOCK.monotonic() - start, position, reason
+                    _holders(directory, slots_n),
+                    CLOCK.monotonic() - start,
+                    position,
+                    reason,
+                    _eta(line, name, slots_n, directory, _default_cost(cfg)),
                 )
             time.sleep(QUEUE_POLL_S)
             _beat(ticket.path)
@@ -405,11 +508,18 @@ def hold(
         now = CLOCK.wall()
         body = {"holder": holder, "pid": os.getpid(), "at": now,
                 "at_iso": datetime.fromtimestamp(now).astimezone().strftime("%H:%M:%S")}  # fmt: skip
+        if mine is not None:  # without a predicted cost the note says none (unknown, not zero)
+            body["cost_s"] = mine[1]
         with contextlib.suppress(OSError):
             ticket.path.unlink()  # the next in line may try the slots now
         fsio.replace_text(note, json.dumps(body), fsync=False)
+        ran_from = CLOCK.monotonic()
         try:
             yield
         finally:
             with contextlib.suppress(OSError):
                 note.unlink()
+            if mine is not None:  # the run's own seconds teach its kind's cost
+                SQ.record_cost(
+                    directory, scope, CLOCK.monotonic() - ran_from, keep=int(cfg.suites.cost_runs)
+                )

@@ -92,6 +92,14 @@ also held while the host load is over `[suites].load_ceiling_per_core` (a lone s
 and the wait says why and shows the load. The wait is queue time: the per-test timeout starts
 when the suite is admitted, never before.
 
+The queue is not plain first in, first out: a fix of red main and the merge-queue integrator go
+first, then a phase's closing run, then an item's run, then a baseline measurement; within a class
+the shortest predicted run (the median of the measured runs of its kind) goes first. A run that has
+waited `[suites].max_wait_factor` times its own cost goes first whatever arrives, and one agent
+leads at most `[suites].agent_share` of the waiting runs. The wait line reads `you are #4 in the
+queue, estimated wait 14m (3 ahead, predicted 31m)`. A class is read from the holder label by
+`[suites].class_patterns` unless the caller names one.
+
 ## The log never conflicts
 
 Each agent appends to its own shard, so two agents writing at the same moment produce no
