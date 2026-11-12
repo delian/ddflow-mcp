@@ -500,6 +500,7 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+json_envelope = false
 
 [perf_metrics]
 ring_max_bytes = 2000000
@@ -594,6 +595,14 @@ max_items = 3
 
 [release]
 manifest_lint = "block"
+
+[resultcache]
+enabled = true
+keep_days = 14
+max_mb = 64
+reuse_failed = false
+probe_commands = ["pytest --version", "uv --version"]
+env_vars = []
 
 [review]
 max_rounds = 2
@@ -714,6 +723,17 @@ burn_rate_exhaust_s = 3600.0
 [store]
 stale_index_days = 7.0
 index_touch_s = 86400.0
+
+[suites]
+max_concurrent = 0
+cores_per_suite = 96
+load_ceiling_per_core = 0.35
+load_poll_s = 2.0
+max_wait_factor = 3.0
+agent_share = 0.5
+default_cost_s = 600.0
+cost_runs = 20
+class_patterns = {red_main = ["fix-Bmain-red", "main-red", "red-main"], integrator = ["merge[ _-]?queue", "queue run", "integrator"], phase = ["^P-", "phase[ _-]?(close|suite)"], baseline = ["baseline"]}
 
 [swarm]
 w_critical = 3.0

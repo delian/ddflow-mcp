@@ -347,7 +347,7 @@ class Config(_SectionFields):
         target = getattr(self, sec)
         key = f"{sec}.{knob}"
         typ = next(f.type for f in fields(target) if f.name == knob)
-        value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
+        value = _coerce_layer_knob(sec, knob, raw, typ, lenient, source)
         if key in _OPERATOR_ONLY and source == "file":
             if why := _operator_only_refusal(sec, knob, key):
                 raise InvalidValue(why)

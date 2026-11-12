@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "output.json_envelope"
+new = "false"
+why = "Opt-in: a --json command whose body is a bare array answers {schema, rows} so every body carries a schema id and version."
+effect = "none by default: the bare array stays the shape; an object, a refusal and the MCP bodies are unchanged."
+impact = "additive"

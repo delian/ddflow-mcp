@@ -18,6 +18,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from .. import resultcache as RC
 from .. import suitelock as SL
 from .. import tree_bin as TB
 from .. import workers as WK
@@ -235,7 +236,7 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     holds = _runs_whole_suite(gdef)
     queued_at = time.monotonic()
     who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
-    with SL.hold(cfg, who) if holds else nullcontext():
+    with SL.hold(cfg, who, scope=gdef.id) if holds else nullcontext():
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
@@ -297,6 +298,15 @@ def run_command_gate(
     if not cwd.exists():
         return "unavailable", {"reason": f"working directory {cwd} does not exist"}
 
+    conf = cfg if cfg is not None else Config.load(cwd)
+    rc_key = RC.key(
+        gdef.id, f"{gdef.command}\0timeout={gdef.timeout_s}", cwd, conf
+    )  # a shorter limit may fail
+    if (hit := RC.lookup(cwd, rc_key, conf)) is not None:  # same tree, command, environment
+        return hit["outcome"], {
+            **RC.hit_evidence(hit, rc_key or ""),
+            "tree_sha": tree_identity(cwd),
+        }
     # No bytecode cache in either direction. CPython invalidates a `.pyc` on the
     # source's mtime and SIZE -- and an agent editing in a loop produces same-second,
     # same-size edits by accident, which leaves a stale cache that looks valid. The run
@@ -397,6 +407,9 @@ def run_command_gate(
         # passing here, which is what the gate asks, and an unavailable already says so.
         outcome = _account_for_drift(gdef, cwd, p.code, out, ev)
     _keep_cut_failing_ids(gdef, cwd, out, ev)
+    if rc_key:
+        ev["cache_key"] = rc_key[:16]  # which code, command and environment this result is about
+    RC.store(cwd, rc_key, outcome, ev, conf)  # only passed and failed are kept
     return outcome, ev
 
 

@@ -508,7 +508,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=421d57bf90d5 -->
+<!-- ddflow:begin README/commands sha=ed7f49f2da1a -->
 <details><summary>All 106 commands</summary>
 
 | Command | What it does |
@@ -525,7 +525,7 @@ needs a line written by hand here.
 | `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow approvals` | approval requests for operator-gated commands (a person answers) |
 | `ddflow plan` | check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue |
-| `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
+| `ddflow next` | what may start now (exit 2 = nothing ready or held, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |
 | `ddflow release` | give up a lease |
@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2a4ef277e98e -->
-<details><summary>All 687 knobs across 62 sections</summary>
+<!-- ddflow:begin README/knobs sha=c6e3f29d08af -->
+<details><summary>All 703 knobs across 64 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1299,6 +1299,7 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
 | `perf_metrics.aggregate_min_samples` | `3` |  |
@@ -1373,6 +1374,12 @@ long default is left to `ddflow config --explain`.
 | `reinstruct.every_seconds` | `240` |  |
 | `reinstruct.max_items` | `3` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `resultcache.enabled` | `true` |  |
+| `resultcache.keep_days` | `14` |  |
+| `resultcache.max_mb` | `64` |  |
+| `resultcache.reuse_failed` | `false` |  |
+| `resultcache.probe_commands` | `["pytest --version", "uv --version"]` |  |
+| `resultcache.env_vars` | `[]` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
@@ -1475,6 +1482,15 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
 | `store.index_touch_s` | `86400.0` |  |
+| `suites.max_concurrent` | `0` |  |
+| `suites.cores_per_suite` | `96` |  |
+| `suites.load_ceiling_per_core` | `0.35` |  |
+| `suites.load_poll_s` | `2.0` |  |
+| `suites.max_wait_factor` | `3.0` |  |
+| `suites.agent_share` | `0.5` |  |
+| `suites.default_cost_s` | `600.0` |  |
+| `suites.cost_runs` | `20` |  |
+| `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
