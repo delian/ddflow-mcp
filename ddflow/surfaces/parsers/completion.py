@@ -38,6 +38,9 @@ def _do_install(a: argparse.Namespace) -> int:
         print(text[len(current) :].rstrip() or "(already installed)")
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
+    if text == current:
+        print(f"already installed in {path} (no change)")
+        return 0
     path.write_text(text)
     print(f"installed ddflow completion into {path}")
     return 0
