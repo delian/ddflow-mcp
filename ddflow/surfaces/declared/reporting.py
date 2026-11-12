@@ -116,6 +116,18 @@ COMMANDS: tuple[Command, ...] = (
                 help="The triage, dry run: per item the class (SAFE_AUTO/PROPOSE/OPERATOR), the evidence, the exact command and the recovery attempt count. --json emits it as rows.",
                 cli_help="",
             ),
+            Param(
+                "adopt",
+                type="boolean",
+                help="Take over the EXPIRED lease of --item without a force flag or an approval, when its tree is measured to hold no uncommitted file (committed work stays on its branch). Needs --reason; records who took over, from whom and why. A live lease, an unmeasurable tree or uncommitted work refuses.",
+                cli_help="",
+            ),
+            Param(
+                "reason",
+                help="With --adopt: why the lease is taken over (recorded in the lease note).",
+                default="",
+                cli_help="",
+            ),
             *capped(True),
         ),
         call=lambda repo, a, agent: _cap(
@@ -126,6 +138,8 @@ COMMANDS: tuple[Command, ...] = (
                 apply=bool(a.get("apply")),
                 all=bool(a.get("all")),
                 plan=bool(a.get("plan")),
+                adopt=bool(a.get("adopt")),
+                reason=a.get("reason", "") or "",
                 agent=agent,
             ),
             "recover",
