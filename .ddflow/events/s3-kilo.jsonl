@@ -1,0 +1,2 @@
+{"agent":"s3-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e156b08e969c597ca96e77fdb","kind":"ddflow.seen","lamport":179457,"schema":1,"subject":"ddflow","ts":"2026-11-12T02:04:51.069462Z"}
+{"agent":"s3-kilo","data":{"cwd":"$HOME/src/ddflow","model":"deepseek-ai/DeepSeek-V4-Pro-0813-Godzila","tool":""},"id":"e1e956fe0ba7257be99d3ebc2","kind":"session.started","lamport":179458,"schema":1,"subject":"s20261112T020450-3989739","ts":"2026-11-12T02:04:51.437973Z"}
