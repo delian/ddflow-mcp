@@ -1,7 +1,7 @@
 Answer the performance question from the perf report, and end with the exact next call.
 
 The report is one surface under one command: `ddflow perf report` (MCP `ddflow_perf action=report`,
-also reachable as `ddflow_view action=perf`). Run it; do not answer from memory or by
+also reachable as `ddflow_perf`). Run it; do not answer from memory or by
 reading the log by hand. A figure the log cannot support is missing, never guessed.
 
 ## 1. Match the question to the call
@@ -59,7 +59,7 @@ own footer gave it — the format you chose, the window you asked for, and (for 
 `html`) the `--out` path, CLI first:
 
     ddflow perf report --format <fmt> --window <win>
-    ddflow_view action=perf format=<fmt> window=<win>
+    ddflow_perf format=<fmt> window=<win>
 
 `<fmt>` and `<win>` are the format and window you actually used; a `--filters
 phase=<id>` you passed stays in the call.

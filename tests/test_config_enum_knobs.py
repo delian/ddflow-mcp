@@ -400,6 +400,8 @@ def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
         "flow.integration": {"pr"},
         "flow.claims": {"remote"},
         "flow.pr_merge": {"on_approval", "auto"},
+        "notify.channel": {"email", "n8n", "openclaw", "slack", "teams", "webhook"},
+        "notify.ask_channel": {"email", "n8n", "openclaw", "slack", "teams", "webhook"},
     }
     for key, values in C.KNOB_OUTWARD.items():
         assert values <= set(C.KNOB_CHOICES[key]), key  # the table names real values

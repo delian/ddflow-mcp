@@ -42,10 +42,10 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "P")
     run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture")
     run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
-    run_cli(
-        repo, "task", "add", "B", "--title", "B fixture", "--needs", "A"
-    )  # a cycle, so findings exist
+    run_cli(repo, "update", "B", "--needs", "A")
+    # B needs A and A needs B: a cycle, so findings exist
     # A decision with an EXPLICIT id, governing T1's globs, so the decision tools have
     # something to return. An auto id would be content-addressed and unrepeatable, and
     # a comparison of two empty bodies passes without proving anything.
@@ -65,6 +65,21 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     # A rule with an explicit id, so the rule tools have a row to compare, not two empties.
     run_cli(
         repo, "rule", "add", "--id", "r-test", "--title", "Test rule", "--content", "test content"
+    )
+    # A lesson with an explicit id, so `ddflow_lesson_show` has a real lesson to return
+    # and the two surfaces compare a lesson, not two refusals.
+    run_cli(
+        repo,
+        "lesson",
+        "add",
+        "--id",
+        "L1",
+        "--title",
+        "pin the grammar",
+        "--why",
+        "a",
+        "--how",
+        "b",
     )
     # A fixed probe result for every companion, so neither surface shells out to detect
     # one. Each probe runs the real tool (npx, docker, ...) with a timeout, and two live
@@ -181,10 +196,10 @@ def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture")
     run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
-    run_cli(
-        repo, "task", "add", "B", "--title", "B fixture", "--needs", "A"
-    )  # a real cycle, so findings exist
+    run_cli(repo, "update", "B", "--needs", "A")
+    # B needs A and A needs B: a real cycle, so findings exist
 
     _code, cli_out, _err = run_cli(repo, "--json", "loops")
     from_cli = _json.loads(cli_out)
@@ -219,6 +234,7 @@ def test_a_migrated_tool_keeps_its_exit_contract(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "loops")[0] == NOTHING
 
+    run_cli(repo, "task", "add", "B", "--title", "B fixture")
     run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
-    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--needs", "A")
+    run_cli(repo, "update", "B", "--needs", "A")
     assert run_cli(repo, "loops")[0] == FAIL

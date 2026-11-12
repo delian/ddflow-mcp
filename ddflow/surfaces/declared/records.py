@@ -674,6 +674,7 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_session_inbox",
         tier="all",
         summary="read this lane's delivered inbox messages again",
+        wire_shape=(["session", "inbox"], {}),
         description="Read the lane's delivered messages again: `ddflow heartbeat` delivers and "
         "RETAINS them for [lease].inbox_retain_s, so a piped heartbeat that lost the text can "
         "be shown whole here, fenced as untrusted data. Local to this machine.",
