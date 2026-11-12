@@ -34,7 +34,8 @@ def shim(tmp_path):
         "sys.stdout.write(C.for_shell(sys.argv[2]))\n"
     )
     exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", HOME=str(tmp_path))
+    env = {k: v for k, v in os.environ.items() if k not in ("BASH_ENV", "ENV", "ZDOTDIR")}
+    env.update(PATH=f"{bin_dir}:{os.environ['PATH']}", HOME=str(tmp_path))
     return env
 
 

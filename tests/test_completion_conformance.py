@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -169,8 +170,9 @@ def _widget_index(d: Path) -> str:
 def _registers_a_completer(shell: str, text: str) -> bool:
     """The text really registers the engine's completer (the argcomplete function for bash
     and zsh, the fish completion function), not a placeholder that merely parses."""
-    needle = "__fish_ddflow_complete" if shell == "fish" else "_python_argcomplete"
-    return needle in text
+    name = "__fish_ddflow_complete" if shell == "fish" else "_python_argcomplete"
+    pattern = rf"function {name}\b" if shell == "fish" else rf"(?:^|[;\n]|\\n){name}\(\) \{{"
+    return re.search(pattern, text) is not None
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)

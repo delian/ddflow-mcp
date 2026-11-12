@@ -8,8 +8,9 @@ Put ONE line in your shell startup file, after the shell's completion system is 
 
 `ddflow completion install` writes a guarded block with the equivalent line.
 
-The output is a single comment-free line, so each of `eval "$(...)"`, the unquoted
-`eval $(...)` and `source <(...)` registers it (an unquoted `eval` joins output lines with
+The output is a single comment-free line, so in bash and zsh each of `eval "$(...)"`, the
+unquoted `eval $(...)` and `source <(...)` registers it (fish has no `<(...)`: use
+`| source`; its `eval (...)` works too) (an unquoted `eval` joins output lines with
 spaces, which would turn a leading `#` comment into the whole script). zsh needs
 `compdef`: when the completion system is not loaded yet the line runs `compinit -C`
 (cached dump, no security scan) itself, once; load `compinit` first in `.zshrc` to keep the
