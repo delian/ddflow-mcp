@@ -25,6 +25,11 @@ def _first_line(text: object) -> str:
     return (str(text or "").strip().splitlines() or [""])[0]
 
 
+def _cell(text: object) -> str:
+    """One Markdown table cell: its first line, with the cell delimiter escaped."""
+    return _first_line(text).replace("|", "\\|")
+
+
 def _triage_counts(it: Item, gate: str) -> dict[str, int]:
     out = {"confirmed": 0, "refuted": 0}
     for row in (it.triage.get(gate) or {}).values():
@@ -43,9 +48,9 @@ def _gates(it: Item, pipeline: list[str]) -> list[dict[str, Any]]:
         ev = (rec.evidence if rec else None) or {}
         rows.append(
             {
-                "gate": gate,
-                "outcome": (rec.outcome if rec and rec.outcome else "not run"),
-                "note": _first_line(rec.reason if rec else "").replace("|", "\\|"),
+                "gate": _cell(gate),
+                "outcome": _cell(rec.outcome if rec and rec.outcome else "not run"),
+                "note": _cell(rec.reason if rec else ""),
                 "rounds": int(ev.get("rounds") or 0),
                 **{f"triage_{k}": v for k, v in _triage_counts(it, gate).items()},
             }

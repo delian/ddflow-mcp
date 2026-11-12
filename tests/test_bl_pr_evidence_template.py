@@ -101,7 +101,7 @@ def test_a_stacked_request_names_what_it_is_stacked_on(item):
     assert "Stacked on T0" in text and "https://example.test/pr/1" in text
 
 
-def test_a_pipe_or_newline_in_a_gate_note_does_not_split_its_row(item):
+def test_a_pipe_or_newline_in_a_gate_cell_does_not_split_its_row(item):
     repo, st, it = item
     log = EventLog(repo, "tester")
     log.append(
@@ -109,13 +109,15 @@ def test_a_pipe_or_newline_in_a_gate_note_does_not_split_its_row(item):
         "T1",
         {"gate": "standards", "reason": "bad | see log\nnext line", "evidence": {}},
     )
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write('\n[gates]\ntask_pipeline = ["lint|bad", "standards"]\n')
     st = fold(log.read_all(), strict=False)
-    line = next(
-        ln for ln in _body(repo, st, st.items["T1"]).splitlines() if ln.startswith("| standards")
-    )
-    assert line.count("|") == 4 + 1 and "next line" not in line, (
-        line
-    )  # 4 cell bars + the escaped one
+    text = _body(repo, st, st.items["T1"])
+    rows = [ln for ln in text.splitlines() if ln.startswith("| ") and not ln.startswith("| gate")]
+    assert rows and "next line" not in text, text
+    for row in rows:  # every row has exactly the three cells: 4 unescaped bars
+        assert row.replace("\\|", "").count("|") == 4, row
+    assert any(r.startswith("| lint\\|bad | not run") for r in rows), rows
 
 
 def test_a_bug_without_a_recorded_regression_test_is_said_so(item):
