@@ -176,12 +176,31 @@ def test_a_cell_is_bounded_after_escaping_by_the_knob(item):
 def test_the_smallest_bounds_are_still_bounds(cell_max):
     from ddflow.services.flow.pr_template import _cell
 
+    from ddflow.services.flow.pr_template import _cell as _raw
+
+    _cell = lambda t, n: _raw(t, n, str)  # noqa: E731
     assert len(_cell("hello world", cell_max)) == cell_max
     assert len(_cell("a|b|c|d", cell_max)) <= cell_max
     assert _cell("hi", 5) == "hi"
 
 
 def test_a_cut_never_ends_on_a_dangling_escape():
-    from ddflow.services.flow.pr_template import _cell
+    from ddflow.services.flow.pr_template import _cell as _raw
 
+    _cell = lambda t, n: _raw(t, n, str)  # noqa: E731
     assert _cell("a|b", 3) == "a\u2026"  # `a\|` cut after the backslash would dangle
+
+
+def test_a_secret_is_redacted_before_a_cut_or_an_escape_can_hide_it(item):
+    repo, st, it = item
+    log = EventLog(repo, "tester")
+    log.append(
+        "gate.failed",
+        "T1",
+        {"gate": "standards", "reason": f"token {SECRET} leaked", "evidence": {}},
+    )
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write("\n[flow]\npr_body_cell_max = 24\n")
+    st = fold(log.read_all(), strict=False)
+    text = _body(repo, st, st.items["T1"])
+    assert SECRET not in text and SECRET[:12] not in text, text

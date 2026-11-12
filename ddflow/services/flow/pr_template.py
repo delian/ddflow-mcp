@@ -10,6 +10,7 @@ secret redactor before it can leave the project (r-consent-outward): the request
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +26,12 @@ def _first_line(text: object) -> str:
     return (str(text or "").strip().splitlines() or [""])[0]
 
 
-def _cell(text: object, cell_max: int) -> str:
-    """One Markdown table cell: lines folded to spaces, backslashes escaped first, then the cell
-    delimiter, and the ESCAPED text bounded to ``cell_max`` (`[flow].pr_body_cell_max`)."""
-    flat = " ".join(str(text or "").split())
+def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
+    """One Markdown table cell: SECRET-REDACTED first (on the raw text, so neither escaping nor a
+    cut can hide a secret from the redactor or leave a prefix of one), then lines folded to
+    spaces, backslashes escaped, the cell delimiter escaped, and the ESCAPED text bounded to
+    ``cell_max`` (`[flow].pr_body_cell_max`)."""
+    flat = " ".join(scrub(str(text or "")).split())
     out = flat.replace("\\", "\\\\").replace("|", "\\|")
     if len(out) > cell_max:
         cut = out[: cell_max - 1]
@@ -47,7 +50,9 @@ def _triage_counts(it: Item, gate: str) -> dict[str, int]:
     return out
 
 
-def _gates(it: Item, pipeline: list[str], cell_max: int) -> list[dict[str, Any]]:
+def _gates(
+    it: Item, pipeline: list[str], cell_max: int, scrub: Callable[[str], str]
+) -> list[dict[str, Any]]:
     """Every gate of the pipeline, in order, then any other recorded one; a gate with no
     recorded outcome says `not run` -- it is neither omitted nor shown as passed."""
     rows = []
@@ -56,9 +61,11 @@ def _gates(it: Item, pipeline: list[str], cell_max: int) -> list[dict[str, Any]]
         ev = (rec.evidence if rec else None) or {}
         rows.append(
             {
-                "gate": _cell(gate, cell_max),
-                "outcome": _cell(rec.outcome if rec and rec.outcome else "not run", cell_max),
-                "note": _cell(rec.reason if rec else "", cell_max),
+                "gate": _cell(gate, cell_max, scrub),
+                "outcome": _cell(
+                    rec.outcome if rec and rec.outcome else "not run", cell_max, scrub
+                ),
+                "note": _cell(rec.reason if rec else "", cell_max, scrub),
                 "rounds": int(ev.get("rounds") or 0),
                 **{f"triage_{k}": v for k, v in _triage_counts(it, gate).items()},
             }
@@ -81,7 +88,12 @@ def _bugs(st: State, it: Item) -> list[dict[str, Any]]:
 
 
 def variables(
-    st: State, it: Item, on: Item | None, pipeline: list[str], cell_max: int
+    st: State,
+    it: Item,
+    on: Item | None,
+    pipeline: list[str],
+    cell_max: int,
+    scrub: Callable[[str], str],
 ) -> dict[str, Any]:
     """Every placeholder the template can use, from derived records only."""
     return {
@@ -90,7 +102,7 @@ def variables(
         "body": it.body.strip() or it.title,
         "stacked_on": (on.id if on is not None else ""),
         "stacked_on_url": (on.pr.url if on is not None and on.pr else ""),
-        "gates": _gates(it, pipeline, cell_max),
+        "gates": _gates(it, pipeline, cell_max, scrub),
         "bugs": _bugs(st, it),
         "changelog": dict(it.changelog or {}),
     }
@@ -103,7 +115,14 @@ def render_body(
     override = {TEMPLATE: cfg.flow.pr_body_template} if cfg.flow.pr_body_template else {}
     text = P.render(
         P.resolve(TEMPLATE, repo, override),
-        **variables(st, it, on, list(cfg.gates.task_pipeline), cfg.flow.pr_body_cell_max),
+        **variables(
+            st,
+            it,
+            on,
+            list(cfg.gates.task_pipeline),
+            cfg.flow.pr_body_cell_max,
+            lambda t: redact_secrets(t, cfg)[0],
+        ),
     ).strip()
     clean, _n = redact_secrets(text, cfg)
     return clean
