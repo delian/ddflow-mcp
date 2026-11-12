@@ -31,6 +31,13 @@ def cfg(*, ceiling=0.35, cap=0, per_suite=96, ci_slots=1, wait=10.0, poll=0.0):
     )
 
 
+def _until(pred, timeout=10.0):
+    end = time.monotonic() + timeout
+    while not pred():
+        assert time.monotonic() < end, "timed out"
+        time.sleep(0.02)
+
+
 def load(*values):
     return FakeSource([{"load": v} for v in values])
 
@@ -165,9 +172,11 @@ def test_a_slot_freed_while_the_load_is_over_the_ceiling_is_not_taken(tmp_path: 
     c = cfg(cap=2, poll=3600.0, wait=1.5)
     outcome: list[str] = []
 
+    src = load(0.1, 0.9)
+
     def waiter():
         try:
-            with hold(c, "d", tmp_path, source=load(0.1, 0.9)):
+            with hold(c, "d", tmp_path, source=src):
                 outcome.append("admitted")
         except SL.SuiteBusy as e:
             outcome.append(str(e))
@@ -176,7 +185,7 @@ def test_a_slot_freed_while_the_load_is_over_the_ceiling_is_not_taken(tmp_path: 
         with hold(c, "b", tmp_path, source=load(0.0)):
             t = threading.Thread(target=waiter, daemon=True)
             t.start()
-            time.sleep(0.5)  # d has looked: both slots are held
+            _until(lambda: src.calls >= 1)  # d has looked: both slots are held
         t.join(10)  # b is gone; the load reads 0.9 from now on
     assert outcome and "load" in outcome[0], outcome
 
@@ -186,3 +195,30 @@ def test_the_poll_knob_is_bounded():
 
     assert _poll_seconds(2.0) == "" and _poll_seconds(0) == ""
     assert _poll_seconds(1e308) and _poll_seconds(float("inf")) and _poll_seconds(-1)
+
+
+def test_a_nan_or_infinite_load_is_unreadable_and_never_blocks(tmp_path: Path):
+    for bad in (float("nan"), float("inf")):
+        with hold(cfg(), "first", tmp_path):
+            with hold(cfg(), "second", tmp_path, source=load(bad)):
+                pass
+
+
+def test_a_holder_that_leaves_during_a_cached_block_lets_the_waiter_look_again(tmp_path: Path):
+    """The load reading is remembered for the poll interval, the holders are counted at every
+    look: once the only other suite is gone the waiter is admitted at the next poll, not after
+    the interval (a lone suite is never held back by load)."""
+    c = cfg(cap=2, poll=3600.0, wait=10.0)
+    got: list[str] = []
+    src = load(0.9)
+
+    def waiter():
+        with hold(c, "d", tmp_path, source=src):
+            got.append("admitted")
+
+    with hold(c, "a", tmp_path):
+        t = threading.Thread(target=waiter, daemon=True)
+        t.start()
+        _until(lambda: src.calls >= 1)  # blocked by the load, reading cached for an hour
+    t.join(10)
+    assert got == ["admitted"]

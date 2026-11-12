@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import sys
@@ -99,8 +100,8 @@ def load_block(
         return ""
     ceiling = float(cfg.suites.load_ceiling_per_core)
     value = (source or SIG.HostSignals()).sample().get("load")
-    if value is None or value <= ceiling:
-        return ""
+    if value is None or not math.isfinite(value) or value <= ceiling:
+        return ""  # unreadable (absent, NaN, infinite) never blocks
     return (
         f"host load {value:.2f}/core is over the ceiling {ceiling:.2f}/core "
         f"(~{value * (cores or os.cpu_count() or 1):.0f} on {cores or os.cpu_count() or 1} cores) "
@@ -297,26 +298,28 @@ def _say_default(text: str) -> None:
 
 class _Admission:
     """What keeps the head of the line out of a slot: the suites already running (every live
-    slot, a bigger neighbour's included) and the host load. A block is remembered for
-    ``[suites].load_poll_s``; with none, every look reads afresh, so a slot freed later is never
-    taken on a stale reading."""
+    slot, a bigger neighbour's included, counted at every look) and the host load, whose reading
+    is remembered for ``[suites].load_poll_s`` while it blocks. With no block the next look
+    reads afresh, so a slot freed later is never taken on a stale reading."""
 
     def __init__(self, cfg: Any, directory: Path, slots_n: int, source: Any, cores: Any) -> None:
         self.cfg, self.directory, self.slots_n = cfg, directory, slots_n
         self.source, self.cores = source, cores
         self.poll_s = float(cfg.suites.load_poll_s) if hasattr(cfg, "suites") else 0.0
-        self.running, self.reason, self._at = 0, "", -1e9
+        self.running, self.reason = 0, ""
+        self._at: float | None = None  # when the load was last read to a block
 
     def check(self) -> str:
-        if CLOCK.monotonic() - self._at >= self.poll_s:
-            slots = _slot_indexes(self.directory, self.slots_n)
-            self.running = sum(_held(self.directory, i) for i in slots)
+        slots = _slot_indexes(self.directory, self.slots_n)
+        self.running = sum(_held(self.directory, i) for i in slots)
+        fresh = self._at is not None and CLOCK.monotonic() - self._at < self.poll_s
+        if self.running < 1 or not fresh:
             self.reason = load_block(self.cfg, self.running, self.source, self.cores)
-            self._at = CLOCK.monotonic() if self.reason else -1e9
+            self._at = CLOCK.monotonic() if self.reason else None
         return self.reason
 
     def reset(self) -> str:
-        self.reason, self._at = "", -1e9
+        self.reason, self._at = "", None
         return ""
 
 
