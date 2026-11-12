@@ -409,3 +409,4 @@
 {"agent":"lane-gm-smoke","data":{"at":1794505258.3231504,"holder":"lane-gm-smoke"},"id":"ed34ad6dd82aedce58a0e2f33","kind":"lease.renewed","lamport":186096,"schema":1,"subject":"GR-identity","ts":"2026-11-12T17:40:58.532202Z"}
 {"agent":"lane-gm-smoke","data":{"at":1794506165.5561953,"holder":"lane-gm-smoke"},"id":"e4e06c7b07d92af70c84627c3","kind":"lease.renewed","lamport":186189,"schema":1,"subject":"GR-identity","ts":"2026-11-12T17:56:05.748979Z"}
 {"agent":"lane-gm-smoke","data":{"at":1794507075.7547123,"holder":"lane-gm-smoke"},"id":"e49634e77853da6db1cc48b6f","kind":"lease.renewed","lamport":186264,"schema":1,"subject":"GR-identity","ts":"2026-11-12T18:11:15.944488Z"}
+{"agent":"lane-gm-smoke","data":{"at":1794507983.0667765,"holder":"lane-gm-smoke"},"id":"edab719de66f0ed1626a58cba","kind":"lease.renewed","lamport":186351,"schema":1,"subject":"GR-identity","ts":"2026-11-12T18:26:23.240378Z"}
