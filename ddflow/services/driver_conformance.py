@@ -66,5 +66,23 @@ def run(h) -> dict:
                 "detail": plan.emitter,
             }
 
+    cap = getattr(h, "capabilities", None)
+    if cap is None or cap.none:
+        checks["capabilities"] = {"status": "ok", "detail": "not declared (unknown)"}
+    else:
+        declared = [
+            name
+            for name in ("model_visibility", "cost_exposed", "subagent_model_control")
+            if getattr(cap, name) not in ("", "unknown")
+        ]
+        if cap.patterns:
+            declared.append("patterns")
+        # The values and their sources are validated when the descriptor parses; here the
+        # check reports which capabilities the descriptor declares VERIFIED, nothing guessed.
+        checks["capabilities"] = {
+            "status": "ok",
+            "detail": ", ".join(declared) or "declared, none verified",
+        }
+
     ok = all(c["status"] == "ok" for c in checks.values())
     return {"agent": hid, "status": "ok" if ok else "failed", "checks": checks}
