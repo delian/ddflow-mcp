@@ -41,3 +41,14 @@ def test_activate_line_differs_for_fish():
 def test_uninstall_a_dangling_begin_marker_keeps_the_rest():
     src = "# >>> ddflow completion >>>\n# user comment\n"
     assert install.uninstall_text("bash", src) == "# user comment\n"
+
+
+def test_uninstall_an_orphaned_begin_before_a_block_keeps_user_content():
+    src = (
+        "# >>> ddflow completion >>>\n"
+        "export PATH=/x\n"
+        "# >>> ddflow completion >>>\n"
+        "source <(ddflow completion bash)\n"
+        "# <<< ddflow completion <<<\n"
+    )
+    assert install.uninstall_text("bash", src) == "export PATH=/x\n"

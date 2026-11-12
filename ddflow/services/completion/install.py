@@ -53,12 +53,12 @@ def uninstall_text(shell: str, current: str) -> str:
     while i < len(lines):
         if lines[i].strip() == _BEGIN:
             j = i + 1
-            while j < len(lines) and lines[j].strip() != _END:
+            while j < len(lines) and lines[j].strip() != _END and lines[j].strip() != _BEGIN:
                 j += 1
-            if j < len(lines):  # a CLOSED block: skip begin .. end
+            if j < len(lines) and lines[j].strip() == _END:  # a CLOSED block: skip begin..end
                 i = j + 1
                 continue
-            i += 1  # a dangling begin: drop only the marker line
+            i += 1  # a dangling begin (EOF or another begin first): drop only this marker
             continue
         out.append(lines[i])
         i += 1
