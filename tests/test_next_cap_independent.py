@@ -115,9 +115,3 @@ def test_exit_stays_2_when_nothing_is_ready_and_nothing_is_held(repo):
     run_cli(repo, "phase", "add", "M", "--title", "m")
     code, out, _ = run_cli(repo, "next")
     assert code == 2 and "No free slot" not in out, (code, out)
-
-
-def test_all_lists_the_dependency_blocked_rows_too(repo, monkeypatch):
-    _full_cap(repo, monkeypatch)
-    _, out, _ = run_cli(repo, "next", "--all", agent="lane2")
-    assert "M.D" in out, out

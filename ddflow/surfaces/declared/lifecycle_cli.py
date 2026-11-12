@@ -287,7 +287,7 @@ def next_text(out, a, ctx) -> str | None:
     own = out.data["_render"].get("own_sections") or {}
     lines += _held_lines(out.data.get("held_by_cap") or [], p.cap_note, own.get("held", 0))
     lines += _needs_complete_lines(out.data.get("needs_complete") or [], own.get("complete", 0))
-    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked") or a.get("all")))
+    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked")))
     if p.finished and (p.ready or bdeps):
         lines.append(p.close_note())
     if note := out.data.get("_footer"):
