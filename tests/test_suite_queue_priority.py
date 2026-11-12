@@ -261,3 +261,26 @@ def test_a_costless_holder_that_has_run_long_is_not_about_to_finish(tmp_path: Pa
         (tmp_path / "suites.0.holder").write_text(_json.dumps({"at": time.time() - 7200}))
         line = [W("me", cost=60.0)]
         assert "estimated wait 10m" in SL._eta(line, "me", 1, tmp_path, 600.0)
+
+
+def test_a_block_can_queue_its_holds_as_a_class(tmp_path: Path):
+    with SL.suite_class("integrator"):
+        with SL.hold(cfg(), "agent-x", tmp_path, say=lambda _t: None):
+            pass
+    assert SL._CLASS.get() is None  # restored after the block
+    q = tmp_path / "queue"
+    got: list[str] = []
+    with SL.hold(cfg(), "holder", tmp_path, say=lambda _t: None):
+        with SL.suite_class("integrator"):
+            import contextvars
+
+            def go():
+                with SL.hold(cfg(30.0), "agent-y", tmp_path, say=lambda _t: None):
+                    got.append("agent-y")
+
+            t = threading.Thread(target=contextvars.copy_context().run, args=(go,), daemon=True)
+            t.start()
+            _until(lambda: len(list(q.glob("*.ticket"))) == 1)
+        note = SQ.read_note(next(q.glob("*.ticket")))
+    t.join(10)
+    assert note.get("class") == "integrator"
