@@ -64,7 +64,9 @@ def _fixed_reset(w: quota.Window, now: float) -> str:
 
 def _one(w: quota.Window, readings: Sequence[B.Reading], now: float, harness: str) -> WindowEval:
     r = meters.best(readings, w.window, w.unit, harness)
-    resets = (r.resets_at if r else "") or _fixed_reset(w, now)
+    resets = r.resets_at if r else ""
+    if not resets or clock.epoch(resets, default=0.0) <= now:
+        resets = _fixed_reset(w, now) or resets  # a reset already past is no help
     if r is None or r.status != B.OK or r.value is None:
         why = r.reason if r else "no meter measures this window"
         return WindowEval(
@@ -105,7 +107,7 @@ def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: 
     """Pause when any window is at or over ``pause_at`` (a fraction of its limit)."""
     if not 0 < pause_at <= 1:
         raise ValueError(f"pause_at must be above 0 and at most 1, got {pause_at!r}")
-    if recheck_s <= 0:
+    if not recheck_s > 0:
         raise ValueError(f"recheck_s must be positive, got {recheck_s!r}")
     over = _over(evals, pause_at)
     if not over:

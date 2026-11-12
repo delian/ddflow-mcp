@@ -140,3 +140,14 @@ def test_a_pause_line_outside_the_unit_interval_is_refused(bad):
 def test_a_non_positive_recheck_is_refused():
     with pytest.raises(ValueError):
         Q.decide((), 0.9, NOW, 0)
+
+
+def test_a_stale_reading_with_a_past_reset_gives_way_to_the_fixed_boundary():
+    w = quota.Window("day", 100, "percent", reset="fixed", anchor="2026-11-01T06:00:00+00:00")
+    (e,) = Q.evaluate(profile(w), [reading("day", resets="2026-11-12T06:00:00+00:00")], NOW)
+    assert clock.epoch(e.resets_at) == clock.epoch("2026-11-13T06:00:00+00:00")
+
+
+def test_a_nan_recheck_is_refused():
+    with pytest.raises(ValueError):
+        Q.decide((), 0.9, NOW, float("nan"))
