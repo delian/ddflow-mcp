@@ -78,20 +78,43 @@ def test_blocked_rows_are_limited_to_the_tag_too(repo):
     run_cli(
         repo, "task", "add", "M.E", "--title", "e", "--phase", "M", "--needs", "M.A", "--tags", "x"
     )
-    run_cli(repo, "task", "add", "N.F", "--title", "f", "--phase", "N", "--needs", "N.C")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "N.F",
+        "--title",
+        "f",
+        "--phase",
+        "N",
+        "--needs",
+        "N.C",
+        "--tags",
+        "wave:1",
+    )
     d, _ = _ids(repo, "--tag", "x")
     blocked = {b["item"] for b in d["blocked"]}
     assert "M.E" in blocked and "N.F" not in blocked, blocked
 
 
-def test_lane_mode_honours_the_tag(repo):
+def test_lane_mode_honours_the_tag(repo, monkeypatch):
     _queue(repo)
     code, out, err = run_cli(repo, "next", "--lane", "l1", "--tag", "nosuchtag")
     assert code == 1, (out, err)
+    from ddflow.api.lifecycle import pull
+
+    seen: dict = {}
+    real = pull.plan_for_offer
+
+    def spy(*a, **kw):
+        seen.update(kw)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(pull, "plan_for_offer", spy)
     from ddflow.api import next_lane
 
-    res = next_lane(Path(repo), lane="l1", tags=("wave:1",))
-    assert res.data.get("item") in ("", None, "M.B"), res.data
+    next_lane(Path(repo), lane="l1", tags=("wave:1",))
+    assert seen.get("tags") == ("wave:1",), seen
 
 
 def test_wave_is_shorthand_for_the_wave_tag(repo):
