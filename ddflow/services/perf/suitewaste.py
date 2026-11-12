@@ -115,6 +115,8 @@ def _whole_command(command: str) -> bool:
             continue
         elif _ROOT.match(a):
             root = True
+        elif re.match(r"^(\./)?tests/", a):
+            continue  # a path under the root: redundant beside the root itself
         else:
             return False
     return root

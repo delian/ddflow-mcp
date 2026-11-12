@@ -217,7 +217,7 @@ def test_whole_suite_command_detection():
     assert not whole("pytest test_foo.py --doctest-glob tests")
     assert not whole("pytest test_foo.py --log-file tests")
     assert not whole("pytest --basetemp tests/ tests/test_a.py")
-    assert not whole("pytest tests/test_a.py tests/")
+    assert whole("pytest tests/test_a.py tests/")  # the root collects it anyway
     assert not whole("pytest -n 24 tests/golden/")
     assert not whole("pytest -n 24")
 
