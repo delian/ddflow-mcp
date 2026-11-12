@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ...core.registry import Registry
+from .. import gate_accept as GA
 
 #: verb -> (state, item, target, args) -> the state digest string the site would compute.
 PROVIDERS: Registry[Callable[[Any, str, str, dict[str, str]], str]] = Registry(
@@ -23,13 +24,4 @@ def register(verb: str, provider: Callable[[Any, str, str, dict[str, str]], str]
     PROVIDERS.register(provider, verb)
 
 
-def _approve_partial(st: Any, item: str, target: str, args: dict[str, str]) -> str:
-    """`approve.partial` (a person accepting a baseline-red partial): the provider lives with the
-    acceptance (`gate_accept.provider`); imported here on first use, which keeps this module
-    free of the approvals-consume cycle."""
-    from .. import gate_accept
-
-    return gate_accept.provider(st, item, target, args)
-
-
-register("approve.partial", _approve_partial)
+register("approve.partial", GA.provider)
