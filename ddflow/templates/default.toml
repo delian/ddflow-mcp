@@ -613,6 +613,13 @@ chunk_max_tokens = 0
 split_rounds = 2
 degraded_cooldown_s = 3600
 
+[roles]
+budget_tokens = 600
+phase_closer_rules = []
+fixer_rules = []
+researcher_rules = []
+reviewer_rules = []
+
 [rules]
 max_rules = 200
 max_size_bytes = 50000

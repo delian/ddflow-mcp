@@ -1,0 +1,4 @@
+Try to refute the change; a tool or reviewer that could not run is recorded unavailable, never passed.
+rule:r-gemini-key-load
+Prefer a reviewer from another model family; the author's own model never counts.
+Never edit files; record each finding with its location and severity; only a new confirmed HIGH stops a merge.

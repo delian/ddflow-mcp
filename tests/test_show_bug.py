@@ -37,18 +37,25 @@ def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     assert code == 0, err
     assert f"{bid} [bug] open" in out, out
     assert "the widget drops its last row" in out and " on T1" in out, out
-    assert "fix task(s): BODY, FIX, LIST\n" in out and "OTHER" not in out, out
-    assert "mentioned by: NEAR, TALK" in out, "a task that only discusses a bug is not its fix"
+    # B0b1f135e37: a title or body that SAYS "fixes bug X" is a claim, not the link; only
+    # the `fix-<bug>` task (or one whose `fixes` lists it) is the fix `complete` checks.
+    assert "fix task(s)" not in out and "OTHER" not in out, out
+    assert "mentioned by: BODY, FIX, LIST, NEAR, TALK" in out, (
+        "a task that says it fixes is a mention"
+    )
 
     code, out, err = run_cli(repo, "--json", "show", bid)
     assert code == 0, err
     body = json.loads(out)
     assert (body["id"], body["kind"], body["state"]) == (bid, "bug", "open")
-    assert body["summary"] == "the widget drops its last row" and body["fixing"] == [
-        "BODY",
-        "FIX",
-        "LIST",
-    ]
+    assert body["summary"] == "the widget drops its last row" and body["fixing"] == []
+    assert body["mentioned_by"] == ["BODY", "FIX", "LIST", "NEAR", "TALK"]
+
+    # the real link: a task that follows the `fix-<bug>` template
+    run_cli(repo, "task", "add", f"fix-{bid}", "--title", "the fix", "--globs", "w.py")
+    body = json.loads(run_cli(repo, "--json", "show", bid)[1])
+    assert body["fixing"] == [f"fix-{bid}"], body
+    assert "fix task(s): " + f"fix-{bid}" in run_cli(repo, "show", bid)[1]
 
 
 def test_show_names_a_closed_bugs_regression_tests_and_an_invalid_ones_reason(repo):
@@ -110,9 +117,9 @@ def test_a_fix_after_an_invalid_closure_reads_as_fixed(repo):
 
 
 def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
-    """Bug Bfc863d295f: "fixes bugs A, B and X" -- the convention `_show_bug` names --
-    listed the fix of X as a mere mention: the list pattern needed a comma after every
-    element, so the element before "and" could never be passed over."""
+    """Bug Bfc863d295f: "fixes bugs A, B and X" listed X as not found at all: the list pattern
+    needed a comma after every element. Since B0b1f135e37 such a title is a mention, never the
+    fix, but the id inside an and-joined list must still be FOUND as one."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
@@ -123,8 +130,8 @@ def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
     code, out, err = run_cli(repo, "--json", "show", bid)
     assert code == 0, err
     body = json.loads(out)
-    assert body["fixing"] == ["AND2", "AND3", "OXF"], body
-    assert body["mentioned_by"] == ["SEE"], body
+    assert body["fixing"] == [], body
+    assert body["mentioned_by"] == ["AND2", "AND3", "OXF", "SEE"], body
 
 
 def _show_within_budget(repo, bid, clock=None) -> str:
