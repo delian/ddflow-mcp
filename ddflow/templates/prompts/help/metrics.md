@@ -29,7 +29,10 @@ records), so there is nothing to record and nothing to drift. It writes no event
                                      equal tree (same item or another; `.ddflow/` state and
                                      `[gates].doc_globs` documents do not make trees differ), after a
                                      baseline-red verdict, unplaced; runs, suite and queue minutes and
-                                     the avoidable share. A figure the log cannot give is n/a, never 0.
+                                     the avoidable share, bounded below (unplaced runs not counted) and above (all counted).
+                                     A `unit_tests` run counts only when its command is the whole `tests/` root
+                                     with known execution flags; an unrecognised command is not guessed.
+                                     A figure the log cannot give is n/a, never 0.
     ddflow metrics swarm             the baseline a lane fleet must beat: merged items per hour,
                                      rework rate, agent-hours per item, dollars when events carry
                                      `cost_usd`, critical-path slack and parallelism; `--phase` and

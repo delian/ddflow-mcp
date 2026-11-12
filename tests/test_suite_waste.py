@@ -195,24 +195,28 @@ def test_unplaced_runs_do_not_count_in_the_share_but_do_in_the_upper_bound():
 def test_whole_suite_command_detection():
     whole = SW._whole_command
     assert whole("uv run pytest tests/ -q --timeout=420 -n 48")
+    assert whole("uv run pytest -q --timeout=420 -n {workers} tests/")
     assert whole("pytest ./tests/")
     assert whole("pytest -n 24 tests")
+    assert whole("pytest -n24 --timeout 420 tests")
     assert whole("python -m pytest tests")
-    assert whole("pytest --ff tests/")
-    assert whole("pytest --junitxml tests/out.xml tests/")
-    assert whole("pytest --lfnf=all tests/")
-    assert not whole("pytest --basetemp tests/ tests/test_a.py")
-    assert not whole("pytest --rootdir tests/ tests/unit/test_a.py")
-    assert whole("pytest tests/test_a.py tests/")  # a root collects everything beneath it
+    # Anything unrecognised is not guessed whole: a narrowing option, another path, an option
+    # whose value is a directory, an unknown flag, no root at all.
     assert not whole("pytest tests -k test_one")
     assert not whole("pytest -vk tests/")
-    assert not whole("pytest --sw-skip tests/")
-    assert not whole("pytest -xm slow tests/")
-    assert whole("pytest -n24 -rA tests/")
+    assert not whole("pytest -mslow2 tests")
+    assert not whole("pytest -ktest_foo tests")
     assert not whole("pytest tests/ --ignore=tests/test_slow.py")
     assert not whole("pytest tests --ignore-glob=tests/test_s*.py")
     assert not whole("pytest --ignore tests/")
+    assert not whole("pytest --sw-skip tests/")
+    assert not whole("pytest --ff tests/")
+    assert not whole("pytest test_foo.py --doctest-glob tests")
+    assert not whole("pytest test_foo.py --log-file tests")
+    assert not whole("pytest --basetemp tests/ tests/test_a.py")
+    assert not whole("pytest tests/test_a.py tests/")
     assert not whole("pytest -n 24 tests/golden/")
+    assert not whole("pytest -n 24")
 
 
 def test_a_ci_verdict_without_a_command_is_still_a_suite_run():
@@ -232,6 +236,7 @@ def test_a_class_with_an_untimed_run_has_no_total_minutes():
     assert rerun["runs"] == 2
     assert rerun["suite_minutes"] is None  # [600 s, untimed]: a partial sum is not the total
     assert rerun["suite_minutes_timed"] == 10.0
+    assert rerun["queue_minutes"] is None  # one run has no recorded queue wait either
     assert rerun["untimed"] == 1
     assert rep["avoidable_suite_minutes"] is None
     assert "1 untimed" in SW.text(rep)

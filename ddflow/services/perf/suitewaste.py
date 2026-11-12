@@ -49,25 +49,12 @@ CACHEABLE = ("passed", "failed")
 AVOIDABLE = ("rerun_same_tree_same_item", "rerun_same_tree_other_item")
 #: The research's bound: avoidable runs under this share refute the cache-first order.
 FALSIFIER_SHARE = 0.25
-#: Pytest options that narrow a run to part of the suite.
-_NARROWING = (
-    "-k",
-    "--deselect",
-    "--ignore",
-    "--ignore-glob",
-    "--lf",
-    "--last-failed",
-    "--sw",
-    "--stepwise",
-    "--sw-skip",
-    "--stepwise-skip",
-    "-m",
-)
-#: Pytest options whose next argument is their value, not a path.
-_VALUE_OPTIONS = (
-    "-n", "-p", "-c", "-o", "-W", "--basetemp", "--rootdir", "--junitxml", "--timeout",
-    "--maxfail", "--durations", "--confcutdir", "--dist", "--cache-dir", "--tb", "--color",
-)  # fmt: skip
+#: The pytest options a whole-suite command may carry: they change how the run executes, never
+#: which tests it selects. A flag outside these makes the command unrecognised (not counted),
+#: never guessed whole.
+_PLAIN_FLAGS = ("-q", "-qq", "-v", "-vv", "-x", "--no-header", "-ra", "-rA", "--strict-markers")
+#: Options that take a value (next argument, or ``=value``; ``-n24`` for ``-n``).
+_VALUE_FLAGS = ("-n", "-p", "--timeout", "--tb", "--maxfail", "--durations", "--dist")
 _ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
 
@@ -95,42 +82,31 @@ def _num(v: Any) -> float | None:
 
 
 def _whole_command(command: str) -> bool:
-    """Does this pytest command run the whole ``tests/`` directory: the directory itself as a
-    path and no option or path narrowing it (``-k``, ``--ignore``, ``tests/test_x.py``)?"""
+    """Does this pytest command run the whole ``tests/`` directory? True only for the root path
+    (``tests``, ``tests/``, ``./tests``) with nothing but the known execution flags; any other
+    option or path leaves the command unrecognised, so it is not counted (never guessed)."""
     try:
         tokens = shlex.split(command)
     except ValueError:
         return False
-    # Only the arguments after the pytest program: ``python -m pytest`` has its own ``-m``.
-    cut = next((i for i, t in enumerate(tokens) if t.rsplit("/", 1)[-1] == "pytest"), -1)
-    args = tokens[cut + 1 :]
-    if any(_narrows(a) for a in args):
+    cut = next((i for i, t in enumerate(tokens) if t.rsplit("/", 1)[-1] == "pytest"), None)
+    if cut is None:
         return False
-    # A root path collects everything beneath it, so a file path beside it adds nothing.
-    return any(_ROOT.match(a) for a in _positionals(args))
-
-
-def _narrows(arg: str) -> bool:
-    name = arg.split("=", 1)[0]
-    # ``-k expr`` may be written ``-kexpr`` and ``-m`` likewise; a long option is exact.
-    if name in _NARROWING:
-        return True
-    # A short-flag cluster (``-vk``, ``-xm``, ``-kexpr``) narrows when it carries ``k`` or ``m``.
-    short = arg.startswith("-") and not arg.startswith("--")
-    return short and any(c in "km" for c in name[1:]) and name[1:].isalpha()
-
-
-def _positionals(args: list[str]) -> list[str]:
-    """The arguments that are paths: not an option, and not the value of one that takes one."""
-    out, skip = [], False
-    for a in args:
+    root, skip = False, False
+    for a in tokens[cut + 1 :]:
         if skip:
             skip = False
-        elif a in _VALUE_OPTIONS:
+        elif a in _VALUE_FLAGS:
             skip = True
-        elif not a.startswith("-"):
-            out.append(a)
-    return out
+        elif a in _PLAIN_FLAGS or a.split("=", 1)[0] in _VALUE_FLAGS:
+            continue
+        elif re.fullmatch(r"-n\S+", a):
+            continue
+        elif _ROOT.match(a):
+            root = True
+        else:
+            return False
+    return root
 
 
 def _is_suite(gate: str, ev: dict) -> bool:
@@ -238,7 +214,7 @@ def build(
             #: None when any run of the class recorded no time: a partial sum is not the total.
             "suite_minutes": _minutes([r["suite_s"] for r in by[c]], whole=True),
             "suite_minutes_timed": _minutes([r["suite_s"] for r in by[c]]),
-            "queue_minutes": _minutes([r["queue_s"] for r in by[c]]),
+            "queue_minutes": _minutes([r["queue_s"] for r in by[c]], whole=True),
             "untimed": sum(r["suite_s"] is None for r in by[c]),
         }
         for c in CLASSES
