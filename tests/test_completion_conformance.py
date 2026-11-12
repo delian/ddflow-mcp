@@ -178,8 +178,9 @@ def test_every_shell_script_parses(shell, tmp_path):
     env = {**os.environ, "BASH_ENV": "", "ENV": ""}  # bash reads these at startup
     text = scripts.for_shell(shell)
     # a degenerate or placeholder script would still parse clean, so also require the real
-    # activation function named for the shell, not an empty/comment-only file
-    assert f"_ddflow_activate_{shell}" in text
+    # activation function DEFINITION (bash/zsh name the function followed by "()", fish by
+    # "function <name>") -- a bare echo or comment of the name does not pass
+    assert f"_ddflow_activate_{shell}()" in text or f"function _ddflow_activate_{shell}" in text
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
     result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True, env=env)
