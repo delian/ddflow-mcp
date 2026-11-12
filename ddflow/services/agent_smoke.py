@@ -23,6 +23,7 @@ from typing import Any
 
 from ..adapters import git as G
 from ..adapters.fsio import scratch_dir
+from ..config import Config
 from ..core import outcome as O
 from ..core.redact import Redactor
 from ..infra.fsio import atomic_write
@@ -174,7 +175,7 @@ def assess(
     project: Path, harness: str = "", native_prompt: bool = False
 ) -> tuple[dict[str, bool], list[str]]:
     """The assertions, from the project's event log (and git for the shard) only."""
-    evs = EventLog(project, RUNNER_IDENTITY).read_all()
+    evs = EventLog(project, RUNNER_IDENTITY, log_cfg=Config.load(project).log).read_all()
     acquired = [e for e in evs if e.kind == "lease.acquired"]
     a = {
         "tool_called": any(e.agent != RUNNER_IDENTITY for e in evs),
@@ -373,7 +374,11 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     if h is None:
         print(f"unknown agent {a.agent!r}", file=sys.stderr)
         return EXIT_REFUSED
-    log = EventLog(Path.cwd(), "agent-smoke") if a.record else None
+    log = (
+        EventLog(Path.cwd(), "agent-smoke", log_cfg=Config.load(Path.cwd()).log)
+        if a.record
+        else None
+    )
     with scratch_dir("agent-smoke-") as work:
         given = {
             "rounds": a.rounds,
