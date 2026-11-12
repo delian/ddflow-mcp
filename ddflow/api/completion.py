@@ -7,7 +7,7 @@ from typing import Any
 
 from ..core import outcome as O
 from ..services import completion as CM
-from ..services.completion import install
+from ..services.completion import install  # noqa: F401  # re-exported for surfaces.parsers.completion
 from ._base import _load
 
 
