@@ -101,3 +101,14 @@ def test_a_budget_smaller_than_the_notice_still_holds(proj):
     _config(proj, "[roles]\nbudget_tokens = 1")
     code, out, _ = run_cli(proj, "brief", "--role", "fixer")
     assert code == 0 and approx_tokens(out) <= 4 and out.startswith("# Role: fixer")
+
+
+def test_a_note_without_for_agent_is_refused_with_a_role(proj):
+    code, _, err = run_cli(proj, "brief", "--role", "fixer", "--note", "x")
+    assert code == 1 and "--for-agent" in err
+
+
+def test_the_reviewer_pack_names_the_key_rule_record(proj):
+    run_cli(proj, "rule", "add", "--id", "r-gemini-key-load", "--title", "Load the reviewer key")
+    _, out, _ = run_cli(proj, "brief", "--role", "reviewer")
+    assert "Load the reviewer key" in out

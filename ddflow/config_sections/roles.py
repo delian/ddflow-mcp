@@ -57,7 +57,7 @@ class RolesConfig:
     )
     researcher_rules: list[str] = knob(
         factory=lambda: [
-            "Read-only: no edits and no claims; state a falsifiable claim, run the cheapest test that could refute it and record the verdict (CONFIRMED, REFUTED or THEORETICAL) with the command and its output.",
+            "Read-only: no edits and no item leases; state a falsifiable claim, run the cheapest test that could refute it and record the verdict (CONFIRMED, REFUTED or THEORETICAL) with the command and its output.",
             "File every defect found as a bug after `ddflow similar`; never only work around it.",
             "Record the operator's words verbatim and a lesson after any surprise.",
         ],
@@ -67,6 +67,7 @@ class RolesConfig:
     reviewer_rules: list[str] = knob(
         factory=lambda: [
             "Try to refute the change; a tool or reviewer that could not run is recorded unavailable, never passed.",
+            "rule:r-gemini-key-load",
             "Prefer a reviewer from another model family; the author's own model never counts.",
             "Never edit files; record each finding with its location and severity; only a new confirmed HIGH stops a merge.",
         ],

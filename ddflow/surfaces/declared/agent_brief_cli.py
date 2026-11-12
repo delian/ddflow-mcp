@@ -17,6 +17,8 @@ def call(repo, a, agent, called_from=None, shell_cwd=None):
     """
     item = a.get("target") or a.get("item") or ""
     if a.get("role") and not a.get("for_agent"):
+        if a.get("note"):
+            return O.failed("brief", "--note belongs to --for-agent", text="")
         return _api().brief_role(
             repo, role=a["role"], item=item, phase=a.get("phase", "") or "", agent=agent
         )
