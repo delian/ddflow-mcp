@@ -3,15 +3,20 @@
 # Registers the ONE completion engine (argcomplete over the ddflow parser) for this
 # shell. No command, option or choice name is spelled here: every name the engine offers
 # comes from the argparse parser ddflow's build_parser() returns, introspected at TAB time.
-# Without argcomplete there is no completion: a clear message, then a normal return, never
-# a broken prompt.
+# Without argcomplete there is no completion, and a registration that fails is reported --
+# both return 0, never a broken prompt.
 
 _ddflow_activate_bash() {
   if ! command -v register-python-argcomplete >/dev/null 2>&1; then
     printf '%s\n' "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')" >&2
     return 0
   fi
-  eval "$(register-python-argcomplete ddflow)" 2>/dev/null
+  local _out
+  if ! _out="$(register-python-argcomplete ddflow 2>/dev/null)"; then
+    printf '%s\n' "ddflow: argcomplete could not register completion for ddflow" >&2
+    return 0
+  fi
+  eval "$_out" 2>/dev/null || return 0
 }
 
 _ddflow_activate_bash

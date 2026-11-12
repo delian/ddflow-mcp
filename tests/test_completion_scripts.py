@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 
 import pytest
@@ -26,17 +28,28 @@ def test_for_shell_refuses_an_unknown_shell():
     [("bash", "bash -n"), ("zsh", "zsh -n"), ("fish", "fish -n")],
 )
 def test_script_parses_in_its_shell(shell, syntax):
+    if shutil.which(shell) is None:
+        pytest.skip(f"{shell} not installed")
     probe = subprocess.run(
         syntax, shell=True, input=scripts.for_shell(shell), text=True, capture_output=True
     )
     assert probe.returncode == 0, probe.stderr
 
 
-def test_script_without_argcomplete_returns_0_with_a_message():
-    # No `register-python-argcomplete` on a PATH without argcomplete: the script must
-    # tell the operator and return 0, never break the prompt.
-    evil = subprocess.run(["true"])  # nothing
-    del evil
-    text = scripts.for_shell("bash")
-    assert "register-python-argcomplete" in text
-    assert "argcomplete" in text
+def test_script_without_argcomplete_returns_0_with_a_message(tmp_path):
+    """Without `register-python-argcomplete` on PATH the script prints a message, returns 0."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash not installed")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    env = dict(os.environ, PATH=str(empty))
+    probe = subprocess.run(
+        [bash],
+        input=scripts.for_shell("bash"),
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    assert probe.returncode == 0
+    assert "argcomplete" in probe.stderr

@@ -2,7 +2,8 @@
 #
 # Registers the ONE completion engine (argcomplete over the ddflow parser) for this
 # shell; no command, option or choice name is spelled here. Without argcomplete there is
-# no completion: a clear message, then a normal return, never a broken prompt.
+# no completion, and a registration that fails is reported -- both return 0, never a
+# broken prompt.
 
 function _ddflow_activate_zsh() {
   if ! command -v register-python-argcomplete >/dev/null 2>&1; then
@@ -10,7 +11,12 @@ function _ddflow_activate_zsh() {
     return 0
   fi
   autoload -Uz bashcompinit && bashcompinit 2>/dev/null
-  eval "$(register-python-argcomplete ddflow)" 2>/dev/null
+  local _out
+  if ! _out="$(register-python-argcomplete ddflow 2>/dev/null)"; then
+    print -u2 "ddflow: argcomplete could not register completion for ddflow"
+    return 0
+  fi
+  eval "$_out" 2>/dev/null || return 0
 }
 
 _ddflow_activate_zsh

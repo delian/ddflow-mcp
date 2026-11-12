@@ -2,14 +2,21 @@
 #
 # Registers the ONE completion engine (argcomplete over the ddflow parser) for this
 # shell; no command, option or choice name is spelled here. Without argcomplete there is
-# no completion: a clear message, then a normal return, never a broken prompt.
+# no completion, and a registration that fails is reported -- both return 0, never a
+# broken prompt.
 
 function _ddflow_activate_fish
   if not command -q register-python-argcomplete
     echo "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')" >&2
     return 0
   end
-  register-python-argcomplete --shell fish ddflow 2>/dev/null | source
+  set -l _out (register-python-argcomplete --shell fish ddflow 2>/dev/null)
+  if test $status -ne 0; or test -z "$_out"
+    echo "ddflow: argcomplete could not register completion for ddflow" >&2
+    return 0
+  end
+  echo -n "$_out" | source 2>/dev/null
+  or return 0
 end
 
 _ddflow_activate_fish
