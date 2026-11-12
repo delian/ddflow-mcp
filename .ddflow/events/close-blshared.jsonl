@@ -303,3 +303,7 @@
 {"agent":"close-blshared","data":{"at":1794471719.5674155,"holder":"close-blshared"},"id":"e1d6a92510b1070cb13117316","kind":"lease.renewed","lamport":181385,"schema":1,"subject":"B189","ts":"2026-11-12T08:21:59.702379Z"}
 {"agent":"close-blshared","data":{"at":1794472152.070557,"holder":"close-blshared"},"id":"e25f57f0c945ff3f628c5c3eb","kind":"lease.renewed","lamport":181421,"schema":1,"subject":"B189","ts":"2026-11-12T08:29:12.210413Z"}
 {"agent":"close-blshared","data":{"at":1794472338.156715,"holder":"close-blshared"},"id":"eb5a4e28a10c65a68467a0d89","kind":"lease.renewed","lamport":181441,"schema":1,"subject":"B189","ts":"2026-11-12T08:32:18.291596Z"}
+{"agent":"close-blshared","data":{"at":1794472772.0200527,"holder":"close-blshared"},"id":"e6c7736afb119568514a68ad6","kind":"lease.renewed","lamport":181496,"schema":1,"subject":"B189","ts":"2026-11-12T08:39:32.194235Z"}
+{"agent":"close-blshared","data":{"at":1794472957.2645676,"holder":"close-blshared"},"id":"e370027b4cd94cb3334ddcd54","kind":"lease.renewed","lamport":181510,"schema":1,"subject":"B189","ts":"2026-11-12T08:42:37.395968Z"}
+{"agent":"close-blshared","data":{"at":1794473391.4790025,"holder":"close-blshared"},"id":"e197c54abf5c8cac45f163647","kind":"lease.renewed","lamport":181552,"schema":1,"subject":"B189","ts":"2026-11-12T08:49:51.645273Z"}
+{"agent":"close-blshared","data":{"at":1794473577.2187638,"holder":"close-blshared"},"id":"e6a951211c9b36ac1c23c1f08","kind":"lease.renewed","lamport":181562,"schema":1,"subject":"B189","ts":"2026-11-12T08:52:57.361314Z"}
