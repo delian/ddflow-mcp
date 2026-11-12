@@ -222,3 +222,21 @@ def test_escaping_cannot_create_an_unredacted_secret_prefix():
     scrub = lambda t: t.replace(secret, "[REDACTED]")  # noqa: E731
     out = _cell("|123", 3, scrub)
     assert "\\|" not in out and "123" not in out, out
+
+
+def test_the_shipped_template_renders_identically_without_the_template_engine(item):
+    """Shipped templates stay in the subset the stdlib fallback renderer also accepts."""
+    from ddflow.adapters.templates import _render_stdlib
+    from ddflow.services import prompts as P
+    from ddflow.services.flow.pr_template import variables
+
+    repo, st, it = item
+    log = EventLog(repo, "tester")
+    log.append("bug.found", "B2", {"summary": "race", "item": "T1"})
+    log.append("bug.fixed", "B2", {"regression_test": "tests/test_race.py::test_it"})
+    st = fold(log.read_all(), strict=False)
+    cfg = Config.load(repo)
+    vars_ = variables(st, st.items["T1"], None, list(cfg.gates.task_pipeline), 200, str)
+    text = P.resolve("pr_body", repo).text
+    assert "tests/test_race.py::test_it" in P.render(text, **vars_)
+    assert _render_stdlib(text, vars_).strip() == P.render(text, **vars_).strip()
