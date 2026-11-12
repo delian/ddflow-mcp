@@ -152,3 +152,20 @@ useDefault = true
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
   regexes = ['''^glpat-Xk3Zq9LmFk3Zq9LmFk3Z$''']
+
+
+[[allowlists]]
+  # tests/test_critic_findings.py proves the redactor removes a WHOLE PEM block, so it
+  # builds one. The block is not a key: its body is the single 30-character line
+  # `MIIEow...` + `secretbodyhere`, which spells its own filler, is far too short for any
+  # RSA private key, and is not decodable DER. The private-key rule reads the BEGIN/END
+  # frame and flags it anyway. The rule's secret is the SOURCE TEXT of the three adjacent
+  # Python string literals (so the regex carries their `\n"` joins), found by running the
+  # scanner on the file.
+  # Scoped to ONE rule, ONE file, and the WHOLE block (anchored frame and body): a PEM block
+  # in any other file, or a different body in this one, still fires.
+  description = "the placeholder PEM block in the redaction test is not a private key"
+  targetRules = ["private-key"]
+  condition = "AND"
+  paths = ['''^tests/test_critic_findings\.py$''']
+  regexes = ['''^-----BEGIN RSA PRIVATE KEY-----\\n"\s*"MIIEowIBAAKCAQEAsecretbodyhere\\n"\s*"-----END RSA PRIVATE KEY-----$''']
