@@ -37,6 +37,7 @@ def _do_install(a: argparse.Namespace) -> int:
         print(f"would append one guarded block to {path}:")
         print(text[len(current) :].rstrip() or "(already installed)")
         return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     print(f"installed ddflow completion into {path}")
     return 0
@@ -45,8 +46,15 @@ def _do_install(a: argparse.Namespace) -> int:
 def _do_uninstall(a: argparse.Namespace) -> int:
     sh = a.shell or "bash"
     path = _install.target_file(sh, _home())
-    current = path.read_text() if path.is_file() else ""
-    path.write_text(_install.uninstall_text(sh, current))
+    if not path.is_file():
+        print(f"no completion block in {path} (nothing to remove)")
+        return 0
+    current = path.read_text()
+    text = _install.uninstall_text(sh, current)
+    if text == current:
+        print(f"no completion block in {path} (nothing to remove)")
+        return 0
+    path.write_text(text)
     print(f"uninstalled ddflow completion from {path}")
     return 0
 

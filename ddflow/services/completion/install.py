@@ -1,10 +1,11 @@
 """Install and uninstall the shell completion activation line.
 
-Installation is offered, never silent (`DDflow completion` offers at onboarding and asks
-the operator; the explicit command here requires a `--yes`). It APPENDS one marker-guarded
+Installation is offered, never silent (`ddflow completion` offers at onboarding and asks the
+operator; the explicit `install` command requires `--yes`). It APPENDS one marker-guarded
 block to the shell's startup file; `uninstall` removes ONLY that block -- the files and
 lines it did not write stay. The block sources `ddflow completion <shell>`, so the
-activation script itself stays the single source of truth.
+activation script itself stays the single source of truth, and the block differs per shell
+(fish has no process substitution, so its line pipes the script into ``source``).
 """
 
 from __future__ import annotations
@@ -28,12 +29,9 @@ def target_file(shell: str, home: str | Path) -> Path:
 
 
 def _activate_line(shell: str) -> str:
+    if shell == "fish":
+        return f"ddflow completion {shell} | source"
     return f"source <(ddflow completion {shell})"
-
-
-def installable(shell: str, home: str | Path) -> Path:
-    """The file `install` would edit, without touching it."""
-    return target_file(shell, home)
 
 
 def install_text(shell: str, current: str) -> str:
@@ -45,13 +43,17 @@ def install_text(shell: str, current: str) -> str:
 
 
 def uninstall_text(shell: str, current: str) -> str:
-    """``current`` with the activation block it may carry removed."""
+    """``current`` with the activation block it may carry removed. A closed block drops
+    its begin/source/end lines; a dangling begin marker (no end) drops only that marker,
+    never the rest of the file."""
+    del shell
     lines = current.splitlines(keepends=True)
+    has_end = any(L.strip() == _END for L in lines)
     kept: list[str] = []
     inside = False
     for L in lines:
         if L.strip() == _BEGIN:
-            inside = True
+            inside = has_end  # only a CLOSED block eats following lines
             continue
         if inside:
             if L.strip() == _END:
@@ -59,17 +61,3 @@ def uninstall_text(shell: str, current: str) -> str:
             continue
         kept.append(L)
     return "".join(kept)
-
-
-def install(shell: str, home: str | Path, *, yes: bool = False) -> str:
-    """The startup file after `install` runs: appended (when ``yes``) or the plan (else)."""
-    path = target_file(shell, home)
-    current = path.read_text() if path.is_file() else ""
-    return install_text(shell, current)
-
-
-def uninstall(shell: str, home: str | Path, *, write: bool = False) -> str:
-    """The startup file after `uninstall` runs."""
-    path = target_file(shell, home)
-    current = path.read_text() if path.is_file() else ""
-    return uninstall_text(shell, current)

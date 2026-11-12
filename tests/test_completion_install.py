@@ -29,3 +29,15 @@ def test_target_file_per_shell(tmp_path):
     assert install.target_file("fish", tmp_path) == tmp_path / ".config" / "fish" / "config.fish"
     assert install.target_file("zsh", tmp_path) == tmp_path / ".zshrc"
     assert install.target_file("bash", tmp_path) == tmp_path / ".bashrc"
+
+
+def test_activate_line_differs_for_fish():
+    text = install.install_text("fish", "")
+    assert "ddflow completion fish | source" in text
+    text = install.install_text("bash", "")
+    assert "source <(ddflow completion bash)" in text
+
+
+def test_uninstall_a_dangling_begin_marker_keeps_the_rest():
+    src = "# >>> ddflow completion >>>\n# user comment\n"
+    assert install.uninstall_text("bash", src) == "# user comment\n"
