@@ -31,7 +31,13 @@ def _line(st, text: str) -> str:
 
 def render(cfg, st, role: str, *, item: str = "", phase: str = "") -> str:
     """The role pack text for ``role``, scoped to an item or phase when one is named."""
-    lines = getattr(cfg.roles, role.replace("-", "_") + "_rules")
+    packs = {
+        "phase-closer": cfg.roles.phase_closer_rules,
+        "fixer": cfg.roles.fixer_rules,
+        "researcher": cfg.roles.researcher_rules,
+        "reviewer": cfg.roles.reviewer_rules,
+    }
+    lines = packs[role]
     head = f"# Role: {role}" + (f" ({phase})" if phase else "") + (f" on {item}" if item else "")
     body = [f"- {_line(st, str(x))}" for x in lines]
     budget = int(cfg.roles.budget_tokens)
