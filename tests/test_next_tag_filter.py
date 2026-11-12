@@ -76,7 +76,18 @@ def test_tag_limits_ready_and_blocked(repo):
 def test_blocked_rows_are_limited_to_the_tag_too(repo):
     _queue(repo)
     run_cli(
-        repo, "task", "add", "M.E", "--title", "e", "--phase", "M", "--needs", "M.A", "--tags", "x"
+        repo,
+        "task",
+        "add",
+        "M.E",
+        "--title",
+        "e",
+        "--phase",
+        "M",
+        "--needs",
+        "M.A",
+        "--tags",
+        "x,wave:1",
     )
     run_cli(
         repo,
