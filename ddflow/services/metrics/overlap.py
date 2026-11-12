@@ -26,6 +26,7 @@ def _windows(ctx: Context) -> tuple[dict[str, tuple[float, float, tuple[str, ...
     were left out because a lease was still held."""
     out: dict[str, tuple[float, float, tuple[str, ...]]] = {}
     open_items: set[str] = set()
+    unknown: set[str] = set()
     for lease in ctx.facts.leases:
         if not ctx.in_scope(lease.item, lease.start):
             continue
@@ -38,6 +39,11 @@ def _windows(ctx: Context) -> tuple[dict[str, tuple[float, float, tuple[str, ...
             max(e, lease.end),
             tuple(sorted(set(g) | set(lease.globs))),
         )
+        if not lease.globs:
+            unknown.add(lease.item)  # one glob-less lease: the item's paths are not known
+    for item in unknown:
+        s, e, _g = out[item]
+        out[item] = (s, e, ())
     for item in open_items:
         out.pop(item, None)
     return out, len(open_items)
@@ -60,13 +66,14 @@ def build(ctx: Context, size: dict[str, int | None]) -> dict:
     small = {i for i in win if size.get(i) and (size[i] or 0) <= ELIGIBLE_MAX_LINES}
     for n, a in enumerate(order):
         a_end = win[a][1]
-        for b in order[n + 1 :]:
+        for m in range(n + 1, len(order)):
+            b = order[m]
             if win[b][0] >= a_end:
                 break  # sorted by start: nothing later overlaps a
-            pairs += 1
-            if pairs > MAX_PAIRS:
+            if pairs >= MAX_PAIRS:
                 truncated = True
                 break
+            pairs += 1
             if _disjoint(win[a][2], win[b][2]):
                 disjoint += 1
                 if a in small and b in small:

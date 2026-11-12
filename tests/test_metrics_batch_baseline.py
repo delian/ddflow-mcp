@@ -193,3 +193,20 @@ def test_overlap_text_names_the_table():
     from ddflow.services.metrics import batch as B
 
     assert "batch-eligible" in B.text(run(overlap_log()).metrics)
+
+
+def test_an_item_with_one_glob_less_lease_is_never_disjoint():
+    log = overlap_log()
+    log.claim("a1", "Z", T0 + 70)  # a re-claim of Z that names no globs
+    log.release("a1", "Z", T0 + 190)
+    ov = run(log).metrics["overlap"]
+    assert ov["pairs_path_disjoint"] == 1  # only X-Y; Z has an unknown-globs lease
+
+
+def test_the_pair_cap_counts_exactly_the_cap(monkeypatch):
+    from ddflow.services.metrics import overlap as OV
+
+    monkeypatch.setattr(OV, "MAX_PAIRS", 2)
+    ov = run(overlap_log()).metrics["overlap"]
+    assert ov["truncated"] is True
+    assert ov["pairs_overlapping"] == 2
