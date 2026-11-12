@@ -69,6 +69,16 @@ class LanesConfig:
         10,
         doc="How many moves `ddflow lanes advise` prints, most urgent first (stopped lanes with unfinished work, then glob stalls, then idle lanes beside ready work).",
     )
+    idle_s: int = knob(
+        1800,
+        doc="Seconds a lane holding a lease may go without writing an event or heartbeating before `ddflow lanes --coordinator` flags it `idle`. 0 flags none.",
+        check=_whole,
+    )
+    coordinator_max_rows: int = knob(
+        15,
+        doc="Most rows each section of `ddflow lanes --coordinator` (suites, holders, approvals, ready phases, chain) prints; the cut says how many more there are. 0 prints every row.",
+        check=_whole,
+    )
     brief_notes: int = knob(
         3,
         doc="How many of a lane's most recent session notes `ddflow lanes brief` quotes, fenced as data, under 'Previous run'. 0 quotes none.",

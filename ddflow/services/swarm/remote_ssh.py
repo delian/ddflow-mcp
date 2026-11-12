@@ -16,8 +16,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 
 from ...infra import proc as P
+from ...infra.fsio import replace_path
 from ..lane_driver import LaneStatus, Result, failed, ok, unavailable
-from .remote import DEFAULT, Knobs, RemoteError, _safe
+from .remote_config import DEFAULT, Knobs, RemoteError, _safe
 
 _HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@%:\[\]-]*")
 _ROOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]*")
@@ -168,7 +169,7 @@ class SshTransport:
         t = self._k.copy_timeout_s
         r = self._ended(self._piped(f"cat {self._file(lane, name)}", drain, t), t)
         if r.ok:
-            part.replace(local)
+            replace_path(part, local)
         else:
             part.unlink(missing_ok=True)
         return r

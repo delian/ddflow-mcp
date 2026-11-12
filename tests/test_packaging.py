@@ -27,6 +27,15 @@ GOVERNS = ("pyproject.toml", "ddflow/templates/**")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _installed_means_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run of the INSTALLED wheel must import the installed code. A PYTHONPATH naming this
+    tree (a lane's shell exports one, the shim sets one) put the source ahead of site-packages,
+    so the "installed" ddflow ran the lane's code, and the foreign-launch guard refused it from
+    a linked worktree: the test failed there and passed on the primary (Bbaaaba1364)."""
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+
+
 @pytest.fixture(scope="module")
 def wheel(tmp_path_factory) -> Path:
     if not shutil.which("uv"):

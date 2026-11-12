@@ -148,6 +148,28 @@ def test_changed_python_own_excludes_a_merge_pulled_file(tmp_path):
     assert "src/b.py" not in own
 
 
+def test_auto_fix_formats_only_files_the_item_owns(repo, monkeypatch, tmp_path):
+    """B-autoformat-stages-outside-lease: the item's glob is only `src/a.py`; a merge brings
+    in `src/b.py` (unformatted, outside the glob) and `changed_python` names both. The
+    auto-fix must reformat only the item's own (glob) files and leave the outside-glob file
+    untouched and unreported."""
+    wt = _ruff_item(repo, monkeypatch, tmp_path)
+    _commit(wt, {"src/a.py": "value=1\n"}, "a drifted module")
+    (wt / "src").mkdir(exist_ok=True)
+    (wt / "src" / "b.py").write_text("value=1\n")  # a merge brought it in; glob is only src/a.py
+
+    monkeypatch.setattr(
+        A.CI, "changed_python", lambda repo, sha, base, *, own=False: ["src/a.py", "src/b.py"]
+    )
+    res = A.run(repo, ref="T1")
+
+    corr = res.data.get("corrections") or {}
+    assert corr.get("reformatted") == ["src/a.py"], corr
+    assert (wt / "src" / "b.py").read_text() == "value=1\n", (
+        "a file outside the item's globs was rewritten"
+    )
+
+
 def test_safe_files_keeps_only_the_worktrees_own_python_files(tmp_path):
     """A path that escapes the worktree or reads as a flag is never handed to ruff."""
     from ddflow.services.ci import ruff

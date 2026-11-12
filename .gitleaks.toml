@@ -127,3 +127,28 @@ useDefault = true
   # not by digest shape or path, so a key-shaped value in the same `key=` slot still fires.
   description = "Container fingerprint fixture in the perf-remote tests"
   regexes = ['''^abcdef012345$''']
+
+[[allowlists]]
+  # The committed event-log shard lane-hard.jsonl quotes the canonical RFC 7518 EXAMPLE
+  # JWT (`{"alg":"none"}`, `{"sub":"alice"}`, no signature) while a `gate.failed` record
+  # for the AU-redact-shapes bug explains why the JWT redaction shape matches or does not.
+  # It is a documented example, not a credential. Named by exact value, exactly the jwt
+  # rule, exactly the event-log shard files: a JWT with any other subject still fires.
+  description = "Canonical alg=none/sub=alice example JWT quoted in a committed event-log detail"
+  targetRules = ["jwt"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJhbGljZSJ9\.$''']
+
+[[allowlists]]
+  # The committed event-log shard lane-hard.jsonl quotes ddflow's synthetic gitlab PAT
+  # filler sample (`glpat-` plus the "Fk3Zq9Lm" filler body, itself built at run time in
+  # tests/test_secret_shapes_table.py) while a critic finding for the AU-redact-shapes work
+  # argues the provider-sample test misses a changed first character. It is synthetic
+  # filler, not a credential. Named by exact value, exactly the gitlab-pat rule, exactly
+  # the event-log shard files: a real `glpat-` token anywhere else still fires.
+  description = "Synthetic gitlab PAT filler sample quoted in a committed event-log detail"
+  targetRules = ["gitlab-pat"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^glpat-Xk3Zq9LmFk3Zq9LmFk3Z$''']

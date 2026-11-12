@@ -1,0 +1,7 @@
+# Ratchet `deferred_imports` for ddflow.surfaces.mcp_lifecycle (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+# Justification: `mcp_upgrade` is imported inside `hosting()`, not at module level: importing
+# it hoists the config layer into every import of this surface. A unused-branch stdio server
+# never upgrades, so the import stays lazy until a restart/kill answers.
+baseline = 1

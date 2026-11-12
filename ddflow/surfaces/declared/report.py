@@ -8,7 +8,15 @@ from ..tools._common import _api
 
 
 def _text(out, a) -> str:
-    return out.data["text"].rstrip("\n")
+    text = out.data["text"].rstrip("\n")
+    item = a.get("item") or ""
+    capped = _api().output_budget.apply(
+        text,
+        a=a,
+        cli=f"ddflow report {item}",
+        mcp=f"ddflow_show id={item} report=true",
+    )
+    return f"{capped.text}\n\n{capped.footer}" if capped.footer else capped.text
 
 
 COMMANDS: tuple[Command, ...] = (

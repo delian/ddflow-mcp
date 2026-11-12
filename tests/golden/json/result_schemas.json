@@ -699,6 +699,7 @@
    "regression_verify",
    "lesson_captured",
    "lesson_capture",
+   "open_duplicates",
    "tags",
    "was",
    "changed"
@@ -715,6 +716,7 @@
     "regression_verify": {},
     "lesson_captured": {},
     "lesson_capture": {},
+    "open_duplicates": {},
     "tags": {},
     "was": {},
     "changed": {},
@@ -2486,7 +2488,8 @@
    "text",
    "fleet",
    "fleet_total",
-   "resume"
+   "resume",
+   "coordinator"
   ],
   "output_schema": {
    "type": "object",
@@ -2505,6 +2508,7 @@
     "fleet": {},
     "fleet_total": {},
     "resume": {},
+    "coordinator": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -3125,6 +3129,39 @@
     "floor": {},
     "semantic": {},
     "scanned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_duplicate": {
+  "command": "bug_duplicate",
+  "schema": "bug_duplicate@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "of",
+   "regression_test",
+   "fix_task",
+   "fix_task_removed"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_duplicate@1"
+    },
+    "id": {},
+    "of": {},
+    "regression_test": {},
+    "fix_task": {},
+    "fix_task_removed": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

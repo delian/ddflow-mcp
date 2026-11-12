@@ -187,7 +187,9 @@ class SessionConfig:
         doc="`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, in percent, alongside `claude_autocompact_window`: it LOWS the window only (Claude Code honours it as a percentage override, never a raise). 0 leaves the harness default untouched.",
         check=lambda v: (
             ""
-            if isinstance(v, int) and not isinstance(v, bool) and CLAUDE_WINDOW_OFF <= v <= CLAUDE_PCT_MAX
+            if isinstance(v, int)
+            and not isinstance(v, bool)
+            and CLAUDE_WINDOW_OFF <= v <= CLAUDE_PCT_MAX
             else "must be a whole-number percent, 0..100 (0 = harness default)"
         ),
     )
