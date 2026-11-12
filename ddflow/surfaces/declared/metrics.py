@@ -45,6 +45,9 @@ COMMANDS: tuple[Command, ...] = (
             "view=slo: the service-level indicators ddflow tracks for itself. "
             "view=batch: the size-bucket tables behind batched gates (review runs and minutes "
             "by changed lines, findings per run, findings confirmed/refuted by size, lock wait). "
+            "view=suitewaste: why whole-suite runs happen (first run on a code tree, reruns on an "
+            "equal tree, after a baseline-red verdict, unplaced) with runs, suite and queue minutes "
+            "and the avoidable share. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -61,8 +64,8 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste",
                 positional=True,
                 nargs="?",
                 choices=VIEWS,
