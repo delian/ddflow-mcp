@@ -14,6 +14,7 @@ from ..core.budget import approx_tokens
 from ..infra import worktree as W
 from ..infra.store import Store
 from ..services import agent_brief as AB
+from ..services import brief_roles as BR
 from ..services import harnessreg as HR
 from ..services import launchbrief as LBS
 from ..services import prompts as P
@@ -55,14 +56,29 @@ def _lesson_lines(cfg, store, st, query: str, count: int) -> list[str]:
     return lines
 
 
+def brief_role(
+    repo: Path, *, role: str, item: str = "", phase: str = "", agent: str = ""
+) -> O.Outcome:
+    """`brief --role R`: the project's rules for a role (`services.brief_roles`), exit 1 for an
+    unknown role."""
+    if role not in BR.ROLES:
+        return O.failed("brief", BR.unknown_role(role), text="")
+    _log, cfg, _loaded = _load(repo, agent)
+    st = Store(repo, cfg).ensure(_log)
+    text = BR.render(cfg, st, role, item=item, phase=phase)
+    return O.ok("brief", text=text, role=role, approx_tokens=approx_tokens(text))
+
+
 def agent_brief(
-    repo: Path, *, item: str, for_agent: str, note: str = "", agent: str = ""
+    repo: Path, *, item: str, for_agent: str, note: str = "", role: str = "", agent: str = ""
 ) -> O.Outcome:
     """The launch brief of subagent ``for_agent`` for ``item``: the standard text, then the
     item's own part. Exit 1 for an unknown item or an unusable agent name."""
     log, cfg, _loaded = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
+    if role and role not in BR.ROLES:
+        return O.failed("brief", BR.unknown_role(role), text="")
     if not AB.AGENT_NAME.fullmatch(for_agent or ""):
         return O.failed(
             "brief", f"{for_agent!r} is not a usable agent name (letters, digits, . _ -)", text=""
@@ -85,7 +101,14 @@ def agent_brief(
             lease_s=cfg.lease.ttl_s,
             heartbeat_s=cfg.lease.heartbeat_s,
             note=note.strip(),
-            extra=cfg.session.agent_brief_extra.strip(),
+            extra="\n\n".join(
+                x
+                for x in (
+                    cfg.session.agent_brief_extra.strip(),
+                    BR.render(cfg, st, role, item=item) if role else "",
+                )
+                if x
+            ),
             rules=[charter] if charter else [],
             decisions=decisions,
             decisions_all=total,

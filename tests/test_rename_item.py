@@ -92,8 +92,8 @@ def test_abandon_repoint_to_refuses_a_cycle_and_a_dead_target(repo):
 
 def test_abandon_with_dependents_offers_repoint(repo):
     _setup(repo)
-    _c, out, _e = run_cli(repo, "abandon", "A", "--reason", "x")
-    assert "--repoint-to" in out
+    code, _out, err = run_cli(repo, "abandon", "A", "--reason", "x")
+    assert code == 3 and "--repoint-to" in err, err  # 92a8a886d: refused, naming both ways out
 
 
 def test_the_tombstone_names_the_new_id_once_and_repoint_to_self_is_refused(repo):
