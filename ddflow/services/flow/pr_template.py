@@ -31,7 +31,9 @@ def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
     cut can hide a secret from the redactor or leave a prefix of one), then lines folded to
     spaces, backslashes escaped, the cell delimiter escaped, and the ESCAPED text bounded to
     ``cell_max`` (`[flow].pr_body_cell_max`)."""
-    flat = " ".join(scrub(str(text or "")).split())
+    flat = scrub(
+        " ".join(scrub(str(text or "")).split())
+    )  # folding can CREATE a match: scrub again
     out = flat.replace("\\", "\\\\").replace("|", "\\|")
     if len(out) > cell_max:
         cut = out[: cell_max - 1]

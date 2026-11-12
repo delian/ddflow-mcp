@@ -204,3 +204,12 @@ def test_a_secret_is_redacted_before_a_cut_or_an_escape_can_hide_it(item):
     st = fold(log.read_all(), strict=False)
     text = _body(repo, st, st.items["T1"])
     assert SECRET not in text and SECRET[:12] not in text, text
+
+
+def test_folding_lines_cannot_create_an_unredacted_secret_prefix():
+    from ddflow.services.flow.pr_template import _cell
+
+    secret = "token value 1234567890"
+    scrub = lambda t: t.replace(secret, "[REDACTED]")  # noqa: E731
+    out = _cell("token\nvalue 1234567890", 12, scrub)
+    assert "token value" not in out and "1234" not in out, out
