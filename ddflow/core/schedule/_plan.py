@@ -251,8 +251,12 @@ def plan(
     hold: Callable[[Item], Blocked | None] | None = None,
     parallel: FC.Decision | None = None,
     with_deps: bool = False,
+    tags: Sequence[str] = (),
 ) -> Plan:
     """Compute the ready set.
+
+    ``tags`` keeps only the candidates carrying EVERY one of them (NV-next-tag-filter); the
+    caps are still counted across the whole queue.
 
     ``hold`` lets a caller withhold an item the pure state cannot see is spoken for (a
     waiter in line, `claim` would refuse it): a Blocked it returns goes to ``blocked`` and
@@ -280,6 +284,8 @@ def plan(
             for i in state.items.values()
             if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
         ]
+    if tags:
+        candidates = [i for i in candidates if set(tags) <= set(i.tags)]
     p.cycles = find_cycles(state.live_by_id())
     in_cycle = {n for c in p.cycles for n in c}
     live = state.active_leases(now, grace)
