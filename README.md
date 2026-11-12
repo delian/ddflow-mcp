@@ -509,8 +509,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=ed7f49f2da1a -->
-<details><summary>All 106 commands</summary>
+<!-- ddflow:begin README/commands sha=bc6aba03b64a -->
+<details><summary>All 107 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -561,6 +561,7 @@ needs a line written by hand here.
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |
 | `ddflow session` | see `ddflow session --help` |
+| `ddflow correct` | correct a wrongly recorded value, history kept |
 | `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
 | `ddflow recover` | find crashed agents' work; --all --plan triages it (exit 2 = nothing) |
@@ -870,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=63f173a34ecf -->
-<details><summary>All 709 knobs across 65 sections</summary>
+<!-- ddflow:begin README/knobs sha=4198bbc84a32 -->
+<details><summary>All 721 knobs across 66 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1345,6 +1346,18 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `premerge.enabled` | `true` |  |
+| `premerge.stages` | `["pre-commit"]` |  |
+| `premerge.budget_s` | `120` |  |
+| `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
+| `premerge.fix` | `true` |  |
+| `premerge.commit_fixes` | `true` |  |
+| `premerge.max_fix_rounds` | `1` |  |
+| `premerge.precommit_command` | `"pre-commit"` |  |
+| `premerge.skip_hooks` | `[]` |  |
+| `premerge.generic_hooks` | `true` |  |
+| `premerge.large_file_kb` | `500` |  |
+| `premerge.test_command` | `"python -m pytest -q -x"` |  |
 | `prices.limit` | `{}` |  |
 | `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |

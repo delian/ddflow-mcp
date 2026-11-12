@@ -12,6 +12,7 @@ the value may be a secret, which keeps every digest off. A scrub removes the old
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -82,8 +83,6 @@ def _author(log, kind: str, rid: str) -> str:
 def _holds(st: Any, kind: str, rid: str, rec: Any, agent: str, grace_s: int) -> bool:
     """Does ``agent`` hold a live lease on the item the record is on (the item itself for a
     task or a phase)?"""
-    import time
-
     item = rid if kind in ("task", "phase") else str(getattr(rec, "item", "") or "")
     it = st.items.get(item) if item else None
     lease = getattr(it, "lease", None)

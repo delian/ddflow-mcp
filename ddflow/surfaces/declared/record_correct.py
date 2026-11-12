@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...api import record_correct as RC
 from ...core import outcome as O
 from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
@@ -33,8 +34,6 @@ def _text_of(a: dict, nearest: str) -> tuple[str | None, str]:
 
 
 def correct_call(repo, a: dict, agent: str):
-    from ...api import record_correct as RC
-
     text, why = _text_of(a, RC.NEAREST)
     if text is None:
         return O.failed(RC.VERB, why)
