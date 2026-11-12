@@ -210,7 +210,10 @@ def test_whole_suite_command_detection():
     assert not whole("pytest tests --ignore-glob=tests/test_s*.py")
     assert not whole("pytest --ignore tests/")
     assert not whole("pytest --sw-skip tests/")
-    assert not whole("pytest --ff tests/")
+    assert whole("pytest --ff tests/")  # failed-first only reorders
+    assert not whole("pytest -x tests/")  # stops at the first failure
+    assert not whole("pytest --maxfail 2 tests/")
+    assert not whole("pytest -nfoo tests/")
     assert not whole("pytest test_foo.py --doctest-glob tests")
     assert not whole("pytest test_foo.py --log-file tests")
     assert not whole("pytest --basetemp tests/ tests/test_a.py")
@@ -236,7 +239,7 @@ def test_a_class_with_an_untimed_run_has_no_total_minutes():
     assert rerun["runs"] == 2
     assert rerun["suite_minutes"] is None  # [600 s, untimed]: a partial sum is not the total
     assert rerun["suite_minutes_timed"] == 10.0
-    assert rerun["queue_minutes"] is None  # one run has no recorded queue wait either
+    assert rerun["queue_minutes"] == 1.0  # only the recorded waits are summed
     assert rerun["untimed"] == 1
     assert rep["avoidable_suite_minutes"] is None
     assert "1 untimed" in SW.text(rep)

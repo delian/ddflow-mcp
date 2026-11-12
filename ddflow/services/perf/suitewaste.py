@@ -52,9 +52,20 @@ FALSIFIER_SHARE = 0.25
 #: The pytest options a whole-suite command may carry: they change how the run executes, never
 #: which tests it selects. A flag outside these makes the command unrecognised (not counted),
 #: never guessed whole.
-_PLAIN_FLAGS = ("-q", "-qq", "-v", "-vv", "-x", "--no-header", "-ra", "-rA", "--strict-markers")
+_PLAIN_FLAGS = (
+    "-q",
+    "-qq",
+    "-v",
+    "-vv",
+    "--no-header",
+    "-ra",
+    "-rA",
+    "--strict-markers",
+    "--ff",
+    "--failed-first",
+)
 #: Options that take a value (next argument, or ``=value``; ``-n24`` for ``-n``).
-_VALUE_FLAGS = ("-n", "-p", "--timeout", "--tb", "--maxfail", "--durations", "--dist")
+_VALUE_FLAGS = ("-n", "-p", "--timeout", "--tb", "--durations", "--dist")
 _ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
 
@@ -100,7 +111,7 @@ def _whole_command(command: str) -> bool:
             skip = True
         elif a in _PLAIN_FLAGS or a.split("=", 1)[0] in _VALUE_FLAGS:
             continue
-        elif re.fullmatch(r"-n\S+", a):
+        elif re.fullmatch(r"-n(\d+|auto)", a):
             continue
         elif _ROOT.match(a):
             root = True
@@ -214,7 +225,8 @@ def build(
             #: None when any run of the class recorded no time: a partial sum is not the total.
             "suite_minutes": _minutes([r["suite_s"] for r in by[c]], whole=True),
             "suite_minutes_timed": _minutes([r["suite_s"] for r in by[c]]),
-            "queue_minutes": _minutes([r["queue_s"] for r in by[c]], whole=True),
+            #: A run that did not queue has no wait: only the recorded waits are summed.
+            "queue_minutes": _minutes([r["queue_s"] for r in by[c]]),
             "untimed": sum(r["suite_s"] is None for r in by[c]),
         }
         for c in CLASSES
