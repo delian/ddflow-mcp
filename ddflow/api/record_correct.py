@@ -74,7 +74,7 @@ def _coerce(kind: str, name: str, raw: Any) -> Any:
 def _author(log, kind: str, rid: str) -> str:
     """The agent that first recorded ``rid``: the agent of the first event on its subject."""
     for ev in log.read_all():
-        if ev.subject == rid and ev.kind.split(".")[0] in (kind, "task", "phase", "item"):
+        if ev.subject == rid and ev.kind.startswith(f"{kind}."):
             return ev.agent
     return ""
 
@@ -100,14 +100,16 @@ def _check_request(rc: Any, reason: str, fields: Mapping[str, Any]) -> O.Outcome
         return O.failed(
             VERB,
             f"the reason is {len(reason)} characters; at most {rc.correct_reason_max_chars} "
-            "([records].correct_reason_max_chars). Say why it was wrong, not what it said.",
+            "([records].correct_reason_max_chars). Say why it was wrong, not what it said. "
+            f"{NEAREST}",
         )
     if not fields:
         return O.failed(VERB, f"name a field and its new text. {NEAREST}")
     if len(fields) > rc.correct_max_fields:
         return O.failed(
             VERB,
-            f"{len(fields)} fields; at most {rc.correct_max_fields} ([records].correct_max_fields)",
+            f"{len(fields)} fields; at most {rc.correct_max_fields} "
+            f"([records].correct_max_fields). {NEAREST}",
         )
     return None
 

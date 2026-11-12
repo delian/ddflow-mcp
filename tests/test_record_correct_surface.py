@@ -248,6 +248,8 @@ def test_cli_and_mcp_are_one_declaration(proj):
         proj, "ddflow_correct", agent="alice", id="B1", field="summary", text="old name", reason="r"
     )
     assert not bad, out
+    assert _state(proj).bugs["B1"].summary == "old name"
+    assert len(_corrections(proj)) == 2
     from ddflow.surfaces.tools import TOOLS
     from ddflow.surfaces.tools import families as F
 
@@ -307,3 +309,41 @@ def test_help_and_readme_name_the_verb():
     assert "ddflow correct" in (root / "README.md").read_text()
     topics = list((root / "ddflow/templates/prompts/help").glob("*.md"))
     assert any("ddflow correct" in t.read_text() for t in topics)
+
+
+def test_every_refusal_names_the_nearest_verb(proj):
+    code, out, err = run_cli(
+        proj, "correct", "B1", "--field", "summary", "--text", "x", "--reason", "r" * 600
+    )
+    assert code != 0 and "ddflow correct <id>" in out + err, out + err
+
+
+def test_a_binary_file_is_a_refusal_not_a_traceback(proj, tmp_path):
+    f = tmp_path / "bad.bin"
+    f.write_bytes(b"\xff\xfe\x00\x80\x81")
+    code, out, err = run_cli(
+        proj, "correct", "B1", "--field", "summary", "--from-file", str(f), "--reason", "r"
+    )
+    assert code != 0 and "Traceback" not in out + err and "as text" in out + err, out + err
+    assert not _corrections(proj)
+
+
+def test_the_author_is_read_from_the_selected_kind_only(proj):
+    """A task and a phase of one id: the phase's author is the phase.added event's agent."""
+    EventLog(proj, "bob").append("task.added", "X1", {"title": "t"})
+    EventLog(proj, "alice").append("phase.added", "X1", {"title": "p"})
+    code, _o, err = run_cli(
+        proj,
+        "correct",
+        "X1",
+        "--kind",
+        "phase",
+        "--field",
+        "body",
+        "--text",
+        "b",
+        "--reason",
+        "r",
+        agent="alice",
+    )
+    assert code == 0, err

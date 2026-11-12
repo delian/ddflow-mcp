@@ -24,8 +24,8 @@ def _text_of(a: dict) -> tuple[str | None, str]:
     if path:
         try:
             return Path(path).read_text(), ""
-        except OSError as exc:
-            return None, f"cannot read {path}: {exc.strerror or exc}"
+        except (OSError, ValueError) as exc:  # ValueError: bytes that are not text
+            return None, f"cannot read {path} as text: {getattr(exc, 'strerror', '') or exc}"
     if a.get("text") is None:
         return None, "give the new text: --text TEXT or --from-file PATH"
     return str(a["text"]), ""
