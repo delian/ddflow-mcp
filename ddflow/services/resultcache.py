@@ -61,6 +61,9 @@ def _code_entries(cwd: Path) -> dict[str, str] | None:
     untracked = G.paths(cwd, "ls-files", "--others", "--exclude-standard")
     if changed is None or untracked is None:
         return None
+    for rel, val in list(entries.items()):  # every submodule, edited or not, by what it holds now
+        if val.startswith("160000 ") and (cwd / rel / ".git").exists():
+            changed = [*changed, rel]
     for rel in {*changed, *untracked}:
         path = cwd / rel
         if not os.path.lexists(path):  # a broken symlink is still something
