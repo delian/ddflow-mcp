@@ -208,3 +208,29 @@ def test_the_kind_is_declared_with_its_text_fields_redacted():
     assert k is not None
     assert "reason" in k.text
     assert "fields" in k.text
+
+
+def test_a_secret_correction_keeps_no_digest_of_the_old_value(seeded, log):
+    _correct(log, "B1", "bug", {"summary": "a long enough clean text"}, digest_old=False)
+    (row,) = _st(seeded).corrections["bug:B1"][-1]["fields"]
+    assert row["old"] == ""
+    assert row["new"]
+
+
+def test_digest_old_defaults_to_keeping_the_old_digest(seeded, log):
+    _correct(log, "B1", "bug", {"summary": "a long enough clean text"})
+    (row,) = _st(seeded).corrections["bug:B1"][-1]["fields"]
+    assert row["old"]
+
+
+def test_digest_old_must_be_a_bool(seeded, log):
+    data = {
+        "kind": "bug",
+        "fields": {"summary": "x"},
+        "reason": "r",
+        "digest_chars": 12,
+        "min_chars": 8,
+        "digest_old": "no",
+    }
+    with pytest.raises(ValueError, match="digest_old"):
+        _folded(seeded, log, data)
