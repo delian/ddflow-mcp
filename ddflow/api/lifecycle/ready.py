@@ -4,7 +4,9 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import difflib
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,7 @@ from ...core.schedule import (
     critical_path,
     glob_conflict,
     wave_of,
+    with_tags,
 )
 from ...core.tier import tier_of
 from ...services import flow as FS
@@ -44,19 +47,25 @@ def next_(
     phase_only: bool = False,
     flat: bool = False,
     exclude_leased: bool = False,
+    tags: Sequence[str] = (),
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`).
 
     ``flat`` (False) groups the ready list by ``wave:N`` bucket (bugs and
     dependency-carrying items lead each bucket); ``exclude_leased`` drops ready items
-    whose globs overlap another agent's live lease to ``excluded_leased``.
+    whose globs overlap another agent's live lease to ``excluded_leased``. ``tags`` (every
+    one required, ``wave:N`` included) limits the offer to items carrying them; a tag no
+    item carries is a refusal naming the nearest ones, never an empty answer.
     """
 
     log, cfg, st = _load(repo, agent)
     unknown = _unknown_phase(st, phase)
     if unknown:
         return O.failed("next", unknown, phase=phase)
+    tags = _clean_tags(tags)
+    if unknown_tag := _unknown_tag(st, tags):
+        return O.failed("next", unknown_tag, tags=list(tags))
     promoted: list[str] = []
     if cfg.flow.auto_promote:
         # Continuous delivery where the operator asked for it: an environment in
@@ -83,7 +92,10 @@ def next_(
         if rep.changes:
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
-    p = plan_for_offer(repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only)
+    p = plan_for_offer(
+        repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only, tags=tags
+    )
+    p.blocking_deps = with_tags(p.blocking_deps, tags)
     excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
@@ -100,6 +112,7 @@ def next_(
         "interrupted": p.interrupted,
         "critical_path": critical_path(st, phase, cfg),
         "finished_phases": p.finished,
+        "filter": {"tag": list(tags), "phase": phase},
         "_render": {"plan": p},
     }
     if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
@@ -110,6 +123,24 @@ def next_(
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
     return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
+
+
+def _clean_tags(tags: Sequence[str]) -> tuple[str, ...]:
+    """``tags`` stripped of blanks and repeats, in the order given."""
+    return tuple(dict.fromkeys(t.strip() for t in tags if t and t.strip()))
+
+
+def _unknown_tag(st, tags: Sequence[str]) -> str:
+    """Why ``tags`` cannot slice the queue: one that NO live item carries, with the nearest
+    tags that exist ("" when every tag is in use). An empty slice of a typo reads as 'nothing
+    to do', and a driver takes that for a finished wave."""
+    known = {t for i in st.items.values() if not i.removed for t in i.tags}
+    for tag in tags:
+        if tag not in known:
+            near = difflib.get_close_matches(tag, sorted(known), n=5, cutoff=0.6)
+            hint = f" Nearest: {', '.join(near)}." if near else ""
+            return f"no item carries the tag {tag!r}.{hint}"
+    return ""
 
 
 def _actionable(p) -> bool:

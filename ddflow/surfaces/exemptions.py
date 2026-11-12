@@ -41,6 +41,11 @@ EXEMPTIONS: tuple[Command, ...] = (
         "shell, `approve` a person's act; neither is worth tools/list bytes",
     ),
     Command(
+        path=("completion",),
+        reason="edits the person's own shell startup file (consent: `install --yes`) and prints a "
+        "script for their shell; an MCP tool has no shell to activate it in",
+    ),
+    Command(
         path=("grant",),
         reason="a person's act (DX-operator-grants-recorded): `grant add` is refused under any "
         "agent identity like `approve`, so no tool carries it; `list` goes with it",
