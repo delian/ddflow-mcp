@@ -124,11 +124,13 @@ def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: 
     return Decision("pause", _resume_at(over, now, recheck_s), names, why)
 
 
-def resume(evals: Sequence[WindowEval], pause_at: float) -> bool:
-    """May a paused subject resume? Only when every window has a fresh figure below the line:
-    a stale or missing one is not evidence that the quota came back, and neither is an empty
-    list (a profile that was lost or failed to read looks the same as one that stopped
-    limiting). The caller resumes a subject whose profile is now unlimited by its profile."""
+def resume(profile: quota.Profile, evals: Sequence[WindowEval], pause_at: float) -> bool:
+    """May a paused subject resume? A profile that no longer limits (unlimited or unknown)
+    never pauses, so yes. A limited one only when every window has a fresh figure below the
+    line: a stale or missing figure is not evidence that the quota came back, and an empty
+    list from a limited profile is a failed read, not an all-clear."""
+    if profile.state != "limited":
+        return True
     return bool(evals) and all(
         e.fraction is not None and not e.stale and e.fraction < pause_at for e in evals
     )

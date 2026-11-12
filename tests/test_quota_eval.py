@@ -122,7 +122,12 @@ def test_resume_needs_a_fresh_figure_below_the_line():
     stale = Q.evaluate(profile(W5H), [reading(value=10.0, stale=True)], NOW)
     missing = Q.evaluate(profile(W5H), [], NOW)
     over = Q.evaluate(profile(W5H), [reading(value=95.0)], NOW)
-    assert [Q.resume(x, 0.9) for x in (fresh, stale, missing, over)] == [True, False, False, False]
+    assert [Q.resume(profile(W5H), x, 0.9) for x in (fresh, stale, missing, over)] == [
+        True,
+        False,
+        False,
+        False,
+    ]
 
 
 def test_a_fixed_window_resets_at_its_next_period_boundary():
@@ -161,5 +166,12 @@ def test_the_run_reason_never_claims_a_measurement_or_the_absence_of_a_limit_wro
     assert Q.decide((), 0.9, NOW, 60).reason == "no window limits this subject"
 
 
-def test_an_empty_evaluation_is_not_evidence_to_resume():
-    assert Q.resume((), 0.9) is False
+def test_an_empty_evaluation_of_a_limited_profile_is_not_evidence_to_resume():
+    assert Q.resume(profile(W5H), (), 0.9) is False
+
+
+@pytest.mark.parametrize(
+    "p", [quota.Profile("a", unlimited=True), quota.Profile("a", unknown=True)]
+)
+def test_a_profile_that_no_longer_limits_may_resume(p):
+    assert Q.resume(p, Q.evaluate(p, [], NOW), 0.9) is True
