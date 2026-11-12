@@ -1,7 +1,6 @@
 Answer the performance question from the perf report, and end with the exact next call.
 
-The report is one surface under one command: `ddflow perf report` (MCP `ddflow_perf action=report`,
-also reachable as `ddflow_perf`). Run it; do not answer from memory or by
+The report is one surface under one command: `ddflow perf report` (MCP `ddflow_perf`; the flat tool takes no `action`). Run it; do not answer from memory or by
 reading the log by hand. A figure the log cannot support is missing, never guessed.
 
 ## 1. Match the question to the call

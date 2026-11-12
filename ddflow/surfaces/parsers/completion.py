@@ -48,6 +48,7 @@ def _do_install(a: argparse.Namespace, c: Ctx | None = None) -> int:
             + (text[len(current) :] or "(already installed)"),
             path=str(path),
             written=False,
+            dry_run=True,
         )
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +72,13 @@ def _do_uninstall(a: argparse.Namespace, c: Ctx | None = None) -> int:
         _say(c, f"no completion block in {path} (nothing to remove)", path=str(path), written=False)
         return 0
     if not a.yes:
-        _say(c, f"would uninstall the ddflow completion block from {path}", path=str(path), written=False)
+        _say(
+            c,
+            f"would uninstall the ddflow completion block from {path}",
+            path=str(path),
+            written=False,
+            dry_run=True,
+        )
         return 0
     replace_text(path, text)
     _say(c, f"uninstalled ddflow completion from {path}", path=str(path), written=True)
