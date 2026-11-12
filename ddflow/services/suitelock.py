@@ -337,7 +337,7 @@ def _ordered(cfg: Any, queue: Path, names: list[str]) -> list[SQ.Waiting]:
                 n,
                 str(note.get("class") or SQ.ITEM),
                 float(note.get("cost_s") or 0.0),
-                str(note.get("agent") or n),
+                str(note.get("agent") or n.split("-", 1)[-1].rsplit(".", 1)[0]),
                 waited,
             )
         )

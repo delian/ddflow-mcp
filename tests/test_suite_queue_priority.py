@@ -171,7 +171,11 @@ def test_a_queued_fix_of_red_main_overtakes_older_item_runs_through_the_lock(tmp
         _until(lambda: tickets() == 3)
     for t in threads:
         t.join(30)
-    assert got[0] == "fix-Bmain-red-boom" and set(got) == {"item-1", "item-2", fix_name()}
+    assert got == [
+        fix_name(),
+        "item-1",
+        "item-2",
+    ]  # each ran once, the fix first, the items in arrival order
 
 
 def fix_name():
@@ -219,3 +223,12 @@ def test_a_malformed_or_costless_holder_note_does_not_break_the_estimate(tmp_pat
             (slots / "suites.0.holder").write_text(body)
             line = [W("me", cost=60.0)]
             assert "estimated wait" in SL._eta(line, "me", 1, slots, 600.0)
+
+
+def test_two_tickets_of_one_holder_without_notes_are_one_agent(tmp_path: Path):
+    q = tmp_path / "queue"
+    q.mkdir()
+    for ts in ("00000000000000000001", "00000000000000000002"):
+        (q / f"{ts}-same.ticket").touch()
+    rows = SL._ordered(cfg(), q, sorted(p.name for p in q.glob("*.ticket")))
+    assert len({w.agent for w in rows}) == 1
