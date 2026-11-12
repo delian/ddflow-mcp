@@ -99,6 +99,20 @@ def test_a_redaction_that_errors_fails_closed(tmp_path, cfg, monkeypatch):
     assert key not in raw and RE.FAILED_MARKER in raw
 
 
+def test_a_failed_redaction_scrubs_to_the_stable_placeholder_not_a_failure_marker():
+    # Befd5e5baa3: a failed redaction must degrade to the ONE stable placeholder every
+    # redaction path already recognises -- `[REDACTED]` -- never
+    # `[REDACTED:redaction-failed]`. The old marker surfaced the redactor's own failure as
+    # an item's visible title/body (gskip-fix-Bbd88c54354-1 rendered it) and is unreadable.
+    placeholder, n = RE.fail_closed_text()
+    assert placeholder == "[REDACTED]" and n == 1
+    assert "failed" not in placeholder and "redaction-failed" not in placeholder
+    assert RE.fail_closed_data({"title": "x", "tags": ["a b"]}) == {
+        "title": "[REDACTED]",
+        "tags": ["[REDACTED]"],
+    }
+
+
 def test_the_event_writer_fails_closed_when_its_redactor_errors(tmp_path, monkeypatch):
     from ddflow.core import redact as R
 
