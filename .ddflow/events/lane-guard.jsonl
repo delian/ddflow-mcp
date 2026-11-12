@@ -202,3 +202,4 @@
 {"agent":"lane-guard","data":{"at":1794469021.710167,"holder":"lane-guard"},"id":"e6ec65af19c9f5fca730063fe","kind":"lease.renewed","lamport":180954,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T07:37:01.840809Z"}
 {"agent":"lane-guard","data":{"at":1794469616.1918316,"holder":"lane-guard"},"id":"eac7867033d96ffdd24a99727","kind":"lease.renewed","lamport":181028,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T07:46:56.325803Z"}
 {"agent":"lane-guard","data":{"at":1794469641.8449185,"holder":"lane-guard"},"id":"e1ff960c5c421dcdc158d481b","kind":"lease.renewed","lamport":181037,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T07:47:21.985507Z"}
+{"agent":"lane-guard","data":{"tags":["bugfix","no-deps","wave:0"]},"id":"ee48171a165da7c13621c5b98","kind":"task.updated","lamport":181042,"schema":1,"subject":"fix-Bmain-red-merge-review-pipeline","ts":"2026-11-12T07:47:34.644436Z"}
