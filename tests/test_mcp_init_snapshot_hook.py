@@ -26,6 +26,7 @@ from ddflow.surfaces import ifacesnap
 from ddflow.surfaces.mcp import Server, serve
 
 INS = importlib.import_module("ddflow.surfaces.mcp._instructions")
+ROOT = Path(__file__).resolve().parents[1]
 SNAP_TEXT = "FROM THE SNAPSHOT"
 NOTICE = "UPGRADE-NOTICE-PENDING"
 
@@ -126,10 +127,10 @@ def test_a_handshake_from_the_snapshot_takes_milliseconds(tmp_path, monkeypatch)
 
     monkeypatch.setattr(INS, "_instruction_vars", slow)
     srv = Server(repo)
-    t0 = time.perf_counter()
-    _init(srv)
-    _discover(srv)
-    assert time.perf_counter() - t0 < 0.2, "initialize must answer in under 200 ms"
+    for answer in (_init, _discover):
+        t0 = time.perf_counter()
+        answer(srv)
+        assert time.perf_counter() - t0 < 0.2, f"{answer.__name__} must answer in under 200 ms"
 
 
 # ---- when the snapshot is not used -----------------------------------------------------------
@@ -295,7 +296,7 @@ def test_a_failing_notice_never_fails_the_first_tool_call(tmp_path, monkeypatch)
 
 
 def _spawn_roundtrip(repo: Path, frames: list[str], timeout: float = 120) -> list[dict]:
-    env = {**os.environ, "DDFLOW_REPO": str(repo)}
+    env = {**os.environ, "DDFLOW_REPO": str(repo), "PYTHONPATH": str(ROOT)}
     env.pop("DDFLOW_MCP_OFFLOAD", None)
     proc = subprocess.run(
         [sys.executable, "-m", "ddflow.surfaces.mcp"],
@@ -338,3 +339,13 @@ def test_malformed_frames_do_not_stop_a_snapshot_handshake(tmp_path):
     _write_snapshot(repo)
     out = _spawn_roundtrip(repo, ["{broken", "[1]", _init_frame(7), "null"])
     assert any(r.get("id") == 7 and r["result"]["instructions"] == SNAP_TEXT for r in out), out
+
+
+def test_a_live_handshake_after_a_cached_one_cancels_the_deferred_notice(tmp_path, notice):
+    repo = _repo(tmp_path)
+    _write_snapshot(repo)
+    srv = Server(repo)
+    assert NOTICE not in _init(srv)["instructions"]  # served from the snapshot: notice deferred
+    S.path(repo).unlink()  # the next handshake (a second one, or an expired snapshot) is live
+    assert NOTICE in _init(srv)["instructions"]
+    assert not any(NOTICE in t for t in _tool_texts(srv)), "said once, in the handshake"

@@ -311,6 +311,7 @@ class Server(_Handlers):
             self._notice_deferred = True
             return snap["instructions"]
         stable, volatile = _instructions_parts(self.repo, self.agent, self.tier)
+        self._notice_deferred = False  # this handshake says the upgrade line itself
         self.snapshot_due = stable
         return stable + volatile
 
