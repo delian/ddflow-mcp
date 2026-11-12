@@ -324,3 +324,14 @@ def test_inflight_dedupe_compares_what_is_stored_not_what_was_computed(repo: Pat
     for want in ("recorded", "unchanged"):
         ev = log.read_all()
         assert S.record_inflight(log, cfg, sid, ev, fold(ev, strict=False), "a1") == want
+
+
+def test_a_late_expiry_record_does_not_hide_writes_made_after_the_real_lapse():
+    # The lease ran out at NOW-7500; a reaper only wrote lease.expired at NOW-100, and the
+    # session wrote at NOW-1000, after the real lapse: it is not dead.
+    evs = _seed(
+        _ev("session.note", "s1", 8, NOW - 1000, text="still working"),
+        _ev("lease.expired", "T1", 9, NOW - 100, agent="x", holder="a1", event="e", reason="r"),
+        _ev("lease.released", "T1", 10, NOW - 90, agent="b2", holder="a1"),
+    )
+    assert _dead(evs) == []

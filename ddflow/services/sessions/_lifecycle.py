@@ -125,10 +125,25 @@ def _epoch(ts: str) -> float:
 
 def _lapses(events: list, st: Any, agent: str, now: float, grace_s: int) -> list[float]:
     """When `agent`'s leases lapsed: from `lease.expired` events and from the state's lapsed
-    leases (a reclaim replaces the lease in state, the event stays in the log)."""
-    out = [
-        _epoch(e.ts) for e in events if e.kind == "lease.expired" and e.data.get("holder") == agent
-    ]
+    leases (a reclaim replaces the lease in state, the event stays in the log).
+
+    A `lease.expired` is often written by a reaper long after the lease ran out, so its own
+    time is only the latest the lapse can be: the lapse is the TTL end of the holder's last
+    acquisition or renewal of that item before the event, when the log has one."""
+    last_ttl_end: dict[str, float] = {}  # item -> end of the holder's latest known TTL
+    out: list[float] = []
+    for e in events:
+        d = e.data
+        if e.kind in ("lease.acquired", "lease.renewed") and d.get("holder", e.agent) == agent:
+            at = d.get("at")
+            if isinstance(at, (int, float)):
+                prior = last_ttl_end.get(e.subject, 0.0)
+                ttl = d.get("ttl_s")
+                end = at + (ttl if isinstance(ttl, (int, float)) else 0)
+                last_ttl_end[e.subject] = max(prior, end) if e.kind == "lease.renewed" else end
+        elif e.kind == "lease.expired" and d.get("holder") == agent:
+            wrote = _epoch(e.ts)
+            out.append(min(wrote, last_ttl_end[e.subject]) if e.subject in last_ttl_end else wrote)
     for it in st.items.values():
         lease = it.lease
         if lease is not None and lease.holder == agent and not lease.live(now, grace_s):
