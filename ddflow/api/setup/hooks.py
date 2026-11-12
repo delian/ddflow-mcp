@@ -321,6 +321,8 @@ def _on_lifecycle(
     if dry_run:
         return _HookResult(result="dry-run", note="ddflow hooks: dry-run")
     cfg = Config.load(repo)
+    if not ending and not cfg.session.inflight_note:
+        return _HookResult(result="off")  # before anything is written, a phantom session included
     log, who = ID.open_log(repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0))
     events = log.read_all()
     st = fold(events, strict=False)
@@ -331,8 +333,6 @@ def _on_lifecycle(
         return _HookResult(
             result=S.close_ended(log, cfg, sid, events, st, str(p.raw.get("reason") or ""))
         )
-    if not cfg.session.inflight_note:
-        return _HookResult(result="off")
     return _HookResult(result=S.record_inflight(log, cfg, sid, events, st, who.id))
 
 

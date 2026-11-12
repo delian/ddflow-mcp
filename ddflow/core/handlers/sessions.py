@@ -241,7 +241,8 @@ def _h_session_ended(st: State, ev: Event) -> None:
     sess = _session(st, ev)
     how = str(ev.data.get("how") or "")
     last = str(ev.data.get("last_active") or "")
-    # A session found dead ended when it last wrote, not when somebody noticed.
-    sess.ended_at = last if how == "interrupted" and last else ev.ts
-    sess.how, sess.last_active = how, last
+    if how or not sess.how:  # a bare later end (a summary) keeps how the session ended
+        # A session found dead ended when it last wrote, not when somebody noticed.
+        sess.ended_at = last if how == "interrupted" and last else ev.ts
+        sess.how, sess.last_active = how, last
     sess.summary = (ev.data.get("summary") or "").strip() or sess.summary

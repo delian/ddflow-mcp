@@ -78,10 +78,10 @@ def record_inflight(log: EventLog, cfg: Config, sid: str, events: list, st: Any,
     `holding nothing` is written only when an earlier note said otherwise, so a session
     that never held anything leaves no note. Returns what happened."""
     text = inflight_text(st, agent, cfg)
-    before = _last_inflight(events, sid)
-    if text == before or (text == "holding nothing" and not before):
-        return "unchanged"
     clean, _n = R.redact(text, cfg)
+    before = _last_inflight(events, sid)  # stored redacted, so compared redacted
+    if clean == before or (text == "holding nothing" and not before):
+        return "unchanged"
     log.append("session.note", sid, {"text": clean, "item": "", "source": INFLIGHT_SOURCE})
     return "recorded"
 

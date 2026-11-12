@@ -277,3 +277,50 @@ def test_refresh_adds_the_options_to_an_entry_written_without_them(repo: Path):
         == 30
     )
     assert CH.install_spec(repo, h).startswith("the ddflow SessionEnd hook is already")
+
+
+def test_a_bare_later_end_keeps_how_the_session_was_closed(repo: Path):
+    log = EventLog(repo, "a1")
+    log.append("session.started", "s1", {})
+    log.append(
+        "session.ended",
+        "s1",
+        {"summary": "", "how": "interrupted", "last_active": "2026-01-01T00:00:00.000000Z"},
+    )
+    log.append("session.ended", "s1", {"summary": "late summary"})
+    sess = fold(log.read_all(), strict=False).sessions["s1"]
+    assert sess.how == "interrupted" and sess.ended_at == "2026-01-01T00:00:00.000000Z"
+    assert sess.summary == "late summary"
+
+
+def test_stop_with_the_note_off_writes_nothing_not_even_a_session(repo: Path):
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "session.inflight_note", "false")
+    before = len(EventLog(repo, "p").read_all())
+    out = _hook(repo, "stop", {"session_id": "never-seen"})
+    assert out.data["result"] == "off"
+    assert len(EventLog(repo, "p").read_all()) == before
+
+
+def test_inflight_dedupe_compares_what_is_stored_not_what_was_computed(repo: Path):
+    log = EventLog(repo, "a1")
+    cfg = Config.load(repo)
+    cfg.session.redact_extra = [r"holding T1"]  # the whole note redacts to a placeholder
+    S.capture_prompt(log, cfg, "raw", "start")
+    sid = S.harness_session_id("raw")
+    log.append("task.added", "T1", {"title": "t", "phase": "", "needs": [], "globs": []})
+    log.append(
+        "lease.acquired",
+        "T1",
+        {
+            "holder": "a1",
+            "at": time.time(),
+            "ttl_s": 600,
+            "worktree": "",
+            "branch": "",
+            "globs": [],
+        },
+    )
+    for want in ("recorded", "unchanged"):
+        ev = log.read_all()
+        assert S.record_inflight(log, cfg, sid, ev, fold(ev, strict=False), "a1") == want

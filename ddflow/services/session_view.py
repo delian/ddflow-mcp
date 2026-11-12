@@ -39,6 +39,7 @@ class _Acc:
     implicit: bool = False
     started: str = ""
     ended: str = ""
+    how: str = ""
     summary: str = ""
     last: str = ""
     entries: list[dict[str, Any]] = field(default_factory=list)
@@ -51,13 +52,16 @@ def _apply_started(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
     s.tool = d.get("tool", "") or s.tool
     s.implicit = s.implicit or bool(d.get("implicit"))
     if d.get("resumed"):  # a prompt on an ended session reopens it
-        s.ended = ""
+        s.ended, s.how = "", ""
 
 
 def _apply_ended(s: _Acc, ev: Any, d: dict[str, Any]) -> None:
     how, last = d.get("how") or "", d.get("last_active") or ""
-    # A session found dead ended when it last wrote (the fold's rule, `_h_session_ended`).
-    s.ended = last if how == "interrupted" and last else ev.ts
+    # A session found dead ended when it last wrote (the fold's rule, `_h_session_ended`);
+    # a bare later end (a summary) keeps how it ended.
+    if how or not s.how:
+        s.ended = last if how == "interrupted" and last else ev.ts
+        s.how = how
     # Trimmed, and an empty one never blanks an earlier summary (B194).
     s.summary = (d.get("summary") or "").strip() or s.summary
 
