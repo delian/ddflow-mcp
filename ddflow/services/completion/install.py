@@ -18,6 +18,16 @@ _BEGIN = "# >>> ddflow completion >>>"
 _END = "# <<< ddflow completion <<<"
 
 
+def _expand(path: str | Path, env) -> Path:
+    """``path`` with a leading ``~`` resolved from ``env``'s HOME (the injected port, not the
+    process); with no HOME in ``env`` the process's own resolution is the fallback."""
+    text = str(path)
+    home = env.get("HOME")
+    if home and (text == "~" or text.startswith("~/")):
+        return Path(home + text[1:])
+    return Path(text).expanduser()
+
+
 def target_file(shell: str, home: str | Path, env=_ENV) -> Path:
     """The startup file a shell reads interactively (what install would edit).
 
@@ -25,14 +35,14 @@ def target_file(shell: str, home: str | Path, env=_ENV) -> Path:
     ``ZDOTDIR``, fish honours ``XDG_CONFIG_HOME`` (both defaulting back to ``home`` when
     unset), so install edits the file the shell will actually read.
     """
-    root = Path(home).expanduser()
+    root = _expand(home, env)
     if shell == "fish":
         xdg = env.get("XDG_CONFIG_HOME")
-        base = Path(xdg).expanduser() if xdg else root / ".config"
+        base = _expand(xdg, env) if xdg else root / ".config"
         return base / "fish" / "config.fish"
     if shell == "zsh":
         zdotdir = env.get("ZDOTDIR")
-        base = Path(zdotdir).expanduser() if zdotdir else root
+        base = _expand(zdotdir, env) if zdotdir else root
         return base / ".zshrc"
     if shell == "bash":
         return root / ".bashrc"
