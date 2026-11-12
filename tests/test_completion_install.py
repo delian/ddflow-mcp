@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from ddflow.services.completion import install
 from ddflow.surfaces.parsers import completion
@@ -121,3 +122,18 @@ def test_install_reactivates_a_commented_out_block(tmp_path):
     out = install.install_text("bash", disabled)
     assert out != disabled
     assert install._activate_line("bash") in out.splitlines()
+
+
+def test_target_file_resolves_tilde_from_the_injected_env_not_the_process(monkeypatch):
+    class _Env:
+        def __init__(self, values):
+            self.values = values
+
+        def get(self, name, default=None):
+            return self.values.get(name, default)
+
+    monkeypatch.setenv("HOME", "/real")
+    fake = _Env({"HOME": "/fake", "ZDOTDIR": "~/zdot", "XDG_CONFIG_HOME": "~/xdg"})
+    assert install.target_file("zsh", "~", fake) == Path("/fake/zdot/.zshrc")
+    assert install.target_file("fish", "~", fake) == Path("/fake/xdg/fish/config.fish")
+    assert install.target_file("bash", "~", fake) == Path("/fake/.bashrc")

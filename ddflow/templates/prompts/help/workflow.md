@@ -24,6 +24,9 @@ Two things make an item safe to hand out, and both are declared on it:
 holding it, no file conflict, under the parallelism cap. Exit 2 means nothing is
 actionable — which is an answer, and usually means something is blocked rather than
 that the queue is empty. `ddflow next --json` gives the same thing with reasons.
+Slice it by label: `ddflow next --tag TAG` (repeat for several, all must match; any
+`ns:value` label), `--wave N` for tag `wave:N`, and `--phase ID`, alone or together. A tag
+no item carries is refused (exit 1) with the nearest ones, never an empty answer.
 
 `ddflow claim <id>` takes a lease and creates a git worktree for it. Leases expire, so
 a crashed agent's work is reclaimable; `ddflow heartbeat <id>` renews one during long

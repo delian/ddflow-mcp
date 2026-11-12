@@ -321,7 +321,7 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--role ROLE] [--note NOTE] [target]
   
   positional arguments:
     target                the item id (as --item; required with --for-agent)
@@ -334,6 +334,8 @@
     --for-agent FOR_AGENT
                           render the standard launch brief of subagent NAME for the item (`--item`
                           or the positional id)
+    --role ROLE           the project's rules for a role: phase-closer, fixer, researcher or
+                          reviewer (with --for-agent: appended to the launch brief)
     --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''
@@ -1980,12 +1982,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths, variants, swarm, slo or batch
+                          tiny, paths, variants, swarm, slo, batch or suitewaste
     item                  with retro: the item id
   
   options:
@@ -2573,7 +2575,7 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--adopt] [--reason REASON] [--full] [--cursor CURSOR]
   
   options:
     -h, --help       show this help message and exit
@@ -2581,6 +2583,8 @@
     --apply
     --all
     --plan
+    --adopt
+    --reason REASON
     --full           print everything: lift the default output caps ([output] max_rows, max_chars)
                      for this call
     --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)

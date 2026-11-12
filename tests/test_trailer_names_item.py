@@ -307,7 +307,7 @@ def test_a_waiver_declared_alone_is_accepted_not_inert(repo):
 
 
 def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
-    from ddflow.infra import proc as P
+    from ddflow.adapters import proc as P  # what infra.git calls; infra.proc only re-exports
     from ddflow.services import enforce as E
 
     def broken(*_a, **_k):
