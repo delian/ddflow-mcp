@@ -487,22 +487,30 @@ def disagreements(repo: Path | str, logged: list[dict[str, Any]]) -> list[str]:
         stored = _read(_store(repo))["tokens"]
     except AuthRefused:
         return []
+    now = CLOCK.wall()
     by_id = {r["id"]: r for r in logged}
     notes: list[str] = []
-    for token_id in sorted(set(stored) - set(by_id)):
-        row = stored[token_id]
-        if not isinstance(row, dict):
-            continue  # a row verify would refuse; nothing this can say
-        notes.append(
-            f"unrecorded: token {token_id} of {row.get('name')} is in the store but has no "
-            f"log record (a crash between the store and the log); `tokens revoke "
-            f"{row.get('name')}` ends it"
-        )
-    for token_id, row in sorted(by_id.items()):
-        if token_id in stored or row["state"] != ACTIVE:
-            continue
-        notes.append(
-            f"unrecorded: token {token_id} of {row['name']} is ended in the store but the "
-            "log still lists it active; it will not verify"
-        )
+
+    def live(row: Any) -> bool:
+        exp = row.get("expires") if isinstance(row, dict) else None
+        return isinstance(exp, (int, float)) and exp > now
+
+    for token_id in sorted(set(stored) | set(by_id)):
+        s_live = live(stored.get(token_id))
+        l_row = by_id.get(token_id)
+        l_active = l_row is not None and l_row.get("state") == ACTIVE
+        if s_live and l_row is None:
+            notes.append(
+                f"unrecorded: token {token_id} of {stored[token_id].get('name')} is live in "
+                f"the store but has no log record (a crash between the store and the log); "
+                f"`tokens revoke {stored[token_id].get('name')}` ends it"
+            )
+        elif s_live != l_active:
+            name = stored[token_id].get("name") if s_live else l_row.get("name")
+            tail = (
+                "is live in the store but not listed as active; it will still verify"
+                if s_live
+                else "is listed active but the store has ended or expired it; it will not verify"
+            )
+            notes.append(f"unrecorded: token {token_id} of {name} {tail}")
     return notes
