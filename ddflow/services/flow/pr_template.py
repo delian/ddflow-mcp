@@ -10,6 +10,7 @@ secret redactor before it can leave the project (r-consent-outward): the request
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,9 @@ def _first_line(text: object) -> str:
     return (str(text or "").strip().splitlines() or [""])[0]
 
 
+_BARE_PIPE = re.compile(r"(?<!\\)\|")
+
+
 def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
     """One Markdown table cell: SECRET-REDACTED first (on the raw text, so neither escaping nor a
     cut can hide a secret from the redactor or leave a prefix of one), then lines folded to
@@ -36,6 +40,7 @@ def _cell(text: object, cell_max: int, scrub: Callable[[str], str]) -> str:
         " ".join(scrub(str(text or "")).split())
     )  # folding can CREATE a match: scrub again
     out = scrub(flat.replace("\\", "\\\\").replace("|", "\\|"))  # escaping can create a match too
+    out = _BARE_PIPE.sub(r"\\|", out)  # a scrub that ate an escape must not leave a delimiter
     if len(out) > cell_max:
         cut = out[: cell_max - 1]
         if (len(cut) - len(cut.rstrip("\\"))) % 2:  # never end on a dangling escape

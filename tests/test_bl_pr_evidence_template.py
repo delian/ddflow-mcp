@@ -255,3 +255,11 @@ def test_a_non_task_item_lists_its_own_kinds_pipeline(repo):
     for gate in want:
         assert f"| {gate} | not run" in text, (gate, text)
     assert "| rubber_duck | not run" not in text or "rubber_duck" in want
+
+
+def test_a_scrub_that_removes_the_escape_still_leaves_no_bare_delimiter():
+    from ddflow.services.flow.pr_template import _cell
+
+    scrub = lambda t: t.replace("foo\\", "[REDACTED]")  # noqa: E731
+    out = _cell("foo|bar", 50, scrub)
+    assert "|" not in out.replace("\\|", ""), out
