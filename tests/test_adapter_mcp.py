@@ -217,9 +217,7 @@ def test_the_default_adapter_imports_no_other_ddflow_layer_and_no_subprocess():
     # `mcp.py` under the 20 KB ceiling), so a level-1 `.` import is a sibling adapter, not
     # another layer. `ddflow` (absolute) and `..` reach layers above `adapters`.
     assert not [
-        m
-        for m in mods
-        if m == "subprocess" or m.startswith("ddflow") or m.startswith("..")
+        m for m in mods if m == "subprocess" or m.startswith("ddflow") or m.startswith("..")
     ], mods
 
 
