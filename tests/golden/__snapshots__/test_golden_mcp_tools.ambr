@@ -702,6 +702,17 @@
           "type": "boolean",
           "description": "With `--phase`: return the phase's own ready items only, hiding the ready upstream blocking-dependencies shown by default."
          },
+         "tag": {
+          "type": "array",
+          "description": "Only items with this tag, e.g. wave:3; repeat: all must match.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "wave": {
+          "type": "integer",
+          "description": "Shorthand for tag wave:N."
+         },
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
