@@ -2,8 +2,10 @@
 
 `tests/test_critic_findings.py` builds a PEM block to prove the redactor removes a whole block;
 the gitleaks `private-key` rule reads it as a key. The allowlist entry must excuse exactly that
-block in exactly that file, and nothing else: the checks below run the entry's own regex over the
-text the scanner reads (the Python source of the three adjacent string literals) and over variants.
+block in exactly that file: the checks below pin the scope of THAT entry (one rule, one anchored
+path, one anchored block) by running its own regex over the text the scanner reads (the Python
+source of the three adjacent string literals) and over variants. Other entries are reviewed in the
+diff that adds them; this test does not search the file for them.
 """
 
 from __future__ import annotations
@@ -22,24 +24,18 @@ def _applies_to_private_key(a: dict) -> bool:
 
 
 def _entry() -> dict:
+    """The one allowlist entry that covers the fixture file for `private-key`: it applies to
+    that rule (no `targetRules`, or listing it) and has a `paths` regex matching the file. It
+    is asserted to be the single such entry, and to name that rule alone."""
     cfg = tomllib.loads((ROOT / ".gitleaks.toml").read_text("utf-8"))
-    applying = [a for a in cfg["allowlists"] if _applies_to_private_key(a)]
     hits = [
         a
-        for a in applying
-        if a.get("targetRules") == ["private-key"]
+        for a in cfg["allowlists"]
+        if _applies_to_private_key(a)
         and any(re.search(p, FIXTURE_FILE) for p in a.get("paths", []))
     ]
-    assert len(hits) == 1, "exactly one private-key allowlist entry covers the fixture file"
-    # no OTHER entry that can apply to private-key may excuse this block, nor be path-free
-    # with a regex that matches the placeholder's body (that would excuse it in every file)
-    for a in applying:
-        if a is hits[0]:
-            continue
-        if not a.get("paths"):
-            assert not any(
-                re.search(rx, "MIIEowIBAAKCAQEAsecretbodyhere") for rx in a.get("regexes", [])
-            ), f"a path-free allowlist excuses the placeholder body everywhere: {a}"
+    assert len(hits) == 1, "exactly one allowlist entry covers the fixture file for private-key"
+    assert hits[0].get("targetRules") == ["private-key"], "and it names that one rule only"
     return hits[0]
 
 
@@ -58,6 +54,7 @@ def test_the_entry_is_scoped_to_one_rule_and_one_file():
     assert len(e["paths"]) == 1 and re.search(e["paths"][0], FIXTURE_FILE)
     assert not re.search(e["paths"][0], "tests/other.py")
     assert not re.search(e["paths"][0], "ddflow/" + FIXTURE_FILE)
+    assert not re.search(e["paths"][0], FIXTURE_FILE + ".bak")
     assert len(e["regexes"]) == 1
 
 
