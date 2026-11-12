@@ -4,8 +4,8 @@
 the gitleaks `private-key` rule reads it as a key. The allowlist entry must excuse exactly that
 block in exactly that file: the checks below pin the scope of THAT entry (one rule, one anchored
 path, one anchored block) by running its own regex over the text the scanner reads (the Python
-source of the three adjacent string literals) and over variants. Other entries are reviewed in the
-diff that adds them; this test does not search the file for them.
+source of the three adjacent string literals) and over variants. Another entry is only checked for
+excusing the placeholder body in every file (no `paths` and a regex that matches it).
 """
 
 from __future__ import annotations
@@ -36,6 +36,13 @@ def _entry() -> dict:
     ]
     assert len(hits) == 1, "exactly one allowlist entry covers the fixture file for private-key"
     assert hits[0].get("targetRules") == ["private-key"], "and it names that one rule only"
+    # a path-free entry that can apply to private-key applies to EVERY file: its regexes must not
+    # match the placeholder body (that would excuse the body everywhere)
+    for a in cfg["allowlists"]:
+        if a is not hits[0] and _applies_to_private_key(a) and not a.get("paths"):
+            assert not any(
+                re.search(rx, "MIIEowIBAAKCAQEAsecretbodyhere") for rx in a.get("regexes", [])
+            ), f"a path-free allowlist excuses the placeholder body in every file: {a}"
     return hits[0]
 
 
