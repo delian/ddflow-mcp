@@ -10,8 +10,8 @@ the configurable window, answers:
   none was unavailable or partial, before it completed -- the swarm ledger's first pass);
 * rolled up per phase, per model and per gate kind, with deterministic gates labelled
   apart from the model (rubber_duck / critic) gates;
-* the window (``[metrics_runs].runs_window_days``, default 30) and the outlier flag
-  (``[metrics_runs].outlier_runs``).
+* the window ([metrics].runs_window_days, default 30) and the outlier flag
+  ([metrics].outlier_runs).
 
 A figure with fewer than ``[metrics].min_samples`` merged items is None, never a zero.
 ``provider`` registers the headline rows the summary shows under ``[runs]``; ``rollup`` is
@@ -46,8 +46,8 @@ def _rate(num: int, den: int, minimum: int) -> float | None:
 
 
 def window_start(cfg: Config, now: float, since: float | None) -> float:
-    """The window's floor: an explicit ``since`` else ``[metrics_runs].runs_window_days`` back."""
-    return since if since is not None else now - float(cfg.metrics_runs.runs_window_days) * DAY_S
+    """The window's floor: an explicit ``since`` else [metrics].runs_window_days back."""
+    return since if since is not None else now - float(cfg.metrics.runs_window_days) * DAY_S
 
 
 def merged_spans(facts: Facts, state: State, phase: str, floor: float) -> list[Span]:
@@ -110,9 +110,10 @@ def _per_gate(facts: Facts, merged: list[Span], minimum: int) -> list[dict]:
         at_done = done.get(o.item)
         if at_done is None or o.at > at_done:
             continue
-        first.setdefault((o.item, o.gate), o.kind)
         if o.kind in RAN:
             runs[o.gate] += 1
+            # the FIRST RUN verdict: a skip before the first run is not one.
+            first.setdefault((o.item, o.gate), o.kind)
     items: dict[str, int] = defaultdict(int)
     passed: dict[str, int] = defaultdict(int)
     for (_item, gate), kind in first.items():
@@ -177,7 +178,7 @@ def rollup(
     sessions = _models(events)
     leases = _lease_models(events)
     rows = _per_item(facts, state, merged, sessions, leases)
-    outliers = max(int(cfg.metrics_runs.outlier_runs), 0)
+    outliers = max(int(cfg.metrics.outlier_runs), 0)
     for r in rows:
         r["outlier"] = outliers > 0 and r["runs"] >= outliers
     first_pass_items = sum(r["first_pass"] for r in rows)
@@ -192,7 +193,7 @@ def rollup(
     return {
         "group_by": group_by,
         "window": {
-            "days": cfg.metrics_runs.runs_window_days,
+            "days": cfg.metrics.runs_window_days,
             "since": floor,
         },
         "merged": n,
@@ -219,7 +220,7 @@ def provider(ctx: Context) -> list[dict]:
     Computed from the one fold ``Context.facts`` without re-folding; only the aggregate
     figures the summary needs, never a per-item row (that is ``rollup``)."""
     cfg = ctx.cfg
-    floor = ctx.since if ctx.since is not None else ctx.now - float(cfg.metrics_runs.runs_window_days) * DAY_S
+    floor = ctx.since if ctx.since is not None else ctx.now - float(cfg.metrics.runs_window_days) * DAY_S
     merged = merged_spans(ctx.facts, ctx.facts.state, ctx.phase, floor)
     by_item: dict[str, list[Outcome]] = defaultdict(list)
     for o in ctx.facts.outcomes:
@@ -248,5 +249,5 @@ def provider(ctx: Context) -> list[dict]:
             "n": n,
             "value": runs_total / n if n >= minimum else None,
         },
-        {"metric": "runs.total_runs", "group": "", "n": n, "value": runs_total if n else None},
+        {"metric": "runs.total_runs", "group": "", "n": n, "value": runs_total if n >= minimum else None},
     ]

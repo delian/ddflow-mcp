@@ -86,7 +86,7 @@ def test_the_runs_window_days_knob_is_read_not_hardcoded():
     g = log()
     st, cfg, _ = frozen(g)
     cfg.metrics.min_samples = 1
-    cfg.metrics_runs.runs_window_days = 1
+    cfg.metrics.runs_window_days = 1
     report = rollup(g.events, st, cfg, now=T0 + 86400 + 500)
     assert [r["item"] for r in report["per_item"]] == ["beta"]
 
