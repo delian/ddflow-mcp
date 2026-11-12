@@ -275,9 +275,12 @@ ALWAYS = True
 
 def test_the_prices_accessors_read_the_knobs():
     """The `KNOWN_UNREAD` reason for `prices.limit` / `prices.reset`: the accessors really read
-    them, so an exemption cannot outlive the read."""
+    them -- per model, so a constant return cannot pass -- and an exemption cannot outlive the
+    read."""
     cfg = Config()
-    cfg.prices.limit = {"m": "5"}
-    cfg.prices.reset = {"m": "1d"}
-    assert cfg.prices.limit_of("m") == 5.0
-    assert cfg.prices.reset_of("m") == "1d"
+    cfg.prices.limit = {"a": "5", "b": 7}
+    cfg.prices.reset = {"a": "1d", "b": "2d"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("b")) == (5.0, 7.0)
+    assert cfg.prices.limit_of("other") is None
+    assert (cfg.prices.reset_of("a"), cfg.prices.reset_of("b")) == ("1d", "2d")
+    assert cfg.prices.reset_of("other") == "1mo"
