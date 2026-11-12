@@ -156,3 +156,17 @@ def test_a_backslash_before_a_pipe_cannot_unescape_the_delimiter(item):
         r for r in _body(repo, st, st.items["T1"]).splitlines() if r.startswith("| standards")
     )
     assert "x \\\\\\| y" in row, row  # backslash doubled, then the pipe escaped
+
+
+def test_a_cell_is_bounded_after_escaping_by_the_knob(item):
+    repo, st, it = item
+    log = EventLog(repo, "tester")
+    log.append("gate.failed", "T1", {"gate": "standards", "reason": "|" * 500, "evidence": {}})
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write("\n[flow]\npr_body_cell_max = 40\n")
+    st = fold(log.read_all(), strict=False)
+    row = next(
+        r for r in _body(repo, st, st.items["T1"]).splitlines() if r.startswith("| standards")
+    )
+    note = row.split(" | ")[-1].rstrip(" |")
+    assert len(note) <= 40 and note.endswith("…"), (len(note), row)

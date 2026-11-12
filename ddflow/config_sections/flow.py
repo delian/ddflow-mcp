@@ -8,6 +8,12 @@ from dataclasses import dataclass
 
 from ._docs import declare, knob
 
+
+def _positive_int(value: object) -> str:
+    ok = isinstance(value, int) and not isinstance(value, bool) and value > 0
+    return "" if ok else "a whole number above zero"
+
+
 #: `[flow]`'s enumerated values. Declared here, beside the knobs, so `Config.check`
 #: refuses a value outside them; `core/flow.py` imports them rather than keeping a copy.
 FLOW_MODELS = ("trunk", "gitflow")
@@ -166,7 +172,12 @@ class FlowConfig:
     )
     pr_body_template: str = knob(
         "",
-        doc="Path to the template that renders a pull request's description (`integration = \"pr\"`). Empty (default): `.ddflow/prompts/pr_body.md` if the project has one, else the shipped template, which lists every gate with its outcome, the review rounds and triage, the bugs fixed with their regression tests and the changelog entry. Placeholders come from recorded data only, and the finished text is secret-redacted before it goes to the forge. `ddflow prompts eject pr_body` writes an editable copy.",
+        doc='Path to the template that renders a pull request\'s description (`integration = "pr"`). Empty (default): `.ddflow/prompts/pr_body.md` if the project has one, else the shipped template, which lists every gate with its outcome, the review rounds and triage, the bugs fixed with their regression tests and the changelog entry. Placeholders come from recorded data only, and the finished text is secret-redacted before it goes to the forge. `ddflow prompts eject pr_body` writes an editable copy.',
+    )
+    pr_body_cell_max: int = knob(
+        200,
+        doc="Longest one cell of the pull-request description's gate table, in characters after escaping; a longer gate note is cut with an ellipsis (the full reason stays in the log, `ddflow gate list`). Bounds the outward text (`pr_body_template`).",
+        check=_positive_int,
     )
     #: path -> regex with ONE capture group (the version text): `version cut` bumps these.
     version_files: dict[str, str] = knob(
