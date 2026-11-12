@@ -172,7 +172,9 @@ def _registers_a_completer(shell: str, text: str) -> bool:
     and zsh, the fish completion function), not a placeholder that merely parses."""
     name = "__fish_ddflow_complete" if shell == "fish" else "_python_argcomplete"
     pattern = rf"function {name}\b" if shell == "fish" else rf"(?:^|[;\n]|\\n){name}\(\) \{{"
-    return re.search(pattern, text) is not None
+    registered = "complete --command ddflow" if shell == "fish" else "-F _python_argcomplete ddflow"
+    registers = registered in text or "compdef _python_argcomplete ddflow" in text
+    return re.search(pattern, text) is not None and registers
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)
