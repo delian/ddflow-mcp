@@ -410,3 +410,18 @@ def test_binary_lock_content_is_hashed_without_loss(tmp_path: Path):
     one = key(repo)
     (repo / "uv.lock").write_bytes(b"\xfe")
     assert key(repo) not in (None, one)
+
+
+def test_a_submodule_untracked_file_mode_and_bytes_are_in_the_key(tmp_path: Path):
+    lib = project(tmp_path, "lib2")
+    repo = project(tmp_path, "main2")
+    git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(lib), "lib")
+    git(repo, "commit", "-q", "-m", "add lib")
+    f = repo / "lib" / "payload.bin"
+    f.write_bytes(b"\xff")
+    one = key(repo)
+    f.write_bytes(b"\xfe")
+    two = key(repo)
+    f.chmod(0o755)
+    three = key(repo)
+    assert len({one, two, three}) == 3 and None not in (one, two, three)

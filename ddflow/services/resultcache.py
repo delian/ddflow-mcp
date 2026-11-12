@@ -107,7 +107,8 @@ def _submodule_dirt(path: Path) -> str | None:
     parts = []
     for rel in sorted(others):
         try:
-            parts.append(f"{rel}={_digest((path / rel).read_bytes().decode('latin-1'))}")
+            mode = os.lstat(path / rel).st_mode & 0o111
+            parts.append(f"{rel}:{mode}={_digest((path / rel).read_bytes().decode('latin-1'))}")
         except OSError:
             return None
     return _digest(diff.out, *parts) if diff.out or parts else ""
