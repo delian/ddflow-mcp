@@ -64,7 +64,9 @@ def _runs_by_bucket(ctx: Context, size: dict[str, int | None]) -> dict[str, list
     bucket_runs: dict[str, list[dict]] = defaultdict(list)
     # A run "had a finding" when the item+gate pair of the run has a triaged finding.
     with_finding: set[tuple[str, str]] = {
-        (f.item, f.gate) for f in ctx.facts.findings if ctx.in_scope(f.item, f.at)
+        (f.item, f.gate)
+        for f in ctx.facts.findings
+        if f.gate in REVIEW_GATES and ctx.in_scope(f.item, f.at)
     }
     for o in ctx.facts.outcomes:
         if o.gate not in REVIEW_GATES or o.kind not in RAN or not ctx.in_scope(o.item, o.at):

@@ -80,7 +80,7 @@ def build(ctx: Context, size: dict[str, int | None]) -> dict:
         "pairs_overlapping": pairs,
         "pairs_path_disjoint": disjoint,
         "eligible_items": len(eligible),
-        "eligible_share": rate(len(eligible), len(win), minimum),
+        "eligible_share": None if truncated else rate(len(eligible), len(win), minimum),
         "max_lines": ELIGIBLE_MAX_LINES,
         "truncated": truncated,
     }

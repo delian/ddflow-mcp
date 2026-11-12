@@ -218,3 +218,10 @@ def test_overlap_figures_alone_count_as_data():
     empty = {"buckets": [], "overlap": {"items": 0}}
     assert not B.has_figures(empty)
     assert B.has_figures({"buckets": [], "overlap": {"items": 3}})
+
+
+def test_a_truncated_overlap_scan_gives_no_share(monkeypatch):
+    from ddflow.services.metrics import overlap as OV
+
+    monkeypatch.setattr(OV, "MAX_PAIRS", 2)
+    assert run(overlap_log()).metrics["overlap"]["eligible_share"] is None
