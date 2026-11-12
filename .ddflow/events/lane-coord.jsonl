@@ -238,3 +238,4 @@
 {"agent":"lane-coord","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e9e3d5560c2542601b88a49fe","kind":"cadence.ran","lamport":181521,"schema":1,"subject":"recall_recheck:CO-brief-roles","ts":"2026-11-12T08:43:57.791612Z"}
 {"agent":"lane-coord","data":{"at":1794473650.9679365,"holder":"lane-coord"},"id":"eb0e27290373445d86ef944b2","kind":"lease.renewed","lamport":181571,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T08:54:11.120278Z"}
 {"agent":"lane-coord","data":{"at":1794473925.0754263,"holder":"lane-coord"},"id":"e6e89e9a27bd6044bfa5e0ea8","kind":"lease.renewed","lamport":181600,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T08:58:45.188890Z"}
+{"agent":"lane-coord","data":{"at":1794474270.516171,"holder":"lane-coord"},"id":"e06f452db2fbcf11d7ac21be3","kind":"lease.renewed","lamport":181644,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T09:04:30.650158Z"}
