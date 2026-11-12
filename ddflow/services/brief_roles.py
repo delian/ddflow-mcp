@@ -7,11 +7,19 @@ The pack is cut at a line boundary to `[roles].budget_tokens` and says so.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..core import defs as D
 from ..core.budget import approx_tokens
 
 ROLES = ("phase-closer", "fixer", "researcher", "reviewer")
 RULE_PREFIX = "rule:"
+
+
+def packaged(role: str) -> list[str]:
+    """The shipped pack of ``role``: ddflow/templates/roles/<role>.txt, one rule per line."""
+    path = Path(__file__).resolve().parent.parent / "templates" / "roles" / f"{role}.txt"
+    return [x for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
 def unknown_role(role: str) -> str:
@@ -37,7 +45,7 @@ def render(cfg, st, role: str, *, item: str = "", phase: str = "") -> str:
         "researcher": cfg.roles.researcher_rules,
         "reviewer": cfg.roles.reviewer_rules,
     }
-    lines = packs[role]
+    lines = packs[role] or packaged(role)
     head = f"# Role: {role}" + (f" ({phase})" if phase else "") + (f" on {item}" if item else "")
     body = [f"- {_line(st, str(x))}" for x in lines]
     budget = int(cfg.roles.budget_tokens)

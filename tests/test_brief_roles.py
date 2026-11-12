@@ -114,10 +114,10 @@ def test_the_reviewer_pack_names_the_key_rule_record(proj):
     assert "Load the reviewer key" in out
 
 
-def test_an_empty_pack_prints_no_cut_notice(proj):
+def test_an_empty_list_means_the_packaged_pack(proj):
     _config(proj, "[roles]\nfixer_rules = []")
     _, out, _ = run_cli(proj, "brief", "--role", "fixer")
-    assert out.strip() == "# Role: fixer"
+    assert "tests first" in out.lower()
 
 
 def test_a_budget_for_one_rule_and_the_notice_keeps_that_rule(proj):
