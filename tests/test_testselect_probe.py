@@ -126,26 +126,45 @@ def _extract(root: Path, sha: str) -> tuple[Path, list[str]]:
     return raw, git_raw(root, "ls-tree", "-r", "--name-only", sha).splitlines()
 
 
+def _changed_sets(root: Path, sha: str) -> tuple[list[str], list[str]]:
+    """(source files, test files) the merge changed, outside .ddflow."""
+    names = git_raw(root, "diff", "--name-only", "--no-renames", f"{sha}^1", sha).splitlines()
+    names = [n for n in names if n and not n.startswith(".ddflow/")]
+    return [n for n in names if not T.is_test_file(n)], [n for n in names if T.is_test_file(n)]
+
+
+def _stand_ins(root: Path, raw: Path, sha: str, src: list[str], listed: list[str]) -> dict:
+    py = [f for f in src if f.endswith(".py")]
+    added = git_raw(
+        root, "diff", "--name-only", "--no-renames", "--diff-filter=AD", f"{sha}^1", sha
+    ).splitlines()
+    return {
+        "changed": src,
+        "listed": listed,
+        "idents": TI.changed_identifiers(root, f"{sha}^1", py, tip=sha, source=raw),
+        "membership": added,
+        "phrases": TI.changed_phrases(root, f"{sha}^1", py, tip=sha, source=raw),
+    }
+
+
+def _score(raw: Path, row: MergeRow, co: list[str], got: set[str], src: list[str]) -> None:
+    """Recall of the co-changed tests; a missed one is blind (drives a subprocess) or routable."""
+    row.held = row.co if row.full else sum(1 for c in co if c in got)
+    for c in (c for c in co if not row.full and c not in got):
+        blind = drives_subprocess((raw / c).read_text("utf-8", "replace"), src)
+        (row.blind if blind else row.missed).append(c)
+
+
 def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
     """One merge against the existing selector; None when it changed no source."""
     root_s, sha, limits = args
     root = Path(root_s)
-    names = git_raw(root, "diff", "--name-only", "--no-renames", f"{sha}^1", sha).splitlines()
-    names = [n for n in names if n and not n.startswith(".ddflow/")]
-    src = [n for n in names if not T.is_test_file(n)]
-    co_all = [n for n in names if T.is_test_file(n)]
+    src, co_all = _changed_sets(root, sha)
     if not src:
         return None
     raw, listed = _extract(root, sha)
     try:
-        py = [f for f in src if f.endswith(".py")]
-        idents = TI.changed_identifiers(root, f"{sha}^1", py, tip=sha, source=raw)
-        phrases = TI.changed_phrases(root, f"{sha}^1", py, tip=sha, source=raw)
-        added = git_raw(
-            root, "diff", "--name-only", "--no-renames", "--diff-filter=AD", f"{sha}^1", sha
-        ).splitlines()
-        stand_in = {"changed": src, "listed": listed, "idents": idents, "membership": added,
-                    "phrases": phrases}  # fmt: skip
+        stand_in = _stand_ins(root, raw, sha, src, listed)
         sel = T.select(raw, "x", **stand_in, **limits)
         assert sel is not None
         suite = [p for p in listed if T.is_test_file(p) and (raw / p).is_file()]
@@ -157,10 +176,7 @@ def replay_one(args: tuple[str, str, dict]) -> MergeRow | None:
             selected=len(suite) if full else len(got), full=full,
             unrouted=not full and not got, co=len(co),
         )  # fmt: skip
-        row.held = len(co) if full else sum(1 for c in co if c in got)
-        for c in (c for c in co if not full and c not in got):
-            blind = drives_subprocess((raw / c).read_text("utf-8", "replace"), src)
-            (row.blind if blind else row.missed).append(c)
+        _score(raw, row, co, got, src)
         if full:  # what a choice narrower than the whole suite would have held at the hub
             narrow = T.select(raw, "x", **stand_in, **{**limits, "hub_importers": 0})
             assert narrow is not None
