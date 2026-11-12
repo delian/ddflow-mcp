@@ -16,27 +16,28 @@ from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api  # noqa: F401 -- _api names the api package lazily
 
 
-def _text_of(a: dict) -> tuple[str | None, str]:
+def _text_of(a: dict, nearest: str) -> tuple[str | None, str]:
     """(text, why not): the new text, from `--text` or read from `--from-file`."""
     path = a.get("from_file") or ""
     if path and a.get("text") is not None:
-        return None, "give --text or --from-file, not both"
+        return None, f"give --text or --from-file, not both. {nearest}"
     if path:
         try:
             return Path(path).read_text(), ""
         except (OSError, ValueError) as exc:  # ValueError: bytes that are not text
-            return None, f"cannot read {path} as text: {getattr(exc, 'strerror', '') or exc}"
+            why = getattr(exc, "strerror", "") or exc
+            return None, f"cannot read {path} as text: {why}. {nearest}"
     if a.get("text") is None:
-        return None, "give the new text: --text TEXT or --from-file PATH"
+        return None, f"give the new text: --text TEXT or --from-file PATH. {nearest}"
     return str(a["text"]), ""
 
 
 def correct_call(repo, a: dict, agent: str):
     from ...api import record_correct as RC
 
-    text, why = _text_of(a)
+    text, why = _text_of(a, RC.NEAREST)
     if text is None:
-        return O.failed(RC.VERB, f"{why}. {RC.NEAREST}")
+        return O.failed(RC.VERB, why)
     return RC.correct_one(
         repo,
         a["id"],

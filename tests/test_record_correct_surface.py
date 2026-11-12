@@ -325,6 +325,7 @@ def test_a_binary_file_is_a_refusal_not_a_traceback(proj, tmp_path):
         proj, "correct", "B1", "--field", "summary", "--from-file", str(f), "--reason", "r"
     )
     assert code != 0 and "Traceback" not in out + err and "as text" in out + err, out + err
+    assert "ddflow correct <id>" in out + err, "the refusal names the nearest verb"
     assert not _corrections(proj)
 
 
