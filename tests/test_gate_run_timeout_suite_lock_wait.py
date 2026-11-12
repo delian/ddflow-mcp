@@ -24,6 +24,7 @@ from ddflow.services.gates.defs import GateDef
 def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
+    cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
     cfg.ci.suite_wait_s = 0.2
     with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
         started = time.monotonic()
@@ -92,6 +93,7 @@ def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkey
     """The DOWN direction of a `wait_s` override runs end to end, not only in `SL.hold`."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
+    cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
     cfg.ci.suite_wait_s = 1.2
     now = [0.0]
 
@@ -117,6 +119,7 @@ def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypa
     """The longer wait changed when the run gives up, not what the give-up does with its place."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
+    cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
     cfg.ci.suite_wait_s = 0.2
     queue = tmp_path / "queue"
     with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
@@ -134,6 +137,7 @@ def test_a_waiter_that_reaches_the_head_restarts_its_wait_budget(tmp_path, monke
     moment it got there, recorded UNAVAILABLE with no test run)."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
+    cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
     cfg.ci.suite_wait_s = 1.0
     now = [0.0]
 
@@ -177,6 +181,7 @@ def test_an_override_waiter_reaching_the_head_keeps_a_hard_total_bound(tmp_path,
     default knob only."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
+    cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
     cfg.ci.suite_wait_s = 5.0
     now = [0.0]
 

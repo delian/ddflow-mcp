@@ -81,12 +81,11 @@ def limit(cfg: Any, cores: int | None = None) -> int:
     the cores (``cores // [suites].cores_per_suite``) and never under ``[ci].max_concurrent_suites``
     (the floor). A config with no ``[suites]`` section keeps the ``[ci]`` value."""
     floor = max(1, int(cfg.ci.max_concurrent_suites))
-    suites = getattr(cfg, "suites", None)
-    if suites is None:
+    if not hasattr(cfg, "suites"):
         return floor
-    if int(suites.max_concurrent) > 0:
-        return int(suites.max_concurrent)
-    per = max(1, int(suites.cores_per_suite))
+    if int(cfg.suites.max_concurrent) > 0:
+        return int(cfg.suites.max_concurrent)
+    per = max(1, int(cfg.suites.cores_per_suite))
     return max(floor, (cores or os.cpu_count() or 1) // per)
 
 
@@ -96,10 +95,9 @@ def load_block(
     """Why a new suite is held back by the load, "" when it is not. Only while another suite
     runs (a lone suite starts whatever the load: it is not from a suite); an unreadable load
     never blocks."""
-    suites = getattr(cfg, "suites", None)
-    if suites is None or running < 1:
+    if not hasattr(cfg, "suites") or running < 1:
         return ""
-    ceiling = float(suites.load_ceiling_per_core)
+    ceiling = float(cfg.suites.load_ceiling_per_core)
     value = (source or SIG.HostSignals()).sample().get("load")
     if value is None or value <= ceiling:
         return ""
@@ -321,7 +319,7 @@ def hold(
     slots = SLOTS.Slots(directory, NAME)
     said: tuple[int, str] = (0, "")
     reason, reason_at = "", -1e9
-    poll_s = float(getattr(getattr(cfg, "suites", None), "load_poll_s", 0.0) or 0.0)
+    poll_s = float(cfg.suites.load_poll_s) if hasattr(cfg, "suites") else 0.0
     with contextlib.ExitStack() as stack:
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
         name = ticket.name
