@@ -87,9 +87,11 @@ def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
         # flag out of the set, an extra one a flag in (nothing missing, nothing extra)
         offered = {f for o in node["options"] for f in o["flags"]}
         assert offered == _visible_flags(p, parser), path
-        # each offered option carries the choices its argparse action holds
+        # each offered option is one argparse action: its flags and choices are that
+        # action's own (a multi-flag option still has exactly the action's choices)
         for o in node["options"]:
             action = p._option_string_actions[o["flags"][0]]
+            assert list(o["flags"]) == list(action.option_strings), path
             assert o["choices"] == (
                 None if action.choices is None else [str(c) for c in action.choices]
             ), path

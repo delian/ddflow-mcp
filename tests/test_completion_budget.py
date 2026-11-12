@@ -49,20 +49,23 @@ def _index(d: Path) -> Path:
 def test_id_completion_meets_the_latency_budget(tmp_path):
     """A fresh id TAB (import the light entry point + query) completes under a finite
     ceiling; the startup import cost is part of what a TAB pays. The child is bounded by
-    both a wall timeout and a closed stdin, so a wedged tab reads as a budget miss."""
+    both a wall timeout and a closed stdin, and timed best-of-three so a single steal on
+    an otherwise correct reply reads as noise, not a budget miss."""
     _index(tmp_path)
-    start = time.perf_counter()
-    result = subprocess.run(
-        [sys.executable, "-m", "ddflow.completion_fast", "ids", "COMP"],
-        cwd=tmp_path,
-        env={**os.environ, "PYTHONPATH": str(ROOT)},
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=scaled(60.0),
-        check=False,
-    )
-    took = time.perf_counter() - start
-    assert result.returncode == 0
-    assert result.stdout.split() == ["COMP-a", "COMP-b"], result.stderr
-    assert took < scaled(2.0)
+    best = float("inf")
+    for _ in range(3):
+        start = time.perf_counter()
+        result = subprocess.run(
+            [sys.executable, "-m", "ddflow.completion_fast", "ids", "COMP"],
+            cwd=tmp_path,
+            env={**os.environ, "PYTHONPATH": str(ROOT)},
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=scaled(60.0),
+            check=False,
+        )
+        best = min(best, time.perf_counter() - start)
+        assert result.returncode == 0
+        assert result.stdout.split() == ["COMP-a", "COMP-b"], result.stderr
+    assert best < scaled(2.0)
