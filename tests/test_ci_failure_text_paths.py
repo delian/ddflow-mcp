@@ -95,6 +95,7 @@ def test_odd_path_characters_after_a_root_or_marker_do_not_count_as_the_tree() -
 def test_roots_of_equal_length_give_one_result_in_any_order() -> None:
     text = "/a/b/c"
     assert FT.normalise(text, ["/a/b", "/b/c"]) == FT.normalise(text, ["/b/c", "/a/b"])
+    assert FT.normalise(text, ["/a/b", "/b/c"]) == "<tree>/c"  # the name breaks the tie
 
 
 def test_a_base_tree_and_a_worktree_root_keep_what_follows_them() -> None:
@@ -112,3 +113,21 @@ def test_roots_are_replaced_in_one_pass_and_a_sentence_end_or_bracket_closes_a_p
     assert FT.normalise("see /srv/ci/run.", ["/srv/ci/run"]) == "see <tree>."
     assert FT.normalise("[/tmp/ddflow-ci.aaa/t.py]") == "[<tree>/t.py]"
     assert FT.normalise("/tmp/ddflow-ci.aaa.bak/x") == "/tmp/ddflow-ci.aaa.bak/x"
+
+
+def test_a_pytest_temp_inside_a_tree_reads_the_same_from_two_trees() -> None:
+    one = "File /tmp/ddflow-base.aaa/pytest-of-u/pytest-1/tests/test_a.py"
+    two = "File /tmp/ddflow-ci.bbb/pytest-of-v/pytest-2/tests/test_a.py"
+    assert FT.normalise(one) == "File <tree><pytest-tmp>/tests/test_a.py"
+    assert FT.digest(one) == FT.digest(two)
+
+
+def test_the_baseline_compare_reads_one_failure_from_two_trees_as_the_same() -> None:
+    from ddflow.services.gates import baseline_red as BR
+
+    tid = "tests/test_a.py::test_x"
+    base = {tid: TEXT.format(root="/tmp/ddflow-base.abc123")}
+    ci = {tid: TEXT.format(root="/tmp/ddflow-ci.def456")}
+    assert BR._differs(tid, ci, base) is False  # an old red is not a new offender
+    new = {tid: ci[tid].replace("not found", "is not valid json")}
+    assert BR._differs(tid, new, base) is True

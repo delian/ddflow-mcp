@@ -25,6 +25,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
+from ..ci.failure_text import normalise as normalise_paths
 from ..flakes import LINE_CHARS
 from .baseline import cache_snapshot, cache_store
 from .testcmd import counts_of
@@ -61,9 +62,10 @@ _ADDR = re.compile(r"(?<=\bat )0x[0-9a-f]+(?=>)")
 
 
 def _norm(text: str) -> str:
-    """``text`` with a memory address in an object repr blanked to ``0x``: a hex inside an
-    assertion value is left alone, so a genuine value change still reads as a new offender."""
-    return _ADDR.sub("0x", text)
+    """``text`` with a memory address in an object repr blanked to ``0x`` and the ci tree it ran
+    in blanked to ``<tree>`` (GM-ci-path-normalise): a hex inside an assertion value is left
+    alone, so a genuine value change still reads as a new offender."""
+    return _ADDR.sub("0x", normalise_paths(text))
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:

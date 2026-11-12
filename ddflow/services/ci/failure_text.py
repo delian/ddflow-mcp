@@ -42,8 +42,8 @@ def normalise(text: str, roots: Iterable[str] = ()) -> str:
     if named:  # one pass over every root: a replacement never opens a boundary for the next
         pattern = "|".join(re.escape(r) for r in named)
         text = re.sub(_START + "(?:" + pattern + ")" + _END, TREE, text)
-    text = _PYTEST.sub(PYTEST_TMP, text)
-    return _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
+    text = _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
+    return _PYTEST.sub(PYTEST_TMP, text)  # last: a pytest temp may sit inside a tree
 
 
 def digest(text: str, roots: Iterable[str] = ()) -> str:
