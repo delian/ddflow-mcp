@@ -142,7 +142,8 @@ def test_growth_rejects_a_file_already_over_the_limit_that_grew_baselined_or_not
     assert "grew" in msg and str(size) in msg
     base = repo / FS.BASELINE  # a baseline line does not license growth either
     base.parent.mkdir(parents=True)
-    base.write_text(f"old.py | {size - 50} | legacy\n")  # a baseline LOWER than the base's size
+    now = (repo / "old.py").stat().st_size
+    base.write_text(f"old.py | {now} | legacy\n")  # a baseline that WOULD mask the growth
     before = base.read_text()
     assert "grew" in FS.growth(repo, ["old.py"], FIXTURE_LIMIT, "HEAD")[0]
     assert base.read_text() == before, "a rejection never edits the baseline"
@@ -180,3 +181,12 @@ def test_a_touched_file_that_cannot_be_statted_is_an_error_not_a_pass(tmp_path):
     (repo / "loop.py").symlink_to("loop.py")  # ELOOP on stat, not a deletion
     with pytest.raises(RuntimeError, match=r"cannot measure loop\.py"):
         FS.growth(repo, ["loop.py"], FIXTURE_LIMIT, "HEAD")
+
+
+def test_a_dangling_link_is_not_read_as_a_deletion(tmp_path):
+    import pytest
+
+    repo = _based(tmp_path, {"a.py": 10})
+    (repo / "foo.py").symlink_to("missing.py")
+    with pytest.raises(RuntimeError, match="dangling"):
+        FS.growth(repo, ["foo.py"], FIXTURE_LIMIT, "HEAD")

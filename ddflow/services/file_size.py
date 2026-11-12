@@ -108,8 +108,10 @@ def growth(repo: Path, changed: list[str], limit: int, base: str) -> list[str]:
             continue
         try:
             size = (repo / rel).stat().st_size
-        except FileNotFoundError:  # deleted (a path that is gone is no growth)
-            continue
+        except FileNotFoundError:
+            if not (repo / rel).is_symlink():  # deleted (a path that is gone is no growth)
+                continue
+            raise RuntimeError(f"cannot measure {rel}: a dangling link") from None
         except OSError as exc:  # unreadable is not "deleted": the check did not see the bytes
             raise RuntimeError(f"cannot measure {rel}: {exc.strerror or exc}") from exc
         if size <= limit:
