@@ -29,23 +29,22 @@ class Gap:
 
 def rows(hs: list | None = None) -> list[Gap]:
     """The gaps: every ``(agent, feature)`` a descriptor answers ``unverified``, one entry
-    each (deduped; a rerun adds none new), in-agent gaps before orchestrator gaps (the
-    descriptor-first order the gap's ``needs`` follow)."""
+    each (deduped; a rerun adds none new), in-agent gaps before orchestrator gaps -- the
+    ordering DESCRIPTOR_FIRST describes (in_agent surface first, then driver, then parity)."""
     hs = list(HR.load() if hs is None else hs)
     catalog = [r for r in CAT.load().rows if r.axis in ("in_agent", "orchestrator")]
-    by_axis_order = {r.feature: i for i, r in enumerate(catalog)}
+    ordered = [r for r in catalog if r.axis == "in_agent"] + [
+        r for r in catalog if r.axis == "orchestrator"
+    ]
     out: list[Gap] = []
     seen: set[tuple[str, str]] = set()
     for h in hs:
         answer = AN.answers(h)
-        for axis in ("in_agent", "orchestrator"):
-            for row in sorted(
-                (r for r in catalog if r.axis == axis), key=lambda r: by_axis_order[r.feature]
-            ):
-                key = (h.id, row.feature)
-                if answer[row.feature] == "unverified" and key not in seen:
-                    seen.add(key)
-                    out.append(Gap(h.id, row.feature, row.axis))
+        for row in ordered:
+            key = (h.id, row.feature)
+            if answer[row.feature] == "unverified" and key not in seen:
+                seen.add(key)
+                out.append(Gap(h.id, row.feature, row.axis))
     return out
 
 
