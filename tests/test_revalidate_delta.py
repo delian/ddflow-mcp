@@ -208,3 +208,32 @@ def test_the_complete_hook_refuses_when_the_delta_reaches_a_test(tmp_path: Path)
     log = _Log()
     assert checks._stands(repo, Config(), log)(a) == ""
     assert log.rows == []  # nothing recorded: no pass was kept
+
+
+def test_a_rename_reaches_the_tests_that_import_the_old_path(tmp_path: Path):
+    repo, a = repo_with_tests(tmp_path)
+    git(repo, "mv", "pkg/a.py", "pkg/renamed.py")
+    git(repo, "commit", "-q", "-m", "rename")
+    b = git(repo, "rev-parse", "HEAD")
+    v = assess(repo, a, b)
+    assert "pkg/a.py" in v.delta and "pkg/renamed.py" in v.delta
+    assert v.kind in ("selected", "full")  # never 'stands': test_a imports the old module
+
+
+def test_a_document_a_test_reads_is_not_dropped_from_the_delta(tmp_path: Path):
+    repo, a = repo_with_tests(tmp_path)
+    (repo / "tests" / "test_doc.py").write_text(
+        "from pathlib import Path\n\n\ndef test_n():\n    assert Path('docs/n.md').read_text()\n"
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "test reading a doc")
+    a = git(repo, "rev-parse", "HEAD")
+    b = commit(repo, "docs/n.md", "changed\n")
+    seen = {}
+
+    def spy(tree, base, **kw):
+        seen["changed"] = kw["changed"]
+        return Selection(base=base, changed=kw["changed"])
+
+    assess(repo, a, b, selector=spy)
+    assert seen["changed"] == ["docs/n.md"]  # the selector, not a glob, decides what a doc reaches

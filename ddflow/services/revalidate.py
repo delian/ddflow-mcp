@@ -2,7 +2,8 @@
 (SV-revalidate-delta; R-suite-lock-principles-2026-11-12).
 
 A full-suite pass was recorded on commit A. Main is now at B. The delta A..B is the paths that
-differ, minus ``.ddflow/`` and ``[gates].doc_globs`` documents. Then:
+differ (a rename counts as both paths), minus ``.ddflow/`` state; the selector decides which
+documents a test reads. Then:
 
 * no path of the delta is in any test's closure (``testselect``): the pass STANDS for B, with the
   note 'unchanged by delta';
@@ -24,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 from ..core import bookkeeping
-from ..core.globs import inside
 from ..infra import git as G
 from . import testselect as TS
 
@@ -44,13 +44,14 @@ class Verdict:
     note: str = ""
 
 
-def _delta(repo: Path, a: str, b: str, doc_globs: list[str]) -> list[str] | None:
-    paths = G.paths(repo, "diff", "--name-only", a, b)
+def _delta(repo: Path, a: str, b: str) -> list[str] | None:
+    """The paths that differ between ``a`` and ``b``, a rename as BOTH its old and new path (the
+    old module's importers are the tests it breaks), ``.ddflow/`` state left out. Documents stay
+    in: a test may read one, which the selector knows."""
+    paths = G.paths(repo, "diff", "--name-only", "--no-renames", a, b)
     if paths is None:
         return None
-    return [
-        p for p in paths if not bookkeeping.is_state(p) and not any(inside(p, g) for g in doc_globs)
-    ]
+    return [p for p in paths if not bookkeeping.is_state(p)]
 
 
 def assess(
@@ -66,7 +67,7 @@ def assess(
         return Verdict(UNAVAILABLE, why="the pass or the tree names no commit")
     if a == b:
         return Verdict(STANDS, "passed", note=NOTE_STANDS)
-    delta = _delta(repo, a, b, list(cfg.gates.doc_globs or []))
+    delta = _delta(repo, a, b)
     if delta is None:
         return Verdict(
             UNAVAILABLE, why=f"git could not say what changed between {a[:12]} and {b[:12]}"
