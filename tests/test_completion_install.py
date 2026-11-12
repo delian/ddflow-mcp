@@ -97,6 +97,14 @@ def test_install_appends_a_block_when_only_a_comment_matches(tmp_path):
     assert "# >>> ddflow completion >>>" in install.install_text("bash", commented)
 
 
+def test_install_appends_when_the_marker_is_commented_or_quoted(tmp_path):
+    # a commented/quoted marker line is not an active managed block: still append one
+    commented_block = "# # >>> ddflow completion >>>\n# source <(ddflow completion bash)\n"
+    out = install.install_text("bash", commented_block)
+    assert out != commented_block
+    assert any(ln.strip() == install._BEGIN for ln in out.splitlines())
+
+
 def test_install_is_idempotent_when_a_managed_block_exists(tmp_path):
     current = install.install_text("bash", "source <(ddflow completion bash) # keep\n")
     assert install.install_text("bash", current) == current
