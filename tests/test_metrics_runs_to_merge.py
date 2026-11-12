@@ -77,12 +77,17 @@ def test_the_window_knob_excludes_an_item_completed_before_it():
     # a since AFTER alpha completed drops it: the window selects by completion time.
     after_alpha = run(g, since=T0 + 400)
     assert [r["item"] for r in after_alpha["per_item"]] == ["beta"]
-    # the runs_window_days knob moves the floor itself: at days=30 with now set so the
-    # floor lands between alpha's and beta's completion, alpha is left out.
+
+
+def test_the_runs_window_days_knob_is_read_not_hardcoded():
+    # a NON-default window: 1 day. Ending at T0+1d+500s the floor is T0+500, so alpha
+    # (completed T0+300) is out while beta (T0+800) is in. A hard-coded 30-day floor
+    # would keep alpha, so this passes only when the knob is actually read.
+    g = log()
     st, cfg, _ = frozen(g)
     cfg.metrics.min_samples = 1
-    cfg.metrics_runs.runs_window_days = 30
-    report = rollup(g.events, st, cfg, now=T0 + 30 * 86400 + 500)
+    cfg.metrics_runs.runs_window_days = 1
+    report = rollup(g.events, st, cfg, now=T0 + 86400 + 500)
     assert [r["item"] for r in report["per_item"]] == ["beta"]
 
 
