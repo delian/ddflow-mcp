@@ -67,7 +67,12 @@ def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
 
 
 def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
-    return not GA.refusal(it, gate)
+    """`accept_baseline_red`: ``gate`` is a partial ddflow MEASURED baseline-red, and NOT one only
+    a person accepts. A measured partial `gate run` did not auto-accept (its failing tests sit in
+    a file the item changed or reaches, or the knob is off; `GA.person_only`) is a person's call
+    (`gate_accept.next_step`, D-baseline-red-auto-accept), so the standing rule steps aside for it
+    through the SAME helper `complete_unavailable` reads (B7657fc26be)."""
+    return not GA.refusal(it, gate) and not GA.person_only(it, gate)
 
 
 #: The required-gate outcomes a ROUTINE completion may finish over without a person: the ONE

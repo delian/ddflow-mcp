@@ -494,6 +494,70 @@ def test_a_routine_completion_never_auto_answers_a_person_only_baseline_red_part
     assert _state(repo).items["T1"].state != "done"
 
 
+def _person_only_record():
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    def rec(auto):
+        base = {"red": True, "base": "main", "ids": ["tests/t.py::test_x"]}
+        if auto is not None:
+            base["auto"] = auto
+        return Item(
+            id="T1",
+            kind="task",
+            gates={
+                "unit_tests": GateRecord(
+                    gate="unit_tests",
+                    outcome="partial",
+                    reason="baseline-red: tests/t.py::test_x",
+                    evidence={"baseline": base},
+                )
+            },
+        )
+
+    return rec
+
+
+def test_accept_baseline_red_predicate_refuses_a_person_only_partial():
+    """B7657fc26be: `accept_baseline_red` reads the SAME `gate_accept.person_only` helper as
+    `complete_unavailable`: a measured baseline-red partial `gate run` did not auto-accept (its
+    failing tests are in a file the item changed or reaches, or the knob is off) is a person's
+    call and the standing rule must not answer it. A partial `gate run` DID auto-accept
+    (D-baseline-red-auto-accept) is unaffected."""
+    cfg = _cfg(policy=["accept_baseline_red"], policy_max_uses=99)
+    rec = _person_only_record()
+    when = PO.RULES["accept_baseline_red"].when
+    assert (
+        when(rec({"accepted": False, "why": "item reaches tests/t.py"}), "unit_tests", cfg) is False
+    )
+    assert when(rec(None), "unit_tests", cfg) is False  # measured before the auto path existed
+    assert when(rec({"accepted": True, "ids": ["tests/t.py::test_x"]}), "unit_tests", cfg) is True
+
+
+def test_an_agent_approve_is_not_accepted_by_policy_for_a_person_only_partial(repo, monkeypatch):
+    """B7657fc26be end to end: `ddflow approve T1 unit_tests` from an agent shell (harness
+    marker, no --agent) over a person-only baseline-red partial, with `accept_baseline_red` on
+    and the window open, is NOT accepted by `policy:accept_baseline_red`: it is refused and no
+    policy answer is recorded."""
+    _person_only_baseline_red(repo)
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(
+        cfg_path.read_text().replace(
+            'policy = ["complete_unavailable"]', 'policy = ["accept_baseline_red"]'
+        )
+    )
+    monkeypatch.setenv("CLAUDECODE", "1")
+    code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "agent tries")
+    assert code != 0, (out, err)
+    assert "ACCEPTED" not in out + err
+    answered = [
+        r
+        for r in asks_of(_state(repo)).values()
+        if r["answered_by"] == "policy:accept_baseline_red"
+    ]
+    assert answered == []
+
+
 def test_a_person_accepted_baseline_red_partial_is_not_refused_for_the_agent_complete(repo):
     """B-complete-self-approves-over-person-only-partial, round-2: once a PERSON accepts the
     measured baseline-red partial (`ddflow approve T1 unit_tests`), the verdict settles that
