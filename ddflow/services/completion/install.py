@@ -10,6 +10,7 @@ activation script itself stays the single source of truth, and the block differs
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 _BEGIN = "# >>> ddflow completion >>>"
@@ -17,12 +18,21 @@ _END = "# <<< ddflow completion <<<"
 
 
 def target_file(shell: str, home: str | Path) -> Path:
-    """The startup file a shell reads interactively (what install would edit)."""
+    """The startup file a shell reads interactively (what install would edit).
+
+    ``home`` is the fallback; where the shell itself looks first wins: zsh honours
+    ``ZDOTDIR``, fish honours ``XDG_CONFIG_HOME`` (both defaulting back to ``home`` when
+    unset), so install edits the file the shell will actually read.
+    """
     root = Path(home).expanduser()
     if shell == "fish":
-        return root / ".config" / "fish" / "config.fish"
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        base = Path(xdg).expanduser() if xdg else root / ".config"
+        return base / "fish" / "config.fish"
     if shell == "zsh":
-        return root / ".zshrc"
+        zdotdir = os.environ.get("ZDOTDIR")
+        base = Path(zdotdir).expanduser() if zdotdir else root
+        return base / ".zshrc"
     if shell == "bash":
         return root / ".bashrc"
     raise ValueError(f"not a completion shell: {shell!r}")

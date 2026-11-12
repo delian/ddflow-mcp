@@ -57,6 +57,9 @@ def _do_uninstall(a: argparse.Namespace) -> int:
     if text == current:
         print(f"no completion block in {path} (nothing to remove)")
         return 0
+    if not a.yes:
+        print(f"would uninstall the ddflow completion block from {path}")
+        return 0
     path.write_text(text)
     print(f"uninstalled ddflow completion from {path}")
     return 0

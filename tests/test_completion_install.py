@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
+
 from ddflow.services.completion import install
+from ddflow.surfaces.parsers import completion
 
 
 def test_install_appends_a_guarded_block(tmp_path):
@@ -31,6 +34,14 @@ def test_target_file_per_shell(tmp_path):
     assert install.target_file("bash", tmp_path) == tmp_path / ".bashrc"
 
 
+def test_target_file_honors_zdotdir_and_xdg_config_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZDOTDIR", str(tmp_path / "zdot"))
+    assert install.target_file("zsh", tmp_path) == tmp_path / "zdot" / ".zshrc"
+    monkeypatch.delenv("ZDOTDIR")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    assert install.target_file("fish", tmp_path) == tmp_path / "xdg" / "fish" / "config.fish"
+
+
 def test_activate_line_differs_for_fish():
     text = install.install_text("fish", "")
     assert "ddflow completion fish | source" in text
@@ -52,3 +63,22 @@ def test_uninstall_an_orphaned_begin_before_a_block_keeps_user_content():
         "# <<< ddflow completion <<<\n"
     )
     assert install.uninstall_text("bash", src) == "export PATH=/x\n"
+
+
+def test_uninstall_does_not_write_without_yes(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = tmp_path / ".zshrc"
+    rc.write_text(install.install_text("zsh", "export X=1\n"))
+    a = argparse.Namespace(cmd="uninstall", shell="zsh", yes=False)
+    assert completion._do_uninstall(a) == 0
+    assert "ddflow completion" in rc.read_text()  # previewed, not written
+
+
+def test_uninstall_writes_only_with_yes(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = tmp_path / ".zshrc"
+    rc.write_text(install.install_text("zsh", "export X=1\n"))
+    a = argparse.Namespace(cmd="uninstall", shell="zsh", yes=True)
+    assert completion._do_uninstall(a) == 0
+    assert "ddflow completion" not in rc.read_text()
+    assert "export X=1\n" in rc.read_text()  # the line install did not write stays
