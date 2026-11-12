@@ -34,7 +34,7 @@ BASELINE: dict[str, tuple[int, str]] = {
         "`hooks` subcommands, kept until 1.0 (D-compat-r2)",
     ),
     "ddflow/services/claudehooks.py": (
-        9,
+        6,
         "the legacy hook table: the identities of hook entries already written into "
         "operators' settings files, kept byte for byte",
     ),
