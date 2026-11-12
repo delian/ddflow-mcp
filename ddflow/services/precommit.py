@@ -170,6 +170,7 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
         Hook("trailing-whitespace"),
         Hook("end-of-file-fixer"),
         Hook("check-merge-conflict"),
+        Hook("check-case-conflict"),
         Hook("check-added-large-files"),
         Hook("detect-private-key"),
     ]
@@ -183,7 +184,7 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
         hygiene.append(Hook("check-json", {"exclude": JSONC}))
     repos = [
         Repo("https://github.com/pre-commit/pre-commit-hooks", tuple(hygiene),
-             "whitespace, merge markers, oversized files, private keys, config files that do not parse"),
+             "whitespace, merge markers, case-colliding paths, oversized files, private keys, config files that do not parse"),
         Repo("https://github.com/gitleaks/gitleaks", (Hook("gitleaks"),),
              "secrets in the diff (reads .gitleaks.toml when the project has one)"),
     ]  # fmt: skip

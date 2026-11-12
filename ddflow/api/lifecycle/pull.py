@@ -6,6 +6,7 @@ A read verb (r-read-verbs-read-only): it appends nothing. The choice is
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,7 @@ from ...services.ticks import TickCtx
 from .._base import _load
 from ..model_cmds import LOCAL
 from .planning import plan_for_offer
-from .ready import _unknown_phase
+from .ready import _clean_tags, _unknown_phase, _unknown_tag
 
 
 def _declares_trust(path: Path, name: str) -> bool:
@@ -167,15 +168,29 @@ def next_lane(
     phase: str = "",
     agent: str = "",
     phase_only: bool = False,
+    tags: Sequence[str] = (),
 ) -> O.Outcome:
-    """The pull answer for ``lane``: an offer (exit 0), else exit 2 with why not."""
+    """The pull answer for ``lane``: an offer (exit 0), else exit 2 with why not. ``tags``
+    limits the offer as in `next` (a tag no item carries is refused)."""
     log, cfg, st = _load(repo, agent)
     if unknown := _unknown_phase(st, phase):
         return O.failed("next", unknown, phase=phase)
+    tags = _clean_tags(tags)
+    if bad_tag := _unknown_tag(st, tags):
+        return O.failed("next", bad_tag, tags=list(tags))
     now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
     p = plan_for_offer(
-        repo, log, cfg, st, kind=kind, phase=phase, agent=me, now=now, phase_only=phase_only
+        repo,
+        log,
+        cfg,
+        st,
+        kind=kind,
+        phase=phase,
+        agent=me,
+        now=now,
+        phase_only=phase_only,
+        tags=tags,
     )
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)

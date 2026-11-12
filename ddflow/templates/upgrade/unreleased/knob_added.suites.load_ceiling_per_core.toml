@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "suites.load_ceiling_per_core"
+new = '0.35'
+why = "SL-suite-load-budget: the suite lock admits by a core-derived cap and a load budget."
+impact = "additive"

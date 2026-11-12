@@ -1349,7 +1349,7 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste."
          },
          "lane": {
           "type": "string",

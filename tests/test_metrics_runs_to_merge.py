@@ -104,7 +104,15 @@ def test_a_review_gate_is_labelled_a_model_gate_and_others_deterministic():
     g.add("task.added", "gamma", "lead", T0 - 1000, title="g", body="")
     g.claim("a1", "gamma", T0 + 100, "g.py")
     g.add("gate.passed", "gamma", "a1", T0 + 200, gate="unit_tests", by="a1", evidence={})
-    g.add("gate.passed", "gamma", "a1", T0 + 300, gate="rubber_duck", by="r1", evidence={"model": "m-beta"})
+    g.add(
+        "gate.passed",
+        "gamma",
+        "a1",
+        T0 + 300,
+        gate="rubber_duck",
+        by="r1",
+        evidence={"model": "m-beta"},
+    )
     g.complete("a1", "gamma", T0 + 400)
     g.release("a1", "gamma", T0 + 401)
     by_gate = {r["gate"]: r for r in run(g)["per_gate"]}

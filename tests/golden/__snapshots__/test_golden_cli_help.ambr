@@ -1982,12 +1982,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths, variants, swarm, slo or batch
+                          tiny, paths, variants, swarm, slo, batch or suitewaste
     item                  with retro: the item id
   
   options:
@@ -2575,7 +2575,7 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--adopt] [--reason REASON] [--full] [--cursor CURSOR]
   
   options:
     -h, --help       show this help message and exit
@@ -2583,6 +2583,8 @@
     --apply
     --all
     --plan
+    --adopt
+    --reason REASON
     --full           print everything: lift the default output caps ([output] max_rows, max_chars)
                      for this call
     --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
