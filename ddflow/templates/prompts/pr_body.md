@@ -13,8 +13,8 @@
 |---|---|---|
 {% for g in gates %}| {{ g.gate }} | {{ g.outcome }}{% if g.rounds %} ({{ g.rounds }} round(s)){% endif %}{% if g.triage_confirmed or g.triage_refuted %} [{{ g.triage_confirmed }} confirmed, {{ g.triage_refuted }} refuted]{% endif %} | {{ g.note }} |
 {% endfor %}
-{% endif %}{% if bugs %}Bugs fixed (each with the regression test that fails without the fix):
-{% for b in bugs %}- {{ b.id }}: {{ b.summary }}{% if b.regression_tests %} -- {{ b.regression_tests | join(", ") }}{% endif %}
+{% endif %}{% if bugs %}Bugs fixed:
+{% for b in bugs %}- {{ b.id }}: {{ b.summary }}{% if b.regression_tests %} -- regression test: {{ b.regression_tests | join(", ") }}{% else %} -- NO regression test recorded{% endif %}
 {% endfor %}
 {% endif %}{% if changelog %}Changelog: {{ changelog.category }}: {{ changelog.line }}
 

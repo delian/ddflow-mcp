@@ -44,7 +44,7 @@ def _gates(it: Item) -> list[dict[str, Any]]:
             {
                 "gate": gate,
                 "outcome": rec.outcome,
-                "note": _first_line(rec.reason),
+                "note": _first_line(rec.reason).replace("|", "\\|"),
                 "rounds": int(ev.get("rounds") or 0),
                 **{f"triage_{k}": v for k, v in _triage_counts(it, gate).items()},
             }
@@ -57,7 +57,9 @@ def _bugs(st: State, it: Item) -> list[dict[str, Any]]:
         {
             "id": b.id,
             "summary": _first_line(b.summary),
-            "regression_tests": list(b.regression_tests or ([b.regression_test] if b.regression_test else [])),
+            "regression_tests": list(
+                b.regression_tests or ([b.regression_test] if b.regression_test else [])
+            ),
         }
         for b in st.bugs.values()
         if b.item == it.id
