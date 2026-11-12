@@ -137,15 +137,18 @@ def test_the_handshake_tells_the_agent_to_ASK_not_to_fix(repo):
     from ddflow.surfaces.mcp import _instruction_vars, _instructions
 
     _adopted(repo)
+    from ddflow.services import brief_volatile
+
     clean = _instructions(repo)
     assert "rules file needs the operator" not in clean, "it speaks when nothing is wrong"
+    assert "rules file needs the operator" not in brief_volatile.volatile_lines(
+        _instruction_vars(repo)
+    ), "the brief speaks when nothing is wrong"
 
     (repo / "AGENTS.md").unlink()
 
     # The rules-drift notice is per-session state, so it renders in the brief, not in
     # the byte-stable handshake (B-mcp-instructions-volatile-prefix).
-    from ddflow.services import brief_volatile
-
     handshake = _instructions(repo)
     assert "rules file needs the operator" not in handshake
     assert "Ask the operator before fixing it" not in handshake
