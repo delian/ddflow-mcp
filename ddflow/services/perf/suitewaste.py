@@ -22,6 +22,7 @@ never a zero. Falsifier (R-suite-lock-principles-2026-11-12): under 25 percent a
 from __future__ import annotations
 
 import re
+import shlex
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
@@ -48,7 +49,9 @@ CACHEABLE = ("passed", "failed")
 AVOIDABLE = ("rerun_same_tree_same_item", "rerun_same_tree_other_item")
 #: The research's bound: avoidable runs under this share refute the cache-first order.
 FALSIFIER_SHARE = 0.25
-_WHOLE = re.compile(r"(?:^|\s)tests/?(?:\s|$)")
+#: Pytest options that narrow a run to part of the suite.
+_NARROWING = ("-k", "-m", "--deselect", "--ignore", "--lf", "--ff", "--last-failed", "--sw")
+_ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
 
 
@@ -74,11 +77,26 @@ def _num(v: Any) -> float | None:
     return float(v) if ok else None
 
 
-def _is_suite(gate: str, ev: dict) -> bool:
-    command = ev.get("command")
-    if not isinstance(command, str) or not command:
+def _whole_command(command: str) -> bool:
+    """Does this pytest command run the whole ``tests/`` directory: the directory itself as a
+    path and no option or path narrowing it (``-k``, ``--ignore``, ``tests/test_x.py``)?"""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
         return False
-    return gate == "ci" or bool(_WHOLE.search(command))
+    if any(t.split("=")[0] in _NARROWING for t in tokens):
+        return False
+    paths = [t for t in tokens if not t.startswith("-") and re.match(r"^(\./)?tests", t)]
+    return bool(paths) and all(_ROOT.match(t) for t in paths)
+
+
+def _is_suite(gate: str, ev: dict) -> bool:
+    """A ``ci`` verdict is a whole-suite run; a ``unit_tests`` verdict only when its recorded
+    command runs the whole directory (a scoped or selected run is not)."""
+    if gate == "ci":
+        return True
+    command = ev.get("command")
+    return isinstance(command, str) and _whole_command(command)
 
 
 def runs(events: Sequence[Event], floor: float | None, now: float) -> list[dict]:
@@ -140,6 +158,8 @@ def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
 
 
 def _minutes(values: list[float | None]) -> float | None:
+    """Minutes of the runs that recorded a time; None when none did. The count of runs that
+    did not is reported beside it (``untimed``), so a partial sum is never read as the total."""
     known = [v for v in values if v is not None]
     return round(sum(known) / 60.0, 2) if known else None
 
@@ -166,6 +186,7 @@ def build(
             "runs": len(by[c]),
             "suite_minutes": _minutes([r["suite_s"] for r in by[c]]),
             "queue_minutes": _minutes([r["queue_s"] for r in by[c]]),
+            "untimed": sum(r["suite_s"] is None for r in by[c]),
         }
         for c in CLASSES
     }
@@ -223,6 +244,7 @@ def text(data: dict) -> str:
         lines.append(
             f"  {c:<28} runs {v['runs']:>4}  suite {_fmt(v['suite_minutes'])}  "
             f"queue {_fmt(v['queue_minutes'])}"
+            + (f"  ({v['untimed']} untimed, not in the minutes)" if v["untimed"] else "")
         )
     f = data["falsifier"]
     if f["holds"] is not None:

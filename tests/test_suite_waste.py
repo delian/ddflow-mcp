@@ -180,3 +180,29 @@ def test_unknown_trees_cannot_refute_the_falsifier():
     assert rep["avoidable_share"] == 0.2
     assert rep["avoidable_share_of_placed"] == 0.5
     assert rep["falsifier"]["holds"] is True
+
+
+def test_whole_suite_command_detection():
+    whole = SW._whole_command
+    assert whole("uv run pytest tests/ -q --timeout=420 -n 48")
+    assert whole("pytest ./tests/")
+    assert whole("pytest -n 24 tests")
+    assert not whole("pytest tests -k test_one")
+    assert not whole("pytest tests/ --ignore=tests/test_slow.py")
+    assert not whole("pytest tests/test_a.py tests/")
+    assert not whole("pytest -n 24 tests/golden/")
+
+
+def test_a_ci_verdict_without_a_command_is_still_a_suite_run():
+    ev = _log(("A", "ci", "passed", {"tree_sha": "aaaaaaa1+clean"}))
+    assert _report(ev, {"aaaaaaa1": "T"})["runs"] == 1
+
+
+def test_untimed_runs_are_counted_not_summed_as_zero():
+    ev = _log(
+        ("A", "ci", "passed", _ev("aaaaaaa1")),
+        ("B", "ci", "passed", {"tree_sha": "aaaaaaa2+clean"}),
+    )
+    cl = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"})["classes"]["rerun_same_tree_other_item"]
+    assert cl["suite_minutes"] is None
+    assert cl["untimed"] == 1
