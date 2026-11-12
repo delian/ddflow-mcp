@@ -174,7 +174,8 @@ def test_an_empty_evaluation_of_a_limited_profile_is_not_evidence_to_resume():
 
 
 @pytest.mark.parametrize(
-    "p", [quota.Profile("a", unlimited=True), quota.Profile("a", unknown=True)]
+    ("p", "want"),
+    [(quota.Profile("a", unlimited=True), True), (quota.Profile("a", unknown=True), False)],
 )
-def test_a_profile_that_no_longer_limits_may_resume(p):
-    assert Q.resume(p, Q.evaluate(p, [], NOW), 0.9) is True
+def test_an_unlimited_profile_may_resume_and_an_unknown_one_may_not(p, want):
+    assert Q.resume(p, Q.evaluate(p, [], NOW), 0.9) is want
