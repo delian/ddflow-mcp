@@ -12,6 +12,11 @@ resumes an agent and runs no daemon. Acting on a lane (starting or resuming it) 
     ddflow lanes fleet           every agent the log has seen, past the lane window: role, harness,
                                  model, items, lease, stop reason; lost and live work first
     ddflow lanes resume <lane>   how to resume a stopped lane, or who took its item over; read-only
+    ddflow lanes --coordinator   the coordinator's screen: running suites, lease holders (idle ones
+                                 flagged after lanes.idle_s), pending approvals with their commands,
+                                 ready work per phase and, with `--item ID`, that item's blocked-by
+                                 chain; each section is cut at lanes.coordinator_max_rows
+    ddflow lease                 the lease holders table alone (the same holders)
 
 States:
 

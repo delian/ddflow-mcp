@@ -8,6 +8,15 @@
    },
    "v": 1
   },
+  "agent.smoke": {
+   "fields": {
+    "agent": ["str"],
+    "attempts": ["list"],
+    "reason": ["str"],
+    "verdict": ["str"]
+   },
+   "v": 1
+  },
   "approval.granted": {
    "fields": {
     "digest": ["str"],

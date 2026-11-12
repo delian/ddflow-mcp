@@ -1,0 +1,18 @@
+# Shell activation for ddflow completion: fish.
+#
+# Registers the ONE completion engine (argcomplete over the ddflow parser) for this
+# shell; no command, option or choice name is spelled here. Without argcomplete there is
+# no completion, and a registration that fails is reported -- both return 0, never a
+# broken prompt.
+
+function _ddflow_activate_fish
+  if not command -q register-python-argcomplete
+    echo "ddflow: completion needs the optional 'argcomplete' extra (pip install argcomplete)" >&2
+    return 0
+  end
+  register-python-argcomplete --shell fish ddflow | source
+  return 0
+end
+
+_ddflow_activate_fish
+functions -e _ddflow_activate_fish
