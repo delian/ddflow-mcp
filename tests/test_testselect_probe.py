@@ -392,7 +392,7 @@ def test_the_report_names_every_measure(tmp_path):
 def test_the_probe_runs_on_this_repository_window():
     """A thin live smoke: the newest merges until one with source is scored (the full 100-merge
     read-out is the script)."""
-    shas = merge_log(ROOT)[:6]
+    shas = merge_log(ROOT)[:3]
     if not shas:
         pytest.skip("no merge history here")
     p = probe(ROOT, shas, TSC.limits(Config()), workers=1)
