@@ -123,16 +123,16 @@ def _store(
     failing = {
         i: digest_of(text) for i, text in sorted(got.failures.items()) if i not in got.worktree_only
     }
-    if keep_days > 0:
-        try:
+    try:
+        if keep_days > 0:
             path = _path(repo, sha, command)
             path.parent.mkdir(parents=True, exist_ok=True)
             fsio.ensure_ignored_dir(path.parent)
             body = {"sha": sha, "complete": got.complete, "measured_at": now, "tests": failing}
             atomic_write(path, json.dumps(body))
-            prune(repo, keep_days, now)
-        except OSError:
-            pass  # best effort: a failed write costs a re-measure
+        prune(repo, keep_days, now)  # also with keep 0: "keeps nothing" removes what was kept
+    except OSError:
+        pass  # best effort: a failed write costs a re-measure
     return Baseline(sha, got.complete, now, failing, False)
 
 

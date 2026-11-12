@@ -97,20 +97,45 @@ def test_keep_zero_keeps_nothing(tmp_path: Path) -> None:
     assert len(calls) == 2
 
 
-def test_the_measure_runs_under_the_lock_and_rechecks_after_it(tmp_path: Path) -> None:
-    """A run that waited for the lock finds what the holder stored and does not measure."""
+def test_the_measure_runs_while_the_lock_is_held(tmp_path: Path) -> None:
+    inside: list = []
+    state = {"held": False}
+
+    @contextlib.contextmanager
+    def lock():
+        state["held"] = True
+        try:
+            yield
+        finally:
+            state["held"] = False
+
+    def run():
+        inside.append(state["held"])
+        return BS.Measured(failures={"t.py::a": "boom"})
+
+    BS.baseline_for(tmp_path, SHA, CMD, run, keep_days=14, lock=lock)
+    assert inside == [True]
+
+
+def test_a_run_that_waited_for_the_lock_finds_what_the_holder_stored(tmp_path: Path) -> None:
     calls: list = []
     held: list = []
 
     @contextlib.contextmanager
     def lock():
         held.append("in")
-        if len(held) == 1:  # while we waited, someone else stored the base
-            BS.baseline_for(tmp_path, SHA, CMD, _measure(calls), keep_days=14)
+        BS.baseline_for(tmp_path, SHA, CMD, _measure(calls), keep_days=14)  # the other run
         yield
 
     got = BS.baseline_for(tmp_path, SHA, CMD, _measure(calls), keep_days=14, lock=lock)
     assert len(calls) == 1 and got.cached is True and held == ["in"]
+
+
+def test_keep_zero_prunes_what_an_earlier_keep_stored(tmp_path: Path) -> None:
+    BS.baseline_for(tmp_path, SHA, CMD, _measure([]), keep_days=14)
+    assert any(BS.store_dir(tmp_path).glob("*.json"))
+    BS.baseline_for(tmp_path, OTHER, CMD, _measure([]), keep_days=0)
+    assert not any(BS.store_dir(tmp_path).glob("*.json"))
 
 
 def test_the_store_directory_is_git_ignored_local(tmp_path: Path) -> None:
