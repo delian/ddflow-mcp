@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -89,9 +90,13 @@ def _queued_by_holder(repo: Path, item: str, held) -> bool:
     """The merge queue's integrator lands an entry its own holder put in line: that request is
     the holder's consent to end their lease at the landing. Read off the queue itself, never
     off an argument a caller names: the entry must be the one the integrator is running now,
-    queued by the lease's holder."""
+    queued by the lease's holder, and THIS process must be that integrator (the one that holds
+    the integrator lock), so a peer landing in the same window is still refused."""
     entry = MQ.get(repo, item)
-    return entry is not None and entry.state == MQ.RUNNING and entry.agent == held.holder
+    if entry is None or entry.state != MQ.RUNNING or entry.agent != held.holder:
+        return False
+    running = MQ.holder(repo)
+    return running is not None and running["pid"] == os.getpid()
 
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:

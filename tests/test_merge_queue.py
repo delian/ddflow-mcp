@@ -565,3 +565,26 @@ def test_merge_queue_refusal_over_mcp_names_the_landing_flag(repo):
     text = json.dumps(reply)
     assert "keep" in text and "only enqueues" in text, text
     assert _state(repo).items["T1"].state != "done"
+
+
+def test_only_the_running_integrator_may_land_over_the_holders_lease(proj):
+    """The queue's consent to end the holder's lease is the integrator's alone: a peer that
+    lands the same item while its entry is RUNNING (no integrator lock held by its process)
+    is not covered by it."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.merge import _queued_by_holder
+    from ddflow.services import mergequeue as MQ
+
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    held = SimpleNamespace(holder="t1")
+    entry = MQ.get(proj, "T1")
+    assert not _queued_by_holder(proj, "T1", held), "a queued entry is not yet running"
+    entry.state = MQ.RUNNING
+    MQ.save(proj, entry)
+    assert not _queued_by_holder(proj, "T1", held), "no integrator holds the lock"
+    with MQ.integrator(proj, agent="integrator") as got:
+        assert got
+        assert _queued_by_holder(proj, "T1", held)
+        assert not _queued_by_holder(proj, "T1", SimpleNamespace(holder="someone-else"))
