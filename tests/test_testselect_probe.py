@@ -24,6 +24,8 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from helpers import git_proc, git_raw
@@ -354,7 +356,7 @@ def test_the_probe_runs_on_this_repository_window():
     """A thin live smoke: the newest merge only (the full 100-merge read-out is the script)."""
     shas = merge_log(ROOT)[:1]
     if not shas:
-        return
+        pytest.skip("no merge history here")
     p = probe(ROOT, shas, TSC.limits(Config()), workers=1)
     assert all(0.0 <= r.share <= 1.0 for r in p.rows)
 
