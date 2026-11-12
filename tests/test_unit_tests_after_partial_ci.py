@@ -42,3 +42,7 @@ def test_an_unmeasured_ci_still_refuses(monkeypatch, outcome):
 
 def test_a_partial_ci_of_another_tree_still_refuses(monkeypatch):
     assert _scope(monkeypatch, "partial", "aaaaaaaaaaaa+clean").needs_ci
+
+
+def test_no_tree_never_counts_as_a_partial_ci_measured_here():
+    assert TSC._ci_partial_here(_it("partial", TREE), None) is False

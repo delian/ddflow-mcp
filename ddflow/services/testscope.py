@@ -190,13 +190,13 @@ def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     return tree is None or (bool(ran) and ran == G.normal_fingerprint(G.tree_identity(tree)))
 
 
-def _ci_partial_here(it, tree: Path) -> bool:
+def _ci_partial_here(it, tree: Path | None) -> bool:
     """Whether the item's ci gate ended PARTIAL on exactly the commit ``tree`` holds now, clean
     (B-unit-tests-refuses-on-partial-ci-red-main): the whole suite already ran here and a red
     main keeps it from passing, so rerunning ci proves nothing new. The gate runs its own
     selection; ci stays partial and still decides whether the item may complete."""
     ci = it.gates.get("ci")
-    if ci is None or ci.outcome != "partial":
+    if tree is None or ci is None or ci.outcome != "partial":
         return False
     ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
     return bool(ran) and ran.endswith("+clean") and ran == G.normal_fingerprint(G.tree_identity(tree))
