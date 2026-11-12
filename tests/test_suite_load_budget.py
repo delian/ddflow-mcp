@@ -119,23 +119,24 @@ def test_the_cap_still_bounds_the_suites_whatever_the_load(tmp_path: Path):
 
 
 def test_waiting_for_load_is_queue_time_not_run_time(tmp_path: Path):
-    """The wait ends before the block starts, so a per-test clock begun inside the block starts
-    at admission and the load wait never comes off it (DX-ci-timeout-excludes-queue)."""
+    """The wait ends before the block starts: a clock begun on entering the block (the per-test
+    clock, DX-ci-timeout-excludes-queue) has read none of the load wait."""
     marks: dict[str, float] = {}
     with hold(cfg(), "first", tmp_path):
 
         def second():
             queued = time.monotonic()
             with hold(cfg(), "second", tmp_path, source=load(0.9, 0.9, 0.9, 0.1)):
-                marks["admitted"] = time.monotonic()
-                marks["queued"] = queued
+                begun = time.monotonic()  # the per-test clock starts here, at admission
+                time.sleep(0.01)
+                marks["clock"] = time.monotonic() - begun
+            marks["queue_wait"] = begun - queued
 
         t = threading.Thread(target=second, daemon=True)
         t.start()
         t.join(10)
-    assert marks["admitted"] - marks["queued"] >= 0.2  # it waited (poll is 0.25 s)
-    # a clock started at admission has read none of that wait:
-    assert time.monotonic() - marks["admitted"] < marks["admitted"] - marks["queued"]
+    assert marks["queue_wait"] >= 0.5  # three polls of 0.25 s with the load over the ceiling
+    assert marks["clock"] < marks["queue_wait"] / 10  # the wait is not on the run clock
 
 
 def test_a_poll_interval_never_lets_a_waiter_skip_the_load_check_on_reaching_the_head(
@@ -152,18 +153,23 @@ def test_a_poll_interval_never_lets_a_waiter_skip_the_load_check_on_reaching_the
 
 
 def test_a_neighbour_with_a_bigger_cap_counts_toward_this_projects_cap_and_load(tmp_path: Path):
-    """The slot files are shared: a holder in slot 5 (another project allowed more slots) is
-    seen by a project whose own cap is 1, which then neither admits into slot 0 nor skips the
+    """The slot files are shared: a holder in slot 5 (another project allowed more slots) is seen
+    by a project whose own cap is 1, which then neither admits into free slot 0 nor skips the
     load check as 'the lone suite'."""
-    big = cfg(cap=8)
-    small = cfg(cap=1, wait=0.4)
-    slots_held = []
-    with hold(big, "a", tmp_path), hold(big, "b", tmp_path, source=load(0.0)):
-        slots_held = SL._slot_indexes(tmp_path, 1)
+    from ddflow.infra import fsio
+    from ddflow.services import slots as SLOTS
+
+    held = SLOTS.Slots(tmp_path, SL.NAME).path(5)
+    with fsio.file_lock(held, 0):
+        assert SL._held(tmp_path, 5) and not SL._held(tmp_path, 0)
         with pytest.raises(SL.SuiteBusy):
-            with hold(small, "c", tmp_path, source=load(0.0)):
+            with hold(cfg(cap=1, wait=0.4), "agent", tmp_path, source=load(0.0)):
                 pass
-    assert len(slots_held) >= 2
+        # and the load check applies: with room under a bigger cap it is the load that holds
+        with pytest.raises(SL.SuiteBusy) as e:
+            with hold(cfg(cap=8, wait=0.4), "agent", tmp_path, source=load(0.9)):
+                pass
+        assert "load" in str(e.value)
 
 
 def test_a_slot_freed_while_the_load_is_over_the_ceiling_is_not_taken(tmp_path: Path):
@@ -220,5 +226,7 @@ def test_a_holder_that_leaves_during_a_cached_block_lets_the_waiter_look_again(t
         t = threading.Thread(target=waiter, daemon=True)
         t.start()
         _until(lambda: src.calls >= 1)  # blocked by the load, reading cached for an hour
+        time.sleep(0.6)  # several polls later it is still held back
+        assert got == []
     t.join(10)
     assert got == ["admitted"]
