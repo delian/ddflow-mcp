@@ -287,3 +287,4 @@
 {"agent":"lane-coord","data":{"at":1794483207.443528,"holder":"lane-coord"},"id":"e8ea708c7f273306a0224ddd9","kind":"lease.renewed","lamport":182288,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T11:33:27.545226Z"}
 {"agent":"lane-coord","data":{"at":1794483757.2367806,"holder":"lane-coord"},"id":"e6358a2e46d65a99c56e73b09","kind":"lease.renewed","lamport":182329,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T11:42:37.369697Z"}
 {"agent":"lane-coord","data":{"at":1794484449.6208525,"holder":"lane-coord"},"id":"ecaaf418c169bf46bbb223387","kind":"lease.renewed","lamport":182397,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T11:54:09.770021Z"}
+{"agent":"lane-coord","data":{"at":1794485069.5789518,"holder":"lane-coord"},"id":"ef7b2e9036148947f5e53c497","kind":"lease.renewed","lamport":182481,"schema":1,"subject":"CO-brief-roles","ts":"2026-11-12T12:04:29.722974Z"}
