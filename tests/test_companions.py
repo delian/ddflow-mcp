@@ -57,10 +57,13 @@ def test_a_probe_that_TIMES_OUT_is_unknown_not_absent(monkeypatch):
     none of them means the companion is missing, and saying so sends an operator to
     install something they already have."""
 
-    def hang(*_a, **_k):
-        raise subprocess.TimeoutExpired(cmd="probe", timeout=1)
-
-    monkeypatch.setattr(CO.P, "run", hang)
+    # `is_installed` calls `P.capture`; it returns a `Captured` holding the error (capture
+    # never raises for the command's own trouble), so a timeout is `error=TimeoutExpired`.
+    monkeypatch.setattr(
+        CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(
+            error=subprocess.TimeoutExpired(cmd="probe", timeout=1)
+        )
+    )
     installed, detail = CO.is_installed(_companion())
     assert installed is None, f"a timeout was reported as {installed!r}: {detail}"
     assert "could not" in detail.lower() or "timed out" in detail.lower(), detail
@@ -70,10 +73,9 @@ def test_a_probe_that_cannot_be_SPAWNED_is_unknown_not_absent(monkeypatch):
     """Out of file descriptors, a broken interpreter, a sandbox refusing exec — the
     tool's presence is exactly as unknown as before we asked."""
 
-    def boom(*_a, **_k):
-        raise OSError(24, "Too many open files")
-
-    monkeypatch.setattr(CO.P, "run", boom)
+    monkeypatch.setattr(
+        CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(error=OSError(24, "Too many open files"))
+    )
     installed, _detail = CO.is_installed(_companion())
     assert installed is None
 
@@ -82,12 +84,7 @@ def test_a_probe_that_RAN_and_failed_is_absent(monkeypatch):
     """The other half. A tool that answered "no" answered — that is a fact, not a
     shrug, and turning it into unknown would make the state useless."""
 
-    class Done:
-        returncode = 3
-        stdout = ""
-        stderr = "not configured"
-
-    monkeypatch.setattr(CO.P, "run", lambda *a, **k: Done())
+    monkeypatch.setattr(CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(3, "", "not configured"))
     installed, detail = CO.is_installed(_companion())
     assert installed is False
     assert "exited 3" in detail, detail
@@ -97,10 +94,11 @@ def test_a_probe_that_RAN_and_failed_is_absent(monkeypatch):
 
 
 def test_the_state_word_distinguishes_unknown_from_missing(monkeypatch):
-    def hang(*_a, **_k):
-        raise subprocess.TimeoutExpired(cmd="probe", timeout=1)
-
-    monkeypatch.setattr(CO.P, "run", hang)
+    monkeypatch.setattr(
+        CO.P, "capture", lambda argv, *, timeout, **k: CO.P.Captured(
+            error=subprocess.TimeoutExpired(cmd="probe", timeout=1)
+        )
+    )
     st = CO.Status(_companion(), CO.is_installed(_companion())[0], "", "")
     assert st.state == "unknown", st.state
 

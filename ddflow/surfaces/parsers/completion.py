@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import argparse
 
-from ...services.completion import scripts
+from ...api import completion_scripts
 from ..context import Ctx
 
 
 def _cmd_completion(a: argparse.Namespace, c: Ctx) -> int:
     del c
-    print(scripts.for_shell(a.shell), end="")
+    print(completion_scripts.for_shell(a.shell), end="")
     return 0
 
 
