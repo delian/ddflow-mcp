@@ -17,6 +17,7 @@ Three contracts COMP-conformance owns:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -171,11 +172,12 @@ def test_every_shell_script_parses(shell, tmp_path):
     if exe is None:
         pytest.skip(f"{shell} is not installed: the {shell} template is unexercised")
     flags = {"bash": ["-n"], "zsh": ["-f", "-n"], "fish": ["--no-execute", "--no-config"]}
+    env = {**os.environ, "BASH_ENV": "", "ENV": ""}  # bash reads these at startup
     text = scripts.for_shell(shell)
     # a degenerate or placeholder script would still parse clean, so also require the real
     # activation function named for the shell, not an empty/comment-only file
     assert f"_ddflow_activate_{shell}" in text
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
-    result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True)
+    result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True, env=env)
     assert result.returncode == 0, (shell, result.stderr)
