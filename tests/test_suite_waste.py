@@ -132,7 +132,18 @@ def test_share_and_falsifier_verdict():
     rep = _report(ev, {f"aaaaaaa{i}": "T" for i in range(4)}, min_samples=2)
     assert rep["avoidable_share"] == 0.75
     assert rep["falsifier"]["threshold"] == 0.25
-    assert rep["falsifier"]["holds"] is True  # 75 percent avoidable: the cache-first order stands
+    assert rep["falsifier"]["verdict"] == "stands"  # 75 percent avoidable: cache-first stands
+
+
+def test_the_falsifier_refutes_only_when_even_the_upper_bound_is_under_the_threshold():
+    one = [("A", "ci", "passed", _ev(f"aaaaaaa{i}")) for i in range(1, 9)]
+    keys = {f"aaaaaaa{i}": f"T{i}" for i in range(1, 9)}
+    rep = _report(_log(*one), keys, min_samples=1)  # 8 placed, none avoidable
+    assert rep["avoidable_share"] == 0.0 and rep["falsifier"]["verdict"] == "refuted"
+    more = [*one, *[("B", "ci", "passed", _ev(f"bbbbbbb{i}")) for i in range(4)]]
+    rep = _report(_log(*more), keys, min_samples=1)  # 4 unknown of 12 could be avoidable: 33%
+    assert rep["avoidable_share_max"] == 4 / 12
+    assert rep["falsifier"]["verdict"] == "undetermined"
 
 
 def test_text_mentions_every_class():
@@ -162,15 +173,14 @@ def test_a_rework_by_the_second_item_is_a_same_item_rerun():
     assert cl["rerun_same_tree_same_item"]["runs"] == 1
 
 
-def test_a_phase_scope_leaves_other_items_out():
-    ev = _log(("A", "ci", "passed", _ev("aaaaaaa1")), ("B", "ci", "passed", _ev("aaaaaaa2")))
+def test_a_phase_scope_reports_only_its_items_but_keeps_the_tree_history():
+    ev = _log(("B", "ci", "passed", _ev("aaaaaaa1")), ("A", "ci", "passed", _ev("aaaaaaa2")))
     rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"}, in_scope=lambda i: i == "A")
     assert rep["runs"] == 1
-    assert rep["avoidable"] == 0
+    assert rep["classes"]["rerun_same_tree_other_item"]["runs"] == 1  # B's run still counts
 
 
-def test_unknown_trees_cannot_refute_the_falsifier():
-    # one placed avoidable rerun pair plus unplaced runs: 1 of 5 overall, but 1 of 2 placed.
+def test_unplaced_runs_do_not_count_in_the_share_but_do_in_the_upper_bound():
     ev = _log(
         ("A", "ci", "passed", _ev("aaaaaaa1")),
         ("A", "ci", "passed", _ev("aaaaaaa2")),
@@ -178,8 +188,8 @@ def test_unknown_trees_cannot_refute_the_falsifier():
     )
     rep = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"}, min_samples=1)
     assert rep["avoidable_share"] == 0.2
-    assert rep["avoidable_share_of_placed"] == 0.5
-    assert rep["falsifier"]["holds"] is True
+    assert rep["avoidable_share_max"] == 0.8
+    assert rep["falsifier"]["verdict"] == "undetermined"
 
 
 def test_whole_suite_command_detection():
@@ -187,9 +197,14 @@ def test_whole_suite_command_detection():
     assert whole("uv run pytest tests/ -q --timeout=420 -n 48")
     assert whole("pytest ./tests/")
     assert whole("pytest -n 24 tests")
+    assert whole("python -m pytest tests")
+    assert whole("pytest --ff tests/")
+    assert whole("pytest --junitxml tests/out.xml tests/")
+    assert whole("pytest tests/test_a.py tests/")  # a root collects everything beneath it
     assert not whole("pytest tests -k test_one")
     assert not whole("pytest tests/ --ignore=tests/test_slow.py")
-    assert not whole("pytest tests/test_a.py tests/")
+    assert not whole("pytest tests --ignore-glob=tests/test_s*.py")
+    assert not whole("pytest --ignore tests/")
     assert not whole("pytest -n 24 tests/golden/")
 
 
@@ -198,11 +213,15 @@ def test_a_ci_verdict_without_a_command_is_still_a_suite_run():
     assert _report(ev, {"aaaaaaa1": "T"})["runs"] == 1
 
 
-def test_untimed_runs_are_counted_not_summed_as_zero():
+def test_untimed_runs_are_counted_beside_the_minutes():
     ev = _log(
         ("A", "ci", "passed", _ev("aaaaaaa1")),
-        ("B", "ci", "passed", {"tree_sha": "aaaaaaa2+clean"}),
+        ("A", "ci", "passed", _ev("aaaaaaa2")),
+        ("B", "ci", "passed", {"tree_sha": "aaaaaaa3+clean"}),
     )
-    cl = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T"})["classes"]["rerun_same_tree_other_item"]
-    assert cl["suite_minutes"] is None
-    assert cl["untimed"] == 1
+    cl = _report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"})["classes"]
+    rerun = cl["rerun_same_tree_same_item"]
+    assert (rerun["runs"], rerun["suite_minutes"], rerun["untimed"]) == (1, 10.0, 0)
+    other = cl["rerun_same_tree_other_item"]
+    assert (other["runs"], other["suite_minutes"], other["untimed"]) == (1, None, 1)
+    assert "1 untimed" in SW.text(_report(ev, {"aaaaaaa1": "T", "aaaaaaa2": "T", "aaaaaaa3": "T"}))

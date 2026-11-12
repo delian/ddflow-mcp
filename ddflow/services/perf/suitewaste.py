@@ -50,7 +50,7 @@ AVOIDABLE = ("rerun_same_tree_same_item", "rerun_same_tree_other_item")
 #: The research's bound: avoidable runs under this share refute the cache-first order.
 FALSIFIER_SHARE = 0.25
 #: Pytest options that narrow a run to part of the suite.
-_NARROWING = ("-k", "-m", "--deselect", "--ignore", "--lf", "--ff", "--last-failed", "--sw")
+_NARROWING = ("-k", "--deselect", "--ignore", "--lf", "--last-failed", "--sw", "--stepwise", "-m")
 _ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
 
@@ -84,10 +84,13 @@ def _whole_command(command: str) -> bool:
         tokens = shlex.split(command)
     except ValueError:
         return False
-    if any(t.split("=")[0] in _NARROWING for t in tokens):
+    # Only the arguments after the pytest program: ``python -m pytest`` has its own ``-m``.
+    cut = next((i for i, t in enumerate(tokens) if t.rsplit("/", 1)[-1] == "pytest"), -1)
+    args = tokens[cut + 1 :]
+    if any(a.startswith(n) for a in args for n in _NARROWING):
         return False
-    paths = [t for t in tokens if not t.startswith("-") and re.match(r"^(\./)?tests", t)]
-    return bool(paths) and all(_ROOT.match(t) for t in paths)
+    # A root path collects everything beneath it, so a file path beside it adds nothing.
+    return any(_ROOT.match(a) for a in args)
 
 
 def _is_suite(gate: str, ev: dict) -> bool:
@@ -176,8 +179,13 @@ def build(
 ) -> dict:
     """The report as plain data."""
     minimum = max(int(cfg.metrics.min_samples if min_samples is None else min_samples), 1)
-    scoped = [r for r in runs(events, since, now) if in_scope is None or in_scope(r["item"])]
-    rows = classify(scoped, probe)
+    # Classify the whole log: a run by another item is still the earlier run that makes an
+    # in-scope run a rerun; the scope only picks the rows that are reported.
+    rows = [
+        r
+        for r in classify(runs(events, since, now), probe)
+        if in_scope is None or in_scope(r["item"])
+    ]
     by: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by[r["class"]].append(r)
@@ -193,10 +201,9 @@ def build(
     n = len(rows)
     avoidable = sum(classes[c]["runs"] for c in AVOIDABLE)
     share = avoidable / n if n >= minimum else None
-    placed = n - classes["unplaced"]["runs"]
-    #: The unplaced runs are unknown: they may have re-run a tree, so the share over the placed
-    #: runs is the upper bound and the one the falsifier is judged on.
-    upper = avoidable / placed if placed >= minimum else None
+    #: The unplaced runs are unknown: any of them may have re-run a tree. ``share`` counts
+    #: none of them avoidable (the lower bound), ``upper`` counts all of them (the upper).
+    upper = (avoidable + classes["unplaced"]["runs"]) / n if n >= minimum else None
     unavailable: dict[str, str] = {
         "baseline_measure": "a baseline measurement of a base leaves no gate event in the log",
         "queue_integrator": "the merge queue's runs are recorded as the item's own gate runs",
@@ -206,24 +213,36 @@ def build(
     if classes["unplaced"]["runs"]:
         unavailable["unplaced"] = (
             f"{classes['unplaced']['runs']} runs name no clean commit git can read: "
-            "not counted as avoidable"
+            "none counted in the share, all counted in the upper bound"
         )
     return {
         "runs": n,
         "avoidable": avoidable,
         "avoidable_share": share,
-        "avoidable_share_of_placed": upper,
+        "avoidable_share_max": upper,
         "avoidable_suite_minutes": _minutes([r["suite_s"] for c in AVOIDABLE for r in by[c]]),
         "classes": classes,
-        "falsifier": {
-            "threshold": FALSIFIER_SHARE,
-            "holds": None if upper is None else upper >= FALSIFIER_SHARE,
-            "claim": (
-                "under 25 percent avoidable, even counting only the runs whose tree is known, "
-                "refutes the cache-first order"
-            ),
-        },
+        "falsifier": _falsifier(share, upper),
         "unavailable": unavailable,
+    }
+
+
+def _falsifier(lower: float | None, upper: float | None) -> dict:
+    """R-suite-lock-principles: the cache-first order is refuted when even the upper bound is
+    under the threshold, stands when the lower bound reaches it, else undetermined."""
+    if lower is None or upper is None:
+        holds = None
+    elif upper < FALSIFIER_SHARE:
+        holds = False
+    elif lower >= FALSIFIER_SHARE:
+        holds = True
+    else:
+        holds = None
+    return {
+        "threshold": FALSIFIER_SHARE,
+        "holds": holds,
+        "verdict": {True: "stands", False: "refuted", None: "undetermined"}[holds],
+        "claim": "avoidable share under 25 percent (upper bound) refutes the cache-first order",
     }
 
 
@@ -234,11 +253,11 @@ def has_figures(data: dict) -> bool:
 def text(data: dict) -> str:
     share = data["avoidable_share"]
     head = "n/a" if share is None else f"{share * 100:.0f}%"
-    upper = data["avoidable_share_of_placed"]
-    placed = "n/a" if upper is None else f"{upper * 100:.0f}%"
+    upper = data["avoidable_share_max"]
+    top = "n/a" if upper is None else f"{upper * 100:.0f}%"
     lines = [
-        f"whole-suite runs {data['runs']}, avoidable {data['avoidable']} ({head}; "
-        f"{placed} of the runs whose tree is known)"
+        f"whole-suite runs {data['runs']}, avoidable {data['avoidable']} "
+        f"({head}, at most {top} if every unplaced run re-ran a tree)"
     ]
     for c, v in data["classes"].items():
         lines.append(
@@ -247,9 +266,7 @@ def text(data: dict) -> str:
             + (f"  ({v['untimed']} untimed, not in the minutes)" if v["untimed"] else "")
         )
     f = data["falsifier"]
-    if f["holds"] is not None:
-        verdict = "not refuted" if f["holds"] else "REFUTED"
-        lines.append(f"falsifier (avoidable under {f['threshold'] * 100:.0f}%): {verdict}")
+    lines.append(f"falsifier (avoidable under {f['threshold'] * 100:.0f}%): {f['verdict']}")
     if data["unavailable"]:
         lines.append("unavailable (not zero):")
         lines += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]
