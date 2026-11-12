@@ -112,7 +112,7 @@ def decide(evals: Sequence[WindowEval], pause_at: float, now: float, recheck_s: 
     over = _over(evals, pause_at)
     if not over:
         if not evals:
-            why = "no window limits this subject"
+            why = "no window was given to check, so none is over the line"
         elif any(e.fraction is not None for e in evals):
             why = "every measured window is below the line"
         else:

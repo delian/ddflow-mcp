@@ -163,7 +163,10 @@ def test_the_run_reason_never_claims_a_measurement_or_the_absence_of_a_limit_wro
     measured = Q.evaluate(profile(W5H), [reading(value=10.0)], NOW)
     assert "no window could be measured" in Q.decide(unmeasured, 0.9, NOW, 60).reason
     assert Q.decide(measured, 0.9, NOW, 60).reason == "every measured window is below the line"
-    assert Q.decide((), 0.9, NOW, 60).reason == "no window limits this subject"
+    assert (
+        Q.decide((), 0.9, NOW, 60).reason
+        == "no window was given to check, so none is over the line"
+    )
 
 
 def test_an_empty_evaluation_of_a_limited_profile_is_not_evidence_to_resume():
