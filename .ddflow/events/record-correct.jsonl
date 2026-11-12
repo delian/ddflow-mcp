@@ -105,3 +105,5 @@
 {"agent":"record-correct","data":{"at":1794473456.6057267,"holder":"record-correct"},"id":"e7b2d764fc09cf88cb7a664d8","kind":"lease.renewed","lamport":181556,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T08:50:56.744173Z"}
 {"agent":"record-correct","data":{"at":1794474082.3981738,"holder":"record-correct"},"id":"e160006a5dc2c2fee992515bc","kind":"lease.renewed","lamport":181614,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T09:01:22.533632Z"}
 {"agent":"record-correct","data":{"at":1794474701.193728,"holder":"record-correct"},"id":"e3f95b8eb76236990562423fb","kind":"lease.renewed","lamport":181687,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T09:11:41.331217Z"}
+{"agent":"record-correct","data":{"at":1794475038.1261702,"holder":"record-correct"},"id":"e7129c933955b2620fe374961","kind":"lease.renewed","lamport":181709,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T09:17:18.259595Z"}
+{"agent":"record-correct","data":{"at":1794475323.3989153,"holder":"record-correct"},"id":"ec570f93af8baaf2e27d11752","kind":"lease.renewed","lamport":181716,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T09:22:03.537605Z"}
