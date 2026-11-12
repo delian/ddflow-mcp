@@ -12,13 +12,13 @@ from typing import Any, TypeVar
 
 from ...adapters.http import local_endpoint as _is_local_endpoint
 from ...config import Config, LogConfig, SessionConfig
+from ...core import ids as IDS
 from ...core import redact as R
 from ...core import upcasters as UP
 from ...core.events import CAPABILITIES_KIND, SEEN_KIND, SKEW_OVERRIDDEN_KIND, Event, utcnow
 from ...core.model import known_kinds
 from ...core.redact_errors import PatternError, fail_closed_data
 from ...core.secret_shapes import session_secret_patterns
-from ...core.slug import safe_filename
 from .. import blobstore as BS
 from .. import fsio
 from .. import hostinfo as H
@@ -120,6 +120,11 @@ class EventLog(_GuardMixin, _ReadMixin):
         # clone's `.ddflow/local/clone-id`, and a log built only to be read -- a sibling
         # project's, in `external.sync` -- must not write into that repository.
         self._agent_id = agent_id
+        if agent_id and (why := IDS.agent_id_problem(agent_id)):
+            raise ValueError(
+                f"{agent_id[:40]!r} is not a usable agent id: {why}. Name yourself with "
+                "--agent, DDFLOW_AGENT or as_agent: a short name of letters, digits, '.', '_' or '-'."
+            )
         self.lock_path = self.root / ".ddflow" / "events.lock"
         self.lock_timeout_s = lock_timeout_s
         # NOT created here. Merely constructing a log -- which happens on every CLI
@@ -149,8 +154,7 @@ class EventLog(_GuardMixin, _ReadMixin):
     # -- shard paths ---------------------------------------------------------------
     @property
     def shard(self) -> Path:
-        safe = safe_filename(self.agent_id, repl="_", unicode=True)
-        return self.dir / f"{safe}.jsonl"
+        return self.dir / f"{IDS.shard_stem(self.agent_id)}.jsonl"
 
     def shards(self) -> list[Path]:
         if not self.dir.is_dir():

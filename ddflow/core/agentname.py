@@ -9,9 +9,11 @@ refuse such a name; they used to each carry their own copy of the pattern.
 (Python's `$` matches before a final newline), so the guarantee would live in whatever
 happened to strip the name first rather than in the check credited with it.
 
-The CLI's `--agent` and `DDFLOW_AGENT` are deliberately NOT checked with it today: they are
-the operator's own words and the shard filename is sanitised separately
-(`infra.log.EventLog.shard`).
+The CLI's `--agent` and `DDFLOW_AGENT` are deliberately NOT checked with THIS pattern: they are
+the operator's own words. They are bounded where the id is used instead, by
+`core.ids.agent_id_problem` (at most `AGENT_ID_MAX` = 128 characters, no control or line-separator
+character; the MCP surface keeps its stricter 64), and the shard file name is made safe and
+injective by `core.ids.shard_stem`.
 """
 
 from __future__ import annotations

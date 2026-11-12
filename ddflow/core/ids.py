@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +20,58 @@ from ..config import ID_PREFIXES, Config, IdsConfig, id_problem
 from .digest import content_digest
 from .events import ID_MINTING_KINDS
 from .model import fold
+from .slug import safe_filename
+
+#: The longest agent id accepted, in characters (the MCP surface's declared names stop at 64,
+#: `core.agentname`: the operator's own `--agent` is given more room). The id names a log shard, a file system name
+#: is limited to 255 BYTES, and a character is up to four.
+AGENT_ID_MAX = 128
+#: A sanitised or over-long shard stem is cut to this many characters before its digest, so the
+#: whole file name (stem, `~`, the digest, `.jsonl`) stays under 255 bytes at four bytes a character.
+_STEM_KEEP = 48
+_DIGEST_CHARS = 12
+#: The longest unchanged shard stem, in BYTES: a file name holds 255, and `.jsonl` takes six, so
+#: every name the old rule could write still maps to itself.
+_NAME_BYTES = 249
+#: Unicode categories no name may hold: control characters, lone surrogates (what a non-UTF-8
+#: `DDFLOW_AGENT` arrives as; the log cannot encode them), and the line and paragraph separators.
+_UNSAFE_CATEGORIES = frozenset({"Cc", "Cs", "Zl", "Zp"})
+
+
+def agent_id_problem(agent_id: str) -> str:
+    """Why ``agent_id`` cannot be used as an agent id, or "" when it can.
+
+    The id becomes a file name in the committed log: too long a one fails on every append
+    with an OS error, and a control character (a newline above all) has no place in a name.
+    Everything else is allowed and made safe by `shard_stem`, since the CLI's `--agent` and
+    `DDFLOW_AGENT` are the operator's own words."""
+    if len(agent_id) > AGENT_ID_MAX:
+        return f"it is {len(agent_id)} characters long; at most {AGENT_ID_MAX} are allowed"
+    if any(unicodedata.category(c) in _UNSAFE_CATEGORIES for c in agent_id):
+        return "it holds a control, line-separator or non-UTF-8 character (a newline, a tab, a NUL, U+0085)"
+    return ""
+
+
+def shard_stem(agent_id: str) -> str:
+    """The file name (without `.jsonl`) of an agent's log shard: injective.
+
+    An id that survives the file-name filter unchanged keeps its name, so a log written
+    before this rule replays under the same file (r-replay-compat). Any other id (one with
+    a `/`, a space, a `:`, a leading dot, or a length that does not fit) gets a readable
+    prefix and a digest of the WHOLE id after a `~`, which the filter never lets through, so
+    no two ids share a shard and no name can start with a dot (the shard glob skips those)."""
+    safe = safe_filename(agent_id, repl="_", unicode=True)
+    if (
+        agent_id
+        and safe == agent_id
+        and not safe.startswith(".")
+        and len(safe.encode()) <= _NAME_BYTES
+    ):
+        return safe
+    digest = content_digest(
+        agent_id.encode("utf-8", "surrogatepass"), "sha256", length=_DIGEST_CHARS
+    )
+    return f"{safe.lstrip('.')[:_STEM_KEEP] or 'agent'}~{digest}"
 
 
 def auto_id(prefix: str, *parts: str) -> str:
