@@ -250,6 +250,16 @@ def _approved(
     }
 
 
+def person_only_target(it, verb: str, target: str) -> bool:
+    """Does ``verb`` over ``target`` name a measured baseline-red partial only a person accepts
+    (`GA.person_only`)? `approve.partial` targets one gate, `complete.force` the comma-joined
+    unmet gates; no other verb accepts a partial. The retry-threshold rule, which answers the
+    generic T2 verbs without a per-rule predicate, steps aside for it (B1bc4733e43)."""
+    if verb not in ("approve.partial", "complete.force"):
+        return False
+    return any(GA.person_only(it, g) for g in (target or "").split(",") if g and g in it.gates)
+
+
 def apply(
     log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
 ) -> dict[str, Any] | None:
@@ -273,7 +283,7 @@ def apply(
         return _approved(log, cfg, canon, reason, rule_id)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
-        if retry_armed(cfg, canon):
+        if retry_armed(cfg, canon) and not person_only_target(it, canon.verb, canon.target):
             n = refusals(state, canon)
             if n >= threshold:
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.
