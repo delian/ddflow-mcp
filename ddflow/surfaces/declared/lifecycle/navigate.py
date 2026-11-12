@@ -44,7 +44,13 @@ def _next(repo, a, agent):
     tags = _tags(a)
     if lane := a.get("lane", ""):
         out = _api().next_lane(
-            repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
+            repo,
+            lane=lane,
+            kind=kind,
+            phase=phase,
+            phase_only=phase_only,
+            agent=agent,
+            tags=tags,
         )
         token = _lane_token(
             lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
