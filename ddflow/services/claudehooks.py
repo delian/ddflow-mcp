@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -53,8 +54,6 @@ CLAUDE_SETTINGS = ".claude/settings.json"
 #: ``Bash`` matcher keeps refusing the forbidden commands (LK-write-hook-wire).
 WRITE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 PRETOOL_MATCHER = f"Bash|{WRITE_MATCHER}"
-#: Seconds a SessionEnd hook may run: the harness default of 1.5 s cannot fit a log fold.
-SESSION_END_TIMEOUT_S = 30
 
 
 @dataclass(frozen=True)
@@ -105,11 +104,14 @@ class HookSpec:
         )
 
 
+#: A table row for each harness the legacy table covers: the agent named once, not per row.
+_claude = partial(HookSpec, "claude")
+_gemini = partial(HookSpec, "gemini")
+
 #: Every harness hook ddflow installs. Git hooks are not here: they are files, not
 #: settings entries, and `enforce._hooks()` is their one table.
 HOOKS: tuple[HookSpec, ...] = (
-    HookSpec(
-        "claude",
+    _claude(
         "session-start",
         "SessionStart",
         CLAUDE_SETTINGS,
@@ -118,8 +120,7 @@ HOOKS: tuple[HookSpec, ...] = (
         fail_open=False,
         run="run session_start --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "pre-compact",
         PRECOMPACT_EVENT,
         CLAUDE_SETTINGS,
@@ -128,8 +129,7 @@ HOOKS: tuple[HookSpec, ...] = (
         "the session's state is recorded before every compaction",
         run="run pre_compact --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "stop",
         "Stop",
         CLAUDE_SETTINGS,
@@ -138,18 +138,16 @@ HOOKS: tuple[HookSpec, ...] = (
         run="run stop --harness claude",
         background=True,
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "session-end",
         "SessionEnd",
         CLAUDE_SETTINGS,
         None,
         "the session's end is recorded with what it was doing",
         run="run session_end --harness claude",
-        timeout=SESSION_END_TIMEOUT_S,
+        timeout=30,  # the harness default of 1.5 s cannot fit a log fold
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "prompt",
         PROMPT_EVENT,
         CLAUDE_SETTINGS,
@@ -157,8 +155,7 @@ HOOKS: tuple[HookSpec, ...] = (
         "every operator prompt is recorded",
         run="run prompt --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "pre-tool",
         "PreToolUse",
         CLAUDE_SETTINGS,
@@ -168,8 +165,7 @@ HOOKS: tuple[HookSpec, ...] = (
         "and [locks].mode)",
         run="run pre_tool --harness claude",
     ),
-    HookSpec(
-        "gemini",
+    _gemini(
         "prompt",
         GEMINI_PROMPT_EVENT,
         GEMINI_SETTINGS,
@@ -177,8 +173,7 @@ HOOKS: tuple[HookSpec, ...] = (
         "every operator prompt is recorded",
         run="run prompt --harness gemini",
     ),
-    HookSpec(
-        "gemini",
+    _gemini(
         "pre-compact",
         "PreCompress",
         GEMINI_SETTINGS,
@@ -186,15 +181,14 @@ HOOKS: tuple[HookSpec, ...] = (
         "the session's state is recorded before every compaction",
         run="run pre_compact --harness gemini",
     ),
-    HookSpec(
-        "gemini",
+    _gemini(
         "session-end",
         "SessionEnd",
         GEMINI_SETTINGS,
         None,
         "the session's end is recorded with what it was doing",
         run="run session_end --harness gemini",
-        timeout=SESSION_END_TIMEOUT_S,
+        timeout=30,  # the harness default of 1.5 s cannot fit a log fold
     ),
 )
 
@@ -364,24 +358,15 @@ def state(
     return on, ""
 
 
-#: The entry fields a table row's `timeout` and `background` write.
-_OPTION_KEYS = ("timeout", "async")
-
-
 def _entry_options(timeout: int, background: bool) -> dict[str, Any]:
+    """The entry fields a table row's `timeout` and `background` write. A row that sets
+    neither leaves the operator's own `timeout` or `async` on the entry alone."""
     opts: dict[str, Any] = {}
     if timeout:
         opts["timeout"] = timeout
     if background:
         opts["async"] = True
     return opts
-
-
-def _same_options(entry: dict[str, Any], opts: dict[str, Any]) -> bool:
-    """Whether the entry carries exactly the options the table row wants."""
-    return all(entry.get(k) == v for k, v in opts.items()) and not any(
-        k in entry and k not in opts for k in _OPTION_KEYS
-    )
 
 
 def _refreshed(
@@ -430,11 +415,14 @@ def install(
             if _ours(h, marker):
                 have = str(h.get("command", ""))
                 wanted, edited = _refreshed(region, have, command, entry["command"], path, event)
-                if wanted == have and h.get("type") == "command" and _same_options(h, opts):
+                if (
+                    wanted == have
+                    and h.get("type") == "command"
+                    and all(h.get(k) == v for k, v in opts.items())
+                ):
                     return f"the ddflow {event} hook is already in {path}"
                 saved = backup_edited(repo, path, "command") if edited else ""
-                kept = {k: v for k, v in h.items() if k not in _OPTION_KEYS}
-                g["hooks"][i] = {**kept, "type": "command", "command": wanted, **opts}
+                g["hooks"][i] = {**h, "type": "command", "command": wanted, **opts}
                 _write(path, data)
                 return f"updated the ddflow {event} hook in {path}{saved}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})

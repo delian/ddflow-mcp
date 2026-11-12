@@ -260,7 +260,7 @@ def test_stop_and_session_end_rows_carry_their_entry_options(repo: Path):
     stop = data["hooks"]["Stop"][0]["hooks"][0]
     end = data["hooks"]["SessionEnd"][0]["hooks"][0]
     assert stop["async"] is True and "timeout" not in stop
-    assert end["timeout"] == CH.SESSION_END_TIMEOUT_S and "async" not in end
+    assert end["timeout"] == 30 and "async" not in end
 
 
 def test_refresh_adds_the_options_to_an_entry_written_without_them(repo: Path):

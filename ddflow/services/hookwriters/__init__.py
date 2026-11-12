@@ -85,7 +85,7 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
             else None,
             f"the {event.replace('_', ' ')} event reaches ddflow",
             run=f"run {event} --harness {h.id}",
-            timeout=CH.SESSION_END_TIMEOUT_S if event == "session_end" else 0,
+            timeout=30 if event == "session_end" else 0,
             background=event == "stop",
         )
         for event in INSTALLED
