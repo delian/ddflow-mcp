@@ -2052,7 +2052,7 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--ignore-cap] [--blocked] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
@@ -2062,6 +2062,8 @@
     --tag TAG            only items carrying this tag (repeatable: all must match); exit 1 if no
                          item carries it
     --wave WAVE          shorthand for --tag wave:N
+    --ignore-cap         treat items held only by the parallelism cap as ready for this call
+    --blocked            list every blocked item, dependency-blocked ones too (text view)
     --kind {task,phase}
     --lane LANE          answer this idle lane: its best item and a note for claim
     --full               print everything: lift the default output caps ([output] max_rows,
@@ -3836,7 +3838,8 @@
       approvals           approval requests for operator-gated commands (a person answers)
       plan                check a proposed plan, filed it PROPOSED, confirm it, or lint the whole
                           open queue
-      next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
+      next                what may start now (exit 2 = nothing ready or held, exit 1 = unknown
+                          --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
       release             give up a lease

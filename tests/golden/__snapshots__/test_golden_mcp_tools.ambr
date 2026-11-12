@@ -713,6 +713,14 @@
           "type": "integer",
           "description": "Shorthand for tag wave:N."
          },
+         "ignore_cap": {
+          "type": "boolean",
+          "description": "Offer items only the parallelism cap holds back as ready."
+         },
+         "blocked": {
+          "type": "boolean",
+          "description": "List every blocked item."
+         },
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
