@@ -90,25 +90,8 @@ def _holds(st: Any, kind: str, rid: str, rec: Any, agent: str, grace_s: int) -> 
     return bool(lease and lease.holder == agent and lease.live(time.time(), grace_s))
 
 
-def _refusal(msg: str, **data: Any) -> O.Outcome:
-    return O.refused(VERB, f"{msg} Nearest verb: {NEAREST}.", **data)
-
-
-def correct(
-    repo: Path,
-    rid: str,
-    *,
-    fields: Mapping[str, Any],
-    reason: str,
-    kind: str = "",
-    secret: bool = False,
-    approval: str = "",
-    agent: str = "",
-) -> O.Outcome:
-    """Correct ``fields`` of the record ``rid``; see the module docstring for who may."""
-    log, cfg, st = _base._load(repo, agent)
-    rc = cfg.records
-    reason = (reason or "").strip()
+def _check_request(rc: Any, reason: str, fields: Mapping[str, Any]) -> O.Outcome | None:
+    """The refusal for a request that cannot be a correction whatever the record is."""
     if not reason:
         return O.failed(
             VERB, f"a reason is required: say why the value was wrong, never what it was. {NEAREST}"
@@ -126,62 +109,118 @@ def correct(
             VERB,
             f"{len(fields)} fields; at most {rc.correct_max_fields} ([records].correct_max_fields)",
         )
+    return None
+
+
+def _resolve_kind(st: Any, rid: str, kind: str) -> tuple[str, O.Outcome | None]:
+    """(kind, refusal): the one correctable kind ``rid`` is, or why it is none or several."""
     kinds = _kinds_of(st, rid)
     if kind:
         if kind not in RU.CORRECTABLE:
-            return O.failed(
+            return "", O.failed(
                 VERB, f"kind {kind!r} cannot be corrected; one of {', '.join(RU.CORRECTABLE)}"
             )
         kinds = [k for k in kinds if k == kind]
     if not kinds:
-        return O.failed(
+        return "", O.failed(
             VERB,
             f"no correctable record {rid!r}{f' of kind {kind}' if kind else ''}. A rule, a "
             "schedule or a trigger is a definition: `ddflow update` edits it. "
             f"Correctable: {', '.join(RU.CORRECTABLE)}.",
         )
     if len(kinds) > 1:
-        return O.failed(VERB, f"{rid} is a {' and a '.join(kinds)}: name one with --kind")
-    kind = kinds[0]
+        return "", O.failed(VERB, f"{rid} is a {' and a '.join(kinds)}: name one with --kind")
+    return kinds[0], None
+
+
+def _new_values(kind: str, fields: Mapping[str, Any]) -> tuple[dict[str, Any], O.Outcome | None]:
+    """The fields as the record's own names and types, or why they are not."""
     try:
         new = {
             _field_name(kind, str(n)): _coerce(kind, _field_name(kind, str(n)), v)
             for n, v in fields.items()
         }
     except ValueError as exc:
-        return O.failed(VERB, f"{exc}. {NEAREST}")
+        return {}, O.failed(VERB, f"{exc}. {NEAREST}")
     bad = sorted(set(new) - _allowed(kind))
     if bad:
-        return O.failed(
+        return {}, O.failed(
             VERB,
             f"a {kind} has no field {', '.join(bad)}; a {kind} accepts "
             f"{', '.join(sorted(_allowed(kind)))}. {NEAREST}",
         )
+    return new, None
+
+
+def _permission(
+    log: Any,
+    cfg: Any,
+    st: Any,
+    kind: str,
+    rid: str,
+    new: Mapping[str, Any],
+    *,
+    reason: str,
+    approval: str,
+    agent: str,
+) -> tuple[dict[str, Any], O.Outcome | None]:
+    """(stamp, refusal): who may correct. A person may; an agent may its own record and one
+    on an item it holds; any other correction is the operator's, by an approval."""
+    if not IDN.agent_marker(agent):
+        return {}, None
+    me = log.agent_id
     rec = RU._record_of(st, kind, rid)
-    stamp: dict[str, Any] = {}
-    if IDN.agent_marker(agent):
-        me = log.agent_id
-        if not (_author(log, kind, rid) == me or _holds(st, kind, rid, rec, me, cfg.lease.grace_s)):
-            canon = Canon(
-                verb=VERB,
-                agent=me,
-                item=rid,
-                target=",".join(sorted(new)),
-                args={"kind": kind, "reason": reason},
-                state=D.content_digest(f"{kind}:{rid}:{','.join(sorted(new))}"),
-            )
-            decided = CN.operator_gate(
-                log, cfg, canon, approval_id=approval, reason=reason, auto=False
-            )
-            if not decided.ok:
-                return O.refused(
-                    VERB,
-                    f"{decided.message} {rid} was recorded by another agent and is on an item "
-                    f"you do not hold: only the operator corrects it. Nearest verb: {NEAREST}.",
-                    id=rid,
-                    approval=decided.ask_id,
-                )
-            stamp = {"approval": decided.stamp}
+    if _author(log, kind, rid) == me or _holds(st, kind, rid, rec, me, cfg.lease.grace_s):
+        return {}, None
+    names = ",".join(sorted(new))
+    canon = Canon(
+        verb=VERB,
+        agent=me,
+        item=rid,
+        target=names,
+        args={"kind": kind, "reason": reason},
+        state=D.content_digest(f"{kind}:{rid}:{names}"),
+    )
+    decided = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=reason, auto=False)
+    if decided.ok:
+        return {"approval": decided.stamp}, None
+    return {}, O.refused(
+        VERB,
+        f"{decided.message} {rid} was recorded by another agent and is on an item you do not "
+        f"hold: only the operator corrects it. Nearest verb: {NEAREST}.",
+        id=rid,
+        approval=decided.ask_id,
+    )
+
+
+def correct(
+    repo: Path,
+    rid: str,
+    *,
+    fields: Mapping[str, Any],
+    reason: str,
+    kind: str = "",
+    secret: bool = False,
+    approval: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """Correct ``fields`` of the record ``rid``; see the module docstring for who may."""
+    log, cfg, st = _base._load(repo, agent)
+    rc = cfg.records
+    reason = (reason or "").strip()
+    if (refusal := _check_request(rc, reason, fields)) is not None:
+        return refusal
+    kind, refusal = _resolve_kind(st, rid, kind)
+    if refusal is not None:
+        return refusal
+    new, refusal = _new_values(kind, fields)
+    if refusal is not None:
+        return refusal
+    stamp, refusal = _permission(
+        log, cfg, st, kind, rid, new, reason=reason, approval=approval, agent=agent
+    )
+    if refusal is not None:
+        return refusal
     log.append(
         RU.KIND,
         rid,
