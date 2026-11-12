@@ -34,17 +34,18 @@ def _triage_counts(it: Item, gate: str) -> dict[str, int]:
     return out
 
 
-def _gates(it: Item) -> list[dict[str, Any]]:
+def _gates(it: Item, pipeline: list[str]) -> list[dict[str, Any]]:
+    """Every gate of the pipeline, in order, then any other recorded one; a gate with no
+    recorded outcome says `not run` -- it is neither omitted nor shown as passed."""
     rows = []
-    for gate, rec in it.gates.items():
-        if not rec.outcome:
-            continue
-        ev = rec.evidence or {}
+    for gate in [*pipeline, *(g for g in it.gates if g not in pipeline)]:
+        rec = it.gates.get(gate)
+        ev = (rec.evidence if rec else None) or {}
         rows.append(
             {
                 "gate": gate,
-                "outcome": rec.outcome,
-                "note": _first_line(rec.reason).replace("|", "\\|"),
+                "outcome": (rec.outcome if rec and rec.outcome else "not run"),
+                "note": _first_line(rec.reason if rec else "").replace("|", "\\|"),
                 "rounds": int(ev.get("rounds") or 0),
                 **{f"triage_{k}": v for k, v in _triage_counts(it, gate).items()},
             }
@@ -66,7 +67,7 @@ def _bugs(st: State, it: Item) -> list[dict[str, Any]]:
     ]
 
 
-def variables(st: State, it: Item, on: Item | None) -> dict[str, Any]:
+def variables(st: State, it: Item, on: Item | None, pipeline: list[str]) -> dict[str, Any]:
     """Every placeholder the template can use, from derived records only."""
     return {
         "item": it.id,
@@ -74,7 +75,7 @@ def variables(st: State, it: Item, on: Item | None) -> dict[str, Any]:
         "body": it.body.strip() or it.title,
         "stacked_on": (on.id if on is not None else ""),
         "stacked_on_url": (on.pr.url if on is not None and on.pr else ""),
-        "gates": _gates(it),
+        "gates": _gates(it, pipeline),
         "bugs": _bugs(st, it),
         "changelog": dict(it.changelog or {}),
     }
@@ -85,6 +86,8 @@ def render_body(
 ) -> str:
     """The request body: template (config path > project > shipped), then redacted."""
     override = {TEMPLATE: cfg.flow.pr_body_template} if cfg.flow.pr_body_template else {}
-    text = P.render(P.resolve(TEMPLATE, repo, override), **variables(st, it, on)).strip()
+    text = P.render(
+        P.resolve(TEMPLATE, repo, override), **variables(st, it, on, list(cfg.gates.task_pipeline))
+    ).strip()
     clean, _n = redact_secrets(text, cfg)
     return clean

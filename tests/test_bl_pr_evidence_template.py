@@ -8,6 +8,7 @@ changelog entry. Outward text is secret-redacted (r-consent-outward).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -73,8 +74,11 @@ def test_the_config_path_beats_the_project_template(item):
     repo, st, it = item
     custom = repo / "custom_pr.md"
     custom.write_text("CONFIG {{ title }}")
+    project = repo / ".ddflow" / "prompts"
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "pr_body.md").write_text("PROJECT {{ title }}")
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
-        fh.write(f'\n[flow]\npr_body_template = "{custom}"\n')
+        fh.write(f"\n[flow]\npr_body_template = {json.dumps(str(custom))}\n")
     assert _body(repo, st, it) == "CONFIG Do the thing"
 
 
@@ -121,3 +125,19 @@ def test_a_bug_without_a_recorded_regression_test_is_said_so(item):
     st = fold(log.read_all(), strict=False)
     text = _body(repo, st, st.items["T1"])
     assert "B1: race -- NO regression test recorded" in text, text
+
+
+def test_a_gate_that_has_not_run_is_listed_as_not_run(item):
+    repo, st, it = item
+    text = _body(repo, st, it)
+    assert "| merge | not run" in text, text
+    assert "| research | passed" in text
+
+
+def test_pr_body_without_a_config_reads_the_project_layers(item):
+    repo, st, it = item
+    custom = repo / "c.md"
+    custom.write_text("LAYERED {{ item }}")
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write(f"\n[flow]\npr_body_template = {json.dumps(str(custom))}\n")
+    assert FS.pr_body(st, it, on=None, repo=repo) == "LAYERED T1"
