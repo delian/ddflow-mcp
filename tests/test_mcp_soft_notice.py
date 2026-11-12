@@ -213,3 +213,11 @@ def test_the_capability_word_is_the_client_tables():
 def test_the_connection_object_answers_for_a_removed_tool_too():
     assert notice().removed("c", OLD, OLD[:2]) == N.removed_tool("c", OLD, OLD[:2])
     assert notice().removed("zzz", OLD, OLD[:2]) is None
+
+
+def test_a_removed_tool_call_is_answered_every_time_and_leaves_the_footer_cadence_alone():
+    n = notice(every_calls=100)
+    assert footer(n, live=OLD[:2])  # the footer speaks once
+    for _ in range(3):  # the answer to a call is never rate limited
+        assert n.removed("c", OLD, OLD[:2])
+    assert footer(n, live=OLD[:2]) == "", "and it did not reset the footer's window"

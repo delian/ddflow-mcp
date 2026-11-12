@@ -130,5 +130,7 @@ class RestartNotice:
         return message(d)
 
     def removed(self, name: Any, served: Any, live: Any) -> str | None:
-        """The text for a call to `name` the upgrade removed, or None (see `removed_tool`)."""
+        """The text for a call to `name` the upgrade removed, or None (see `removed_tool`). It is the
+        ANSWER to that call (replacing "no such tool"), not a footer, so the cadence does not apply:
+        every such call gets it and the footer's counters are left alone."""
         return removed_tool(name, served, live)
