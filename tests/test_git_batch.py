@@ -119,7 +119,9 @@ def test_recover_still_measures_every_tree(repo):
     assert all(r.salvageable is False for r in found), [r.advice for r in found[:2]]
     capped = L.scan(EventLog(repo, "r"), Config.load(repo), repo, view=True)
     assert sum(1 for r in capped if r.salvageable is None) == 20 - 16
-    assert all("complete" in r.advice or "NOT MEASURED" in r.advice for r in capped)
+    assert all(
+        "complete" in r.advice or "past the measurement cap" in r.advice for r in capped
+    )  # a tree past the cap is named as unmeasured, and `recover` is the way to measure it
 
 
 def test_an_unknown_commit_is_not_reported_as_off_the_base(repo):
