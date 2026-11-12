@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ea3bc0df9605 -->
-<details><summary>All 691 knobs across 63 sections</summary>
+<!-- ddflow:begin README/knobs sha=056f78f4cc77 -->
+<details><summary>All 696 knobs across 63 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1479,6 +1479,11 @@ long default is left to `ddflow config --explain`.
 | `suites.cores_per_suite` | `96` |  |
 | `suites.load_ceiling_per_core` | `0.35` |  |
 | `suites.load_poll_s` | `2.0` |  |
+| `suites.max_wait_factor` | `3.0` |  |
+| `suites.agent_share` | `0.5` |  |
+| `suites.default_cost_s` | `600.0` |  |
+| `suites.cost_runs` | `20` |  |
+| `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
