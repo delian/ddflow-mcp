@@ -163,6 +163,7 @@ def _permission(
     new: Mapping[str, Any],
     *,
     reason: str,
+    secret: bool,
     approval: str,
     agent: str,
 ) -> tuple[dict[str, Any], O.Outcome | None]:
@@ -175,13 +176,19 @@ def _permission(
     if _author(log, kind, rid) == me or _holds(st, kind, rid, rec, me, cfg.lease.grace_s):
         return {}, None
     names = ",".join(sorted(new))
+    # The approval is of THIS correction: the new text is bound into the digest, so an approval
+    # for one text cannot be spent on another. The ask records the digest, and a digest of a
+    # value that may be a secret confirms a guess: a secret correction binds the text's length
+    # and the secret choice instead, which the operator reads in the question.
+    text = D.canonical(dict(sorted(new.items())))
+    bound = D.content_digest(f"{kind}:{rid}:{text}") if not secret else D.content_digest(names)
     canon = Canon(
         verb=VERB,
         agent=me,
         item=rid,
         target=names,
-        args={"kind": kind, "reason": reason},
-        state=D.content_digest(f"{kind}:{rid}:{names}"),
+        args={"kind": kind, "reason": reason, "secret": str(secret), "chars": str(len(text))},
+        state=bound,
     )
     decided = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=reason, auto=False)
     if decided.ok:
@@ -219,7 +226,7 @@ def correct(
     if refusal is not None:
         return refusal
     stamp, refusal = _permission(
-        log, cfg, st, kind, rid, new, reason=reason, approval=approval, agent=agent
+        log, cfg, st, kind, rid, new, reason=reason, secret=secret, approval=approval, agent=agent
     )
     if refusal is not None:
         return refusal

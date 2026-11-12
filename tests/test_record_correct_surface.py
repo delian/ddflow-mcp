@@ -348,3 +348,20 @@ def test_the_author_is_read_from_the_selected_kind_only(proj):
         agent="alice",
     )
     assert code == 0, err
+
+
+def test_an_approval_is_spent_only_on_the_correction_it_was_asked_for(proj):
+    base = ("correct", "B1", "--field", "summary", "--reason", "typo")
+    code, _o, err = run_cli(proj, *base, "--text", "text A", "--approval", "request", agent="bob")
+    ask_id = re.search(r"approval (Q[0-9a-f]+)", err).group(1)
+    digest = asks_of(_state(proj))[ask_id]["digest"]
+    assert run_cli(proj, "approvals", "approve", ask_id, "--digest", digest[:12])[0] == 0
+    # another text, and the same text marked secret, are other corrections
+    code, _o, err = run_cli(proj, *base, "--text", "text B", "--approval", ask_id, agent="bob")
+    assert code == 3 and not _corrections(proj), err
+    code, _o, err = run_cli(
+        proj, *base, "--text", "text A", "--secret", "--approval", ask_id, agent="bob"
+    )
+    assert code == 3 and not _corrections(proj), err
+    code, _o, err = run_cli(proj, *base, "--text", "text A", "--approval", ask_id, agent="bob")
+    assert code == 0, err

@@ -345,7 +345,7 @@ SITES: tuple[Site, ...] = (
         "C",
         T2,
         L1,
-        "the record, the fields replaced and the reason (never the new text: the ask would then carry it)",
+        "the record, the fields replaced, the reason and the new text (for --secret only its length and the choice, so the ask never carries a digest of a possible secret)",
         ("ddflow/api/record_correct.py:_permission",),
         "ddflow correct <id> --field NAME --text TEXT --reason WHY --approval request|ID",
     ),
