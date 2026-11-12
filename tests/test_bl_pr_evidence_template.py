@@ -170,3 +170,11 @@ def test_a_cell_is_bounded_after_escaping_by_the_knob(item):
     )
     note = row.split(" | ")[-1].rstrip(" |")
     assert len(note) <= 40 and note.endswith("…"), (len(note), row)
+
+
+@pytest.mark.parametrize("cell_max", [1, 2, 5])
+def test_the_smallest_bounds_are_still_bounds(cell_max):
+    from ddflow.services.flow.pr_template import _cell
+
+    assert len(_cell("hello world", cell_max)) == cell_max
+    assert _cell("hi", 5) == "hi"
