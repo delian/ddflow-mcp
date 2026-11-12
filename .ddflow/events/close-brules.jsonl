@@ -249,3 +249,4 @@
 {"agent":"close-brules","data":{"at":1794475147.1223345,"holder":"close-brules"},"id":"eb89be9df59f42b3ab929be50","kind":"lease.renewed","lamport":181710,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-12T09:19:07.258055Z"}
 {"agent":"close-brules","data":{"at":1794475764.6859405,"holder":"close-brules"},"id":"efa4f2b3e94e94a900bd0d543","kind":"lease.renewed","lamport":181744,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-12T09:29:24.819192Z"}
 {"agent":"close-brules","data":{"at":1794476381.8563638,"holder":"close-brules"},"id":"e8b3fe44a2f4895640c063af4","kind":"lease.renewed","lamport":181794,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-12T09:39:42.003509Z"}
+{"agent":"close-brules","data":{"at":1794477000.3083856,"holder":"close-brules"},"id":"ef279236c61514405e3cec167","kind":"lease.renewed","lamport":181870,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-12T09:50:00.398282Z"}
