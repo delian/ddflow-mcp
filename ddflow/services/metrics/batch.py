@@ -145,6 +145,8 @@ def build(ctx: Context, group_by: str = "") -> dict:
 
 def has_figures(data: dict) -> bool:
     """Whether any bucket has any figure (else the answer is exit 2 'not enough data')."""
+    if (data.get("overlap") or {}).get("items"):
+        return True
     return any(
         r["elapsed"]["p50_s"] is not None
         or r["lock_wait"]["p50_s"] is not None

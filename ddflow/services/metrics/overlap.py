@@ -5,7 +5,7 @@ are *path-disjoint* when no glob of one overlaps a glob of the other (``core.glo
 the same test the lease engine uses, so there is no second definition of disjoint). An item is
 batch-eligible when it is small enough and has a time-overlapping, path-disjoint partner that
 is small enough too. An item whose lease named no glob is never called disjoint (unknown is
-not disjoint), and a lease still held has no end, so it is left out and named in ``skipped``.
+not disjoint). A lease still held is closed at ``now`` by the fact fold.
 """
 
 from __future__ import annotations
@@ -21,17 +21,14 @@ ELIGIBLE_MAX_LINES = 800
 MAX_PAIRS = 200_000
 
 
-def _windows(ctx: Context) -> tuple[dict[str, tuple[float, float, tuple[str, ...]]], int]:
-    """item -> (first lease start, last lease end, union of lease globs); and how many items
-    were left out because a lease was still held."""
+def _windows(ctx: Context) -> dict[str, tuple[float, float, tuple[str, ...]]]:
+    """item -> (first lease start, last lease end, union of lease globs)."""
     out: dict[str, tuple[float, float, tuple[str, ...]]] = {}
-    open_items: set[str] = set()
     unknown: set[str] = set()
     for lease in ctx.facts.leases:
         if not ctx.in_scope(lease.item, lease.start):
             continue
-        if lease.end is None:
-            open_items.add(lease.item)
+        if lease.end is None:  # the fold closes held leases; a hand-built Facts may not
             continue
         s, e, g = out.get(lease.item, (lease.start, lease.end, ()))
         out[lease.item] = (
@@ -44,9 +41,7 @@ def _windows(ctx: Context) -> tuple[dict[str, tuple[float, float, tuple[str, ...
     for item in unknown:
         s, e, _g = out[item]
         out[item] = (s, e, ())
-    for item in open_items:
-        out.pop(item, None)
-    return out, len(open_items)
+    return out
 
 
 def _disjoint(a: tuple[str, ...], b: tuple[str, ...]) -> bool:
@@ -58,7 +53,7 @@ def _disjoint(a: tuple[str, ...], b: tuple[str, ...]) -> bool:
 def build(ctx: Context, size: dict[str, int | None]) -> dict:
     """The overlap table as plain data."""
     minimum = int(ctx.cfg.metrics.min_samples)
-    win, held = _windows(ctx)
+    win = _windows(ctx)
     order = sorted(win, key=lambda i: win[i][0])
     pairs = disjoint = 0
     eligible: set[str] = set()
@@ -87,7 +82,6 @@ def build(ctx: Context, size: dict[str, int | None]) -> dict:
         "eligible_items": len(eligible),
         "eligible_share": rate(len(eligible), len(win), minimum),
         "max_lines": ELIGIBLE_MAX_LINES,
-        "skipped": {"lease_still_held": held} if held else {},
         "truncated": truncated,
     }
 

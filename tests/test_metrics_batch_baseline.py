@@ -210,3 +210,11 @@ def test_the_pair_cap_counts_exactly_the_cap(monkeypatch):
     ov = run(overlap_log()).metrics["overlap"]
     assert ov["truncated"] is True
     assert ov["pairs_overlapping"] == 2
+
+
+def test_overlap_figures_alone_count_as_data():
+    from ddflow.services.metrics import batch as B
+
+    empty = {"buckets": [], "overlap": {"items": 0}}
+    assert not B.has_figures(empty)
+    assert B.has_figures({"buckets": [], "overlap": {"items": 3}})
