@@ -424,3 +424,23 @@ def test_the_rehearsal_demands_a_note_from_a_start_check_that_ran_out_of_time(
     assert rehearsal._noted({1: {"instructions": ""}})
     assert rehearsal._default_path({1: {"instructions": note}}) == []
     assert rehearsal._default_path({1: {"instructions": ""}})
+
+
+def test_a_snapshot_served_handshake_says_the_upgrade_on_the_first_tool_result(
+    tmp_path: Path,
+) -> None:
+    """SU-init-fast-hook (eaf0b03f4): a handshake answered from the cached interface snapshot
+    is the STABLE text only, and the upgrade notice rides the first tool result. The rehearsal
+    reads that line from the tool result, never from the handshake alone."""
+    rehearsal = DR.Rehearsal(options(tmp_path, project(tmp_path, confirm_free=True)))
+    stable = {1: {"instructions": "the stable instruction text, no upgrade line here"}}
+    notice = "ddflow 0.2.1 is newer than this project: 72 item(s). Ask the operator whether"
+    session = {
+        1: {"instructions": "the stable instruction text, no upgrade line here"},
+        2: {"tools": [{"name": "t", "description": "d"}]},
+        3: {"content": [{"type": "text", "text": notice}]},
+    }
+    assert rehearsal._default_path(session) == []
+    assert rehearsal._proposed(session)[1] == []
+    # a handshake that stays silent about the upgrade is still a failure, now as before
+    assert rehearsal._default_path(stable) != []
