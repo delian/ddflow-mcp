@@ -38,6 +38,7 @@ from .handlers._common import (  # noqa: F401
 )
 from .handlers.agentsmoke import AGENTSMOKE_HANDLERS
 from .handlers.approvals import APPROVAL_HANDLERS
+from .handlers.batch import BATCH_HANDLERS
 from .handlers.defs import DEF_HANDLERS
 from .handlers.exports import (
     _h_export_acknowledged,
@@ -316,6 +317,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: services/batchgate.py (the batch record of batched gates)
+    **BATCH_HANDLERS,
     # first writer: services/installmanifest.py (an onboarding writer's run)
     **INSTALLMANIFEST_HANDLERS,
     # first writer: services/agent_smoke.py (a live smoke run)
