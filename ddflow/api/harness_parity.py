@@ -13,10 +13,11 @@ import json
 from collections import Counter
 
 from ..services import harnessreg as HR
+from ..services import facts
 from ..services.parity import answers as AN
 from ..services.parity import catalog as CAT
 
-_STATES = ("verified", "documented", "unverified", "none")
+_STATES = facts.STATUSES
 
 
 def active_rows() -> list:

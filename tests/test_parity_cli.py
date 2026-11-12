@@ -35,8 +35,8 @@ def test_blocking_is_the_first_unverified_row():
     h = HR.get("grok")
     answer = P.rows()[h.id]
     blocked = P.blocking(answer, catalog)
-    if blocked:
-        assert answer[blocked] == "unverified"
+    first = next((r.feature for r in catalog if answer[r.feature] == "unverified"), "")
+    assert blocked == first
 
 
 def test_json_round_trips_the_full_report():
