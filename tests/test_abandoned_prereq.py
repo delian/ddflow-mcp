@@ -71,6 +71,7 @@ def test_two_abandoned_needs_leave_no_stuck_edge_and_drop_only_the_abandoned_edg
     code, _, err = run_cli(repo, "abandon", "D2", "--reason", "x", "--drop-edges")
     assert code == 0, err
     assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["needs"] == []
+    assert json.loads(run_cli(repo, "--json", "show", "D2")[1])["state"] == "abandoned"
     text = "".join(run_cli(repo, "doctor")[1:])
     assert "T1 needs 'D1'" not in text
     assert "T1 needs 'D2'" not in text
