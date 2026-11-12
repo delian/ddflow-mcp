@@ -125,7 +125,7 @@ def _roots(repo: Path | str) -> tuple[Path, ...]:
 
 def project_key(repo: Path | str) -> str:
     """Which project a token is for: a token paired for one project proves nothing in another."""
-    return content_digest(str(_roots(repo)[-1]), "sha256").removeprefix("sha256:")[:16]
+    return content_digest(str(_roots(repo)[-1]), "sha256")[:16]
 
 
 def store_path(repo: Path | str) -> Path:
@@ -173,6 +173,14 @@ def _read(path: Path) -> dict[str, Any]:
         raise AuthRefused(f"refusing: the token store {path} is unreadable ({exc}).") from exc
     if not isinstance(data, dict) or data.get("format") != STORE_VERSION:
         raise AuthRefused(f"refusing: the token store {path} is not one this ddflow reads.")
+    for table in ("tokens", "pairings"):
+        value = data.get(table)
+        if value is not None and not isinstance(value, dict):
+            raise AuthRefused(
+                f"refusing: the token store {path} has {table!r} as {type(value).__name__}, "
+                "not a table; it refuses instead of crashing on the wrong shape. Fix the "
+                "store, or pair again from a new store."
+            )
     return {**_empty(), **data}
 
 
@@ -324,7 +332,7 @@ def _spend(cfg: Config, data: dict[str, Any], code: str) -> dict[str, Any]:
     m = _CODE.fullmatch(code.strip())
     if m is None or (row := data["pairings"].get(m.group(1))) is None:
         raise AuthRefused(_BAD_CODE)
-    if not hmac.compare_digest(token_hash(row["salt"] + m.group(2).upper()), row["hash"]):
+    if not hmac.compare_digest(token_hash(row["salt"] + m.group(2)), row["hash"]):
         row["attempts"] += 1
         if row["attempts"] >= cfg.agent.pair_max_attempts:
             del data["pairings"][m.group(1)]
@@ -463,3 +471,32 @@ def rows(st, *, everything: bool = False, now: float | None = None) -> list[dict
     """The tokens the log knows, oldest first: only the active ones unless ``everything``."""
     out = [{**r, "state": state_of(r, now)} for r in tokens_of(st).values()]
     return [r for r in out if everything or r["state"] == ACTIVE]
+
+
+def disagreements(repo: Path | str, logged: list[dict[str, Any]]) -> list[str]:
+    """Where `tokens list` (the log) and `verify` (the store) part company. `redeem` and
+    `revoke` write the store first and the log second, so a crash between the two leaves one
+    side ahead and a list derived from the log alone would lie. One note for each, said next
+    to the rows; the list itself stays "... is derived from the log", the notes are how it is
+    reconciled against what actually verifies."""
+    try:
+        stored = _read(_store(repo))["tokens"]
+    except AuthRefused:
+        return []
+    by_id = {r["id"]: r for r in logged}
+    notes: list[str] = []
+    for token_id in sorted(set(stored) - set(by_id)):
+        row = stored[token_id]
+        notes.append(
+            f"unrecorded: token {token_id} of {row['name']} is live in the store but has no "
+            f"log record (a crash between the store and the log); `tokens revoke "
+            f"{row['name']}` ends it"
+        )
+    for token_id in sorted(set(by_id) - set(stored)):
+        row = by_id[token_id]
+        if row["state"] == ACTIVE:
+            notes.append(
+                f"unrecorded: token {token_id} of {row['name']} is ended in the store but the "
+                "log still lists it active; it will not verify"
+            )
+    return notes

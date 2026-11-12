@@ -78,11 +78,15 @@ def revoke(repo: Path, args: dict, agent: str = "") -> O.Outcome:
 
 
 def tokens_list(repo: Path, args: dict, agent: str = "") -> O.Outcome:
-    """Who holds a token, from the log: names, roles and dates, never a secret."""
+    """Who holds a token, from the log: names, roles and dates, never a secret. Where the log
+    and the store disagree (a crash between them), the notes say so under the rows."""
     _log, _cfg, st = _load(repo, agent)
     rows = AU.rows(st, everything=bool(args.get("all")))
     text = "\n".join(
         f"{r['name']}  {r['role']}  {r['state']}  until {r['expires_at']}  ({r['id']}, by {r['by']})"
         for r in rows
     )
+    if notes := AU.disagreements(repo, rows):
+        text = f"{text}\n" if text else text
+        text += "\n".join(notes)
     return O.ok("tokens.list", tokens=rows, text=text or "no tokens")
