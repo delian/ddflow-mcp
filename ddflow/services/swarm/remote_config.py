@@ -8,7 +8,6 @@ split stays a DAG (r-small-files) and never a latent import cycle.
 
 from __future__ import annotations
 
-import dataclasses
 import re
 from dataclasses import dataclass
 
@@ -50,11 +49,28 @@ class Knobs:
     def from_config(cls, cfg: Config) -> Knobs:
         """Read the ``[swarm] remote_*`` knobs; one per field, so a new field needs a knob."""
         sw = cfg.swarm
-        kw = {f.name: getattr(sw, "remote_" + f.name) for f in dataclasses.fields(cls)}
-        # a config list one is the tuple field (a frozen knob), never a list object in Knobs
-        for name in ("exclude", "ssh_argv"):
-            kw[name] = tuple(kw[name])
-        return cls(**kw)
+        # each knob spelled out, so the dead-knob scan sees every read; `test_swarm_remote_config`
+        # holds the field list and the knob list together
+        return cls(
+            exclude=tuple(sw.remote_exclude),
+            bundle_max_bytes=sw.remote_bundle_max_bytes,
+            return_max_bytes=sw.remote_return_max_bytes,
+            return_max_commits=sw.remote_return_max_commits,
+            git_timeout_s=sw.remote_git_timeout_s,
+            scan_max_blob_bytes=sw.remote_scan_max_blob_bytes,
+            scan_batch_files=sw.remote_scan_batch_files,
+            branch_prefix=sw.remote_branch_prefix,
+            seed_name=sw.remote_seed_name,
+            proposals_max=sw.remote_proposals_max,
+            proposal_chars=sw.remote_proposal_chars,
+            proposals_max_bytes=sw.remote_proposals_max_bytes,
+            ssh_argv=tuple(sw.remote_ssh_argv),
+            ssh_timeout_s=sw.remote_ssh_timeout_s,
+            ssh_connect_timeout_s=sw.remote_ssh_connect_timeout_s,
+            copy_timeout_s=sw.remote_copy_timeout_s,
+            lanes_root=sw.remote_lanes_root,
+            detail_chars=sw.remote_detail_chars,
+        )
 
 
 DEFAULT = Knobs()
