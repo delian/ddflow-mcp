@@ -46,6 +46,7 @@ def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brie
     now: float | None = None,
     events: Callable[[], Sequence[Event]] | Sequence[Event] | None = None,
     phase_only: bool = False,
+    tags: Sequence[str] = (),
 ) -> Plan:
     """The ready set for ``purpose``, computed with the caller's identity (``agent``, else
     the configured id, else the log's), the reservation hold and the parallelism limit."""
@@ -64,6 +65,7 @@ def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brie
         hold=_reservation_hold(repo, st, cfg, me, now),
         parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
         with_deps=bool(phase) and not phase_only,
+        tags=tags,
     )
 
 
@@ -78,6 +80,7 @@ def plan_for_offer(
     agent: str,
     now: float | None = None,
     phase_only: bool = False,
+    tags: Sequence[str] = (),
 ) -> Plan:
     """The ``purpose="offer"`` plan ``next`` and ``pull`` must agree on, in one copy.
 
@@ -97,6 +100,7 @@ def plan_for_offer(
         agent=agent,
         now=now,
         phase_only=phase_only,
+        tags=tags,
     )
 
 
