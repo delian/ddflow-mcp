@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 
+from ...core import outcome as O
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ...views.output_caps import cut_text as _cut_text
 from ...views.output_caps import footer_of as _footer_of
@@ -56,13 +57,13 @@ def _status_handler(a, c):
 def _recover_call(repo, a, agent):
     """`recover`: the sweep or plan, or with `--adopt` one expired lease taken over."""
     if a.get("adopt"):
-        return _cap(
-            repo,
-            importlib.import_module("ddflow.api.recover_adopt").adopt(
-                repo, a.get("item", "") or "", reason=a.get("reason", "") or "", agent=agent
-            ),
-            "recover",
-            a,
+        if a.get("plan") or a.get("apply") or a.get("all"):
+            return O.refused(
+                "recover.adopt",
+                "--adopt takes over one lease and does nothing else: drop --plan, --apply and --all",
+            )
+        return importlib.import_module("ddflow.api.recover_adopt").adopt(
+            repo, a.get("item", "") or "", reason=a.get("reason", "") or "", agent=agent
         )
     return _cap(
         repo,

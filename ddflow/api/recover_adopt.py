@@ -72,8 +72,8 @@ def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
         f"({rec.unmerged_commits} unmerged commit(s) kept on its branch): {reason.strip()}"
     )
     out = CL._claim_once(repo, item, note=note, force=True, agent=agent)
-    # the recover surface's output caps and renderer read these keys
-    out.data.setdefault("found", [])
-    out.data.setdefault("_render", {"found": [], "salvageable": []})
-    out.data.setdefault("count", 1)
+    if out.ok:  # the recover surface's renderer reads these keys
+        out.data.setdefault("found", [])
+        out.data.setdefault("_render", {"found": [], "salvageable": []})
+        out.data.setdefault("count", 1)
     return out
