@@ -239,10 +239,13 @@ def test_a_class_with_an_untimed_run_has_no_total_minutes():
     assert rerun["runs"] == 2
     assert rerun["suite_minutes"] is None  # [600 s, untimed]: a partial sum is not the total
     assert rerun["suite_minutes_timed"] == 10.0
-    assert rerun["queue_minutes"] == 1.0  # only the recorded waits are summed
+    assert rerun["queue_minutes"] is None  # one run has no recorded wait: unknown, not zero
+    assert rerun["queue_minutes_known"] == 1.0
+    assert rerun["queue_unknown"] == 1
     assert rerun["untimed"] == 1
     assert rep["avoidable_suite_minutes"] is None
     assert "1 untimed" in SW.text(rep)
+    assert "1 without a recorded wait" in SW.text(rep)
 
 
 def test_the_view_scopes_by_phase_through_the_service():

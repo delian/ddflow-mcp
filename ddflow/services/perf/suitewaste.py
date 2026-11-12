@@ -227,8 +227,10 @@ def build(
             #: None when any run of the class recorded no time: a partial sum is not the total.
             "suite_minutes": _minutes([r["suite_s"] for r in by[c]], whole=True),
             "suite_minutes_timed": _minutes([r["suite_s"] for r in by[c]]),
-            #: A run that did not queue has no wait: only the recorded waits are summed.
-            "queue_minutes": _minutes([r["queue_s"] for r in by[c]]),
+            #: An older log never recorded the wait, so a missing one is unknown, not zero.
+            "queue_minutes": _minutes([r["queue_s"] for r in by[c]], whole=True),
+            "queue_minutes_known": _minutes([r["queue_s"] for r in by[c]]),
+            "queue_unknown": sum(r["queue_s"] is None for r in by[c]),
             "untimed": sum(r["suite_s"] is None for r in by[c]),
         }
         for c in CLASSES
@@ -303,6 +305,12 @@ def text(data: dict) -> str:
             + (
                 f"  ({v['untimed']} untimed; the timed runs alone {_fmt(v['suite_minutes_timed'])})"
                 if v["untimed"]
+                else ""
+            )
+            + (
+                f"  ({v['queue_unknown']} without a recorded wait; the known waits alone "
+                f"{_fmt(v['queue_minutes_known'])})"
+                if v["queue_unknown"]
                 else ""
             )
         )
