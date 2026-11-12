@@ -143,7 +143,11 @@ def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
     _git(wt, "add", "-A")
     _git(wt, "commit", "-qm", "work")
     code, out, err = run_cli(repo, "--json", "merge", "T1")
-    assert '"ci"' in out and CI.bug_id("ruff check") in out, (code, out[-600:], err[-300:])
+    assert '"post_merge_check"' in out and CI.bug_id("ruff check") in out, (
+        code,
+        out[-600:],
+        err[-300:],
+    )
 
 
 def test_the_pre_push_hook_reports_its_outcome_to_ddflow(repo, fake_precommit, tmp_path):
