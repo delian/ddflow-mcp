@@ -103,3 +103,38 @@ def test_an_unknown_size_is_not_counted_as_small():
     ans = run(log)
     assert bucket(ans, "(unknown size)")["items"] == 1
     assert bucket(ans, "< 50")["items"] == 0
+
+
+def test_a_non_review_gate_finding_is_not_a_review_finding():
+    log = seeded()
+    log.add("review.triaged", "A", "a1", T0 + 1160, gate="ci", severity="LOW", verdict="confirmed")
+    small = bucket(run(log), "< 50")
+    assert small["findings"] == 1  # only the rubber_duck one
+
+
+def test_a_finding_before_the_window_is_not_counted():
+    log = seeded()
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    ans = M.run(log.events, st, cfg, now, view="batch", since="99h")  # after every event
+    assert all(b["findings"] == 0 and b["runs"] == 0 for b in ans.metrics["buckets"])
+
+
+def test_lock_wait_is_rendered_and_counts_as_a_figure():
+    from ddflow.services.metrics import batch as B
+
+    ans = run(seeded())
+    assert "lock wait p50 30s" in B.text(ans.metrics)
+    only_wait = {
+        "buckets": [
+            {
+                "bucket": "x",
+                "elapsed": {"p50_s": None, "n": 0},
+                "lock_wait": {"p50_s": 30, "n": 3},
+                "findings_per_run": None,
+                "runs_with_finding": None,
+                "confirmed_rate": None,
+            }
+        ]
+    }
+    assert B.has_figures(only_wait)
