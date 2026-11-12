@@ -443,6 +443,7 @@ def test_the_offer_counts_every_source_not_three_of_them(repo):
     from ddflow.services import brief_volatile
 
     assert "queue is empty" not in _instructions(repo).lower()
+    assert "ddflow_import" not in _instructions(repo)
     text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import" in text, text[-800:]
     assert "queue is empty" in text.lower(), text[-800:]

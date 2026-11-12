@@ -306,6 +306,7 @@ def test_the_handshake_says_the_import_was_never_finished(repo):
     from ddflow.services import brief_volatile
 
     assert "ddflow_import_verify" not in _instructions(repo)
+    assert "without globs" not in _instructions(repo)
     text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import_verify" in text, text[-1200:]
     assert "without globs" in text, text[-1200:]

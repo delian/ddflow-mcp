@@ -233,6 +233,7 @@ def test_the_mcp_instructions_offer_it_when_there_is_history_and_no_queue(repo):
     from ddflow.services import brief_volatile
 
     assert "queue is empty" not in _instructions(repo).lower()
+    assert "ddflow_import" not in _instructions(repo)
     text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import" in text, text[-600:]
     assert "queue is empty" in text.lower(), text[-600:]
