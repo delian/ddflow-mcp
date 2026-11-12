@@ -425,3 +425,16 @@ def test_a_submodule_untracked_file_mode_and_bytes_are_in_the_key(tmp_path: Path
     f.chmod(0o755)
     three = key(repo)
     assert len({one, two, three}) == 3 and None not in (one, two, three)
+
+
+def test_a_submodule_untracked_symlink_is_keyed_by_the_link(tmp_path: Path):
+    lib = project(tmp_path, "lib3")
+    repo = project(tmp_path, "main3")
+    git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(lib), "lib")
+    git(repo, "commit", "-q", "-m", "add lib")
+    link = repo / "lib" / "l"
+    link.symlink_to("one")
+    a = key(repo)
+    link.unlink()
+    link.symlink_to("two")
+    assert a is not None and key(repo) not in (None, a)

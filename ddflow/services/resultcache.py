@@ -110,6 +110,9 @@ def _submodule_dirt(path: Path) -> str | None:
     parts = []
     for rel in sorted(others):
         try:
+            if (path / rel).is_symlink():  # the link itself, never its target
+                parts.append(f"{rel}:link={_digest(os.readlink(path / rel))}")
+                continue
             mode = os.lstat(path / rel).st_mode & 0o111
             parts.append(f"{rel}:{mode}={_digest((path / rel).read_bytes().decode('latin-1'))}")
         except OSError:
