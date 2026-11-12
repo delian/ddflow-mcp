@@ -318,7 +318,7 @@ def test_a_hand_made_detached_tree_named_like_a_generic_scritch_is_still_foreign
 
 
 def test_a_symlink_named_like_a_scratch_tree_is_still_foreign(checkout, monkeypatch, tmp_path):
-    primary, tree = checkout
+    _primary, tree = checkout
     systmp = tmp_path / "systmp"
     systmp.mkdir()
     cover = systmp / "ddflow-cover"
