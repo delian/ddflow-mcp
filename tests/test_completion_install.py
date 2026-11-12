@@ -90,7 +90,14 @@ def test_uninstall_writes_only_with_yes(tmp_path, monkeypatch):
     assert "export X=1\n" in rc.read_text()  # the line install did not write stays
 
 
-def test_install_skips_a_commented_not_activated_line(tmp_path):
+def test_install_appends_a_block_when_only_a_comment_matches(tmp_path):
+    # a commented-out activation line is not "installed": still append the managed block
     commented = f"# {install._activate_line('bash')}\n"
     assert install.install_text("bash", commented) != commented
     assert "# >>> ddflow completion >>>" in install.install_text("bash", commented)
+
+
+def test_install_is_idempotent_when_a_managed_block_exists(tmp_path):
+    current = install.install_text("bash", "source <(ddflow completion bash) # keep\n")
+    assert install.install_text("bash", current) == current
+    assert current.count("# >>> ddflow completion >>>") == 1
