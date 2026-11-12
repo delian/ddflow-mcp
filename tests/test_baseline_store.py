@@ -99,6 +99,7 @@ def test_keep_zero_keeps_nothing(tmp_path: Path) -> None:
 
 def test_the_measure_runs_while_the_lock_is_held(tmp_path: Path) -> None:
     inside: list = []
+    stored: list = []
     state = {"held": False}
 
     @contextlib.contextmanager
@@ -107,6 +108,8 @@ def test_the_measure_runs_while_the_lock_is_held(tmp_path: Path) -> None:
         try:
             yield
         finally:
+            # the entry is on disk before the lock is given back
+            stored.append(BS.load(tmp_path, SHA, CMD, keep_days=14) is not None)
             state["held"] = False
 
     def run():
@@ -114,7 +117,7 @@ def test_the_measure_runs_while_the_lock_is_held(tmp_path: Path) -> None:
         return BS.Measured(failures={"t.py::a": "boom"})
 
     BS.baseline_for(tmp_path, SHA, CMD, run, keep_days=14, lock=lock)
-    assert inside == [True]
+    assert inside == [True] and stored == [True]
 
 
 def test_a_run_that_waited_for_the_lock_finds_what_the_holder_stored(tmp_path: Path) -> None:
@@ -194,3 +197,19 @@ def test_the_same_failure_from_two_ci_trees_stores_one_digest(tmp_path: Path) ->
         keep_days=14,
     )
     assert one.failing == two.failing and one.failing != other.failing
+
+
+def test_a_long_wait_for_the_lock_does_not_age_the_store_write(tmp_path: Path, monkeypatch) -> None:
+    """The time read after the lock is won, not the time the call began, stamps the entry and
+    judges what the holder stored."""
+    clock = {"t": 0.0}
+    monkeypatch.setattr(BS.CLOCK, "wall", lambda: clock["t"])
+
+    @contextlib.contextmanager
+    def lock():
+        clock["t"] = 2 * DAY  # waited two days
+        yield
+
+    got = BS.baseline_for(tmp_path, SHA, CMD, _measure([]), keep_days=1, lock=lock)
+    assert got.measured_at == 2 * DAY
+    assert BS.load(tmp_path, SHA, CMD, keep_days=1) is not None  # fresh at 2 days

@@ -149,16 +149,20 @@ def baseline_for(
 ) -> Baseline:
     """The baseline of ``sha``: the stored complete one, else ``measure()`` once (under
     ``lock()`` when given, reading the store again once it is held) and stored."""
-    clock = CLOCK.wall() if now is None else now
-    held = load(repo, sha, command, keep_days=keep_days, now=clock)
+
+    def stamp() -> float:  # read again after a wait: a lock can be held for hours
+        return CLOCK.wall() if now is None else now
+
+    held = load(repo, sha, command, keep_days=keep_days, now=stamp())
     if held is not None and held.complete:
         return held
     with (lock or contextlib.nullcontext)():
         if lock is not None:
-            held = load(repo, sha, command, keep_days=keep_days, now=clock)
+            held = load(repo, sha, command, keep_days=keep_days, now=stamp())
             if held is not None and held.complete:
                 return held
-        return _store(repo, sha, command, measure(), keep_days, clock)
+        got = measure()
+        return _store(repo, sha, command, got, keep_days, stamp())
 
 
 def baseline_for_cfg(
