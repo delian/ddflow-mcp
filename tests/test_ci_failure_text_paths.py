@@ -80,3 +80,26 @@ def test_a_named_root_matches_whole_path_components_only() -> None:
     assert FT.digest("/srv/ci/run/70/same.txt", ["/srv/ci/run/7"]) != FT.digest(
         "/other/0/same.txt", ["/other"]
     )
+
+
+def test_odd_path_characters_after_a_root_or_marker_do_not_count_as_the_tree() -> None:
+    assert FT.normalise("/srv/ci/run/7+extra/z", ["/srv/ci/run/7"]) == "/srv/ci/run/7+extra/z"
+    assert FT.normalise("E /opt/ddflow-ci.abc-extra/f") == "E /opt/ddflow-ci.abc-extra/f"
+    assert (
+        FT.normalise("fail /src/pytest-of-old/pytest-0/a.py")
+        == "fail /src/pytest-of-old/pytest-0/a.py"
+    )
+    assert FT.normalise("foo/b/c/test.py", ["/b/c"]) == "foo/b/c/test.py"
+
+
+def test_roots_of_equal_length_give_one_result_in_any_order() -> None:
+    text = "/a/b/c"
+    assert FT.normalise(text, ["/a/b", "/b/c"]) == FT.normalise(text, ["/b/c", "/a/b"])
+
+
+def test_a_base_tree_and_a_worktree_root_keep_what_follows_them() -> None:
+    for root in ("/tmp/ddflow-base.abc123", "/home/u/src/proj/.ddflow/worktrees/GM-x"):
+        one = TEXT.format(root=root)
+        other = one.replace("tests/data/x.json", "tests/data/y.json")
+        new = one.replace("not found", "is not valid json")
+        assert FT.digest(one) != FT.digest(other) and FT.digest(one) != FT.digest(new)

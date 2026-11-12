@@ -18,21 +18,27 @@ from ...core.digest import content_digest
 
 TREE = "<tree>"
 PYTEST_TMP = "<pytest-tmp>"
+#: Where a path starts and ends inside failure text: not in the middle of another path or word.
+_START = r"(?<![\w.\-/])"
+_END = r"(?=[/\s:'\")\],]|$)"
 #: A scratch tree ddflow makes: the directory name is the marker, whatever the temp root is.
-_SCRATCH = re.compile(r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+")
+_SCRATCH = re.compile(_START + r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+" + _END)
 #: A lane worktree: ``<anything>/.ddflow/worktrees/<item>``.
-_WORKTREE = re.compile(r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+")
-#: pytest's own temp tree: the user and the run counter differ between two runs.
-_PYTEST = re.compile(r"(?:/(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+")
+_WORKTREE = re.compile(_START + r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+" + _END)
+#: pytest's own temp tree, under a temp root: the user and the run counter differ between runs.
+_PYTEST = re.compile(_START + r"(?:/(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+" + _END)
 
 
 def normalise(text: str, roots: Iterable[str] = ()) -> str:
     """``text`` with each tree root blanked to ``<tree>``: the named ``roots`` (longest first,
-    so a nested root is not half-replaced) and the roots ddflow's own scratch trees and
-    worktrees have. A path outside any tree is left alone."""
-    named = sorted({str(r).rstrip("/") for r in roots if str(r).strip("/")}, key=len, reverse=True)
-    for root in named:  # a whole path component: `/run/7` is not the start of `/run/70`
-        text = re.sub(re.escape(root) + r"(?![\w.\-])", TREE, text)
+    then by name, so the result never depends on set order and a nested root is not
+    half-replaced) and the roots ddflow's own scratch trees and worktrees have. A root matches
+    whole path components only. A path outside any tree is left alone."""
+    named = sorted(
+        {str(r).rstrip("/") for r in roots if str(r).strip("/")}, key=lambda r: (-len(r), r)
+    )
+    for root in named:
+        text = re.sub(_START + re.escape(root) + _END, TREE, text)
     text = _PYTEST.sub(PYTEST_TMP, text)
     return _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
 
