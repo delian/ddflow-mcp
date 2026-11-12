@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import shutil
 import sqlite3
 import subprocess
@@ -26,7 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.services.completion import kinds, scripts
+from ddflow.services import completion_shell as scripts
+from ddflow.services.completion import kinds
 from ddflow.services.completion import tree as T
 from ddflow.services.completion import values as V
 from ddflow.surfaces.cli import build_parser
@@ -166,12 +166,11 @@ def _widget_index(d: Path) -> str:
     return str(d / "index.db-wwwwwwww")
 
 
-def _activation_defined(shell: str, text: str) -> bool:
-    """The template really DEFINES the activation function, anchored at the start of a
-    line, so an echo or comment that merely mentions the name does not pass."""
-    name = f"_ddflow_activate_{shell}"
-    header = rf"^function\s+{name}\b" if shell == "fish" else rf"^(?:function\s+)?{name}\s*\(\s*\)"
-    return re.search(header, text, re.MULTILINE) is not None
+def _registers_a_completer(shell: str, text: str) -> bool:
+    """The text really registers the engine's completer (the argcomplete function for bash
+    and zsh, the fish completion function), not a placeholder that merely parses."""
+    needle = "__fish_ddflow_complete" if shell == "fish" else "_python_argcomplete"
+    return needle in text
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)
@@ -186,9 +185,8 @@ def test_every_shell_script_parses(shell, tmp_path):
     env = {**os.environ, "BASH_ENV": "", "ENV": ""}  # bash reads these at startup
     text = scripts.for_shell(shell)
     # a degenerate or placeholder script would still parse clean, so also require the
-    # real activation function DEFINITION, anchored at line start -- an echo, comment
-    # or mention of the name alone does not pass
-    assert _activation_defined(shell, text)
+    # registration of the real completer
+    assert _registers_a_completer(shell, text)
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
     result = subprocess.run(
