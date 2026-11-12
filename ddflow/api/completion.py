@@ -7,6 +7,7 @@ from typing import Any
 
 from ..core import outcome as O
 from ..services import completion as CM
+from ..services.completion import install
 from ._base import _load
 
 

@@ -264,21 +264,37 @@ def check_table(table: Any, name: str, where: str) -> None:
         SUBMODEL_CONTROLS,
         where,
     )
-    if name == "capabilities":
-        patterns = table.get("patterns")
-        if patterns is not None and (
-            not isinstance(patterns, list)
-            or not all(isinstance(p, str) and p in PATTERNS for p in patterns)
-        ):
-            raise DescriptorError(
-                f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}"
-            )
-    if name == "orchestration" and keys and table.get("loop") is None:
+    _check_capabilities_table(name, table, where)
+    _check_orchestration_table(name, table, keys, where)
+    _check_headless_table(name, table, where)
+    _check_none_and_continuation_table(name, table, keys, where)
+
+
+def _check_capabilities_table(name: str, table: dict, where: str) -> None:
+    if name != "capabilities":
+        return
+    patterns = table.get("patterns")
+    if patterns is not None and (
+        not isinstance(patterns, list)
+        or not all(isinstance(p, str) and p in PATTERNS for p in patterns)
+    ):
+        raise DescriptorError(f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}")
+
+
+def _check_orchestration_table(name: str, table: dict, keys: set, where: str) -> None:
+    if name != "orchestration":
+        return
+    if keys and table.get("loop") is None:
         raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
-    if name == "orchestration":
-        _require_orchestration_keepalive(table, where)
+    _require_orchestration_keepalive(table, where)
+
+
+def _check_headless_table(name: str, table: dict, where: str) -> None:
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
+
+
+def _check_none_and_continuation_table(name: str, table: dict, keys: set, where: str) -> None:
     if "none" in table and table["none"] is True and keys:
         raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
     if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
@@ -342,7 +358,13 @@ def validate(sections: dict[str, Any], where: str) -> None:
         for k, v in vars(sec).items():
             if type(v) is int and v < 0:
                 raise DescriptorError(f"{where}: [{name}].{k} must not be negative")
-    cont = sections.get("continuation")
+    _validate_continuation(sections.get("continuation"), where)
+    _validate_headless(sections, where)
+    _validate_orchestration(sections.get("orchestration"), where)
+    _validate_capabilities(sections.get("capabilities"), where)
+
+
+def _validate_continuation(cont: Any, where: str) -> None:
     if cont and (cont.cap or cont.goal_command or cont.loop_guard):
         if cont.mechanism in ("", "none"):
             raise DescriptorError(
@@ -353,6 +375,9 @@ def validate(sections: dict[str, Any], where: str) -> None:
         _membership(
             "continuation", cont.mechanism, "continuation.mechanism", CONTINUATION_MECHANISMS, where
         )
+
+
+def _validate_headless(sections: dict[str, Any], where: str) -> None:
     head = sections.get("headless")
     if head and head.autonomy:
         auto = sections.get("autonomy")
@@ -360,22 +385,27 @@ def validate(sections: dict[str, Any], where: str) -> None:
             raise DescriptorError(
                 f"{where}: headless.autonomy {head.autonomy!r} is not an [autonomy].profiles id"
             )
-    orch = sections.get("orchestration")
+
+
+def _validate_orchestration(orch: Any, where: str) -> None:
     if orch and orch.loop:
         _membership("orchestration", orch.loop, "orchestration.loop", ORCHESTRATION_LOOPS, where)
-    cap = sections.get("capabilities")
-    if cap:
-        for field_name in ("model_visibility", "cost_exposed", "subagent_model_control"):
-            value = getattr(cap, field_name)
-            source = getattr(cap, f"{field_name}_source")
-            # a verified (non-unknown) value must cite the file and key that set it, never guess.
-            if value not in ("", "unknown") and not source.strip():
-                raise DescriptorError(
-                    f"{where}: capabilities.{field_name} is {value!r} but "
-                    f"capabilities.{field_name}_source names no file and key that set it"
-                )
-        if cap.patterns and not cap.patterns_source.strip():
+
+
+def _validate_capabilities(cap: Any, where: str) -> None:
+    if not cap:
+        return
+    for field_name in ("model_visibility", "cost_exposed", "subagent_model_control"):
+        value = getattr(cap, field_name)
+        source = getattr(cap, f"{field_name}_source")
+        # a verified (non-unknown) value must cite the file and key that set it, never guess.
+        if value not in ("", "unknown") and not source.strip():
             raise DescriptorError(
-                f"{where}: capabilities.patterns is {list(cap.patterns)!r} but "
-                "capabilities.patterns_source names no file and key that set it"
+                f"{where}: capabilities.{field_name} is {value!r} but "
+                f"capabilities.{field_name}_source names no file and key that set it"
             )
+    if cap.patterns and not cap.patterns_source.strip():
+        raise DescriptorError(
+            f"{where}: capabilities.patterns is {list(cap.patterns)!r} but "
+            "capabilities.patterns_source names no file and key that set it"
+        )

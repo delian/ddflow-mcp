@@ -284,7 +284,7 @@ def test_the_shell_spawn_carries_its_bandit_justification():
     assert "shell=True" not in ci_src and "CommandRunner()" in ci_src
     runner_src = (root / "ddflow/services/cmdrunner.py").read_text("utf-8")
     assert "shell=True" not in runner_src and "P.run_shell(" in runner_src
-    src = (root / "ddflow/infra/proc.py").read_text("utf-8")
+    src = (root / "ddflow/adapters/proc_server.py").read_text("utf-8")
     call = next(ln for ln in src.splitlines() if "shell=True" in ln and "popen(" in ln)
     assert "nosec B604" in call, "the shell=True popen( line needs `# nosec B604` + why"
 
