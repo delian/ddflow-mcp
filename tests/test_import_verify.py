@@ -298,10 +298,14 @@ def test_the_handshake_says_the_import_was_never_finished(repo):
     """The offer to import stops the moment the queue has anything in it. Without this
     block, an import that landed 1,170 tasks and stopped there is never mentioned
     again — and the agent has no reason to think anything is missing."""
-    from ddflow.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instruction_vars
 
     _imported(repo)
-    text = _instructions(repo)
+    # The import-unfinished notice is per-session state, so it renders in the brief,
+    # not in the byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    from ddflow.services import brief_volatile
+
+    text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import_verify" in text, text[-1200:]
     assert "without globs" in text, text[-1200:]
 

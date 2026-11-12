@@ -120,9 +120,16 @@ def test_an_adopted_project_with_unimported_history_is_offered_it_too(tmp_path):
     assert run_cli(tmp_path, "init")[0] == 0
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "todo.md").write_text("## P1\n\n- [ ] **P1.1** — work\n")
+    # The offer is per-session state, so it renders in the brief, not in the byte-stable
+    # handshake (B-mcp-instructions-volatile-prefix).
+    from ddflow.services import brief_volatile
+    from ddflow.surfaces.mcp import _instruction_vars
+
     text = _instructions(tmp_path)
-    assert "queue is empty" in text
-    assert "`onboard` prompt also cuts the workflow over" in text
+    assert "queue is empty" not in text  # moved to the brief
+    brief = brief_volatile.volatile_lines(_instruction_vars(tmp_path))
+    assert "queue is empty" in brief
+    assert "`onboard` prompt also cuts the workflow over" in brief
 
 
 def test_an_unscoped_run_names_no_scope():

@@ -38,6 +38,13 @@ from ddflow.services import companions as CO
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
+def _brief_lines(repo: Path) -> str:
+    from ddflow.services import brief_volatile
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    return brief_volatile.volatile_lines(_instruction_vars(repo))
+
+
 def _companion(**over) -> CO.Companion:
     spec = {
         "id": "probe_target",
@@ -307,8 +314,11 @@ def test_the_handshake_never_tells_an_agent_to_register_a_cli_tool(repo):
     # version of this test read `unregistered_companions` — a variable the template
     # referenced nowhere, so the fix computed three new lists, rendered none of them,
     # and this test went green over an instruction block that had not changed a word.
-    # A test that reads an intermediate value proves the intermediate value.
-    text = _instructions(repo)
+    # A test that reads an intermediate value proves the intermediate value. The
+    # companion state lines are per-session state, so they render in the brief, not in
+    # the byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    assert "not wired up" not in _instructions(repo)
+    text = _brief_lines(repo)
     assert "clitool" in text, "the companion is not mentioned at all; the test proves nothing"
     block = text[text.index("clitool") - 400 : text.index("clitool") + 400]
     assert "companions_add" not in block, f"the handshake offers to register a cli tool:\n{block}"
@@ -336,7 +346,9 @@ def test_the_handshake_calls_an_unprobed_companion_UNCHECKED_not_missing(repo):
     # separate heading was tried and removed — it split the install command away from
     # the companion it belonged to, leaving the agent nothing to act on in the turn
     # where it proposes.
-    text = _instructions(repo)
+
+    assert "not wired up" not in _instructions(repo)  # moved to the brief
+    text = _brief_lines(repo)
     assert "[not checked]" in text, text[-900:]
     assert "[not installed]" not in text, "an unprobed companion was rendered as known-absent"
     # ...and the install command is one call away (the charter names `ddflow_companions`).

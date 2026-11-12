@@ -244,6 +244,13 @@ def _instructions(repo: Path) -> str:
     return json.loads(out.getvalue())["result"]["instructions"]
 
 
+def _brief_lines(repo: Path) -> str:
+    from ddflow.services import brief_volatile
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    return brief_volatile.volatile_lines(_instruction_vars(repo))
+
+
 def test_an_unadopted_repo_is_told_to_run_setup(repo):
     text = _instructions(repo)
     assert "does not use ddflow yet" in text
@@ -263,8 +270,11 @@ def test_an_adopted_repo_names_its_remaining_setup_gaps(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     text = _instructions(repo)
     assert "ddflow_brief" in text and "Claim before you edit" in text
-    assert "No test command is configured" in text
-    assert "No cross-family reviewer is configured" in text
+    # The setup gaps are per-session state, so they render in the brief, not in the
+    # byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    brief = _brief_lines(repo)
+    assert "No test command is configured" in brief
+    assert "No cross-family reviewer is configured" in brief
 
 
 def test_a_fully_configured_repo_gets_no_setup_nagging(repo):

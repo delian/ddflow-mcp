@@ -224,11 +224,15 @@ def test_an_empty_repository_says_so_rather_than_failing(repo):
 
 
 def test_the_mcp_instructions_offer_it_when_there_is_history_and_no_queue(repo):
-    from ddflow.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instruction_vars
 
     _legacy(repo)
     run_cli(repo, "init")
-    text = _instructions(repo)
+    # The queue-empty-and-importable offer is per-session state, so it renders in the
+    # brief, not in the byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    from ddflow.services import brief_volatile
+
+    text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "ddflow_import" in text, text[-600:]
     assert "queue is empty" in text.lower(), text[-600:]
 

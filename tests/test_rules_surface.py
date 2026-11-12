@@ -134,14 +134,19 @@ def test_the_handshake_tells_the_agent_to_ASK_not_to_fix(repo):
     matters, and then says ask first. A tool that silently rewrote `AGENTS.md` on connect
     would be editing a file it was never given permission to touch.
     """
-    from ddflow.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instruction_vars, _instructions
 
     _adopted(repo)
     clean = _instructions(repo)
     assert "rules file needs the operator" not in clean, "it speaks when nothing is wrong"
 
     (repo / "AGENTS.md").unlink()
-    text = _instructions(repo)
+
+    # The rules-drift notice is per-session state, so it renders in the brief, not in
+    # the byte-stable handshake (B-mcp-instructions-volatile-prefix).
+    from ddflow.services import brief_volatile
+
+    text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "rules file needs the operator" in text
     assert "Ask the operator before fixing it" in text
     assert "ddflow_setup" in text, "the remedy is not named"
