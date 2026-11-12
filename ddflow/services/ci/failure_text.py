@@ -25,9 +25,14 @@ _END = r"(?=\.?(?:[/\s:'\")\],]|$))"
 _SCRATCH = re.compile(_START + r"(?:/[^\s:'\"]*?)?/ddflow-(?:ci|base|mut)\.[A-Za-z0-9_]+" + _END)
 #: A lane worktree: ``<anything>/.ddflow/worktrees/<item>``.
 _WORKTREE = re.compile(_START + r"(?:/[^\s:'\"]*?)?/\.ddflow/worktrees/[^/\s:'\"]+" + _END)
-#: pytest's own temp tree, under a temp root: the user and the run counter differ between runs.
+#: pytest's own temp tree, under a directory named tmp, T (macOS) or temp (a custom root is
+#: named in ``roots``): the user and the run counter differ between runs.
 _PYTEST = re.compile(
-    _START + r"(?:/(?:private/)?(?:var/)?tmp)?/pytest-of-[^/\s]+/pytest-\d+" + _END
+    _START
+    + r"(?:/(?:[^\s:'\"]*?/)?(?:tmp|T|temp)|"
+    + re.escape(TREE)
+    + r")/pytest-of-[^/\s]+/pytest-\d+"
+    + _END
 )
 
 

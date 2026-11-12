@@ -118,7 +118,7 @@ def test_roots_are_replaced_in_one_pass_and_a_sentence_end_or_bracket_closes_a_p
 def test_a_pytest_temp_inside_a_tree_reads_the_same_from_two_trees() -> None:
     one = "File /tmp/ddflow-base.aaa/pytest-of-u/pytest-1/tests/test_a.py"
     two = "File /tmp/ddflow-ci.bbb/pytest-of-v/pytest-2/tests/test_a.py"
-    assert FT.normalise(one) == "File <tree><pytest-tmp>/tests/test_a.py"
+    assert FT.normalise(one) == "File <pytest-tmp>/tests/test_a.py"
     assert FT.digest(one) == FT.digest(two)
 
 
@@ -131,3 +131,10 @@ def test_the_baseline_compare_reads_one_failure_from_two_trees_as_the_same() -> 
     assert BR._differs(tid, ci, base) is False  # an old red is not a new offender
     new = {tid: ci[tid].replace("not found", "is not valid json")}
     assert BR._differs(tid, new, base) is True
+
+
+def test_pytest_temp_needs_a_temp_root_and_a_macos_root_counts() -> None:
+    mac = "/private/var/folders/xx/yy/T/pytest-of-u/pytest-{n}/tests/test_a.py"
+    assert FT.digest(mac.format(n=1)) == FT.digest(mac.format(n=2))
+    assert FT.normalise("/pytest-of-old/pytest-0/a.py") == "/pytest-of-old/pytest-0/a.py"
+    assert FT.digest("/pytest-of-old/pytest-0/a.py") != FT.digest("/pytest-of-new/pytest-0/a.py")
