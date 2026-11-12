@@ -21,10 +21,6 @@ from ddflow.surfaces.mcp import TOOLS
 #: `--allow-older-version`, `--reason`); a command's own arguments are the rest.
 GLOBAL_DESTS = {"repo", "agent", "json", "allow_older", "skew_reason", "version"}
 
-#: A long option string read back to a flag name: `--rerun-failed` -> `rerun_failed`.
-def _flag_name(option: str) -> str:
-    return option.lstrip("-").replace("-", "_")
-
 
 def _gate_run_params():
     commands = [c for c in all_commands(tools=True) if c.path == ("gate", "run")]
@@ -36,7 +32,7 @@ def _gate_run_own_actions():
     parser = build_parser()
     group = parser._subparsers._group_actions[0]
     gate = group.choices["gate"]
-    subparsers = [a for a in gate._actions if isinstance(a, argparse._SubParsersAction)][0]
+    subparsers = next(a for a in gate._actions if isinstance(a, argparse._SubParsersAction))
     run = subparsers.choices["run"]
     return [
         a
@@ -70,7 +66,5 @@ def test_full_is_carried_by_both_surfaces_or_neither():
     # argument goes -- so once `full` is one surface's flag it must be the other's too.
     # Read from the OPTION STRING (`--full`), which is exactly the argparse token a lane
     # writes and the CLI would otherwise refuse as unrecognized.
-    cli_has_full = any(
-        "--full" in a.option_strings for a in _gate_run_own_actions()
-    )
+    cli_has_full = any("--full" in a.option_strings for a in _gate_run_own_actions())
     assert ("full" in TOOLS["ddflow_gate_run"]["properties"]) == cli_has_full
