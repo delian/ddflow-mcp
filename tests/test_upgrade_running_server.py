@@ -85,6 +85,8 @@ def test_a_server_that_outlived_a_self_upgrade_refuses_writes_and_says_restart(
     new_version = ddflow_new_version()
     # the server is started by the OLD code
     monkeypatch.setattr(ddflow, "__version__", OLD)
+    # nothing newer is installed yet: the package on disk is the version the server runs
+    monkeypatch.setattr(UN, "installed_version", lambda: OLD)
     server = Server(project)
     assert not call(server, "ddflow_status").get("isError")
     first = call(server, "ddflow_phase_add", {"id": "P1", "title": "before the upgrade"}, at=2)

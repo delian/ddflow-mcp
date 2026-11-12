@@ -656,6 +656,15 @@
    },
    "v": 1
   },
+  "merge.reconciled": {
+   "fields": {
+    "base": ["str"],
+    "files": ["list"],
+    "main": ["str"],
+    "unknown": ["bool"]
+   },
+   "v": 1
+  },
   "phase.added": {
    "fields": {
     "body": ["str"],
