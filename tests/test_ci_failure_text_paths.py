@@ -1,0 +1,60 @@
+"""Failure text is compared by a digest that ignores the ci tree's path (GM-ci-path-normalise)."""
+
+from __future__ import annotations
+
+import importlib
+
+# `ddflow.services.ci.failure_text` is also the lazy name of `flakes.failure_text`, so the
+# package attribute is not reliable: import the module by name.
+FT = importlib.import_module("ddflow.services.ci.failure_text")
+
+TEXT = "FAILED tests/test_a.py::test_x - AssertionError: {root}/tests/data/x.json not found"
+
+
+def test_the_same_failure_from_two_tree_paths_has_one_digest() -> None:
+    one = TEXT.format(root="/tmp/ddflow-ci.k3j2h1x9")
+    two = TEXT.format(root="/var/tmp/ddflow-ci.Zq81_aa0")
+    assert one != two
+    assert FT.digest(one) == FT.digest(two)
+    assert (
+        FT.normalise(one)
+        == "FAILED tests/test_a.py::test_x - AssertionError: <tree>/tests/data/x.json not found"
+    )
+
+
+def test_a_base_scratch_and_a_lane_worktree_read_the_same() -> None:
+    a = TEXT.format(root="/tmp/ddflow-base.abc123")
+    b = TEXT.format(root="/home/u/src/proj/.ddflow/worktrees/GM-baseline-store")
+    assert FT.digest(a) == FT.digest(b)
+
+
+def test_a_named_root_is_blanked_too_longest_first() -> None:
+    roots = ["/srv/ci/run/7", "/srv/ci/run/7/sub"]
+    one = TEXT.format(root="/srv/ci/run/7/sub")
+    assert FT.normalise(one, roots).count("<tree>") == 1
+    assert "/sub" not in FT.normalise(one, roots)  # not half-replaced as <tree>/sub
+    two = TEXT.format(root="/srv/ci/run/9")
+    assert FT.digest(one, roots) == FT.digest(two, ["/srv/ci/run/9"])
+
+
+def test_a_real_new_message_still_differs() -> None:
+    one = TEXT.format(root="/tmp/ddflow-ci.aaaa")
+    new = one.replace("not found", "is not valid json")
+    assert FT.digest(one) != FT.digest(new)
+
+
+def test_a_different_repo_relative_path_still_differs() -> None:
+    one = TEXT.format(root="/tmp/ddflow-ci.aaaa")
+    other = one.replace("tests/data/x.json", "tests/data/y.json")
+    assert FT.digest(one) != FT.digest(other)
+
+
+def test_a_path_outside_any_tree_is_left_alone() -> None:
+    text = "FileNotFoundError: /etc/ddflow/cfg.toml"
+    assert FT.normalise(text) == text
+
+
+def test_pytest_temp_dirs_are_blanked() -> None:
+    one = "boom /tmp/pytest-of-ana/pytest-17/test_a0/x.txt"
+    two = "boom /tmp/pytest-of-bob/pytest-3/test_a0/x.txt"
+    assert FT.digest(one) == FT.digest(two)

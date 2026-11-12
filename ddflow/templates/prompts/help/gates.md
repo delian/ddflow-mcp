@@ -52,3 +52,11 @@ says "delta review of N commits since <sha>", the delta's findings merge into th
 record and earlier triage stays on the findings that are unchanged; a rebased branch falls
 back to a full round and says why. `ddflow config review.delta_default true [--local]` makes
 every plain re-review a delta (`--full` then still asks for a full round).
+
+## Failure text across trees
+
+A failure that prints a path prints the checkout it ran in. Before two failures are
+compared by digest, the ci scratch tree, a base scratch tree, a lane worktree and a pytest
+temp directory are rewritten to `<tree>` (`ddflow/services/ci/failure_text.py`), so the same
+failure on the base and on the candidate has one digest and an old red is not read as new.
+A different message or a different repo-relative path still differs.
