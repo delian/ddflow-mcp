@@ -139,3 +139,4 @@
 {"agent":"record-correct","data":{"at":1794483425.8859997,"holder":"record-correct"},"id":"eedf5214ae0a09cc0c3197b55","kind":"lease.renewed","lamport":182311,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T11:37:06.026828Z"}
 {"agent":"record-correct","data":{"at":1794484050.987248,"holder":"record-correct"},"id":"ed7894c3e684d194b1d4a1a09","kind":"lease.renewed","lamport":182356,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T11:47:31.141921Z"}
 {"agent":"record-correct","data":{"at":1794484675.310261,"holder":"record-correct"},"id":"e1f382b6dbc0b106e5cc608c3","kind":"lease.renewed","lamport":182404,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T11:57:55.454976Z"}
+{"agent":"record-correct","data":{"at":1794485297.0129654,"holder":"record-correct"},"id":"e0cdcba5b52c23c828407359e","kind":"lease.renewed","lamport":182518,"schema":1,"subject":"REC-correct-event","ts":"2026-11-12T12:08:17.153118Z"}
