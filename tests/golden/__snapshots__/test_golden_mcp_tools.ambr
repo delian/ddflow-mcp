@@ -24,6 +24,10 @@
           "type": "string",
           "description": "Render this subagent's launch brief for item."
          },
+         "role": {
+          "type": "string",
+          "description": "Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
