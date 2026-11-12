@@ -26,8 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.services.completion import kinds
-from ddflow.services.completion import scripts
+from ddflow.services.completion import kinds, scripts
 from ddflow.services.completion import tree as T
 from ddflow.services.completion import values as V
 from ddflow.surfaces.cli import build_parser
@@ -113,10 +112,10 @@ def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
         # positionals: the same destinations, with each one's choices, in parser order
         pos = _positionals(p)
         assert [x["dest"] for x in node["positionals"]] == [a.dest for a in pos], path
-        for x, a in zip(node["positionals"], pos):
-            assert x["choices"] == (
-                None if a.choices is None else [str(c) for c in a.choices]
-            ), path
+        for x, a in zip(node["positionals"], pos, strict=True):
+            assert x["choices"] == (None if a.choices is None else [str(c) for c in a.choices]), (
+                path
+            )
 
 
 def test_canary_a_synthetic_command_completes_with_no_completion_code(tmp_path):
@@ -171,11 +170,7 @@ def _activation_defined(shell: str, text: str) -> bool:
     """The template really DEFINES the activation function, anchored at the start of a
     line, so an echo or comment that merely mentions the name does not pass."""
     name = f"_ddflow_activate_{shell}"
-    header = (
-        rf"^function\s+{name}\b"
-        if shell == "fish"
-        else rf"^(?:function\s+)?{name}\s*\(\s*\)"
-    )
+    header = rf"^function\s+{name}\b" if shell == "fish" else rf"^(?:function\s+)?{name}\s*\(\s*\)"
     return re.search(header, text, re.MULTILINE) is not None
 
 
@@ -196,5 +191,7 @@ def test_every_shell_script_parses(shell, tmp_path):
     assert _activation_defined(shell, text)
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
-    result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True, env=env)
+    result = subprocess.run(
+        [exe, *flags[shell], str(path)], capture_output=True, text=True, env=env
+    )
     assert result.returncode == 0, (shell, result.stderr)
