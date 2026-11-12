@@ -174,8 +174,6 @@ def test_a_cell_is_bounded_after_escaping_by_the_knob(item):
 
 @pytest.mark.parametrize("cell_max", [1, 2, 5])
 def test_the_smallest_bounds_are_still_bounds(cell_max):
-    from ddflow.services.flow.pr_template import _cell
-
     from ddflow.services.flow.pr_template import _cell as _raw
 
     _cell = lambda t, n: _raw(t, n, str)  # noqa: E731
@@ -240,3 +238,21 @@ def test_the_shipped_template_renders_identically_without_the_template_engine(it
     text = P.resolve("pr_body", repo).text
     assert "tests/test_race.py::test_it" in P.render(text, **vars_)
     assert _render_stdlib(text, vars_).strip() == P.render(text, **vars_).strip()
+
+
+def test_a_non_task_item_lists_its_own_kinds_pipeline(repo):
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    log = EventLog(repo, "tester")
+    log.append("phase.added", "P1", {"title": "a phase"})
+    st = fold(log.read_all(), strict=False)
+    cfg = Config.load(repo)
+    want = G.pipeline_for(st.items["P1"], cfg)
+    assert list(want) != list(cfg.gates.task_pipeline), (
+        "the phase pipeline differs from the task one"
+    )
+    text = FS.pr_body(st, st.items["P1"], on=None, cfg=cfg, repo=repo)
+    for gate in want:
+        assert f"| {gate} | not run" in text, (gate, text)
+    assert "| rubber_duck | not run" not in text or "rubber_duck" in want

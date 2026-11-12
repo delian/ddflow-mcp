@@ -16,6 +16,7 @@ from typing import Any
 
 from ...config import Config
 from ...core.model import Item, State
+from .. import gates as G
 from .. import prompts as P
 from ..redact_report import redact_secrets
 
@@ -121,7 +122,7 @@ def render_body(
             st,
             it,
             on,
-            list(cfg.gates.task_pipeline),
+            list(G.pipeline_for(it, cfg)),
             cfg.flow.pr_body_cell_max,
             lambda t: redact_secrets(t, cfg)[0],
         ),
