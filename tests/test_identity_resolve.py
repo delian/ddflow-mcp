@@ -154,9 +154,13 @@ def test_an_empty_event_log_agent_falls_past_the_env_var_to_the_derived_id(adopt
 
 
 def test_the_shard_name_sanitises_by_isalnum_which_accepts_unicode(adopted):
-    assert EventLog(adopted, "a b/c").shard.name == "a_b_c.jsonl"
+    # a character the filter replaces is kept readable but the name carries a digest of the whole
+    # id (Bc598dc2d6a), so `a b/c` and `a_b_c` are two shards; an id the filter leaves alone
+    # (letters of any script, digits, . _ -) keeps its name, so old logs replay in place
+    assert EventLog(adopted, "a b/c").shard.name.startswith("a_b_c~")
+    assert EventLog(adopted, "a b/c").shard.name != EventLog(adopted, "a_b_c").shard.name
     assert EventLog(adopted, "é-1").shard.name == "é-1.jsonl"
-    assert EventLog(adopted, "x:y").shard.name == "x_y.jsonl"
+    assert EventLog(adopted, "x:y").shard.name.startswith("x_y~")
 
 
 # -- the CLI Ctx: --agent, DDFLOW_AGENT, the harness declaration ------------------------
