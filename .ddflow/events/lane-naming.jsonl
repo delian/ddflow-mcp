@@ -257,3 +257,6 @@
 {"agent":"lane-naming","data":{"at":1794501433.003871,"holder":"lane-naming"},"id":"e85a9204df583af22a829b697","kind":"lease.renewed","lamport":185642,"schema":1,"subject":"LN-name-model","ts":"2026-11-12T16:37:13.150664Z"}
 {"agent":"lane-naming","data":{"at":1794502061.210929,"holder":"lane-naming"},"id":"ea534a4be4409b3b0b95b3eae","kind":"lease.renewed","lamport":185747,"schema":1,"subject":"LN-name-model","ts":"2026-11-12T16:47:41.360827Z"}
 {"agent":"lane-naming","data":{"at":1794502682.181005,"holder":"lane-naming"},"id":"e0e6de0c58bb6acb2210d9007","kind":"lease.renewed","lamport":185851,"schema":1,"subject":"LN-name-model","ts":"2026-11-12T16:58:02.325362Z"}
+{"agent":"lane-naming","data":{"at":1794503319.8936648,"holder":"lane-naming"},"id":"e89853eeba48d77af6d184da0","kind":"lease.renewed","lamport":185924,"schema":1,"subject":"LN-name-model","ts":"2026-11-12T17:08:40.048859Z"}
+{"agent":"lane-naming","data":{"at":1794503951.0657425,"holder":"lane-naming"},"id":"eb91d7a1ffdc59c8a4a839787","kind":"lease.renewed","lamport":185992,"schema":1,"subject":"LN-name-model","ts":"2026-11-12T17:19:11.224145Z"}
+{"agent":"lane-naming","data":{"tags":["skip-followup","wave:0"]},"id":"e09fc6f9266a72af8074ceb0f","kind":"task.updated","lamport":185995,"schema":1,"subject":"gskip-SQ-priority-fair-queue-1","ts":"2026-11-12T17:19:27.491539Z"}
