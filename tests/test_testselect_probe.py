@@ -353,7 +353,8 @@ def test_a_hub_merge_falls_back_to_the_whole_suite_and_reports_a_narrower_choice
     # the co-changed test
     assert row.narrow_selected is not None and 3 <= row.narrow_selected < row.suite
     assert row.narrow_held == row.co == 1
-    assert (p.hub_narrow_share() or 1.0) < 1.0 and p.hub_narrow_recall() == 1.0
+    share = p.hub_narrow_share()
+    assert share is not None and share < 1.0 and p.hub_narrow_recall() == 1.0
 
 
 def test_a_subprocess_only_test_is_a_blind_miss_the_recorded_dependencies_would_route(tmp_path):
