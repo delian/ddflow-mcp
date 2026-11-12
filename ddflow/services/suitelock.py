@@ -125,11 +125,23 @@ def _held(directory: Path, index: int) -> bool:
         return True
 
 
+def _slot_indexes(directory: Path, limit: int) -> list[int]:
+    """Every slot a suite may hold right now: this config's ``limit`` slots and any more that
+    exist on disk, because the state is shared and another project's config may allow more
+    slots than this one (its holders count toward this host's load and cap)."""
+    seen = {
+        int(m.group(1))
+        for p in directory.glob(f"{NAME}.*.lock")
+        if (m := re.fullmatch(rf"{NAME}\.(\d+)\.lock", p.name))
+    }
+    return sorted(seen | set(range(limit)))
+
+
 def _holders(directory: Path, limit: int) -> dict[str, Any]:
     """The note of the oldest holder among the slots held right now (a crashed holder's note
     outlives it, so a note of a free slot is not read)."""
     notes = []
-    for i in range(limit):
+    for i in _slot_indexes(directory, limit):
         if not _held(directory, i):
             continue
         with contextlib.suppress(OSError, ValueError):
@@ -146,7 +158,7 @@ def running(
     directory = Path(directory) if directory else state_dir()
     at = CLOCK.wall() if now is None else now
     rows: list[dict[str, Any]] = []
-    for i in range(limit(cfg)):
+    for i in _slot_indexes(directory, limit(cfg)):
         if not _held(directory, i):
             continue
         with contextlib.suppress(OSError, ValueError, TypeError, OverflowError):
@@ -318,7 +330,7 @@ def hold(
     start = CLOCK.monotonic()
     slots = SLOTS.Slots(directory, NAME)
     said: tuple[int, str] = (0, "")
-    reason, reason_at = "", -1e9
+    reason, reason_at, running = "", -1e9, 0
     poll_s = float(cfg.suites.load_poll_s) if hasattr(cfg, "suites") else 0.0
     with contextlib.ExitStack() as stack:
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
@@ -332,10 +344,12 @@ def hold(
                 if head_since is None:
                     head_since = CLOCK.monotonic()
                 if CLOCK.monotonic() - reason_at >= poll_s:
-                    running = sum(_held(directory, i) for i in range(slots_n))
+                    running = sum(_held(directory, i) for i in _slot_indexes(directory, slots_n))
                     reason = load_block(cfg, running, source, cores)
-                    reason_at = CLOCK.monotonic()
-                if not reason:
+                    # Only a block is remembered for the poll interval; with no block the next
+                    # look reads again, so a slot freed later is never taken on a stale reading.
+                    reason_at = CLOCK.monotonic() if reason else -1e9
+                if not reason and running < slots_n:  # a bigger neighbour's holders count too
                     try:
                         slot = stack.enter_context(slots.hold(slots_n, 0))
                         break

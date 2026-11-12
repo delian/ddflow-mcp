@@ -13,6 +13,7 @@ from ddflow.services.gates.defs import GateDef
 def _cfg(wait: float = 0.0) -> Config:
     cfg = Config()
     cfg.suites.max_concurrent = 1  # these tests model one slot, whatever the host's cores
+    cfg.suites.load_ceiling_per_core = 1e9  # and no host load budget
     cfg.ci.suite_wait_s = wait
     return cfg
 

@@ -128,7 +128,7 @@ def test_waiting_for_load_is_queue_time_not_run_time(tmp_path: Path):
         t.join(10)
     assert marks["admitted"] - marks["queued"] >= 0.2  # it waited (poll is 0.25 s)
     # a clock started at admission has read none of that wait:
-    assert time.monotonic() - marks["admitted"] < time.monotonic() - marks["queued"]
+    assert time.monotonic() - marks["admitted"] < marks["admitted"] - marks["queued"]
 
 
 def test_a_poll_interval_never_lets_a_waiter_skip_the_load_check_on_reaching_the_head(
@@ -142,3 +142,47 @@ def test_a_poll_interval_never_lets_a_waiter_skip_the_load_check_on_reaching_the
             with hold(c, "second", tmp_path, source=load(0.9)):
                 pass
     assert "load" in str(e.value)
+
+
+def test_a_neighbour_with_a_bigger_cap_counts_toward_this_projects_cap_and_load(tmp_path: Path):
+    """The slot files are shared: a holder in slot 5 (another project allowed more slots) is
+    seen by a project whose own cap is 1, which then neither admits into slot 0 nor skips the
+    load check as 'the lone suite'."""
+    big = cfg(cap=8)
+    small = cfg(cap=1, wait=0.4)
+    slots_held = []
+    with hold(big, "a", tmp_path), hold(big, "b", tmp_path, source=load(0.0)):
+        slots_held = SL._slot_indexes(tmp_path, 1)
+        with pytest.raises(SL.SuiteBusy):
+            with hold(small, "c", tmp_path, source=load(0.0)):
+                pass
+    assert len(slots_held) >= 2
+
+
+def test_a_slot_freed_while_the_load_is_over_the_ceiling_is_not_taken(tmp_path: Path):
+    """Every slot is held at the first look, then one frees while the load is over the ceiling:
+    the waiter reads the load afresh (not a stale 'no reason') and stays out."""
+    c = cfg(cap=2, poll=3600.0, wait=1.5)
+    outcome: list[str] = []
+
+    def waiter():
+        try:
+            with hold(c, "d", tmp_path, source=load(0.1, 0.9)):
+                outcome.append("admitted")
+        except SL.SuiteBusy as e:
+            outcome.append(str(e))
+
+    with hold(c, "a", tmp_path):
+        with hold(c, "b", tmp_path, source=load(0.0)):
+            t = threading.Thread(target=waiter, daemon=True)
+            t.start()
+            time.sleep(0.5)  # d has looked: both slots are held
+        t.join(10)  # b is gone; the load reads 0.9 from now on
+    assert outcome and "load" in outcome[0], outcome
+
+
+def test_the_poll_knob_is_bounded():
+    from ddflow.config_sections.suites import _poll_seconds
+
+    assert _poll_seconds(2.0) == "" and _poll_seconds(0) == ""
+    assert _poll_seconds(1e308) and _poll_seconds(float("inf")) and _poll_seconds(-1)

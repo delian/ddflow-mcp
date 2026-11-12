@@ -14,9 +14,10 @@ def _positive_float(value: object) -> str:
     return "" if ok else "must be a number > 0"
 
 
-def _non_negative_float(value: object) -> str:
-    ok = isinstance(value, int | float) and not isinstance(value, bool) and value >= 0
-    return "" if ok else "must be a number >= 0"
+def _poll_seconds(value: object) -> str:
+    lo, hi = 0, 600
+    ok = isinstance(value, int | float) and not isinstance(value, bool) and lo <= value <= hi
+    return "" if ok else "must be a number of seconds from 0 to 600"
 
 
 @declare("suites")
@@ -41,6 +42,6 @@ class SuitesConfig:
     )
     load_poll_s: float = knob(
         2.0,
-        doc="Seconds between two readings of the host load by a suite waiting for admission (the queue itself is polled more often). 0 reads it at every poll.",
-        check=_non_negative_float,
+        doc="Seconds between two readings of the host load by a suite waiting for admission (the queue itself is polled more often). 0 reads it at every poll; at most 600.",
+        check=_poll_seconds,
     )
