@@ -266,6 +266,10 @@ class Item:
     #: docs/todo.md:41". ddflow does not invent completion, so when it records some it
     #: records who said so.
     completion_evidence: str = ""
+    #: The author identity the completion recorded (`author_model`, or `author_family` when the
+    #: author declared a family only). It lives in the completion event; folding it makes it
+    #: a field a `record.corrected` can replace when it was recorded wrongly.
+    author_model: str = ""
     #: B191. Rival DEFINITIONS: `<kind>.added` events for this id from different clones,
     #: each {"event", "agent", "lamport", "ts", "title", "body", "data"}. One log refuses
     #: a second add of a live id, so a rival can only arrive by a merge -- and the fold
