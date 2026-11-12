@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import re
 import shlex
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as _CLOCK
 from ..infra import git as G
 from ..infra import proc as P
 from .ci.ruff import ruff_bin
@@ -400,7 +400,7 @@ def _hooks_step(tree: Path, files: list[str], pm, budget: _Budget, rep: Report) 
     return results
 
 
-def run(tree: Path, base: str, cfg, *, clock: Callable[[], float] = time.monotonic) -> Report:
+def run(tree: Path, base: str, cfg, *, clock: Callable[[], float] = _CLOCK.monotonic) -> Report:
     """Check ``tree`` (the item's worktree, HEAD = its branch) against ``base``; ``cfg`` is the
     project's `Config` (its `[premerge]` section decides). Never raises for a step's own trouble: that is the step's ``unavailable``."""
     pm = cfg.premerge
