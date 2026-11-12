@@ -500,6 +500,7 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+json_envelope = false
 
 [perf_metrics]
 ring_max_bytes = 2000000
