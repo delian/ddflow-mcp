@@ -69,6 +69,8 @@ def test_uninstall_an_orphaned_begin_before_a_block_keeps_user_content():
 
 def test_uninstall_does_not_write_without_yes(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("ZDOTDIR", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     rc = tmp_path / ".zshrc"
     rc.write_text(install.install_text("zsh", "export X=1\n"))
     a = argparse.Namespace(cmd="uninstall", shell="zsh", yes=False)
@@ -78,9 +80,17 @@ def test_uninstall_does_not_write_without_yes(tmp_path, monkeypatch):
 
 def test_uninstall_writes_only_with_yes(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("ZDOTDIR", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     rc = tmp_path / ".zshrc"
     rc.write_text(install.install_text("zsh", "export X=1\n"))
     a = argparse.Namespace(cmd="uninstall", shell="zsh", yes=True)
     assert completion._do_uninstall(a) == 0
     assert "ddflow completion" not in rc.read_text()
     assert "export X=1\n" in rc.read_text()  # the line install did not write stays
+
+
+def test_install_skips_a_commented_not_activated_line(tmp_path):
+    commented = f"# {install._activate_line('bash')}\n"
+    assert install.install_text("bash", commented) != commented
+    assert "# >>> ddflow completion >>>" in install.install_text("bash", commented)
