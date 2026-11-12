@@ -76,11 +76,11 @@ class Probe:
         return sum(r.held for r in self.scored) / total if total else 1.0
 
     @property
-    def routable_recall(self) -> float:
+    def routable_recall(self) -> float | None:
         """Recall once subprocess-driven misses are set aside (they have no import route)."""
         total = sum(r.co - len(r.blind) for r in self.scored)
         held = sum(r.held for r in self.scored)
-        return held / total if total else 1.0
+        return held / total if total else None  # nothing routable to score: not a perfect 1.0
 
     @property
     def median_share(self) -> float:
@@ -119,7 +119,7 @@ class Probe:
     def report(self) -> str:
         return (
             f"merges {len(self.rows)} (scored {len(self.scored)}); "
-            f"recall {self.recall:.3f} (routable {self.routable_recall:.3f}); "
+            f"recall {self.recall:.3f} (routable {_fmt(self.routable_recall)}); "
             f"median selected share {self.median_share:.3f}; "
             f"whole-suite rate {self.fallback_rate:.3f} (hub-fallback rate {self.hub_rate:.3f}); "
             f"unrouted rate {self.unrouted_rate:.3f}; "
@@ -453,3 +453,9 @@ def test_a_merge_with_no_source_change_is_counted_as_skipped(tmp_path):
         workers=1,
     )
     assert len(p.rows) == 1 and p.skipped == 1 and "skipped 1" in p.report()
+
+
+def test_routable_recall_is_undefined_when_every_miss_is_blind_and_nothing_else_scores(tmp_path):
+    repo, shas = make_repo(tmp_path)
+    p = probe(repo, [shas["tool"]], LIMITS, workers=1)
+    assert p.routable_recall is None and "routable n/a" in p.report()
