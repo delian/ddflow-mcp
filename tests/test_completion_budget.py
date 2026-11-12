@@ -48,7 +48,8 @@ def _index(d: Path) -> Path:
 
 def test_id_completion_meets_the_latency_budget(tmp_path):
     """A fresh id TAB (import the light entry point + query) completes under a finite
-    ceiling; the startup import cost is part of what a TAB pays."""
+    ceiling; the startup import cost is part of what a TAB pays. The child is bounded by
+    both a wall timeout and a closed stdin, so a wedged tab reads as a budget miss."""
     _index(tmp_path)
     start = time.perf_counter()
     result = subprocess.run(
@@ -57,6 +58,8 @@ def test_id_completion_meets_the_latency_budget(tmp_path):
         env={**os.environ, "PYTHONPATH": str(ROOT)},
         capture_output=True,
         text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=scaled(60.0),
         check=False,
     )
     took = time.perf_counter() - start

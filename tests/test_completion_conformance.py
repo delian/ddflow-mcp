@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sqlite3
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from ddflow.services.completion import kinds
 from ddflow.services.completion import scripts
 from ddflow.services.completion import tree as T
+from ddflow.services.completion import values as V
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.registry import Command, Param, SuggestingParser, add_commands
 
@@ -56,6 +59,20 @@ def _subcommand_names(parser) -> list[str]:
     return out
 
 
+def _visible_flags(parser, root) -> set[str]:
+    """The option strings the tree offers for ``parser``: its own options, a SUPPRESS one
+    only when it mirrors an ancestor's (global) option, exactly as the engine walks it."""
+    mirrored = {s for a in root._actions for s in a.option_strings}
+    out: set[str] = set()
+    for a in parser._actions:
+        if not a.option_strings:
+            continue
+        if a.help == argparse.SUPPRESS and not set(a.option_strings) & mirrored:
+            continue
+        out.update(a.option_strings)
+    return out
+
+
 def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
     """Every command path offers exactly the parser's subcommands, options and choices."""
     paths = dict(_parsers(parser))
@@ -66,16 +83,19 @@ def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
         node = walked[path]
         # subcommands: the same names, in argparse's own order
         assert list(node["commands"]) == _subcommand_names(p), path
-        # options: the same flags and choices argparse's action holds
+        # options: exactly the parser's visible flags -- a dropped option would leave a
+        # flag out of the set, an extra one a flag in (nothing missing, nothing extra)
+        offered = {f for o in node["options"] for f in o["flags"]}
+        assert offered == _visible_flags(p, parser), path
+        # each offered option carries the choices its argparse action holds
         for o in node["options"]:
             action = p._option_string_actions[o["flags"][0]]
-            assert list(o["flags"]) == list(action.option_strings), path
             assert o["choices"] == (
                 None if action.choices is None else [str(c) for c in action.choices]
             ), path
 
 
-def test_canary_a_synthetic_command_completes_with_no_completion_code():
+def test_canary_a_synthetic_command_completes_with_no_completion_code(tmp_path):
     """A command, option, choice and id-like parameter registered through the generic
     registry only -- plus one declared record kind -- complete with zero edits to any
     completion module: the tree reads them off argparse, the engine infers them by name."""
@@ -108,8 +128,19 @@ def test_canary_a_synthetic_command_completes_with_no_completion_code():
         assert pos, "the synthetic id positional is offered"
         assert pos[0]["kind"] == "id:widget"
         assert pos[0]["arity"] == "1" and pos[0]["dest"] == "widget"
+        # the engine COMPLETES the declared kind to its records, with no per-kind list
+        assert V.complete("id:widget", "W", index=_widget_index(tmp_path)) == ["W1"]
     finally:
         kinds._id_kinds -= {record_kind}
+
+
+def _widget_index(d: Path) -> str:
+    con = sqlite3.connect(d / "index.db-wwwwwwww")
+    con.execute("create table widgets(id text, status text)")
+    con.execute("insert into widgets values('W1','live')")
+    con.commit()
+    con.close()
+    return str(d / "index.db-wwwwwwww")
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)
