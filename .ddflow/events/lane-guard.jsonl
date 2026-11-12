@@ -207,3 +207,5 @@
 {"agent":"lane-guard","data":{"at":1794470267.1952555,"holder":"lane-guard"},"id":"eb7247e803e132f7ae26d9508","kind":"lease.renewed","lamport":181150,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T07:57:47.330354Z"}
 {"agent":"lane-guard","data":{"at":1794470860.5291011,"holder":"lane-guard"},"id":"e36930918ac71db500167d881","kind":"lease.renewed","lamport":181269,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T08:07:40.670161Z"}
 {"agent":"lane-guard","data":{"at":1794470891.670514,"holder":"lane-guard"},"id":"ed2616df7446099e03a32d20a","kind":"lease.renewed","lamport":181273,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T08:08:11.815890Z"}
+{"agent":"lane-guard","data":{"at":1794471484.4191825,"holder":"lane-guard"},"id":"ed820d2587b058d9d3bbd9a5e","kind":"lease.renewed","lamport":181353,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-12T08:18:04.589939Z"}
+{"agent":"lane-guard","data":{"at":1794471515.945537,"holder":"lane-guard"},"id":"e76180faa38402f83f54e0d57","kind":"lease.renewed","lamport":181357,"schema":1,"subject":"GR-claim-base","ts":"2026-11-12T08:18:36.083637Z"}
