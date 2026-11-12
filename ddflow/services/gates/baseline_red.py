@@ -52,12 +52,12 @@ ROUNDS = 3
 NOT_PYTEST = "the gate's command does not run pytest"
 _NOT_FOUND = re.compile(r"^ERROR: (?:file or directory )?not found: (.+)$", re.M)
 _PARAM = re.compile(r"^(.*?::[^\[]*)\[.*\]$")
-#: The memory address held in an object repr: it is always ``at 0x...>``, so a hex sequence
-#: immediately before the closing ``>`` is an address, and one inside an assertion value
-#: (``assert got == 0x10``) is not (B9252d46a4b). Two runs of one test print a different
-#: ``0x...`` for the same object, so an address-only difference is the same failure, not a new
-#: offender; a real value change is still told apart.
-_ADDR = re.compile(r"0x[0-9a-f]+(?=>)")
+#: The memory address held in an object repr, and only that: `` at 0x...>``. A repr address is
+#: the one ``0x`` sequence that is BOTH preceded by `` at `` and followed by the repr's closing
+#: ``>``; a hex inside an assertion value (``assert got == 0x10``, ``assert '0x10>' == '0xff>'``)
+#: is not. Two runs of one test print a different ``0x...`` for the same object, so an
+#: address-only difference is the same failure, not a new offender (B9252d46a4b).
+_ADDR = re.compile(r"(?<=\bat )0x[0-9a-f]+(?=>)")
 
 
 def _norm(text: str) -> str:
