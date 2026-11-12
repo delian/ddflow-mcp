@@ -518,9 +518,7 @@ def test_an_always_run_guard_reached_by_import_does_not_block_auto_accept(
     assert auto["accepted"] is True, auto
 
 
-def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(
-    repo, monkeypatch
-) -> None:
+def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(repo, monkeypatch) -> None:
     """B6450ce772f: an architecture guard (`tests/test_architecture_guards.py`) declares
     ``GOVERNS = ("ddflow/**", ...)`` but imports ddflow modules, so testselect records it with
     the import reason ("imports ..."), not "governs ...". The reach is trivial (it governs the
@@ -530,9 +528,7 @@ def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(
 
     guard = "tests/test_architecture_guards.py"
     (repo / "tests").mkdir(exist_ok=True)
-    (repo / guard).write_text(
-        'GOVERNS = ("ddflow/**",)\ndef test_ratchet():\n    pass\n'
-    )
+    (repo / guard).write_text('GOVERNS = ("ddflow/**",)\ndef test_ratchet():\n    pass\n')
     sel = Selection(
         base="main",
         changed=["ddflow/api/family_schema.py"],
@@ -545,9 +541,7 @@ def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(
     assert auto["accepted"] is True, auto
 
 
-def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(
-    repo, monkeypatch
-) -> None:
+def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(repo, monkeypatch) -> None:
     """The governs exclusion must not leak to a guard reached by import whose declared
     ``GOVERNS`` globs do NOT match a changed path: reaching this file by import may have
     caused its failure, so auto-accept still declines."""
@@ -555,9 +549,7 @@ def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(
 
     guard = "tests/test_layout.py"
     (repo / "tests").mkdir(exist_ok=True)
-    (repo / guard).write_text(
-        'GOVERNS = ("pyproject.toml",)\ndef test_layout():\n    pass\n'
-    )
+    (repo / guard).write_text('GOVERNS = ("pyproject.toml",)\ndef test_layout():\n    pass\n')
     sel = Selection(
         base="main",
         changed=["ddflow/api/family_schema.py"],
