@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from ...adapters.fsio import atomic_write
+from ...adapters.fsio import replace_text
 from ...api import completion_scripts
 from ...api.completion import install as _install
 from ..context import Ctx
@@ -38,7 +38,7 @@ def _do_install(a: argparse.Namespace) -> int:
     if text == current:
         print(f"already installed in {path} (no change)")
         return 0
-    atomic_write(path, text)
+    replace_text(path, text)
     print(f"installed ddflow completion into {path}")
     return 0
 
@@ -57,7 +57,7 @@ def _do_uninstall(a: argparse.Namespace) -> int:
     if not a.yes:
         print(f"would uninstall the ddflow completion block from {path}")
         return 0
-    atomic_write(path, text)
+    replace_text(path, text)
     print(f"uninstalled ddflow completion from {path}")
     return 0
 
