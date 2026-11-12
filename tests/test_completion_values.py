@@ -48,6 +48,13 @@ def test_enum_reads_choices():
     assert V.enum(("a", "b")) == ["a", "b"]
 
 
+def test_agent_and_gate_branches_run(tmp_path):
+    (tmp_path / ".ddflow").mkdir(exist_ok=True)
+    agents = V.complete("agent", "", root=str(tmp_path))
+    assert agents  # the shipped harness ids, without raising
+    assert isinstance(V.complete("gate", "res", root=str(tmp_path)), list)
+
+
 def test_none_offers_nothing():
     assert V.complete("none", "x") == []
 

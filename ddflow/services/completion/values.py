@@ -19,7 +19,7 @@ from .. import completion_ids as CI
 
 
 def enum(choices: list | tuple) -> list[str]:
-    """The enum candidates are the argument's own choices: the engine reads them there."""
+    """The argument's own ``choices``, spelled as strings (the engine reads them itself)."""
     return [str(c) for c in choices]
 
 
