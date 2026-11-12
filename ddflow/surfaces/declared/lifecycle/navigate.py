@@ -59,7 +59,13 @@ def _next(repo, a, agent):
     return _cap(
         repo,
         _api().next_item(
-            repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only, tags=tags
+            repo,
+            kind=kind,
+            phase=phase,
+            agent=agent,
+            phase_only=phase_only,
+            tags=tags,
+            ignore_cap=bool(a.get("ignore_cap", False)),
         ),
         "next",
         a,
@@ -125,6 +131,21 @@ COMMANDS: tuple[Command, ...] = (
                 help="Shorthand for tag wave:N.",
                 cli_help="shorthand for --tag wave:N",
                 default=None,
+            ),
+            Param(
+                "ignore_cap",
+                type="boolean",
+                help="Offer items only the parallelism cap holds back as ready.",
+                cli_help="treat items held only by the parallelism cap as ready for this call",
+                default=False,
+            ),
+            Param(
+                "blocked",
+                type="boolean",
+                help="List every blocked item.",
+                cli_help="list every blocked item, dependency-blocked ones too (text view)",
+                default=False,
+                cli_only=True,
             ),
             Param(
                 "kind",

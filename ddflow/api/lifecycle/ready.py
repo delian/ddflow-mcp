@@ -48,13 +48,16 @@ def next_(
     flat: bool = False,
     exclude_leased: bool = False,
     tags: Sequence[str] = (),
+    ignore_cap: bool = False,
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`).
 
     ``flat`` (False) groups the ready list by ``wave:N`` bucket (bugs and
     dependency-carrying items lead each bucket); ``exclude_leased`` drops ready items
-    whose globs overlap another agent's live lease to ``excluded_leased``. ``tags`` (every
+    whose globs overlap another agent's live lease to ``excluded_leased``. ``ignore_cap`` offers
+    the items only the parallelism cap holds back as ready (a named claim is not capped).
+    ``tags`` (every
     one required, ``wave:N`` included) limits the offer to items carrying them; a tag no
     item carries is a refusal naming the nearest ones, never an empty answer.
     """
@@ -96,6 +99,7 @@ def next_(
         repo, log, cfg, st, kind=kind, phase=phase, agent=me, phase_only=phase_only, tags=tags
     )
     p.blocking_deps = with_tags(p.blocking_deps, tags)
+    held = _take_cap_held(p, st, ignore_cap)
     excluded = _offer_ready(p, st, cfg, me, flat=flat, exclude_leased=exclude_leased)
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
@@ -103,6 +107,8 @@ def next_(
         "synced": synced,
         "promoted": promoted,
         "ready": _ready_rows(p.ready),
+        "held_by_cap": _ready_rows(held),
+        "needs_complete": [i.id for i in _merged_uncompleted(p, st)],
         "co_location_hints": co_location_hints(p.ready),
         "excluded_leased": [plain(b) for b in excluded],
         "blocking_deps": _blocking_dep_rows(p.blocking_deps),
@@ -122,7 +128,9 @@ def next_(
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
     head = "Nothing to claim" if p.finished else "Nothing actionable"
-    return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
+    return O.nothing(
+        "next", f"{head} ({p.summary()}).{_held_hint(held)}{_wait_hint(p)}{p.close_note()}", **data
+    )
 
 
 def _clean_tags(tags: Sequence[str]) -> tuple[str, ...]:
@@ -141,6 +149,39 @@ def _unknown_tag(st, tags: Sequence[str]) -> str:
             hint = f" Nearest: {', '.join(near)}." if near else ""
             return f"no item carries the tag {tag!r}.{hint}"
     return ""
+
+
+def _take_cap_held(p, st, ignore_cap: bool) -> list:
+    """The items ONLY the parallelism cap (or a reserved slot) keeps out of ``ready``.
+
+    By default they stay in ``p.blocked`` too (the key's rows are unchanged) and are
+    returned for the ``held_by_cap`` section. With ``ignore_cap`` they join ``p.ready`` and
+    leave ``blocked``, and nothing is returned: a named `claim` is never capped (B30f9d383ba),
+    so they are claimable now."""
+    held = [st.items[i] for i in p.capped if i in st.items]
+    if not (ignore_cap and held):
+        return held
+    ids = {i.id for i in held}
+    p.ready = [*p.ready, *held]
+    p.blocked = [b for b in p.blocked if b.item not in ids]
+    p.capped = []
+    return []
+
+
+def _merged_uncompleted(p, st) -> list:
+    """The blocked items that are merged but not completed: they need `ddflow complete`, not
+    work, so they get their own section instead of crowding the blocked list."""
+    return [st.items[b.item] for b in p.blocked if st.items[b.item].merged_sha]
+
+
+def _held_hint(held: list) -> str:
+    """The sentence that keeps 'Nothing actionable' from reading as 'nothing unblocked'."""
+    if not held:
+        return ""
+    return (
+        f" {len(held)} item(s) are ready and held ONLY by the cap (listed below, or "
+        f"`--ignore-cap`): a named `ddflow claim` of one is not capped and grants it now."
+    )
 
 
 def _actionable(p) -> bool:

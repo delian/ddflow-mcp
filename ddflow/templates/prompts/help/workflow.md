@@ -28,6 +28,13 @@ Slice it by label: `ddflow next --tag TAG` (repeat for several, all must match; 
 `ns:value` label), `--wave N` for tag `wave:N`, and `--phase ID`, alone or together. A tag
 no item carries is refused (exit 1) with the nearest ones, never an empty answer.
 
+With the parallelism cap full, `next` still says what is otherwise unblocked: items held
+ONLY by the cap are listed under "Ready but held by the cap" (JSON `held_by_cap`, with
+their globs), and exit stays 2. A named `ddflow claim <id>` is not capped, so it grants
+one now; `ddflow next --ignore-cap` offers them as ready for the call. Merged items that
+still need `ddflow complete` are their own list (JSON `needs_complete`), and
+dependency-blocked items are a count unless `--blocked`.
+
 `ddflow claim <id>` takes a lease and creates a git worktree for it. Leases expire, so
 a crashed agent's work is reclaimable; `ddflow heartbeat <id>` renews one during long
 work. `ddflow release <id>` gives it up without completing.

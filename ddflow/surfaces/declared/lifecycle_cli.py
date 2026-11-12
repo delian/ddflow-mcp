@@ -33,6 +33,10 @@ MAX_LISTED_FILES = 10
 _BLOCKED_SHOWN_NO_READY = 10
 _BLOCKED_SHOWN_WITH_READY = 6
 
+#: How many cap-held and merged-uncompleted rows `next`'s text lists before saying how many more.
+_HELD_SHOWN = 15
+_COMPLETE_SHOWN = 10
+
 
 def waiting(rows: list, head: str) -> str:
     """One line per registered waiter, under ``head``; "" when nobody waits."""
@@ -280,45 +284,72 @@ def next_text(out, a, ctx) -> str | None:
     flat = bool(a.get("flat", False))
     clusters = out.data.get("co_location_hints") or []
     excluded = out.data.get("excluded_leased") or []
-    if not p.ready and not bdeps:
-        return _blocked_text(out, p, excluded)
-    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
-    if clusters:
-        lines += _co_locate_lines(clusters)
+    lines = [] if (p.ready or bdeps) else [out.reason]
+    if p.ready or bdeps:
+        lines += _next_ready_lines(p, flat, clusters) if p.ready else []
+        if clusters:
+            lines += _co_locate_lines(clusters)
     lines += _excluded_lines(excluded)
     if bdeps:
         lines += _blocking_dep_lines(bdeps)
-    lines += [
-        f"  (blocked) {b.item}: {b.reason} — {b.detail}"
-        for b in p.blocked[:_BLOCKED_SHOWN_WITH_READY]
-    ]
-    if len(p.blocked) > _BLOCKED_SHOWN_WITH_READY:
-        lines.append(
-            f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_WITH_READY} more (--json holds them all)"
-        )
-    if p.finished:
+    lines += _held_lines(out.data.get("held_by_cap") or [], p.cap_note)
+    lines += _needs_complete_lines(out.data.get("needs_complete") or [])
+    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked", False)))
+    if p.finished and (p.ready or bdeps):
         lines.append(p.close_note())
     if note := out.data.get("_footer"):
         lines.append(note)
     return "\n".join(lines)
 
 
-def _blocked_text(out, p, excluded) -> str:
-    """The "nothing to do" answer: the reason, the cut blocked list and any excluded items."""
-    more = (
-        [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
-        if len(p.blocked) > _BLOCKED_SHOWN_NO_READY
-        else []
+def _held_lines(held, cap_note) -> list[str]:
+    """Ready items only the cap holds back: id, title, wave, globs (what a lane needs to
+    pick a parallel set), under the cap's own words."""
+    if not held:
+        return []
+    lines = [
+        f"\nReady but held by {cap_note or 'the parallelism cap'} "
+        f"({len(held)}; a named `ddflow claim` is not capped and grants one now):"
+    ]
+    for r in held[:_HELD_SHOWN]:
+        wave = f"  [wave:{r['wave']}]" if r.get("wave") is not None else ""
+        lines.append(f"  {r['id']}  {r['title']}{wave}")
+        if r.get("globs"):
+            lines.append(f"      writes: {', '.join(r['globs'])}")
+    if len(held) > _HELD_SHOWN:
+        lines.append(f"  ... and {len(held) - _HELD_SHOWN} more (--json holds them all)")
+    return lines
+
+
+def _needs_complete_lines(ids) -> list[str]:
+    if not ids:
+        return []
+    shown = ids[:_COMPLETE_SHOWN]
+    more = f" ... and {len(ids) - len(shown)} more" if len(ids) > len(shown) else ""
+    return [
+        f"\nMerged, not completed ({len(ids)}): `ddflow complete <id>` records each: "
+        f"{', '.join(shown)}{more}"
+    ]
+
+
+def _blocked_lines(out, p, beside_ready: bool, every: bool) -> list[str]:
+    """The blocked rows that are neither cap-held nor merged-uncompleted (those have their
+    own sections): conflicts and the rest listed, dependency waits as a count unless
+    ``every`` (`--blocked`). The count of what is not shown is always said."""
+    skip = {r["id"] for r in out.data.get("held_by_cap") or []} | set(
+        out.data.get("needs_complete") or []
     )
-    return "\n".join(
-        [
-            out.reason,
-            *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]),
-            *more,
-            *_excluded_lines(excluded),
-            *([note] if (note := out.data.get("_footer")) else []),
-        ]
-    )
+    rows = [b for b in p.blocked if b.item not in skip]
+    deps = [b for b in rows if b.reason == "deps"]
+    listed = rows if every else [b for b in rows if b.reason != "deps"]
+    limit = _BLOCKED_SHOWN_WITH_READY if beside_ready else _BLOCKED_SHOWN_NO_READY
+    prefix = "  (blocked) " if beside_ready else "  "
+    lines = [f"{prefix}{b.item}: {b.reason} — {b.detail}" for b in listed[:limit]]
+    if len(listed) > limit:
+        lines.append(f"  ... and {len(listed) - limit} more (--json holds them all)")
+    if deps and not every:
+        lines.append(f"  {len(deps)} blocked on dependencies (`ddflow next --blocked` lists them)")
+    return lines
 
 
 def _ready_line(it) -> str:
