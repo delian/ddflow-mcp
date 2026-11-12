@@ -35,6 +35,12 @@ def test_a_change_of_a_hex_value_is_still_a_new_offender():
     assert BR._differs("t::a", before, onbase) is True
 
 
+def test_hex_inside_a_string_value_is_still_a_new_offender():
+    before = {"t::a": _sig("assert 'arrived at 0x10' == 'ok'")}
+    onbase = {"t::a": _sig("assert 'arrived at 0xff' == 'ok'")}
+    assert BR._differs("t::a", before, onbase) is True
+
+
 def test_the_same_text_is_not_a_new_offender():
     before = {"t::a": _sig("<function next_step at 0x7f1234>() == 'WHYNOT'")}
     onbase = {"t::a": _sig("<function next_step at 0x7f1234>() == 'WHYNOT'")}
