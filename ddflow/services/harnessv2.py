@@ -267,7 +267,8 @@ def check_table(table: Any, name: str, where: str) -> None:
     if name == "capabilities":
         patterns = table.get("patterns")
         if patterns is not None and (
-            not isinstance(patterns, list) or not all(p in PATTERNS for p in patterns)
+            not isinstance(patterns, list)
+            or not all(isinstance(p, str) and p in PATTERNS for p in patterns)
         ):
             raise DescriptorError(
                 f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}"
@@ -354,12 +355,12 @@ def validate(sections: dict[str, Any], where: str) -> None:
             value = getattr(cap, field_name)
             source = getattr(cap, f"{field_name}_source")
             # a verified (non-unknown) value must cite the file and key that set it, never guess.
-            if value not in ("", "unknown") and not source:
+            if value not in ("", "unknown") and not source.strip():
                 raise DescriptorError(
                     f"{where}: capabilities.{field_name} is {value!r} but "
                     f"capabilities.{field_name}_source names no file and key that set it"
                 )
-        if cap.patterns and not cap.patterns_source:
+        if cap.patterns and not cap.patterns_source.strip():
             raise DescriptorError(
                 f"{where}: capabilities.patterns is {list(cap.patterns)!r} but "
                 "capabilities.patterns_source names no file and key that set it"

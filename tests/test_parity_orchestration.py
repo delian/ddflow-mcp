@@ -127,6 +127,42 @@ patterns_source = "x@y"
         raise AssertionError("an unknown pattern must be refused")
 
 
+def test_a_whitespace_only_source_is_not_a_source():
+    try:
+        HR.parse(
+            _with_capabilities(
+                """
+[capabilities]
+model_visibility = "visible"
+model_visibility_source = " "
+"""
+            ),
+            "grok",
+        )
+    except HV.DescriptorError as exc:
+        assert "model_visibility_source" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("a whitespace-only source records nothing, never a guess")
+
+
+def test_a_non_string_pattern_element_is_rejected_not_crashed():
+    try:
+        HR.parse(
+            _with_capabilities(
+                """
+[capabilities]
+patterns = ["router", ["council"]]
+patterns_source = "x@y"
+"""
+            ),
+            "grok",
+        )
+    except HV.DescriptorError as exc:
+        assert "patterns" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("a nested list must be a DescriptorError, not a TypeError")
+
+
 def test_the_report_grades_every_descriptor_without_guessing():
     report = ORC.report()
     ids = {h.id for h in HR.load()}
