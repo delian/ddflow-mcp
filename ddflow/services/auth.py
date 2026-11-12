@@ -174,12 +174,11 @@ def _read(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict) or data.get("format") != STORE_VERSION:
         raise AuthRefused(f"refusing: the token store {path} is not one this ddflow reads.")
     for table in ("tokens", "pairings"):
-        value = data.get(table)
-        if value is not None and not isinstance(value, dict):
+        if table in data and not isinstance(data.get(table), dict):
             raise AuthRefused(
-                f"refusing: the token store {path} has {table!r} as {type(value).__name__}, "
-                "not a table; it refuses instead of crashing on the wrong shape. Fix the "
-                "store, or pair again from a new store."
+                f"refusing: the token store {path} has {table!r} as "
+                f"{type(data.get(table)).__name__}, not a table; it refuses instead of "
+                "crashing on the wrong shape. Fix the store, or pair again from a new store."
             )
     return {**_empty(), **data}
 
@@ -478,22 +477,31 @@ def disagreements(repo: Path | str, logged: list[dict[str, Any]]) -> list[str]:
     `revoke` write the store first and the log second, so a crash between the two leaves one
     side ahead and a list derived from the log alone would lie. One note for each, said next
     to the rows; the list itself stays "... is derived from the log", the notes are how it is
-    reconciled against what actually verifies."""
+    reconciled against what actually verifies.
+
+    A store `_read` refuses (unreadable, unsafe permissions) is not this: every token verifies
+    against nothing then, and `_read` already names it loudly; there is no ordering divergence
+    to reconcile."""
     try:
         stored = _read(_store(repo))["tokens"]
     except AuthRefused:
         return []
+    now = CLOCK.wall()
     by_id = {r["id"]: r for r in logged}
     notes: list[str] = []
-    for token_id in sorted(set(stored) - set(by_id)):
-        row = stored[token_id]
+    for token_id, row in sorted(stored.items()):
+        if token_id in by_id:
+            continue
+        if not isinstance(row, dict) or row.get("expires", 0) <= now:
+            continue  # a row verify would refuse, or already expired in the store too
         notes.append(
-            f"unrecorded: token {token_id} of {row['name']} is live in the store but has no "
-            f"log record (a crash between the store and the log); `tokens revoke "
-            f"{row['name']}` ends it"
+            f"unrecorded: token {token_id} of {row.get('name')} is live in the store but has "
+            f"no log record (a crash between the store and the log); `tokens revoke "
+            f"{row.get('name')}` ends it"
         )
-    for token_id in sorted(set(by_id) - set(stored)):
-        row = by_id[token_id]
+    for token_id, row in by_id.items():
+        if token_id in stored:
+            continue
         if row["state"] == ACTIVE:
             notes.append(
                 f"unrecorded: token {token_id} of {row['name']} is ended in the store but the "
