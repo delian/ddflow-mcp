@@ -135,28 +135,7 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
     with log.transaction():
         b = _open(_batches(log), batch)
         items = [m["item"] for m in b["members"]]
-        for stray in sorted(set(over) - set(items)):
-            raise ValueError(f"{stray} is not a member of batch {batch}")
-        gdef = (gates if gates is not None else load_gates(log.root, cfg)).get(gate)
-        if gdef is not None and gdef.is_human_gate:
-            raise ValueError(f"{gate!r} is a human-approval gate: a batch never clears it")
-        if outcome != "unavailable" and not any(
-            g["run"] == run
-            and not g.get("finished")
-            and g["gate"] == gate
-            and g["tree_sha"] == tree_sha
-            for g in b["gates"]
-        ):
-            raise ValueError(
-                f"batch {batch}: run {run} of {gate} on tree {tree_sha} was never started "
-                "(batch gate_started); a gate that did not run is unavailable, never "
-                f"{outcome}"
-            )
-        if over and set(over) >= set(items):
-            raise ValueError(
-                f"batch {batch}: the member outcomes cover every member; record the batch "
-                f"outcome itself ({outcome} would leave all of them failed)"
-            )
+        gdef = _guards(log, cfg, b, batch, gate, outcome, tree_sha, run, over, gates)
         base_ev = {
             **(evidence or {}),
             "covered_by": COVERED_BY,
@@ -187,6 +166,34 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
         )  # the batch's own outcome too
         log.append_many(events)
     return run
+
+
+def _guards(log, cfg, b, batch, gate, outcome, tree_sha, run, over, gates):
+    """The refusals that must come before anything is written; returns the gate definition."""
+    items = [m["item"] for m in b["members"]]
+    for stray in sorted(set(over) - set(items)):
+        raise ValueError(f"{stray} is not a member of batch {batch}")
+    gdef = (gates if gates is not None else load_gates(log.root, cfg)).get(gate)
+    if gdef is not None and gdef.is_human_gate:
+        raise ValueError(f"{gate!r} is a human-approval gate: a batch never clears it")
+    if outcome != "unavailable" and not any(
+        g["run"] == run
+        and not g.get("finished")
+        and g["gate"] == gate
+        and g["tree_sha"] == tree_sha
+        for g in b["gates"]
+    ):
+        raise ValueError(
+            f"batch {batch}: run {run} of {gate} on tree {tree_sha} was never started "
+            "(batch gate_started); a gate that did not run is unavailable, never "
+            f"{outcome}"
+        )
+    if over and set(over) >= set(items):
+        raise ValueError(
+            f"batch {batch}: the member outcomes cover every member; record the batch "
+            f"outcome itself ({outcome} would leave all of them failed)"
+        )
+    return gdef
 
 
 def _finished(gate, outcome, tree_sha, run, elapsed_s, queue_wait_s, reason, items):
