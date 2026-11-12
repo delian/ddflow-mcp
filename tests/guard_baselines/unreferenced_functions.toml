@@ -73,5 +73,12 @@ baseline = 0
 "ddflow/services/lanes/reuse.py:next_for" = "LC-reuse"
 # The lane-rotation hand-off note and launch env (TE-context-caps): the rotation loop that
 # writes the note into the item's evidence and puts the window env on the launch.
-"ddflow/services/lanerotate.py:handoff_note" = "TE-context-caps"
-"ddflow/services/lanerotate.py:window_env" = "TE-context-caps"
+ "ddflow/services/lanerotate.py:handoff_note" = "TE-context-caps"
+ "ddflow/services/lanerotate.py:window_env" = "TE-context-caps"
+# The completion value-kind predicates (COMP-declare): the completion value resolver is
+# their first ddflow/ caller; tests/test_completion_declare.py pins their behavior now.
+ "ddflow/services/completion/kinds.py:is_id" = "COMP-declare"
+ "ddflow/services/completion/kinds.py:looks_like_id" = "COMP-declare"
+# The moved volatile status renderer (B-mcp-instructions-volatile-prefix): the brief
+# renderer calls it; tests/test_mcp_instructions.py and tests/test_handshake_recoverable.py pin it.
+ "ddflow/services/brief_volatile.py:volatile_lines" = "B-mcp-instructions-volatile-prefix"

@@ -3,7 +3,6 @@ no tool of its own (tools/list is at its byte budget): over MCP it is `ddflow_sh
 
 from __future__ import annotations
 
-from ...services import output_budget as _budget
 from ..registry import Command, Param
 from ..tools._common import _api
 
@@ -11,7 +10,7 @@ from ..tools._common import _api
 def _text(out, a) -> str:
     text = out.data["text"].rstrip("\n")
     item = a.get("item") or ""
-    capped = _budget.apply(
+    capped = _api().output_budget.apply(
         text,
         a=a,
         cli=f"ddflow report {item}",
