@@ -52,5 +52,5 @@ def render(cfg, st, role: str, *, item: str = "", phase: str = "") -> str:
         kept.append(line)
     out = "\n".join([*kept, notice])
     if approx_tokens(out) > budget:  # not even one rule and the notice fit: the head alone
-        out = head
+        out = head[: budget * 4]  # (a token is about four characters)
     return out

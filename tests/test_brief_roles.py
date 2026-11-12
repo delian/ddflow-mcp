@@ -100,7 +100,7 @@ def test_the_service_lists_its_roles():
 def test_a_budget_smaller_than_the_notice_still_holds(proj):
     _config(proj, "[roles]\nbudget_tokens = 1")
     code, out, _ = run_cli(proj, "brief", "--role", "fixer")
-    assert code == 0 and approx_tokens(out) <= 4 and out.startswith("# Role: fixer")
+    assert code == 0 and approx_tokens(out) <= 1 and out.startswith("# Ro")
 
 
 def test_a_note_without_for_agent_is_refused_with_a_role(proj):
@@ -128,3 +128,9 @@ def test_a_budget_for_one_rule_and_the_notice_keeps_that_rule(proj):
     _, out, _ = run_cli(proj, "brief", "--role", "fixer")
     assert "Alpha rule." in out and "Bravo" not in out and "cut to the budget" in out
     assert approx_tokens(out) <= 22
+
+
+def test_the_phase_closer_pack_is_replaceable_data_too(proj):
+    _config(proj, '[roles]\nphase_closer_rules = ["Only say kiwi."]')
+    _, out, _ = run_cli(proj, "brief", "--role", "phase-closer")
+    assert "Only say kiwi." in out and "21600" not in out and "ratchet" not in out.lower()
