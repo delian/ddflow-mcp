@@ -45,10 +45,11 @@ def _activate_line(shell: str) -> str:
 
 
 def install_text(shell: str, current: str) -> str:
-    """``current`` plus one activation block, appended only when a ddflow-managed block is
-    absent (idempotent). Append-only: trailing newlines stay exactly as they were."""
+    """``current`` plus one activation block, appended only when the activation line is not
+    live (idempotent). A commented-out line is not live, so install re-activates it.
+    Append-only: trailing newlines stay exactly as they were."""
     line = _activate_line(shell)
-    if _BEGIN in current.splitlines():  # ddflow writes the marker at column 0, unsplit
+    if line in current.splitlines():
         return current
     block = f"{_BEGIN}\n{line}\n{_END}\n"
     if not current or current.endswith("\n"):

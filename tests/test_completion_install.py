@@ -109,3 +109,15 @@ def test_install_is_idempotent_when_a_managed_block_exists(tmp_path):
     current = install.install_text("bash", "source <(ddflow completion bash) # keep\n")
     assert install.install_text("bash", current) == current
     assert current.count("# >>> ddflow completion >>>") == 1
+
+
+def test_install_reactivates_a_commented_out_block(tmp_path):
+    # only the activation line commented out (markers intact) is not live: instal re-activates
+    disabled = (
+        "# >>> ddflow completion >>>\n"
+        "# source <(ddflow completion bash)\n"
+        "# <<< ddflow completion <<<\n"
+    )
+    out = install.install_text("bash", disabled)
+    assert out != disabled
+    assert install._activate_line("bash") in out.splitlines()
