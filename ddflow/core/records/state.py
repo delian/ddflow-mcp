@@ -51,6 +51,10 @@ class State:
     #: `memory.recorded` event ids whose superseded text was redacted from the log
     #: (`memory.redacted`): the auditable record that the text no longer stands.
     redacted_memory_events: set[str] = field(default_factory=set)
+    #: `kind:id` -> the `record.corrected` audit entries of that record, oldest first: who, when,
+    #: why and per field a digest of the old and the new value, never the old value
+    #: (REC-correct-event). Kept apart from the records so their shown form does not change.
+    corrections: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).
