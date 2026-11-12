@@ -249,7 +249,7 @@ def run(
     if res.ok:
         if full:  # the periodic full-suite pass a phase close reads (schedule.phase_full_suite)
             log.append("cadence.ran", "integration_tests",
-                       {"result": "0", "evidence": {"note": f"ci run --full on {ref}"}})  # fmt: skip
+                       {"result": "0", "evidence": {"note": f"ci run --full on {ref}", "sha": res.sha}})  # fmt: skip
         return O.ok("ci.run", **data)
     if res.status == "failed":
         return O.Outcome(kind="ci.run", data=data, exit=O.FAIL, reason=res.reason)
