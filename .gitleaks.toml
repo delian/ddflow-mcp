@@ -160,10 +160,10 @@ useDefault = true
   # `MIIEow...` + `secretbodyhere`, which spells its own filler, is far too short for any
   # RSA private key, and is not decodable DER. The private-key rule reads the BEGIN/END
   # frame and flags it anyway.
-  # Scoped to ONE rule, ONE file, and ONE filler body: a PEM block in any other file, or
-  # a different body in this one, still fires.
+  # Scoped to ONE rule, ONE file, and the WHOLE block (anchored frame and body): a PEM block
+  # in any other file, or a different body in this one, still fires.
   description = "the placeholder PEM block in the redaction test is not a private key"
   targetRules = ["private-key"]
   condition = "AND"
   paths = ['''^tests/test_critic_findings\.py$''']
-  regexes = ['''secretbodyhere''']
+  regexes = ['''^-----BEGIN RSA PRIVATE KEY-----\s*MIIEowIBAAKCAQEAsecretbodyhere\s*-----END RSA PRIVATE KEY-----$''']
