@@ -146,9 +146,10 @@ def test_the_handshake_tells_the_agent_to_ASK_not_to_fix(repo):
     # the byte-stable handshake (B-mcp-instructions-volatile-prefix).
     from ddflow.services import brief_volatile
 
-    assert "rules file needs the operator" not in _instructions(repo), (
-        "the drift notice leaked into the handshake instead of staying in the brief"
-    )
+    handshake = _instructions(repo)
+    assert "rules file needs the operator" not in handshake
+    assert "Ask the operator before fixing it" not in handshake
+    assert "ddflow_setup" not in handshake
     text = brief_volatile.volatile_lines(_instruction_vars(repo))
     assert "rules file needs the operator" in text
     assert "Ask the operator before fixing it" in text
