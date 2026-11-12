@@ -42,13 +42,27 @@ def tree(parser):
     return T.command_tree(parser)
 
 
-def _parsers(parser, path=()):
-    """Every canonical command path of the real parser, by argparse's own iteration."""
-    yield path, parser
+def _visible(parser, inherited):
+    """The engine's own visible options of ``parser``: a SUPPRESS option is kept only when
+    it mirrors an ancestor's option (the global ``--json``/``--agent`` copies)."""
+    mirrored = {s for a in inherited for s in a.option_strings}
+    for a in parser._actions:
+        if not a.option_strings:
+            continue
+        if a.help == argparse.SUPPRESS and not set(a.option_strings) & mirrored:
+            continue
+        yield a
+
+
+def _parsers(parser, inherited=(), path=()):
+    """Every canonical command path of the real parser with the options its ancestors
+    contributed, so the expected option set derives the same way the engine's walk does."""
+    yield path, parser, inherited
     for a in parser._actions:
         if isinstance(a, argparse._SubParsersAction):
+            seen = tuple(inherited) + tuple(_visible(parser, inherited))
             for name, child in a.choices.items():
-                yield from _parsers(child, (*path, name))
+                yield from _parsers(child, seen, (*path, name))
 
 
 def _subcommand_names(parser) -> list[str]:
@@ -59,34 +73,30 @@ def _subcommand_names(parser) -> list[str]:
     return out
 
 
-def _visible_flags(parser, root) -> set[str]:
-    """The option strings the tree offers for ``parser``: its own options, a SUPPRESS one
-    only when it mirrors an ancestor's (global) option, exactly as the engine walks it."""
-    mirrored = {s for a in root._actions for s in a.option_strings}
-    out: set[str] = set()
-    for a in parser._actions:
-        if not a.option_strings:
-            continue
-        if a.help == argparse.SUPPRESS and not set(a.option_strings) & mirrored:
-            continue
-        out.update(a.option_strings)
-    return out
+def _positionals(parser) -> list[argparse.Action]:
+    return [
+        a
+        for a in parser._actions
+        if not a.option_strings and not isinstance(a, argparse._SubParsersAction)
+    ]
 
 
 def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
-    """Every command path offers exactly the parser's subcommands, options and choices."""
-    paths = dict(_parsers(parser))
+    """Every command path offers exactly the parser's subcommands, options and choices,
+    for options and positionals alike: nothing missing, nothing extra."""
+    paths = {path: (p, inh) for path, p, inh in _parsers(parser)}
     walked = dict(T.walk(tree))
     assert set(walked) == set(paths)  # no command missing, none extra
     assert len(paths) > 50  # the real parser, at scale
-    for path, p in paths.items():
+    for path, (p, inherited) in paths.items():
         node = walked[path]
         # subcommands: the same names, in argparse's own order
         assert list(node["commands"]) == _subcommand_names(p), path
-        # options: exactly the parser's visible flags -- a dropped option would leave a
+        # options: exactly the engine's visible flags -- a dropped option would leave a
         # flag out of the set, an extra one a flag in (nothing missing, nothing extra)
         offered = {f for o in node["options"] for f in o["flags"]}
-        assert offered == _visible_flags(p, parser), path
+        expected = {s for a in _visible(p, inherited) for s in a.option_strings}
+        assert offered == expected, path
         # each offered option is one argparse action: its flags and choices are that
         # action's own (a multi-flag option still has exactly the action's choices)
         for o in node["options"]:
@@ -94,6 +104,13 @@ def test_the_engine_offers_exactly_the_parsers_surface(parser, tree):
             assert list(o["flags"]) == list(action.option_strings), path
             assert o["choices"] == (
                 None if action.choices is None else [str(c) for c in action.choices]
+            ), path
+        # positionals: the same destinations, with each one's choices, in parser order
+        pos = _positionals(p)
+        assert [x["dest"] for x in node["positionals"]] == [a.dest for a in pos], path
+        for x, a in zip(node["positionals"], pos):
+            assert x["choices"] == (
+                None if a.choices is None else [str(c) for c in a.choices]
             ), path
 
 
@@ -147,16 +164,18 @@ def _widget_index(d: Path) -> str:
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)
 def test_every_shell_script_parses(shell, tmp_path):
-    """Each activation template parses under its own shell; an uninstalled shell is a
-    coverage gap (unavailable), never a failure."""
+    """Each activation template parses under its own shell -- a pure syntax check, with
+    the shell's own rc/global config skipped so a broken user config cannot read as a
+    syntax error; an uninstalled shell is a coverage gap (unavailable), never a failure."""
     exe = shutil.which(shell)
     if exe is None:
         pytest.skip(f"{shell} is not installed: the {shell} template is unexercised")
-    path = tmp_path / f"ddflow-completion.{shell}"
+    flags = {"bash": ["-n"], "zsh": ["-f", "-n"], "fish": ["--no-execute", "--no-config"]}
     text = scripts.for_shell(shell)
-    # a degenerate or placeholder script would still parse clean under -n, so also require
-    # the real activation function named for the shell, not an empty/comment-only file
+    # a degenerate or placeholder script would still parse clean, so also require the real
+    # activation function named for the shell, not an empty/comment-only file
     assert f"_ddflow_activate_{shell}" in text
+    path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
-    result = subprocess.run([exe, "-n", str(path)], capture_output=True, text=True)
+    result = subprocess.run([exe, *flags[shell], str(path)], capture_output=True, text=True)
     assert result.returncode == 0, (shell, result.stderr)
