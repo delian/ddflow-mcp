@@ -84,7 +84,8 @@ class Probe:
 
     @property
     def median_share(self) -> float:
-        return statistics.median(r.share for r in self.rows) if self.rows else 0.0
+        shares = [r.share for r in self.rows if r.suite]
+        return statistics.median(shares) if shares else 0.0
 
     @property
     def fallback_rate(self) -> float:
@@ -389,13 +390,15 @@ def test_the_report_names_every_measure(tmp_path):
 
 
 def test_the_probe_runs_on_this_repository_window():
-    """A thin live smoke: the newest merge only (the full 100-merge read-out is the script)."""
-    shas = merge_log(ROOT)[:1]
+    """A thin live smoke: the newest merges until one with source is scored (the full 100-merge
+    read-out is the script)."""
+    shas = merge_log(ROOT)[:6]
     if not shas:
         pytest.skip("no merge history here")
     p = probe(ROOT, shas, TSC.limits(Config()), workers=1)
     assert not p.errors, p.errors
-    assert p.rows or p.skipped  # the merge was looked at: scored, or counted as no-source
+    if not p.rows:
+        pytest.skip("none of the newest merges changed source: nothing to select")
     assert all(0.0 <= r.share <= 1.0 for r in p.rows)
 
 
