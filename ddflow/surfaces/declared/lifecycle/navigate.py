@@ -160,6 +160,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "role",
+                help="Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief.",
+                cli_help="the project's rules for a role: phase-closer, fixer, researcher or reviewer (with --for-agent: appended to the launch brief)",
+                default="",
+            ),
+            Param(
                 "note",
                 help="",
                 cli_help="with --for-agent: the coordinator's note for this item",

@@ -439,6 +439,7 @@ next_hints = "off"
 on_upgrade = "notify"
 stale_check_every_s = 60.0
 progress_s = 20.0
+init_snapshot_max_age_s = 300.0
 
 [memory]
 max_chars = 280
@@ -611,6 +612,13 @@ exclude_pin_files = true
 chunk_max_tokens = 0
 split_rounds = 2
 degraded_cooldown_s = 3600
+
+[roles]
+budget_tokens = 600
+phase_closer_rules = []
+fixer_rules = []
+researcher_rules = []
+reviewer_rules = []
 
 [rules]
 max_rules = 200

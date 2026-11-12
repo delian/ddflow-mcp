@@ -138,17 +138,18 @@ def test_a_queue_state_change_without_a_move_is_seen(pr_repo):
 def test_an_unaskable_queue_never_triggers_a_merge(pr_repo, monkeypatch):
     """Approved and green, but the queue call hangs (ForgeUnavailable): the request may
     already be queued, so ddflow must not ask the forge to merge it."""
+    from ddflow.adapters import forge_github as FGH
     from ddflow.infra import forge as FG
 
     repo, _forge = _approved_and_green(pr_repo)
-    real = FG._run
+    real = FGH._run  # the adapter calls its own imported name, not the infra shim's
 
     def hang_on_graphql(repo_, argv, **kw):
         if argv[:3] == ["gh", "api", "graphql"]:
             raise FG.ForgeUnavailable("gh api graphql timed out")
         return real(repo_, argv, **kw)
 
-    monkeypatch.setattr(FG, "_run", hang_on_graphql)
+    monkeypatch.setattr(FGH, "_run", hang_on_graphql)
     from ddflow import api
 
     out = api.pr_sync(repo)
@@ -564,3 +565,26 @@ def test_merge_queue_refusal_over_mcp_names_the_landing_flag(repo):
     text = json.dumps(reply)
     assert "keep" in text and "only enqueues" in text, text
     assert _state(repo).items["T1"].state != "done"
+
+
+def test_only_the_running_integrator_may_land_over_the_holders_lease(proj):
+    """The queue's consent to end the holder's lease is the integrator's alone: a peer that
+    lands the same item while its entry is RUNNING (no integrator lock held by its process)
+    is not covered by it."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.merge import _queued_by_holder
+    from ddflow.services import mergequeue as MQ
+
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    held = SimpleNamespace(holder="t1")
+    entry = MQ.get(proj, "T1")
+    assert not _queued_by_holder(proj, "T1", held), "a queued entry is not yet running"
+    entry.state = MQ.RUNNING
+    MQ.save(proj, entry)
+    assert not _queued_by_holder(proj, "T1", held), "no integrator holds the lock"
+    with MQ.integrator(proj, agent="integrator") as got:
+        assert got
+        assert _queued_by_holder(proj, "T1", held)
+        assert not _queued_by_holder(proj, "T1", SimpleNamespace(holder="someone-else"))

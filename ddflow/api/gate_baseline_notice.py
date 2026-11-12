@@ -16,6 +16,7 @@ from ..core.handlers.asks import asks_of
 from ..core.model import fold
 from ..services import gate_accept as GA
 from ..services import lanerelease as LR
+from ..services import logblobs as LB
 from ..services.approvals import policy as PO
 from ..services.approvals.canon import Canon
 from ._base import _load
@@ -44,7 +45,9 @@ def notify(repo: Path, agent: str, item: str, gate: str) -> bool:
     log, cfg, _st = _load(repo, agent)
     it = fold(log.read_all(), strict=False).items.get(item)
     base = (
-        ((it.gates[gate].evidence or {}).get("baseline") or {}) if it and gate in it.gates else {}
+        (LB.full(it.gates[gate].evidence or {}).get("baseline") or {})
+        if it and gate in it.gates
+        else {}
     )
     auto = base.get("auto") or {}
     if (

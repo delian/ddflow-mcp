@@ -88,6 +88,16 @@ def test_a_logic_change_does_not_accept_the_trivial_tier(repo):
     assert CO.needs_independent_reviewer(it, cfg, CO.changed_paths(repo, it), repo)
 
 
+def test_a_logic_change_already_landed_is_not_trivial_from_the_primary(repo):
+    """After `merge` the item's change is on main and the primary's HEAD IS the base: a
+    base-vs-HEAD AST compare is empty and read "format-only", so a landed logic change was
+    excused from review and ci. Nothing to compare means not trivial."""
+    cfg = _with_ci(Config.load(repo))
+    it = _worktree_change(repo, "src/mod.py", "x = 1\n", "x = 2\n")
+    subprocess.run(["git", "-C", str(repo), "merge", "-q", "--ff-only", it.branch], check=True)
+    assert not diff_is_trivial(it, cfg, repo, ["src/mod.py"])
+
+
 def test_a_starred_unpacking_change_is_not_trivial(repo):
     """rubber_duck: `*a, = range(3)` is code (starred unpacking), not a comment, so it must
     never read as trivial."""

@@ -22,8 +22,10 @@ class PatternError(ValueError):
     """A redaction pattern that does not compile (a configuration error)."""
 
 
-#: What replaces a text whose redaction itself failed.
-FAILED_MARKER = "[REDACTED:redaction-failed]"
+#: What replaces a text whose redaction itself failed: the same stable placeholder a
+#: masking redaction writes, so a failed redaction scrubs the field instead of surfacing
+#: a `redaction-failed` marker as an item's visible title (bug Befd5e5baa3).
+FAILED_MARKER = "[REDACTED]"
 
 
 def fail_closed_text() -> tuple[str, int]:

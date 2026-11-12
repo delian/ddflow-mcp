@@ -34,6 +34,7 @@ from ...infra import worktree as W
 from .. import chore as CO
 from .. import gate_accept as GA
 from .. import gates as G
+from .. import logblobs as LB
 from .. import observed_globs as OG
 from .. import review_exclude as RX
 from ..cadence import phase_overdue
@@ -566,7 +567,7 @@ def _refine_disjoint(
     out = []
     for note in notes:
         rec = it.gates.get(note.gate)
-        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        recorded = (LB.full(rec.evidence or {}).get("reviewed_paths") if rec else None) or None
         if note.unverified or not isinstance(recorded, dict):
             out.append(note)
             continue
@@ -610,7 +611,7 @@ def refine_stale_notes(
     out = []
     for note in notes:
         rec = it.gates.get(note.gate)
-        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        recorded = (LB.full(rec.evidence or {}).get("reviewed_paths") if rec else None) or None
         if note.unverified or not isinstance(recorded, dict) or changed is None:
             out.append(note)
             continue
@@ -749,7 +750,7 @@ def readme_report(
     docs = it.gates.get("docs")
     if docs and (
         (docs.outcome == "skipped" and docs.reason)
-        or (docs.outcome == "passed" and (docs.evidence or {}).get("note"))
+        or (docs.outcome == "passed" and LB.full(docs.evidence or {}).get("note"))
     ):
         return ""
     changed = changed_paths(repo, it, cache=cache)

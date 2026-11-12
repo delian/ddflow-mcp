@@ -96,16 +96,38 @@ def test_a_real_conflict_between_two_branches_stays_exclusive(repo: Path) -> Non
     assert "shared.txt" in out.reason and "A" in out.reason, out.reason
 
 
-def test_an_unknown_holder_branch_fails_closed(repo: Path) -> None:
+def test_an_unknown_holder_branch_fails_closed(repo: Path, monkeypatch) -> None:
     (repo / "shared.txt").write_text("one\n")
     _git(repo, "add", "shared.txt")
     _git(repo, "commit", "-qm", "shared")
     _tasks(repo)
     _optimistic_on(repo)
-    # A holds shared.txt but has no `ddflow/A` branch: the probe cannot answer, so B stays refused.
+    _branch_edit(repo, "ddflow/A", "shared.txt", "one\n", "one\nA\n")
     assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
+    real_tip = PR.tip
+
+    # A holds shared.txt but git cannot resolve its branch (a timeout, not "no such branch"):
+    # the probe cannot answer, so B stays refused.
+    def tip(repo: Path, ref: str, timeout_s: float) -> tuple[str, str]:
+        if ref == "ddflow/A":
+            return "", "git timed out"
+        return real_tip(repo, ref, timeout_s)
+
+    monkeypatch.setattr(PR, "tip", tip)
     out = LC.claim(repo, "B", agent="b", no_worktree=True)
     assert out.exit == 3, out.reason
+
+
+def test_an_unborn_holder_branch_is_probed_as_the_default_branch(repo: Path) -> None:
+    """A holder with no branch yet forks from the default branch, like a fresh claimant, so
+    two fresh claims on one file are shared (3be8dfe8d)."""
+    (repo / "shared.txt").write_text("one\n")
+    _git(repo, "add", "shared.txt")
+    _git(repo, "commit", "-qm", "shared")
+    _tasks(repo)
+    _optimistic_on(repo)
+    assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
+    assert LC.claim(repo, "B", agent="b", no_worktree=True).exit == 0
 
 
 def test_a_claimant_side_the_probe_cannot_resolve_fails_closed(repo: Path, monkeypatch) -> None:

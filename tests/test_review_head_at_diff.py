@@ -31,8 +31,13 @@ OK, REFUSED = 0, 3
 
 
 def _setup(repo: Path, tmp_path: Path) -> Path:
-    """A project whose reviewer, when `arm` exists, commits `late<N>.py` to the checked-out
-    branch mid-review (and disarms). Returns the marker path.
+    """A project whose reviewer, when `arm` exists, commits `late<N>.py` to branch `feat`
+    mid-review (and disarms). Returns the marker path.
+
+    The commit is made in a second worktree of `feat`, never in the reviewed tree: a reviewer
+    that moves HEAD, the index or the files of the tree it reviews is `unavailable`
+    (B5ce30dd94d / B708761957b), and this file is about the head the REVIEW records, so the
+    author's late commit must land where the guard does not watch. `repo` stays on main.
 
     A late commit that FAILS fails the reviewer, so the review errors with git's own
     words. Swallowed, it passed the review and surfaced one call later as "nothing
@@ -40,12 +45,13 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     arm = tmp_path / "arm"
     cli = tmp_path / "fake-reviewer"
     calls = tmp_path / "calls"
+    late = tmp_path / "late-wt"  # a second checkout of `feat`, made below
     cli.write_text(
         f"#!/bin/sh\necho x >> '{calls}'\ncat >/dev/null\n"
         f"if [ -f '{arm}' ]; then n=$(cat '{arm}'); rm -f '{arm}'; "
-        f"printf 'late = %s\\n' \"$n\" > '{repo}/late'$n'.py'; "
-        f"git -C '{repo}' add 'late'$n'.py' >/dev/null && "
-        f"git -C '{repo}' commit -qm \"late $n\" >/dev/null "
+        f"printf 'late = %s\\n' \"$n\" > '{late}/late'$n'.py'; "
+        f"git -C '{late}' add 'late'$n'.py' >/dev/null && "
+        f"git -C '{late}' commit -qm \"late $n\" >/dev/null "
         "|| { echo 'the late commit failed' >&2; exit 1; }; fi\n"
         "echo 'STATUS: NO FINDINGS'\n"
     )
@@ -59,10 +65,14 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "add", "-A")  # the task's event is on main, which the reviewed tree stays on
+    _git(repo, "commit", "-qm", "task")
     _git(repo, "checkout", "-q", "-b", "feat")
     (repo / "x.py").write_text("x = 1\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "work")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "worktree", "add", "-q", str(late), "feat")
     return arm
 
 
@@ -85,18 +95,18 @@ def test_the_side_effecting_reviewer_runs_once_per_review(repo, tmp_path):
     assert _review(repo).exit == OK
     # The diff is one small chunk, so one request: any second call is a hedged copy.
     assert (tmp_path / "calls").read_text().count("x") == 1
-    assert _git(repo, "ls-tree", "--name-only", "HEAD", "late1.py") == "late1.py", (
+    assert _git(repo, "ls-tree", "--name-only", "feat", "late1.py") == "late1.py", (
         "committed, uncancelled"
     )
 
 
 def test_a_commit_made_while_a_full_review_runs_shows_up_in_the_next_delta(repo, tmp_path):
     arm = _setup(repo, tmp_path)
-    taken = _git(repo, "rev-parse", "HEAD")
+    taken = _git(repo, "rev-parse", "feat")
     arm.write_text("1")
     first = _review(repo)
     assert first.exit == OK, first.reason
-    late = _git(repo, "rev-parse", "HEAD")
+    late = _git(repo, "rev-parse", "feat")
     assert late != taken, "the reviewer committed while it ran"
     assert _ev(repo)["reviewed_head"] == taken, "the head whose diff was reviewed"
     out = _review(repo, delta=True)
@@ -110,10 +120,11 @@ def test_a_commit_made_while_a_delta_round_runs_is_not_skipped(repo, tmp_path, m
     monkeypatch.setenv("DDFLOW_REVIEW_MAX_ROUNDS", "0")  # deltas count against the cap now
     arm = _setup(repo, tmp_path)
     assert _review(repo).exit == OK
-    (repo / "fix.py").write_text("ok = 1\n")
-    _git(repo, "add", "fix.py")
-    _git(repo, "commit", "-qm", "fix")
-    taken = _git(repo, "rev-parse", "HEAD")
+    wt = tmp_path / "late-wt"
+    (wt / "fix.py").write_text("ok = 1\n")
+    _git(wt, "add", "fix.py")
+    _git(wt, "commit", "-qm", "fix")
+    taken = _git(repo, "rev-parse", "feat")
     arm.write_text("2")
     d1 = _review(repo, delta=True)
     assert d1.exit == OK, d1.reason
@@ -127,7 +138,8 @@ def test_a_commit_made_while_a_delta_round_runs_is_not_skipped(repo, tmp_path, m
 def test_a_late_commit_that_fails_fails_the_review_with_its_cause(repo, tmp_path):
     """B067ea15820: the fixture's reviewer must not hide a commit it could not make."""
     arm = _setup(repo, tmp_path)
-    (repo / ".git" / "index.lock").write_text("")  # git add/commit now refuse
+    lock = _git(tmp_path / "late-wt", "rev-parse", "--git-path", "index.lock")
+    (tmp_path / "late-wt" / lock).write_text("")  # git add/commit in that worktree now refuse
     arm.write_text("1")
     out = _review(repo)
     assert out.exit != OK, "a reviewer whose late commit failed passed the review"
