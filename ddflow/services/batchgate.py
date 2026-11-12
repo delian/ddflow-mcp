@@ -20,7 +20,7 @@ from ..adapters import digest as DG
 from ..config import Config
 from ..core.model import GATE_OUTCOMES, fold
 from ..infra.log import EventLog
-from .gates.defs import GateDef
+from .gates.defs import GateDef, load_gates
 from .gates.kinds import bare, evidence_problems
 
 #: Evidence ``covered_by`` value on a member's outcome: the batch run stood in for its own.
@@ -52,10 +52,15 @@ def form(
 
     Refused: an id already used, no member, a member twice, or a member already in a batch that
     has not landed or dissolved (an item is verified by one batch at a time)."""
-    rows = [
-        {"item": str(m["item"]), "tip": str(m.get("tip", "")), "paths": list(m.get("paths", ()))}
-        for m in members
-    ]
+    rows = []
+    for m in members:
+        if not m.get("tip"):
+            raise ValueError(f"member {m.get('item')!r} has no tip sha")
+        if not isinstance(m.get("paths"), (list, tuple)):
+            raise ValueError(
+                f"member {m.get('item')!r} has no paths manifest (a list, maybe empty)"
+            )
+        rows.append({"item": str(m["item"]), "tip": str(m["tip"]), "paths": list(m["paths"])})
     if not rows:
         raise ValueError("a batch needs at least one member")
     ids = [r["item"] for r in rows]
@@ -132,9 +137,17 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
         items = [m["item"] for m in b["members"]]
         for stray in sorted(set(over) - set(items)):
             raise ValueError(f"{stray} is not a member of batch {batch}")
-        gdef = (gates or {}).get(gate)
+        gdef = (gates if gates is not None else load_gates(log.root, cfg)).get(gate)
         if gdef is not None and gdef.is_human_gate:
             raise ValueError(f"{gate!r} is a human-approval gate: a batch never clears it")
+        if outcome != "unavailable" and not any(
+            g["run"] == run and not g.get("finished") for g in b["gates"]
+        ):
+            raise ValueError(
+                f"batch {batch}: run {run} of {gate} on tree {tree_sha} was never started "
+                "(batch gate_started); a gate that did not run is unavailable, never "
+                f"{outcome}"
+            )
         base_ev = {
             **(evidence or {}),
             "covered_by": COVERED_BY,

@@ -87,7 +87,7 @@ def h_batch_gate_finished(st: State, ev: Event) -> None:
         (
             g
             for g in reversed(b["gates"])
-            if not g["outcome"] and (g["run"] == run if run else g["gate"] == gate)
+            if not g.get("finished") and (g["run"] == run if run else g["gate"] == gate)
         ),
         None,
     )

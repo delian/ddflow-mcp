@@ -30,6 +30,10 @@ def formed(log):
     return log
 
 
+def _start(log, tree="t", gate="ci"):
+    BG.gate_started(log, "b1", gate=gate, tree_sha=tree, command="pytest")
+
+
 def test_formed_batch_folds_with_members_tips_and_paths(formed):
     b = _st(formed).batches["b1"]
     assert b["state"] == "formed"
@@ -51,6 +55,7 @@ def test_replay_rebuilds_the_batch_exactly(formed):
 
 
 def test_fan_out_gives_every_member_its_own_outcome_with_batch_evidence(formed):
+    _start(formed, "tree9")
     BG.fan_out(
         formed,
         Config.load(),
@@ -92,6 +97,7 @@ def test_a_gate_that_did_not_run_is_unavailable_never_passed(formed):
 
 
 def test_a_culprit_member_fails_and_the_rest_keep_the_batch_outcome(formed):
+    _start(formed)
     BG.fan_out(
         formed,
         Config.load(),
@@ -110,6 +116,7 @@ def test_a_culprit_member_fails_and_the_rest_keep_the_batch_outcome(formed):
 def test_fan_out_is_all_or_nothing(formed):
     """A member outcome that cannot be recorded stops the whole fan-out: no member and no
     batch event is written."""
+    _start(formed)
     before = len(formed.read_all())
     with pytest.raises(ValueError):
         BG.fan_out(
@@ -125,6 +132,7 @@ def test_fan_out_is_all_or_nothing(formed):
 
 
 def test_a_member_outside_the_batch_is_refused(formed):
+    _start(formed)
     with pytest.raises(ValueError, match="not a member"):
         BG.fan_out(
             formed,
@@ -179,3 +187,37 @@ def test_a_human_gate_is_never_cleared_by_a_batch(formed):
             gates={"ci": gdef},
         )
     assert len(formed.read_all()) == before
+
+
+def test_a_pass_needs_a_started_run_of_that_gate_and_tree(formed):
+    before = len(formed.read_all())
+    with pytest.raises(ValueError, match="never started"):
+        BG.fan_out(formed, Config.load(), "b1", gate="ci", outcome="passed", tree_sha="t")
+    _start(formed, "other-tree")
+    with pytest.raises(ValueError, match="never started"):
+        BG.fan_out(formed, Config.load(), "b1", gate="ci", outcome="passed", tree_sha="t")
+    assert len(formed.read_all()) == before + 1  # only the start
+
+
+def test_a_human_gate_from_the_project_is_refused_without_a_gates_argument(formed, repo):
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text("[gate.ci]\nhuman = true\n")
+    _start(formed)
+    before = len(formed.read_all())
+    with pytest.raises(ValueError, match="human"):
+        BG.fan_out(formed, Config.load(repo), "b1", gate="ci", outcome="passed", tree_sha="t")
+    assert len(formed.read_all()) == before
+
+
+def test_a_member_needs_a_tip_and_a_path_manifest(log):
+    with pytest.raises(ValueError, match="tip"):
+        BG.form(log, "b", [{"item": "i1", "paths": ["a/**"]}], trigger="count", base_sha="0")
+    with pytest.raises(ValueError, match="paths"):
+        BG.form(log, "b", [{"item": "i1", "tip": "a" * 40}], trigger="count", base_sha="0")
+
+
+def test_a_finish_without_an_outcome_still_closes_the_run(formed):
+    run = BG.gate_started(formed, "b1", gate="ci", tree_sha="t")
+    formed.append("batch.gate_finished", "b1", {"gate": "ci", "run": run})
+    formed.append("batch.gate_finished", "b1", {"gate": "ci", "run": run, "outcome": "passed"})
+    assert len(_st(formed).batches["b1"]["gates"]) == 2  # the second is its own entry
