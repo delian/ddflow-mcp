@@ -9,6 +9,7 @@ from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.services import batchgate as BG
 
+EV = {"command": "pytest -q", "exit_code": 0}
 MEMBERS = [
     {"item": "A", "tip": "a" * 40, "paths": ["a/**"]},
     {"item": "B", "tip": "b" * 40, "paths": ["b/x.py"]},
@@ -45,7 +46,9 @@ def test_formed_batch_folds_with_members_tips_and_paths(formed):
 
 def test_replay_rebuilds_the_batch_exactly(formed):
     BG.gate_started(formed, "b1", gate="ci", tree_sha="t1", command="pytest -q")
-    BG.fan_out(formed, Config.load(), "b1", gate="ci", outcome="passed", tree_sha="t1", by="q")
+    BG.fan_out(
+        formed, Config.load(), "b1", gate="ci", outcome="passed", evidence=EV, tree_sha="t1", by="q"
+    )
     BG.culprit(formed, "b1", member="B", runs=3)
     BG.landed(formed, "b1", sha="f" * 40)
     first = _st(formed).batches
@@ -62,6 +65,7 @@ def test_fan_out_gives_every_member_its_own_outcome_with_batch_evidence(formed):
         "b1",
         gate="ci",
         outcome="passed",
+        evidence=EV,
         tree_sha="tree9",
         by="queue",
         elapsed_s=12.5,
@@ -104,6 +108,7 @@ def test_a_culprit_member_fails_and_the_rest_keep_the_batch_outcome(formed):
         "b1",
         gate="ci",
         outcome="passed",
+        evidence=EV,
         tree_sha="t",
         member_outcomes={"B": ("failed", "its test broke")},
     )
@@ -229,3 +234,46 @@ def test_fan_out_with_another_gate_or_tree_than_the_started_run_is_refused(forme
     for kw in ({"gate": "lint", "tree_sha": "tree1"}, {"gate": "ci", "tree_sha": "tree2"}):
         with pytest.raises(ValueError, match="never started"):
             BG.fan_out(formed, Config.load(), "b1", outcome="passed", run=run, **kw)
+
+
+def test_a_gate_that_requires_evidence_is_not_passed_by_the_batch_annotations(formed):
+    from ddflow.services.gates.defs import GateDef
+
+    _start(formed)
+    gates = {"ci": GateDef(id="ci", evidence=True)}
+    before = len(formed.read_all())
+    with pytest.raises(ValueError, match="requires evidence"):
+        BG.fan_out(
+            formed, Config.load(), "b1", gate="ci", outcome="passed", tree_sha="t", gates=gates
+        )
+    assert len(formed.read_all()) == before
+    BG.fan_out(
+        formed,
+        Config.load(),
+        "b1",
+        gate="ci",
+        outcome="passed",
+        tree_sha="t",
+        gates=gates,
+        evidence={"command": "pytest", "exit_code": 0},
+    )
+
+
+def test_an_override_set_covering_every_member_cannot_leave_a_passed_batch(formed):
+    _start(formed)
+    with pytest.raises(ValueError, match="every member"):
+        BG.fan_out(
+            formed,
+            Config.load(),
+            "b1",
+            gate="ci",
+            outcome="passed",
+            tree_sha="t",
+            member_outcomes={m["item"]: ("failed", "x") for m in MEMBERS},
+        )
+
+
+def test_the_folded_run_keeps_its_members(formed):
+    _start(formed)
+    BG.fan_out(formed, Config.load(), "b1", gate="ci", outcome="passed", evidence=EV, tree_sha="t")
+    assert _st(formed).batches["b1"]["gates"][0]["members"] == ["A", "B", "C"]

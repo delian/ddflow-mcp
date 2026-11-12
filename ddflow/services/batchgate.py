@@ -152,6 +152,11 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
                 "(batch gate_started); a gate that did not run is unavailable, never "
                 f"{outcome}"
             )
+        if over and set(over) >= set(items):
+            raise ValueError(
+                f"batch {batch}: the member outcomes cover every member; record the batch "
+                f"outcome itself ({outcome} would leave all of them failed)"
+            )
         base_ev = {
             **(evidence or {}),
             "covered_by": COVERED_BY,
@@ -169,7 +174,7 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
         ]
         for item in items:
             out, why = over.get(item, (outcome, reason))
-            _check(cfg, gdef, gate, out, why, base_ev, item)
+            _check(cfg, gdef, gate, out, why, base_ev, item, evidence)
             events.append(
                 (
                     f"gate.{out}",
@@ -177,7 +182,9 @@ def fan_out(  # noqa: PLR0913 -- one keyword per fact of a gate run; all of them
                     {"gate": gate, "by": by or log.agent_id, "reason": why, "evidence": base_ev},
                 )
             )
-        _check(cfg, None, gate, outcome, reason, base_ev, batch)  # the batch's own outcome too
+        _check(
+            cfg, gdef, gate, outcome, reason, base_ev, batch, evidence
+        )  # the batch's own outcome too
         log.append_many(events)
     return run
 
@@ -198,7 +205,7 @@ def _finished(gate, outcome, tree_sha, run, elapsed_s, queue_wait_s, reason, ite
     return d
 
 
-def _check(cfg, gdef, gate, outcome, reason, evidence, item) -> None:
+def _check(cfg, gdef, gate, outcome, reason, evidence, item, given=None) -> None:
     """The evidence contract of ``gates.outcomes.record``, checked before anything is written."""
     if outcome not in GATE_OUTCOMES:
         raise ValueError(f"bad outcome {outcome!r}; expected one of {GATE_OUTCOMES}")
@@ -207,7 +214,7 @@ def _check(cfg, gdef, gate, outcome, reason, evidence, item) -> None:
     if outcome == "skipped":
         raise ValueError("a batch never skips a gate for its members: skips are per item")
     if outcome == "passed" and gdef is not None:
-        if gdef.evidence and bare(evidence):
+        if gdef.evidence and bare(given):
             raise ValueError(f"gate {gate!r} requires evidence to pass")
         if why := evidence_problems(gdef, evidence, item, None):
             raise ValueError(f"gate {gate!r} cannot pass without {'; '.join(why)}")

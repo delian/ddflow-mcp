@@ -102,6 +102,9 @@ def h_batch_gate_finished(st: State, ev: Event) -> None:
         elapsed_s=_num(d.get("elapsed_s")),
         queue_wait_s=_num(d.get("queue_wait_s")),
         reason=_str(d.get("reason")),
+        members=[m for m in d.get("members", []) if isinstance(m, str)]
+        if isinstance(d.get("members"), list)
+        else [],
         finished=ev.ts,
     )
 
