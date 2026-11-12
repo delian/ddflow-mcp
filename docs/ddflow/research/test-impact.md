@@ -29,7 +29,7 @@ unit_tests/ci whole run must keep covering:
 
 1. Recall is 0.683 overall (about 94 of 138 co-changed tests); the 44 missed tests split into 29 that drive the program in a
    subprocess (no import route: what TS-cover-deps' recorded dependencies add) and about
-   20 with a route the selector did not draw (re-exporting `__init__`, template/doc text
+   15 with a route the selector did not draw (re-exporting `__init__`, template/doc text
    readers, farther than two hops).
 2. Unmapped source changes select nothing (5.9 percent of merges), rather than the whole
    suite. Selection by itself is not a safe gate for them; a gate that relies on it must

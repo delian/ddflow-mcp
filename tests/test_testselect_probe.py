@@ -105,17 +105,15 @@ class Probe:
     def hub_rows(self) -> list[MergeRow]:
         return [r for r in self.rows if r.hub and r.narrow_selected is not None]
 
-    def hub_narrow_share(self) -> float:
-        hubs = self.hub_rows()
-        if not hubs:
-            return 0.0
-        shares = [r.narrow_selected / r.suite for r in hubs if r.suite]
-        return statistics.median(shares) if shares else 0.0
+    def hub_narrow_share(self) -> float | None:
+        """None when no hub merge had a narrower choice to measure (never a perfect 0)."""
+        shares = [r.narrow_selected / r.suite for r in self.hub_rows() if r.suite]
+        return statistics.median(shares) if shares else None
 
-    def hub_narrow_recall(self) -> float:
+    def hub_narrow_recall(self) -> float | None:
         hubs = [r for r in self.hub_rows() if r.co]
         total = sum(r.co for r in hubs)
-        return sum(r.narrow_held or 0 for r in hubs) / total if total else 1.0
+        return sum(r.narrow_held or 0 for r in hubs) / total if total else None
 
     def report(self) -> str:
         return (
@@ -124,10 +122,14 @@ class Probe:
             f"median selected share {self.median_share:.3f}; "
             f"whole-suite rate {self.fallback_rate:.3f} (hub-fallback rate {self.hub_rate:.3f}); "
             f"unrouted rate {self.unrouted_rate:.3f}; "
-            f"hub narrowed share {self.hub_narrow_share():.3f} at recall "
-            f"{self.hub_narrow_recall():.3f}; subprocess-blind misses {self.blind_total}; "
+            f"hub narrowed share {_fmt(self.hub_narrow_share())} at recall "
+            f"{_fmt(self.hub_narrow_recall())}; subprocess-blind misses {self.blind_total}; "
             f"no-source merges skipped {self.skipped}; errors {len(self.errors)}"
         )
+
+
+def _fmt(x: float | None) -> str:
+    return "n/a" if x is None else f"{x:.3f}"
 
 
 def _extract(root: Path, sha: str) -> tuple[Path, list[str]]:
@@ -342,7 +344,7 @@ def test_a_hub_merge_falls_back_to_the_whole_suite_and_reports_a_narrower_choice
     # the co-changed test
     assert row.narrow_selected is not None and 3 <= row.narrow_selected < row.suite
     assert row.narrow_held == row.co == 1
-    assert p.hub_narrow_share() < 1.0 and p.hub_narrow_recall() == 1.0
+    assert (p.hub_narrow_share() or 1.0) < 1.0 and p.hub_narrow_recall() == 1.0
 
 
 def test_a_subprocess_only_test_is_a_blind_miss_the_recorded_dependencies_would_route(tmp_path):
@@ -389,11 +391,12 @@ def test_the_probe_runs_on_this_repository_window():
 
 if __name__ == "__main__":
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 100
+    import test_testselect_probe as P  # not __main__: a spawned worker must import `_safe`
     import test_testselect_recall as R
 
     R.SCAN = n
     window = merge_log(ROOT)
-    result = probe(ROOT, window, TSC.limits(Config()))
+    result = P.probe(ROOT, window, TSC.limits(Config()))
     print(result.report())
     for r in result.rows:
         if r.missed or r.blind:
@@ -412,7 +415,7 @@ def test_a_hub_share_with_an_empty_suite_does_not_crash():
         narrow_selected=0,
         narrow_held=0,
     )
-    assert "hub narrowed share 0.000" in Probe([row]).report()
+    assert "hub narrowed share n/a" in Probe([row]).report()
 
 
 def test_a_non_hub_whole_suite_answer_is_not_a_hub_row():
