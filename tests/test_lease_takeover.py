@@ -107,6 +107,7 @@ def test_the_cli_route_needs_no_force_flag(repo):
         repo, "recover", "--item", "T1", "--adopt", "--reason", "lane died", agent="next"
     )
     assert code == 0, out + err
+    assert "adopted T1" in out, out  # the adoption line, not a sweep's prose
     assert _lease(repo).holder == "next"
 
 

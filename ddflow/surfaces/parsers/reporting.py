@@ -28,8 +28,8 @@ from ..registry import add_commands
 def render_recover(out, a) -> str:
     """`recover`'s prose. The plan (`--all --plan`) is rendered here; the plain sweep
     keeps the handler's prose word for word (the uc-surface tests pin it)."""
-    if out.kind == "recover.adopt":  # one lease taken over: the claim's own answer
-        return f"adopted {out.data.get('id', '')}: worktree {out.data.get('worktree') or '-'}"
+    if out.data.get("adopted"):  # one lease taken over: the claim's own answer
+        return f"adopted {out.data['adopted']}: worktree {out.data.get('worktree') or '-'}"
     if out.data.get("_render", {}).get("plan"):
         return _render_plan(out)
     return _render_recover(out, a)

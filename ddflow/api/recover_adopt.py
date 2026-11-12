@@ -76,4 +76,5 @@ def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
         out.data.setdefault("found", [])
         out.data.setdefault("_render", {"found": [], "salvageable": []})
         out.data.setdefault("count", 1)
+        out.data["adopted"] = item
     return out
