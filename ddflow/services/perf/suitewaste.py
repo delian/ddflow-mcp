@@ -111,7 +111,11 @@ def _whole_command(command: str) -> bool:
 def _narrows(arg: str) -> bool:
     name = arg.split("=", 1)[0]
     # ``-k expr`` may be written ``-kexpr`` and ``-m`` likewise; a long option is exact.
-    return name in _NARROWING or (arg[:2] in ("-k", "-m") and not arg.startswith("--"))
+    if name in _NARROWING:
+        return True
+    # A short-flag cluster (``-vk``, ``-xm``, ``-kexpr``) narrows when it carries ``k`` or ``m``.
+    short = arg.startswith("-") and not arg.startswith("--")
+    return short and any(c in "km" for c in name[1:]) and name[1:].isalpha()
 
 
 def _positionals(args: list[str]) -> list[str]:
