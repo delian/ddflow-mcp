@@ -8,7 +8,7 @@
 
 _ddflow_activate_bash() {
   if ! command -v register-python-argcomplete >/dev/null 2>&1; then
-    printf '%s\n' "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')" >&2
+    printf '%s\n' "ddflow: completion needs the optional 'argcomplete' extra (pip install argcomplete)" >&2
     return 0
   fi
   local _out

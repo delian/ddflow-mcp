@@ -7,11 +7,10 @@
 
 function _ddflow_activate_fish
   if not command -q register-python-argcomplete
-    echo "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')" >&2
+    echo "ddflow: completion needs the optional 'argcomplete' extra (pip install argcomplete)" >&2
     return 0
   end
   register-python-argcomplete --shell fish ddflow | source
-  or echo "ddflow: argcomplete could not register completion for ddflow" >&2
   return 0
 end
 

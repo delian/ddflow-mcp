@@ -7,7 +7,7 @@
 
 function _ddflow_activate_zsh() {
   if ! command -v register-python-argcomplete >/dev/null 2>&1; then
-    print -u2 "ddflow: completion needs the optional 'argcomplete' extra (pip install 'ddflow-mcp[completion]')"
+    print -u2 "ddflow: completion needs the optional 'argcomplete' extra (pip install argcomplete)"
     return 0
   fi
   autoload -Uz bashcompinit && bashcompinit 2>/dev/null
