@@ -93,7 +93,8 @@ class Report:
             f"  {r.name} {r.outcome}" + (f" ({r.detail})" if r.detail else "") for r in self.results
         ]
         if self.fixed:
-            lines.append(f"  fixed and committed {self.commit[:12]}: {', '.join(self.fixed)}")
+            how = f"committed {self.commit[:12]}" if self.commit else "left uncommitted"
+            lines.append(f"  fixed, {how}: {', '.join(self.fixed)}")
         if self.outside:
             lines.append(
                 f"  hooks rewrote files outside the item (restored, not committed): {', '.join(self.outside)}"
@@ -159,6 +160,13 @@ def _restore(tree: Path, paths: list[str]) -> None:
         G.run(tree, "restore", "--source=HEAD", "--staged", "--worktree", "--", *paths)
 
 
+def _read(tree: Path, name: str) -> bytes:
+    try:
+        return (Path(tree) / name).read_bytes()
+    except OSError:
+        return b""
+
+
 def _commit(tree: Path, files: list[str]) -> str:
     G.run(tree, "add", "--", *files)
     msg = COMMIT_SUBJECT + "\n\n" + "\n".join(files)
@@ -181,14 +189,16 @@ def _precommit_round(tree: Path, files: list[str], pm, budget: _Budget) -> list[
         if why:
             return [*out, HookResult("hooks", UNAVAILABLE, why)]
         text = done.stdout + done.stderr
-        if done.returncode not in (0, 1) or any(m in text for m in _COULD_NOT_RUN):
+        found = [m for ln in text.splitlines() if (m := _HOOK_LINE.match(ln))]
+        # pre-commit's own failure phrase counts only when no hook ran: a hook may print it too.
+        could_not = not found and any(m in text for m in _COULD_NOT_RUN)
+        if done.returncode not in (0, 1) or could_not:
             return [
                 *out,
                 HookResult(
                     "hooks", UNAVAILABLE, f"pre-commit exited {done.returncode}: {_tail(text)}"
                 ),
             ]
-        found = [m for ln in text.splitlines() if (m := _HOOK_LINE.match(ln))]
         for m in found:
             res = {"Passed": PASSED, "Failed": FAILED, "Skipped": SKIPPED}[m["res"]]
             out.append(HookResult(m["name"].strip(), res))
@@ -325,12 +335,19 @@ def _relabel_fixed(results: list[HookResult], prior: set[str], committed: bool) 
 
 
 def _settle(
-    tree: Path, own: set[str], results: list[HookResult], pm, rep: Report, *, last: bool
+    tree: Path,
+    own: set[str],
+    results: list[HookResult],
+    pm,
+    rep: Report,
+    kept: dict[str, bytes],
+    *,
+    last: bool,
 ) -> bool:
     """After a round: restore what a hook rewrote outside the item, commit the item's own
     fixes. True when fixes were committed and the hooks should run again."""
     mod = _modified(tree)
-    mine = [m for m in mod if m in own]
+    mine = [m for m in mod if m in own and kept.get(m) != _read(tree, m)]
     out = [m for m in mod if m not in own]
     if out:
         _restore(tree, out)
@@ -341,10 +358,11 @@ def _settle(
     if not mine:
         return False
     if pm.fix and not last:
-        sha = _commit(tree, mine)
-        if sha:
+        sha = _commit(tree, mine) if pm.commit_fixes else ""
+        if sha or not pm.commit_fixes:
+            kept.update({m: _read(tree, m) for m in mine} if not pm.commit_fixes else {})
             rep.fixed = sorted({*rep.fixed, *mine})
-            rep.commit = sha
+            rep.commit = sha or rep.commit
             return True
         results.append(HookResult("commit", FAILED, "git could not commit the fixes"))
     else:
@@ -363,14 +381,18 @@ def _hooks_step(tree: Path, files: list[str], pm, budget: _Budget, rep: Report) 
         return [HookResult("hooks", SKIPPED, "the item changed no file")]
     own = set(files)
     prior: set[str] = set()
+    kept: dict[str, bytes] = {}  # fixes left uncommitted ([premerge].commit_fixes off)
     results: list[HookResult] = []
     for round_ in range(pm.max_fix_rounds + 1):
-        results = (
-            _precommit_round(tree, files, pm, budget)
-            if has_config
-            else _generic(tree, files, pm, budget)
-        )
-        again = _settle(tree, own, results, pm, rep, last=round_ >= pm.max_fix_rounds)
+        try:
+            results = (
+                _precommit_round(tree, files, pm, budget)
+                if has_config
+                else _generic(tree, files, pm, budget)
+            )
+        except OSError as exc:  # a file unreadable or unwritable: this step's trouble, not a crash
+            results = [HookResult("hooks", UNAVAILABLE, f"{type(exc).__name__}: {exc}")]
+        again = _settle(tree, own, results, pm, rep, kept, last=round_ >= pm.max_fix_rounds)
         if not again:
             break
         prior |= {r.name for r in results if r.outcome in (FAILED, FIXED)}

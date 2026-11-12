@@ -23,6 +23,12 @@ class PremergeConfig:
     )
     stages: list[str] = knob(
         factory=lambda: ["pre-commit"],
+        operator_only=True,
+        check=lambda v: (
+            ""
+            if isinstance(v, list) and v and all(isinstance(x, str) and x for x in v)
+            else "must be a non-empty list of stage names"
+        ),
         doc="The pre-commit stages whose hooks run, each as `pre-commit run --files <changed> --hook-stage <stage>`. Add `pre-push` for the project's push-time hooks; their test-running hooks stay off (the item's own tests run through `test_command`).",
     )
     budget_s: int = knob(
@@ -39,6 +45,11 @@ class PremergeConfig:
     fix: bool = knob(
         True,
         doc="Apply the fixes hooks make (formatting, import order, trailing whitespace) to the item's OWN changed files and commit them to the item's branch, listing the files. Off, a hook that would rewrite a file is reported as failed and the tree is left as it was. A file the item did not change is never touched, never committed.",
+        operator_only=True,
+    )
+    commit_fixes: bool = knob(
+        True,
+        doc="Commit the fixes (see `fix`) to the item's branch as one normal commit naming the files. Off, the fixes are applied and left uncommitted in the tree, listed as such: the hooks re-run on them, and a merge then refuses the dirty tree until the author commits.",
     )
     max_fix_rounds: int = knob(
         1,
@@ -48,14 +59,17 @@ class PremergeConfig:
     precommit_command: str = knob(
         "pre-commit",
         doc="The pre-commit executable. Not found: the hook step is recorded unavailable. ddflow never installs it.",
+        operator_only=True,
     )
     skip_hooks: list[str] = knob(
         factory=list,
         doc="Hook ids left out of the run (the SKIP of pre-commit), for a hook too slow or too wide for a merge. A skipped hook is listed as skipped, never as passed.",
+        operator_only=True,
     )
     generic_hooks: bool = knob(
         True,
         doc="When the project has no .pre-commit-config.yaml, run the built-in generic set on the changed files: trailing whitespace, final newline, merge-conflict markers, private-key header, oversized file, and ruff check and format for Python files. Off, such a project gets no hook step.",
+        operator_only=True,
     )
     large_file_kb: int = knob(
         500,
@@ -65,4 +79,5 @@ class PremergeConfig:
     test_command: str = knob(
         "python -m pytest -q -x",
         doc="The command run with the item's changed or added test files appended; never the whole suite. No such file: the step is skipped, not passed. A command that is not found records the step unavailable.",
+        operator_only=True,
     )

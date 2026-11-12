@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b0c2a7fc7073 -->
-<details><summary>All 698 knobs across 63 sections</summary>
+<!-- ddflow:begin README/knobs sha=a572f25e1b45 -->
+<details><summary>All 699 knobs across 63 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1347,6 +1347,7 @@ long default is left to `ddflow config --explain`.
 | `premerge.budget_s` | `120` |  |
 | `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
 | `premerge.fix` | `true` |  |
+| `premerge.commit_fixes` | `true` |  |
 | `premerge.max_fix_rounds` | `1` |  |
 | `premerge.precommit_command` | `"pre-commit"` |  |
 | `premerge.skip_hooks` | `[]` |  |
