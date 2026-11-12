@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
+import stat
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -159,7 +161,10 @@ class EventLog(_GuardMixin, _ReadMixin):
     def shards(self) -> list[Path]:
         if not self.dir.is_dir():
             return []
-        return sorted(self.dir.glob("*.jsonl"))
+        # A symlinked `*.jsonl` is never a shard: entries are committed, so a hostile
+        # commit could point one at an operator-writable file and the next append would
+        # write ddflow lines into it (B143a77ee1d). List real files only.
+        return sorted(p for p in self.dir.glob("*.jsonl") if not p.is_symlink())
 
     def mark(self, *, clock: bool = True) -> LogMark:
         """A cheap fingerprint of how much log there IS: per shard, its size and (with
@@ -310,8 +315,20 @@ class EventLog(_GuardMixin, _ReadMixin):
                 for kind, subject, data in items:
                     out.append(self.append(kind, subject, data))
             except BaseException:
-                if self.shard.exists():
-                    os.truncate(self.shard, before)
+                try:
+                    # Roll the shard back to `before` on a failed append, no-follow: the
+                    # truncate must not chase a symlink swapped in after the write was
+                    # refused (B143a77ee1d) -- open with O_NOFOLLOW and ftruncate the fd.
+                    # O_NONBLOCK so a FIFO (mkfifo) masquerading as the shard fails open
+                    # instead of wedging the writer waiting for a reader.
+                    fd = os.open(self.shard, os.O_WRONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                except OSError:
+                    pass  # the shard vanished (or became a symlink/FIFO): nothing to roll back
+                else:
+                    try:
+                        os.ftruncate(fd, before)
+                    finally:
+                        os.close(fd)
                 self._lamport = clock
                 raise
             return out
@@ -345,8 +362,12 @@ class EventLog(_GuardMixin, _ReadMixin):
         )
         ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
         line = (ev.to_json() + "\n").encode("utf-8")
+        if self.shard.is_symlink():
+            # A symlink shard is a write into whatever it points at (B143a77ee1d); refuse
+            # it outright rather than appending JSON onto an operator-writable file.
+            raise ValueError(f"refusing to write {self.shard}: it is a symlink")
         created = not self.shard.exists()
-        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o644)
+        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW, 0o644)
         try:
             # A shard that does not end in a newline holds a torn append from a writer
             # that died mid-line (every writer holds this lock, so none is mid-line now).
@@ -470,7 +491,24 @@ class EventLog(_GuardMixin, _ReadMixin):
         give it away), and the content is fsynced before the rename."""
         line = ev.to_json()
         for shard in self.shards():
-            lines = shard.read_text(encoding="utf-8").splitlines()
+            if shard.is_symlink():
+                # A symlink shard is data, not a shard to rewrite (B143a77ee1d): never read
+                # or write through it -- a line it "holds" is not really in this log.
+                continue
+            try:
+                # Read no-follow from the fd, not the path (B143a77ee1d): a shard swapped
+                # to a symlink/FIFO after shards() listed it must not be read through.
+                fd = os.open(shard, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError as e:
+                if e.errno in (errno.ELOOP, errno.ENXIO, errno.ENOENT):
+                    continue  # became a symlink (ELOOP) / a FIFO with no writer (ENXIO) / gone
+                raise  # a real shard we cannot open (EACCES, EISDIR, EMFILE) is a real failure
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                os.close(fd)
+                continue  # a FIFO/device is not a shard line source
+            with os.fdopen(fd, "r", encoding="utf-8") as fh:
+                text = fh.read()
+            lines = text.splitlines()
             for i, raw in enumerate(lines):
                 try:
                     got = json.loads(raw).get("id")
@@ -478,7 +516,9 @@ class EventLog(_GuardMixin, _ReadMixin):
                     continue
                 if got == old_id:
                     lines[i] = line
-                    fsio.replace_text(shard, "\n".join(lines) + "\n")
+                    # replace_text resolves a symlink and writes THROUGH it; the shard must
+                    # be replaced, never followed, so rename over the entry (B143a77ee1d).
+                    fsio.atomic_write(shard, "\n".join(lines) + "\n")
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
                     return
