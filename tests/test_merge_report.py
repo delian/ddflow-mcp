@@ -86,9 +86,11 @@ def test_complete_without_sha_reports_the_merge_commit(repo):
     assert _git(repo, "log", "-1", "--format=%s", "main").startswith("events: complete T1")
 
 
-def _ddflow_in(tree: Path, script: str) -> subprocess.CompletedProcess:
-    """A shell standing in ``tree`` runs ``script`` -- as an agent's harness does."""
-    env = {**os.environ, "PYTHONPATH": str(ROOT), "DDFLOW_AGENT": "agent-test"}
+def _ddflow_in(tree: Path, script: str, repo: Path) -> subprocess.CompletedProcess:
+    """A shell standing in ``tree`` runs ``script`` -- as an agent's harness does, as the
+    agent that holds T1's lease (a merge by a peer of a live lease is refused)."""
+    holder = fold(EventLog(repo).read_all(), strict=False).items["T1"].lease.holder
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "DDFLOW_AGENT": holder}
     ddflow = f"{sys.executable} -m ddflow"
     return subprocess.run(
         ["bash", "-c", script.replace("ddflow", ddflow)],
@@ -103,7 +105,7 @@ def _ddflow_in(tree: Path, script: str) -> subprocess.CompletedProcess:
 def test_merge_from_inside_the_worktree_leaves_the_callers_shell_standing(repo):
     tree = _claimed_with_a_commit(repo)
     # `pwd -P` after the command is exactly what the harness ran, and what failed.
-    p = _ddflow_in(tree, "ddflow merge T1 && pwd -P")
+    p = _ddflow_in(tree, "ddflow merge T1 && pwd -P", repo)
     assert p.returncode == OK, p.stdout + p.stderr
     assert "getcwd" not in p.stderr
     assert _git(repo, "show", "main:a.py") == "x = 1"

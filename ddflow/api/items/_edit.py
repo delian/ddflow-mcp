@@ -382,7 +382,21 @@ def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
     lease = it.lease
     if lease is not None and lease.live(time.time(), cfg.lease.grace_s):
         L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
-    log.append("worktree.adopted", it.id, {"path": stored, "branch": branch, "base": ""})
+    # The fork the rebound branch left its base at: what git says they last shared, when it
+    # answers. Without it a landing from the rebound tree has no fork to reconcile against and
+    # fails closed as `unknown` even when nothing overlapped.
+    base = it.base or cfg.worktree.base_ref or W.default_branch(log.root)
+    fork = W.git(log.root, "merge-base", base, branch)
+    log.append(
+        "worktree.adopted",
+        it.id,
+        {
+            "path": stored,
+            "branch": branch,
+            "base": "",
+            "base_sha": fork.out.strip() if fork.ok else "",
+        },
+    )
     return {"worktree": stored, "branch": branch}
 
 

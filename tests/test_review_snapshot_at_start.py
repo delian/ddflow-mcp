@@ -19,7 +19,13 @@ from test_review_triage_scoped_tree import _git
 import ddflow.api.review as api
 
 
-def test_a_file_changed_while_the_reviewer_runs_is_not_in_the_snapshot(repo, tmp_path):
+def test_a_file_changed_while_the_reviewer_runs_is_not_in_the_snapshot(repo, tmp_path, monkeypatch):
+    # The author's edit lands in the reviewed tree mid-review, which the reviewer git-state
+    # guard (B5ce30dd94d) reads as the tool's doing. This test is about what the snapshot
+    # holds, not that guard (tests/test_reviewer_git_state*.py cover it), so it is stubbed here.
+    from ddflow.services.review import engine
+
+    monkeypatch.setattr(engine, "_tool_moved", lambda *_a, **_k: "")
     _setup(repo, tmp_path)
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("enabled = false", "enabled = true"))

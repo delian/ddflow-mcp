@@ -138,17 +138,18 @@ def test_a_queue_state_change_without_a_move_is_seen(pr_repo):
 def test_an_unaskable_queue_never_triggers_a_merge(pr_repo, monkeypatch):
     """Approved and green, but the queue call hangs (ForgeUnavailable): the request may
     already be queued, so ddflow must not ask the forge to merge it."""
+    from ddflow.adapters import forge_github as FGH
     from ddflow.infra import forge as FG
 
     repo, _forge = _approved_and_green(pr_repo)
-    real = FG._run
+    real = FGH._run  # the adapter calls its own imported name, not the infra shim's
 
     def hang_on_graphql(repo_, argv, **kw):
         if argv[:3] == ["gh", "api", "graphql"]:
             raise FG.ForgeUnavailable("gh api graphql timed out")
         return real(repo_, argv, **kw)
 
-    monkeypatch.setattr(FG, "_run", hang_on_graphql)
+    monkeypatch.setattr(FGH, "_run", hang_on_graphql)
     from ddflow import api
 
     out = api.pr_sync(repo)

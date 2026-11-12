@@ -127,6 +127,7 @@ def test_a_torn_trailing_multibyte_line_keeps_the_earlier_chunks(tmp_path):
     from ddflow.api.review.reviewers import _ReplyFile
 
     rf = _ReplyFile(tmp_path, "T1", "critic", "r")
+    rf.path.parent.mkdir(parents=True)  # created by the first write (`plan`), not by the ctor
     rf.path.write_bytes(b'{"chunk": 1, "reply": "ok"}\n{"chunk": 2, "reply": "ab' + b"\xe2\x82")
     # ``\xe2\x82`` is a torn multi-byte UTF-8 lead byte: read_text("utf-8") raises a
     # UnicodeDecodeError, which the OSError guard misses, losing chunk 1 too. Line-by-line

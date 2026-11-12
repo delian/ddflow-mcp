@@ -288,7 +288,7 @@ def _judge_any(
         }
     by_item = {b.item: b for b in p.blocked}
     stuck = [b for b in p.blocked if not _clears_on_release(st, b, others, by_item)]
-    if p.blocked and len(stuck) == len(p.blocked):
+    if (p.blocked or p.interrupted) and len(stuck) == len(p.blocked):
         # Every blocker needs a person: a cycle, an expired lease under "report", an
         # operator's block, a dependency nobody works on. Some other agent holding an
         # unrelated lease does not change that, and sleeping to the deadline only to
@@ -298,7 +298,12 @@ def _judge_any(
             "status": "hopeless",
             "why": "nothing is ready, and nothing blocked clears when another agent "
             "finishes -- each needs someone to act: "
-            + "; ".join(f"{b.item}: {b.reason} — {b.detail}" for b in stuck),
+            + "; ".join(
+                [f"{b.item}: {b.reason} — {b.detail}" for b in stuck]
+                # An interrupted item (its lease expired or its agent left) is in flight,
+                # not blocked, and no release brings it back: a person recovers it.
+                + [f"{note} (its lease expired or its agent left)" for note in p.interrupted]
+            ),
         }
     blocking = _blocking_leases(st, p.blocked, others)
     return {

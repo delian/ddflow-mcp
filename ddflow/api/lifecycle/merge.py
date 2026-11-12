@@ -148,6 +148,13 @@ def _record_reconciled(
         return
     files = sorted(set(mine) & set(moved))
     if files:
+        # A file the branch already carries exactly as `main` had it (main merged into the
+        # branch, then this landing fast-forwarded) was reconciled before landing, not by it.
+        # Only a file whose branch tip still differs from `main` before the landing counts.
+        diverging = W.git(repo, "diff", "--name-only", landed_before, branch_head, "--", *files)
+        if diverging.ok:
+            files = sorted(set(files) & set(diverging.out.splitlines()))
+    if files:
         log.append(
             "merge.reconciled",
             item,
@@ -183,6 +190,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     force: bool = False,
     approval: str = "",
     on_progress=None,
+    queued_by: str = "",
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -233,6 +241,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     if ID.is_agent(agent):
         held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
+        # The merge queue's integrator lands an entry its own holder put in line: that request
+        # is the holder's consent to end their lease at the landing (queued_by names who asked).
+        if held is not None and queued_by and held.holder == queued_by:
+            held = None
         if held is not None:
             # A same-clone peer agent's live lease: refuse like a foreign one (the
             # operator recovering a crashed agent's item is exempt -- not is_agent).
