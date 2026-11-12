@@ -208,3 +208,8 @@ def test_the_capability_word_is_the_client_tables():
     from ddflow.mcpshim import clients
 
     assert N.HONOURS == clients.HONOURS
+
+
+def test_the_connection_object_answers_for_a_removed_tool_too():
+    assert notice().removed("c", OLD, OLD[:2]) == N.removed_tool("c", OLD, OLD[:2])
+    assert notice().removed("zzz", OLD, OLD[:2]) is None

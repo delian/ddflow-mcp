@@ -128,3 +128,7 @@ class RestartNotice:
             return ""
         self._said, self._since, self._at = d, 0, now
         return message(d)
+
+    def removed(self, name: Any, served: Any, live: Any) -> str | None:
+        """The text for a call to `name` the upgrade removed, or None (see `removed_tool`)."""
+        return removed_tool(name, served, live)
