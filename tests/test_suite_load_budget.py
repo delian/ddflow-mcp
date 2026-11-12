@@ -230,3 +230,43 @@ def test_a_holder_that_leaves_during_a_cached_block_lets_the_waiter_look_again(t
         assert got == []
     t.join(10)
     assert got == ["admitted"]
+
+
+def test_the_ci_run_budget_starts_at_admission_after_a_load_wait(tmp_path: Path, monkeypatch):
+    """Through the production path: a run held back by the load budget gets its WHOLE timeout
+    budget once admitted, and the seconds it reports are the run's own, not the queue's
+    (B4f35548c0a, DX-ci-timeout-excludes-queue)."""
+    from ddflow.services import ci as CI
+    from ddflow.services.ci import runner
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    seen: dict[str, float] = {}
+
+    def execute(cfg, tree, cmd, scope, budget, tick=None, holding_suite=False, used=None):
+        seen["budget"] = budget
+        began = time.monotonic()
+        time.sleep(0.01)
+        return NS(kind="", ran=True), "", time.monotonic() - began
+
+    monkeypatch.setattr(runner, "_execute", execute)
+    src = load(0.9, 0.9, 0.9, 0.1)
+    monkeypatch.setattr(SL.SIG, "HostSignals", lambda *a, **k: src)
+    c = Config()
+    c.suites.max_concurrent = 2
+    c.suites.load_poll_s = 0.0
+    out: dict = {}
+
+    def second():
+        started = time.monotonic()
+        _p, _prefix, waited, elapsed = CI._run_locked(
+            c, "second", None, "", None, 7200, None, {}, True
+        )
+        out.update(waited=waited, elapsed=elapsed, total=time.monotonic() - started)
+
+    with SL.hold(c, "first", tmp_path / "state" / "ddflow" / "suites", say=lambda _t: None):
+        t = threading.Thread(target=second, daemon=True)
+        t.start()
+        t.join(15)
+    assert seen["budget"] == 7200  # the whole timeout, whatever the wait
+    assert out["waited"] >= 0.4  # it queued for the load (three polls of 0.25 s)
+    assert out["elapsed"] < out["waited"]  # the run's own seconds exclude the queue
