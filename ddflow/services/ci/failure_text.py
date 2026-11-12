@@ -48,6 +48,9 @@ def normalise(text: str, roots: Iterable[str] = ()) -> str:
         pattern = "|".join(re.escape(r) for r in named)
         text = re.sub(_START + "(?:" + pattern + ")" + _END, TREE, text)
     text = _WORKTREE.sub(TREE, _SCRATCH.sub(TREE, text))
+    text = re.sub(
+        "(?:" + re.escape(TREE) + "){2,}", TREE, text
+    )  # a scratch tree holding a worktree: one root
     return _PYTEST.sub(PYTEST_TMP, text)  # last: a pytest temp may sit inside a tree
 
 

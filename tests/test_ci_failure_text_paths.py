@@ -138,3 +138,10 @@ def test_pytest_temp_needs_a_temp_root_and_a_macos_root_counts() -> None:
     assert FT.digest(mac.format(n=1)) == FT.digest(mac.format(n=2))
     assert FT.normalise("/pytest-of-old/pytest-0/a.py") == "/pytest-of-old/pytest-0/a.py"
     assert FT.digest("/pytest-of-old/pytest-0/a.py") != FT.digest("/pytest-of-new/pytest-0/a.py")
+
+
+def test_a_worktree_inside_a_scratch_tree_is_one_root_like_either_alone() -> None:
+    nested = "/tmp/ddflow-base.aaaa/.ddflow/worktrees/item/src/a.py"
+    scratch = "/tmp/ddflow-base.bbbb/src/a.py"
+    lane = "/repo/.ddflow/worktrees/item/src/a.py"
+    assert FT.normalise(nested) == FT.normalise(scratch) == FT.normalise(lane) == "<tree>/src/a.py"
