@@ -288,7 +288,21 @@ def move(
         data["counter"] = counter
     if by_id:
         data["by_id"] = by_id
-    log.append(f"suggestion.{state}", sid, data)
+    log.append(_KIND_OF_STATE[state], sid, data)
+
+
+#: state -> event kind, spelled out so every kind has a literal emitter a search finds
+#: (a computed f"suggestion.{state}" hid all eight from the emit-ability guard).
+_KIND_OF_STATE: dict[str, str] = {
+    "seen": "suggestion.seen",
+    "accepted": "suggestion.accepted",
+    "applied": "suggestion.applied",
+    "rejected": "suggestion.rejected",
+    "countered": "suggestion.countered",
+    "withdrawn": "suggestion.withdrawn",
+    "superseded": "suggestion.superseded",
+    "expired": "suggestion.expired",
+}
 
 
 def unanswered(st, *, to_agent: str = "", to_item: str = "") -> list[dict[str, Any]]:

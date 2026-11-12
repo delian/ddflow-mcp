@@ -20,6 +20,12 @@ measure, is never touched. Either way the item is taken back with `ddflow claim 
 person's; an agent's `--force` is dropped, and its route is `ddflow claim <item>
 --approval request`. Nothing is deleted.
 
+When the dead lane's tree holds nothing uncommitted, an agent needs no approval:
+`ddflow recover --item <item> --adopt --reason "<why>"` takes the expired lease over,
+binds the same worktree (committed work stays on its branch) and records who took over,
+from whom and why in the lease note. A live lease, a tree that could not be measured and a
+tree with uncommitted files all refuse and change nothing.
+
 ## A broken index
 
 The index is a disposable, gitignored SQLite projection. Anything wrong with it is fixed

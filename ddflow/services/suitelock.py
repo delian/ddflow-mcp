@@ -3,8 +3,11 @@
 Two or three CI-parity runs at once took a 192-core host to load 337 (bug B26b5951f2b).
 The limit lives in the user's state directory, so every project and every agent of the
 user shares it; it is `slots.Slots` (an flock per slot, given back when the holder dies)
-plus a note of who holds it, so a refused run can say so. ``[ci].max_concurrent_suites``
-(default 1) is how many may run, ``[ci].suite_wait_s`` how long a second one waits.
+plus a note of who holds it, so a refused run can say so. ``limit`` is how many may run
+(``[suites].max_concurrent``, else derived from the cores, never under
+``[ci].max_concurrent_suites``), ``[ci].suite_wait_s`` how long a second one waits, and a
+second suite is also held while the host load is over ``[suites].load_ceiling_per_core``
+(``load_block``): the wait is queue time, so the per-test clock starts at admission.
 
 Waiters are served first in, first out (B1fa77a6832: a bare race for the flock let a fresh
 arrival beat one that had waited half an hour). Each waiter takes a TICKET, a file in
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import sys
@@ -35,6 +39,7 @@ from typing import Any
 from ..adapters.clock import DEFAULT as CLOCK
 from ..adapters.env import DEFAULT as ENV
 from ..infra import fsio
+from ..infra import signals as SIG
 from . import slots as SLOTS
 
 NAME = "suites"
@@ -53,7 +58,9 @@ class SuiteBusy(RuntimeError):
     ``position`` (new argument, default 0 = unknown) is the caller's place in the queue; the
     message names the holder's pid and says "you are #k in the queue"."""
 
-    def __init__(self, holder: dict[str, Any], waited_s: float, position: int = 0) -> None:
+    def __init__(
+        self, holder: dict[str, Any], waited_s: float, position: int = 0, reason: str = ""
+    ) -> None:
         who = holder.get("holder") or "another run"
         since = holder.get("at_iso") or "an unknown time"
         pid = holder.get("pid")
@@ -61,10 +68,45 @@ class SuiteBusy(RuntimeError):
         line = f"blocked on {by} since {since}"
         if position:
             line += f", you are #{position} in the queue"
+        if reason:
+            line += f"; held back: {reason}"
         super().__init__(line)
         self.holder = holder
         self.waited_s = waited_s
         self.position = position
+        self.reason = reason
+
+
+def limit(cfg: Any, cores: int | None = None) -> int:
+    """How many suites may run at once: ``[suites].max_concurrent`` when set, else derived from
+    the cores (``cores // [suites].cores_per_suite``) and never under ``[ci].max_concurrent_suites``
+    (the floor). A config with no ``[suites]`` section keeps the ``[ci]`` value."""
+    floor = max(1, int(cfg.ci.max_concurrent_suites))
+    if not hasattr(cfg, "suites"):
+        return floor
+    if int(cfg.suites.max_concurrent) > 0:
+        return int(cfg.suites.max_concurrent)
+    per = max(1, int(cfg.suites.cores_per_suite))
+    return max(floor, (cores or os.cpu_count() or 1) // per)
+
+
+def load_block(
+    cfg: Any, running: int, source: SIG.SignalSource | None = None, cores: int | None = None
+) -> str:
+    """Why a new suite is held back by the load, "" when it is not. Only while another suite
+    runs (a lone suite starts whatever the load: it is not from a suite); an unreadable load
+    never blocks."""
+    if not hasattr(cfg, "suites") or running < 1:
+        return ""
+    ceiling = float(cfg.suites.load_ceiling_per_core)
+    value = (source or SIG.HostSignals()).sample().get("load")
+    if value is None or not math.isfinite(value) or value <= ceiling:
+        return ""  # unreadable (absent, NaN, infinite) never blocks
+    return (
+        f"host load {value:.2f}/core is over the ceiling {ceiling:.2f}/core "
+        f"(~{value * (cores or os.cpu_count() or 1):.0f} on {cores or os.cpu_count() or 1} cores) "
+        f"with {running} suite(s) running"
+    )
 
 
 def state_dir() -> Path:
@@ -84,11 +126,23 @@ def _held(directory: Path, index: int) -> bool:
         return True
 
 
+def _slot_indexes(directory: Path, limit: int) -> list[int]:
+    """Every slot a suite may hold right now: this config's ``limit`` slots and any more that
+    exist on disk, because the state is shared and another project's config may allow more
+    slots than this one (its holders count toward this host's load and cap)."""
+    seen = {
+        int(m.group(1))
+        for p in directory.glob(f"{NAME}.*.lock")
+        if (m := re.fullmatch(rf"{NAME}\.(\d+)\.lock", p.name))
+    }
+    return sorted(seen | set(range(limit)))
+
+
 def _holders(directory: Path, limit: int) -> dict[str, Any]:
     """The note of the oldest holder among the slots held right now (a crashed holder's note
     outlives it, so a note of a free slot is not read)."""
     notes = []
-    for i in range(limit):
+    for i in _slot_indexes(directory, limit):
         if not _held(directory, i):
             continue
         with contextlib.suppress(OSError, ValueError):
@@ -105,7 +159,7 @@ def running(
     directory = Path(directory) if directory else state_dir()
     at = CLOCK.wall() if now is None else now
     rows: list[dict[str, Any]] = []
-    for i in range(max(1, int(cfg.ci.max_concurrent_suites))):
+    for i in _slot_indexes(directory, limit(cfg)):
         if not _held(directory, i):
             continue
         with contextlib.suppress(OSError, ValueError, TypeError, OverflowError):
@@ -242,6 +296,33 @@ def _say_default(text: str) -> None:
     print(text, file=sys.stderr, flush=True)
 
 
+class _Admission:
+    """What keeps the head of the line out of a slot: the suites already running (every live
+    slot, a bigger neighbour's included, counted at every look) and the host load, whose reading
+    is remembered for ``[suites].load_poll_s`` while it blocks. With no block the next look
+    reads afresh, so a slot freed later is never taken on a stale reading."""
+
+    def __init__(self, cfg: Any, directory: Path, slots_n: int, source: Any, cores: Any) -> None:
+        self.cfg, self.directory, self.slots_n = cfg, directory, slots_n
+        self.source, self.cores = source, cores
+        self.poll_s = float(cfg.suites.load_poll_s) if hasattr(cfg, "suites") else 0.0
+        self.running, self.reason = 0, ""
+        self._at: float | None = None  # when the load was last read to a block
+
+    def check(self) -> str:
+        slots = _slot_indexes(self.directory, self.slots_n)
+        self.running = sum(_held(self.directory, i) for i in slots)
+        fresh = self._at is not None and CLOCK.monotonic() - self._at < self.poll_s
+        if self.running < 1 or not fresh:
+            self.reason = load_block(self.cfg, self.running, self.source, self.cores)
+            self._at = CLOCK.monotonic() if self.reason else None
+        return self.reason
+
+    def reset(self) -> str:
+        self.reason, self._at = "", None
+        return ""
+
+
 @contextlib.contextmanager
 def hold(
     cfg: Any,
@@ -250,6 +331,8 @@ def hold(
     *,
     say: Callable[[str], None] | None = None,
     wait_s: float | None = None,
+    source: SIG.SignalSource | None = None,
+    cores: int | None = None,
 ) -> Iterator[None]:
     """Hold a full-suite slot for the block, in arrival order; `SuiteBusy` when none frees
     within the wait. ``say`` receives a line whenever the waiter's place in the queue
@@ -260,9 +343,13 @@ def hold(
     once a waiter reaches the head its give-up budget runs fresh from that moment, so the time
     it spent advancing up the line does not bounce it the instant it arrives
     (B-suite-wait-expires-at-head-of-queue). An explicit `wait_s` override stays a hard total
-    bound and is not reset at the head."""
+    bound and is not reset at the head.
+
+    ``source`` / ``cores`` (default: this host) are where the load is read: at the head of the
+    line a second suite also waits while ``load_block`` says the load is over the ceiling, and
+    says why; all of it is queue time, so the caller's clock starts when this yields."""
     directory = Path(directory) if directory else state_dir()
-    limit = max(1, int(cfg.ci.max_concurrent_suites))
+    slots_n = limit(cfg, cores)
     wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
     stale_s = float(cfg.ci.suite_queue_stale_s)
     grace_s = float(cfg.ci.suite_queue_grace_s)
@@ -270,7 +357,8 @@ def hold(
     queue = directory / QUEUE
     start = CLOCK.monotonic()
     slots = SLOTS.Slots(directory, NAME)
-    said = 0
+    said: tuple[int, str] = (0, "")
+    watch = _Admission(cfg, directory, slots_n, source, cores)
     with contextlib.ExitStack() as stack:
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
         name = ticket.name
@@ -282,14 +370,21 @@ def hold(
             if position == 1:
                 if head_since is None:
                     head_since = CLOCK.monotonic()
-                try:
-                    slot = stack.enter_context(slots.hold(limit, 0))
-                    break
-                except SLOTS.SlotsTimeout:
-                    pass
-            if position != said:
-                said = position
-                say(str(SuiteBusy(_holders(directory, limit), CLOCK.monotonic() - start, position)))
+                reason = watch.check()
+                if not reason and watch.running < slots_n:  # a bigger neighbour's holders count
+                    try:
+                        slot = stack.enter_context(slots.hold(slots_n, 0))
+                        break
+                    except SLOTS.SlotsTimeout:
+                        pass
+            else:
+                reason = watch.reset()  # not at the head: the line is the reason
+            if (position, reason) != said:
+                said = (position, reason)
+                busy = SuiteBusy(
+                    _holders(directory, slots_n), CLOCK.monotonic() - start, position, reason
+                )
+                say(str(busy))
             # The default wait limit counts time IN LINE, not progress
             # (B-suite-wait-expires-at-head-of-queue): a waiter behind others gives up after
             # `wait` from when it queued; a waiter at the head gives up after `wait` from when
@@ -300,7 +395,9 @@ def hold(
             anchor = start if overridden else (head_since if head_since is not None else start)
             if CLOCK.monotonic() - anchor >= wait:
                 ticket.park = True
-                raise SuiteBusy(_holders(directory, limit), CLOCK.monotonic() - start, position)
+                raise SuiteBusy(
+                    _holders(directory, slots_n), CLOCK.monotonic() - start, position, reason
+                )
             time.sleep(QUEUE_POLL_S)
             _beat(ticket.path)
         # Placed: hand the place on (the ticket goes with this block), then hold.
