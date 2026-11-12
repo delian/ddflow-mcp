@@ -18,3 +18,4 @@
 {"agent":"lane-ts-select","data":{"at":1794495824.685981,"holder":"lane-ts-select"},"id":"e35ee51fd0bcacc28bdb4a482","kind":"lease.renewed","lamport":184468,"schema":1,"subject":"TS-impact-probe","ts":"2026-11-12T15:03:44.861542Z"}
 {"agent":"lane-ts-select","data":{"at":1794496456.5306945,"holder":"lane-ts-select"},"id":"ea9e603da7e2eb079a8725cb3","kind":"lease.renewed","lamport":184575,"schema":1,"subject":"TS-impact-probe","ts":"2026-11-12T15:14:16.674291Z"}
 {"agent":"lane-ts-select","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ea3b3129384302eaac59e8e10","kind":"cadence.ran","lamport":184578,"schema":1,"subject":"recall_recheck:TS-impact-probe","ts":"2026-11-12T15:14:27.457297Z"}
+{"agent":"lane-ts-select","data":{"at":1794497111.1269388,"holder":"lane-ts-select"},"id":"e8db91951d111b83b97d3d65c","kind":"lease.renewed","lamport":184717,"schema":1,"subject":"TS-impact-probe","ts":"2026-11-12T15:25:11.280687Z"}
