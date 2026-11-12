@@ -59,6 +59,13 @@ KNOWN_UNREAD: dict[str, str] = {
     # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
     "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
     "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
+    # Declared for TE-limit-aware-routing: read by the section's own accessors
+    # (`PricesConfig.limit_of` / `reset_of` read `self.limit` / `self.reset`), so no source
+    # line spells `.prices.limit`. `services/limit_routing` has no production caller yet, the
+    # same standing as `pins.mergiraf_keep_pct`; `test_the_prices_accessors_read_the_knobs`
+    # proves the accessors do read them.
+    "prices.limit": "read via PricesConfig.limit_of (self.limit); services/limit_routing has no production caller yet",
+    "prices.reset": "read via PricesConfig.reset_of (self.reset); services/limit_routing has no production caller yet",
 }
 
 
@@ -264,3 +271,21 @@ def test_the_scan_is_not_vacuous():
 #: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
 #: code base, so no import closure can know a change breaks it.
 ALWAYS = True
+
+
+def test_the_prices_accessors_read_the_knobs():
+    """The `KNOWN_UNREAD` reason for `prices.limit` / `prices.reset`: the accessors really read
+    them -- per model, so a constant return cannot pass -- and an exemption cannot outlive the
+    read."""
+    cfg = Config()
+    cfg.prices.limit = {"a": "5", "b": 7}
+    cfg.prices.reset = {"a": "1d", "b": "2d"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("b")) == (5.0, 7.0)
+    assert cfg.prices.limit_of("other") is None
+    assert (cfg.prices.reset_of("a"), cfg.prices.reset_of("b")) == ("1d", "2d")
+    assert cfg.prices.reset_of("other") == "1mo"
+    cfg.prices.limit = {"a": 9, "c": "2.5"}  # a second map: only a live read follows it
+    cfg.prices.reset = {"c": "1w"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("c")) == (9.0, 2.5)
+    assert cfg.prices.limit_of("b") is None
+    assert (cfg.prices.reset_of("c"), cfg.prices.reset_of("a")) == ("1w", "1mo")

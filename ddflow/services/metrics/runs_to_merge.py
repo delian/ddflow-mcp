@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from ...config import Config
 from ...core import progress as PR
 from ...core.model import State
-from ..swarm.ledger import _author_model, _lease_models, _models
+from ..swarm.models import _author_model, _lease_models, _models
 from .facts import Facts, Outcome, Span, collect
 from .providers import Context
 
