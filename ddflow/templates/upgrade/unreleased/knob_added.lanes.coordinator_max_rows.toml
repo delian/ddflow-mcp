@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "lanes.coordinator_max_rows"
+new = '15'
+why = "CO-lanes-coordinator: the most rows each section of `ddflow lanes --coordinator` prints, with a partial-list notice."
+impact = "additive"

@@ -235,7 +235,7 @@ class Param:
         # engine to read. Empty: inferred from the name/choices/type at walk time, and never
         # attached, so a hand-written `add_argument` cannot collide with it.
         if self.complete:
-            from ...services.completion import kinds
+            from ...api import completion_kinds as kinds
 
             action.complete = kinds.normalize(self.complete)  # type: ignore[attr-defined]
         # An old flag is the SAME action under another option string: parsing finds it,

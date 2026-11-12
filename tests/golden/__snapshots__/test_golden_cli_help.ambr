@@ -1698,10 +1698,10 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,lead,approve}] [lane]
+  usage: ddflow lanes [-h] [--coordinator] [--item ITEM] [--watch] [{state,brief,advise,fleet,resume,lead,approve,coordinator}] [lane]
   
   positional arguments:
-    {state,brief,advise,fleet,resume,lead,approve}
+    {state,brief,advise,fleet,resume,lead,approve,coordinator}
                           state (default), brief <lane>, advise, lead, fleet, resume <lane> or
                           approve <template>
     lane                  with brief, resume or approve: the lane name (for approve, the template
@@ -1709,7 +1709,19 @@
   
   options:
     -h, --help            show this help message and exit
+    --coordinator         the coordinator's screen: suites, lease holders, pending approvals, ready
+                          work per phase
+    --item ITEM           with --coordinator: an item whose blocked-by chain to show
     --watch               redraw when the log changes or every [lanes] watch_interval_s
+  
+  '''
+# ---
+# name: test_help[ddflow lease]
+  '''
+  usage: ddflow lease [-h]
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -3760,13 +3772,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3887,6 +3899,8 @@
       dispatch            the dispatcher's plan: what to start now, in order, on which lane (advise
                           only)
       suggest             send a bounded change to the lease holder of an item, as a suggestion
+      lease               the lease holders and how long each has been quiet (idle ones flagged);
+                          the holders of `lanes --coordinator`
       paths               workflow-path variants: directly-follows, top variants, burst overlap,
                           superseded passes, out-of-order
       perf                perf of the host (fingerprint, measuring wrapper) and the perf report
@@ -4028,6 +4042,7 @@
     'ddflow job list',
     'ddflow job run',
     'ddflow lanes',
+    'ddflow lease',
     'ddflow lesson',
     'ddflow lesson add',
     'ddflow lesson list',
