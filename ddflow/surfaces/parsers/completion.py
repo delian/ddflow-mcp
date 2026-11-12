@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 
+from ...adapters.fsio import atomic_write
 from ...api import completion_scripts
 from ...api.completion import install as _install
-from ...adapters.fsio import atomic_write
 from ..context import Ctx
 
 

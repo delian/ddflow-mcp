@@ -278,7 +278,9 @@ def _check_capabilities_table(name: str, table: dict, where: str) -> None:
         not isinstance(patterns, list)
         or not all(isinstance(p, str) and p in PATTERNS for p in patterns)
     ):
-        raise DescriptorError(f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}")
+        raise DescriptorError(
+            f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}"
+        )
 
 
 def _check_orchestration_table(name: str, table: dict, keys: set, where: str) -> None:
