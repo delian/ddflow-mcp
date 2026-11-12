@@ -52,15 +52,18 @@ ROUNDS = 3
 NOT_PYTEST = "the gate's command does not run pytest"
 _NOT_FOUND = re.compile(r"^ERROR: (?:file or directory )?not found: (.+)$", re.M)
 _PARAM = re.compile(r"^(.*?::[^\[]*)\[.*\]$")
-#: A memory address in a failure text: ``<function next_step at 0x...>`` differs per process, so
-#: a difference that is ONLY an address must not read as a new offender (B9252d46a4b).
-_ADDR = re.compile(r"0x[0-9a-f]+")
+#: A memory address in an object repr: ``<function next_step at 0x...>``. Two runs of one test
+#: print a different ``0x...`` for the same object, so a difference that is ONLY the address must
+#: not read as a new offender. Matched in its repr context (``at 0x...``), not a bare hex literal
+#: (``assert got == 0x10``), so a real value change is still told apart (B9252d46a4b).
+_ADDR = re.compile(r"at 0x[0-9a-f]+")
 
 
 def _norm(text: str) -> str:
-    """``text`` with memory addresses blanked: two runs of one test print a different ``0x...``
-    for the same address, so an address-only difference is the same failure, not a new offender."""
-    return _ADDR.sub("0x", text)
+    """``text`` with memory addresses held in an object repr blanked to ``at 0x``: a hex seen in
+    an assertion value (``assert got == 0x10``) is left alone, so a genuine value change still
+    reads as a new offender, while an address-only difference is the same failure."""
+    return _ADDR.sub("at 0x", text)
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:

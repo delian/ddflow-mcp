@@ -29,6 +29,12 @@ def test_a_difference_beyond_the_address_is_a_new_offender():
     assert BR._differs("t::a", before, onbase) is True
 
 
+def test_a_change_of_a_hex_value_is_still_a_new_offender():
+    before = {"t::a": _sig("assert got == 0x10")}
+    onbase = {"t::a": _sig("assert got == 0xff")}
+    assert BR._differs("t::a", before, onbase) is True
+
+
 def test_the_same_text_is_not_a_new_offender():
     before = {"t::a": _sig("<function next_step at 0x7f1234>() == 'WHYNOT'")}
     onbase = {"t::a": _sig("<function next_step at 0x7f1234>() == 'WHYNOT'")}
