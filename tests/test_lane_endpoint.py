@@ -226,6 +226,7 @@ def test_unverified_harness_is_refused_unless_allowed(tmp_path, monkeypatch):
         return lay
 
     monkeypatch.setattr(E, "layout", unread)
+    monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")  # the key is not what is tested
     cat = _verified(tmp_path)
     r = E.prepare(cat, "lan-vllm", "opencode", tmp_path / "o")
     assert isinstance(r, Result) and "unverified" in r.detail and not (tmp_path / "o").exists()

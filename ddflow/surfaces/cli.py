@@ -439,6 +439,9 @@ def _remember_command(
             # repo-local command log to append to, and writing one would leave a stray
             # `.ddflow/` behind in a plain directory (Bd7c147dfb9).
             return
+    if not (root / ".ddflow").is_dir():
+        # An unadopted repository: a read-only command must leave no `.ddflow/` behind.
+        return
     try:
         cmdlog.record(
             root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags
