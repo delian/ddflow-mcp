@@ -28,7 +28,9 @@ def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
     """Adopt ``item``'s expired lease for the caller; see the module docstring."""
     import importlib
 
-    CL = importlib.import_module("ddflow.api.lifecycle.claim")  # lazy: lifecycle.claim imports the reporting package
+    CL = importlib.import_module(
+        "ddflow.api.lifecycle.claim"
+    )  # lazy: lifecycle.claim imports the reporting package
 
     if not item:
         return _refuse("--adopt names the lease to take over: give --item ID", item)
@@ -48,7 +50,11 @@ def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
             item,
         )
     rec = next(
-        (r for r in L.scan(log, cfg, repo, state=st) if r.item == item and r.kind == "expired_lease"),
+        (
+            r
+            for r in L.scan(log, cfg, repo, state=st)
+            if r.item == item and r.kind == "expired_lease"
+        ),
         None,
     )
     if rec is None or rec.salvageable is None:

@@ -31,8 +31,6 @@ def recover(
     apply: bool = False,
     all: bool = False,
     plan: bool = False,
-    adopt: bool = False,
-    reason: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Crashed agents' leases and orphaned worktrees. Exit 2 when there is nothing.
@@ -47,10 +45,6 @@ def recover(
     `apply` runs only SAFE_AUTO and refuses (exit 3) while the kill switch is on.
     """
 
-    if adopt:  # take over one expired lease whose tree is measured clean (GR-lease-takeover)
-        from ..recover_adopt import adopt as _adopt
-
-        return _adopt(repo, item, reason=reason, agent=agent)
     why_items = (
         "expired leases, orphan worktrees, dead gate runs, unended jobs, orphaned queue entries"
     )

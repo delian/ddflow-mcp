@@ -51,6 +51,34 @@ def _status_handler(a, c):
     return out.exit
 
 
+def _recover_call(repo, a, agent):
+    """`recover`: the sweep or plan, or with `--adopt` one expired lease taken over."""
+    if a.get("adopt"):
+        from ...api import recover_adopt
+
+        return _cap(
+            repo,
+            recover_adopt.adopt(
+                repo, a.get("item", "") or "", reason=a.get("reason", "") or "", agent=agent
+            ),
+            "recover",
+            a,
+        )
+    return _cap(
+        repo,
+        _api().recover(
+            repo,
+            item=a.get("item", "") or "",
+            apply=bool(a.get("apply")),
+            all=bool(a.get("all")),
+            plan=bool(a.get("plan")),
+            agent=agent,
+        ),
+        "recover",
+        a,
+    )
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("replay",),
@@ -130,21 +158,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             *capped(True),
         ),
-        call=lambda repo, a, agent: _cap(
-            repo,
-            _api().recover(
-                repo,
-                item=a.get("item", "") or "",
-                apply=bool(a.get("apply")),
-                all=bool(a.get("all")),
-                plan=bool(a.get("plan")),
-                adopt=bool(a.get("adopt")),
-                reason=a.get("reason", "") or "",
-                agent=agent,
-            ),
-            "recover",
-            a,
-        ),
+        call=_recover_call,
         payload="found",
     ),
     Command(
