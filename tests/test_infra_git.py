@@ -9,7 +9,7 @@ import pytest
 
 from ddflow.core.outcome import FAIL, declared_exit
 from ddflow.infra import git as G
-from ddflow.infra import proc as P
+from ddflow.adapters import proc as P
 from ddflow.infra import worktree as W
 
 
