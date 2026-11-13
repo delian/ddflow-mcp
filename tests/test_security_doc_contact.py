@@ -160,3 +160,17 @@ def test_the_contact_exemption_does_not_unmask_other_addresses_that_contain_it(
     cfg.export.security_contact = "sec@corp.example"
     assert "xsec@corp.example" not in safe.redact_text("xsec@corp.example", cfg).text
     assert safe.redact_text("<sec@corp.example>.", cfg).text == "<sec@corp.example>."
+
+
+def test_a_contact_that_is_a_local_part_does_not_unmask_the_address_it_starts(repo: Path) -> None:
+    from ddflow.services.export import safe
+
+    cfg = Config()
+    cfg.export.security_contact = "alice"
+    assert "alice" not in safe.redact_text("write to alice@example.com", cfg).text
+
+
+def test_a_contact_with_inner_whitespace_is_published_as_the_document_writes_it(repo: Path) -> None:
+    contact = "mail  security@corp.example\nor call the desk"
+    text = _body(repo, f'[export]\nsecurity_contact = """{contact}"""\n')
+    assert "mail security@corp.example or call the desk" in text and "[REDACTED" not in text

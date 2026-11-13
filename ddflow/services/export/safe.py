@@ -40,7 +40,8 @@ def redact_text(text: str, cfg: Config) -> Redacted:
     project's own and stays; absolute home paths still go.
     """
     red = redactor("export", cfg)
-    keep = str(getattr(getattr(cfg, "export", None), "security_contact", "")).strip()
+    # the contact as the security document writes it: whitespace collapsed
+    keep = " ".join(str(getattr(getattr(cfg, "export", None), "security_contact", "")).split())
     if not keep or keep not in text:
         return red.text(text)
     # the operator's published reporting contact is the one text redaction leaves alone, where
