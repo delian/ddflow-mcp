@@ -122,10 +122,15 @@ def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
             i += 2
         elif c == "'" or c == '"':
             q = c
+            double = q == '"'
             i += 1
             while i < n and line[i] != q:
-                name.append(line[i])
-                i += 1
+                if double and line[i] == "\\" and i + 1 < n:
+                    name.append(line[i + 1])  # a `\X` quote-removes to `X` in a double quote
+                    i += 2
+                else:
+                    name.append(line[i])
+                    i += 1
             i += 1  # the closing quote is name text, not a string quote
         else:
             name.append(c)
