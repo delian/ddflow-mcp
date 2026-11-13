@@ -1,4 +1,4 @@
-"""The packaged layer: `templates/default.toml`, read under every other layer (CE-defaults-file).
+"""The packaged layer: `templates/default.d/` (or the single `default.toml`), read under every other layer (CE-defaults-file).
 
 The file is generated from the section declarations and pinned to them, so it normally says
 what the dataclass defaults already say. Each knob is therefore COMPARED and only a value that
@@ -22,7 +22,13 @@ import sys
 from dataclasses import fields
 from typing import Any
 
-from ..config_sections._layers import PACKAGED_DEFAULTS, ConfigConflict, read_toml
+from ..config_sections._layers import (
+    PACKAGED_DEFAULTS,
+    PACKAGED_DIR,
+    ConfigConflict,
+    read_dropin_dir,
+    read_toml,
+)
 
 _REPAIR = "repair it with `ddflow pins regenerate --only default-toml`"
 _BUILT_IN = "the built-in defaults apply"
@@ -49,8 +55,11 @@ def _say_drift(keys: list[str]) -> None:
 
 @functools.cache
 def packaged() -> dict[str, Any]:
-    """The parsed packaged file, or `{}` (having warned) when it can not be read."""
+    """The parsed packaged defaults, or `{}` (having warned) when they can not be read: the
+    `default.d` drop-in directory when it holds files, else the single `default.toml`."""
     try:
+        if PACKAGED_DIR.is_dir() and any(PACKAGED_DIR.glob("*.toml")):
+            return read_dropin_dir(PACKAGED_DIR)
         return read_toml(PACKAGED_DEFAULTS)
     except (OSError, ValueError, ConfigConflict) as exc:  # ValueError: bad UTF-8 or TOML
         _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}; {_BUILT_IN}")

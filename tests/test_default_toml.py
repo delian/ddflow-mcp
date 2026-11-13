@@ -47,6 +47,7 @@ def packaged(monkeypatch):
 
     def use(path: Path) -> None:
         monkeypatch.setattr(_packaged, "PACKAGED_DEFAULTS", path)
+        monkeypatch.setattr(_packaged, "PACKAGED_DIR", path.parent / "no-default.d")
         _packaged.packaged.cache_clear()
         _packaged._SAID.clear()
 

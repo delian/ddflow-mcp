@@ -28,6 +28,10 @@ LAYERS = ("file", "local")
 #: no writer targets it and it is not in `LAYERS`. `views/default_toml.py` generates it.
 PACKAGED_DEFAULTS = Path(__file__).resolve().parent.parent / "templates" / "default.toml"
 
+#: The same defaults as a drop-in directory, one generated file per section (CFG-defaults-d-loader).
+#: The packaged layer reads this when it exists, else `PACKAGED_DEFAULTS`.
+PACKAGED_DIR = Path(__file__).resolve().parent.parent / "templates" / "default.d"
+
 
 def layer_path(root: Path, layer: str = "file", own: str = "config.toml") -> Path:
     """The file ``layer`` keeps ``own`` in: `<root>/.ddflow/<own>` for the committed layer,
@@ -88,3 +92,73 @@ def read_toml(path: Path) -> dict[str, Any]:
             return {}
         raise ConfigConflict(path)
     return TomlLibIo().loads(text)
+
+
+class DropinError(ValueError):
+    """A drop-in directory cannot be read as one table: a file that does not parse (named,
+    with the line the TOML parser gives) or a table two files both define."""
+
+
+def _defines(table: dict[str, Any]) -> bool:
+    """Whether ``table`` holds a value of its own, so it is DEFINED (not a bare container of
+    sub-tables such as `[gate]` over `[gate.a]` and `[gate.b]`)."""
+    return any(not isinstance(v, dict) for v in table.values())
+
+
+def _merge_into(
+    into: dict[str, Any],
+    new: dict[str, Any],
+    owner: dict[str, str],
+    file: str,
+    path: str,
+    same_table: str,
+) -> None:
+    for key, val in new.items():
+        here = f"{path}.{key}" if path else key
+        if key not in into:
+            into[key] = val
+            _own(owner, here, val, file)
+        elif isinstance(val, dict) and isinstance(into[key], dict):
+            if same_table == "error" and (_defines(val) or _defines(into[key])):
+                raise DropinError(
+                    f"table [{here}] is defined in both {owner.get(here, '?')} and {file}"
+                )
+            _merge_into(into[key], val, owner, file, here, same_table)
+        elif same_table == "merge":
+            into[key] = val
+        else:
+            raise DropinError(f"key {here} is set in both {owner.get(here, '?')} and {file}")
+
+
+def _own(owner: dict[str, str], path: str, val: Any, file: str) -> None:
+    owner[path] = file
+    if isinstance(val, dict):
+        for k, v in val.items():
+            _own(owner, f"{path}.{k}", v, file)
+
+
+def read_dropin_dir(directory: Path, *, same_table: str = "error") -> dict[str, Any]:
+    """The merged tables of every `*.toml` in ``directory``, read in name order (the systemd
+    `.d` model: the directory is the unit of ownership, the name orders it). A directory that
+    is not there reads as empty.
+
+    ``same_table="error"`` (the shipped layer): a table two files both define raises
+    `DropinError` naming both; sub-tables of a container may be spread over files.
+    ``"merge"`` (a project's `conf.d`): the later file wins key by key. A file that does not
+    parse raises `DropinError` naming file and line; one holding merge-conflict markers raises
+    `ConfigConflict`, as `read_toml` does.
+    """
+    if same_table not in ("error", "merge"):
+        raise ValueError(f"same_table is 'error' or 'merge', not {same_table!r}")
+    root = Path(directory)
+    if not root.is_dir():
+        return {}
+    merged: dict[str, Any] = {}
+    owner: dict[str, str] = {}
+    for path in sorted(root.glob("*.toml")):
+        try:
+            table = read_toml(path)
+        except ValueError as exc:  # TOMLDecodeError says "(at line N, column M)"
+            raise DropinError(f"{path}: {exc}") from exc
+        _merge_into(merged, table, owner, path.name, "", same_table)
+    return merged
