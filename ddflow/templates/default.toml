@@ -242,6 +242,8 @@ baseline_red_rate_warn = 10
 baseline_red_notify_to = "coordinator"
 scrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"]
 keep_env = []
+scrub_secret_names = "warn"
+secret_name_patterns = ["_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD"]
 standards_wait_s = 900
 
 [govern]
