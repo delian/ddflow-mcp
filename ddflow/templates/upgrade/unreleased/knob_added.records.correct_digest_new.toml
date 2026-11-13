@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "records.correct_digest_new"
+new = "false"
+why = "Whether a correction's audit entry keeps a digest of the new value; off for the same reason (REC-correct-surface)."
+impact = "additive"

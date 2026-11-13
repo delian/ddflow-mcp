@@ -26,3 +26,30 @@ lacks is refused naming the kind, the field and the nearest verb: `bug B1 has no
 ... Nearest verb: ddflow bug tag`. Kinds declared as data (`ddflow record <kind>`: goal,
 principle, waiver ...) take the same operations through their declaration. `ddflow update`
 changes nothing when the result equals the record (exit 2).
+
+## Correcting a recorded value
+
+`ddflow update` edits a record; `ddflow correct` is for a value that was recorded WRONG (a typo, a
+wrong fact, a wrong author model on a completion, a leaked value) and says why, with history kept:
+
+    ddflow correct B1 --field summary --text "the right text" --reason "wrong fact"
+    ddflow correct T1 --field author_model --text "<the true model>" --reason "recorded the wrong one"
+    ddflow correct L1 --field rule --from-file new.txt --reason "pasted the wrong paragraph" --secret
+
+Over MCP it is the `correct` action of `ddflow_task` (`id`, `field`, `text`, `reason`, `kind`,
+`secret`, `approval`): one declaration serves both. It writes a `record.corrected` event; the
+record shows the new text, and `show` and `history` list the correction (who, when, why, which
+fields). The reason says why the value was wrong, never what it was.
+
+**The old text is still in the event log.** A correction replaces what the record shows; it
+removes nothing, because the log is append-only and committed. If the old value was a secret,
+a physical scrub of the log removes it (a person's act, never an agent's) and the secret itself
+must be rotated at its source. The audit entry keeps a digest of the old or new value only when `[records]
+correct_digest_old` / `correct_digest_new` are on (off by default: a digest of a low-entropy value
+lets a guess be confirmed), never when `--secret` says the value may be one, and never for a value
+shorter than `[records] correct_min_digest_chars`. The new text goes through the same write-time
+redaction as every write.
+
+Who may: a person corrects anything. An agent corrects a record it authored and a record on an
+item it holds a lease on, without asking (audited); anything else needs the operator:
+`--approval request`, the person answers in chat, then re-run with the approval id.
