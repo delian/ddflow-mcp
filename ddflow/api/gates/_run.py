@@ -351,6 +351,28 @@ def _record_gate_started(log, item, gate, forced) -> str | None:
                 return "the events.lock stayed held past the retry bound"
 
 
+def _start_marker_and_record(repo, item, gate, started_on, log, forced, expected_s):
+    """(marker, refusal): mark the twin marker, then record `gate.started`, retrying the
+    events.lock. Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live
+    twin or a start that could not be recorded after the retry (B-gate-run-dies-on-events-lock).
+    One branch in `run` either way, so `run` keeps its complexity budget."""
+    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, expected_s)
+    if twin_refusal is not None:
+        return None, twin_refusal
+    refused = _record_gate_started(log, item, gate, forced)
+    if refused is not None:
+        RUN.clear_started(marker)  # a run that never started leaves no twin marker behind
+        return None, O.nothing(
+            "gate.run",
+            f"the run could not record its start: {refused}",
+            gate=gate,
+            outcome="",
+            evidence={"reason": refused},
+            id=item,
+        )
+    return marker, None
+
+
 def run(
     repo: Path,
     item: str,
@@ -450,20 +472,11 @@ def run(
         if covered is not None:
             return covered
         started_on = G.tree_identity(cwd)
-        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, gdef.timeout_s)
-        if twin_refusal is not None:
-            return twin_refusal
-        start_refused = _record_gate_started(log, item, gate, forced)
-        if start_refused is not None:
-            RUN.clear_started(marker)  # a run that never started leaves no twin marker behind
-            return O.nothing(
-                "gate.run",
-                f"the run could not record its start: {start_refused}",
-                gate=gate,
-                outcome="",
-                evidence={"reason": start_refused},
-                id=item,
-            )
+        marker, start_refusal = _start_marker_and_record(
+            repo, item, gate, started_on, log, forced, gdef.timeout_s
+        )
+        if start_refusal is not None:
+            return start_refusal
         started_at = clock.now_iso()
         done = _guarded(
             log,
