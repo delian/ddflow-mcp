@@ -14,6 +14,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -71,8 +72,13 @@ def tab(entry: list[str], line: str, cwd: Path) -> list[str]:
     )
     os.close(write_fd)
     os.close(devnull)
-    with os.fdopen(read_fd) as fh:  # read while the child runs: a big answer cannot block it
-        out = fh.read()
+    watchdog = threading.Timer(120, proc.kill)  # a wedged child ends the read at EOF
+    watchdog.start()
+    try:
+        with os.fdopen(read_fd) as fh:  # read while the child runs: a big answer cannot block it
+            out = fh.read()
+    finally:
+        watchdog.cancel()
     assert proc.wait(timeout=120) in (0, 1)
     return [w.strip() for w in out.split(IFS) if w.strip()]
 
