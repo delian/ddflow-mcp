@@ -21,3 +21,4 @@
 {"agent":"recover-1700","data":{"tags":["agent-parity","vibe","wave:1"]},"id":"e30c42025c5b3e938ef5b193d","kind":"task.updated","lamport":194791,"schema":1,"subject":"VB-reviewer","ts":"2026-11-13T17:12:01.547430Z"}
 {"agent":"recover-1700","data":{"tags":["agent-parity","vibe","wave:0"]},"id":"e88b1c638f0453655d2f6bc5b","kind":"task.updated","lamport":194792,"schema":1,"subject":"VB-skills-commands","ts":"2026-11-13T17:12:01.654107Z"}
 {"agent":"recover-1700","data":{"tags":["agent-parity","vibe","wave:0"]},"id":"ec378f13072359325ea458cb1","kind":"task.updated","lamport":194793,"schema":1,"subject":"VB-version-drift","ts":"2026-11-13T17:12:01.757427Z"}
+{"agent":"recover-1700","data":{"path":".ddflow/worktrees/PAR-new-agent-flow"},"id":"e019f6befd7b41b852e84551d","kind":"worktree.removed","lamport":194794,"schema":1,"subject":"PAR-new-agent-flow","ts":"2026-11-13T17:12:13.375445Z"}
