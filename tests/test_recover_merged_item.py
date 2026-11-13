@@ -164,6 +164,22 @@ def test_a_finished_item_with_a_surviving_clean_tree_is_not_advised_to_complete_
     assert not [r for r in _recs(repo, "T1") if "ddflow complete" in r.advice]
 
 
+def test_a_done_item_with_a_lapsed_lease_reads_done_not_expired_lease(repo):
+    """A DONE item whose lease lapsed but was never cleared reads DONE, not
+    [expired_lease] (Ba73b94a6ad).
+
+    `complete` keeps the expired lease record (it is owed nothing, but nothing clears
+    it), and `release --note salvaged` on it is a no-op ('no lease'), so the
+    expired-lease label is stale relative to the item's actual DONE state.
+    """
+    _merged(repo, "T1", "src/T1/a.py")
+    log = EventLog(repo, "worker")
+    assert L.expire(log, "T1", reason="lapsed"), "the lease lapsed on the record"
+    sha = L._fold(log).items["T1"].merged_sha
+    log.append("item.completed", "T1", {"sha": sha})
+    assert not [r for r in _recs(repo, "T1") if r.kind == "expired_lease"]
+
+
 def test_the_advice_counts_the_blockers_it_does_not_list(repo, monkeypatch):
     _merged(repo, "T1", "src/T1/a.py")
     monkeypatch.setattr(L, "_SHOWN_BLOCKERS", 1)

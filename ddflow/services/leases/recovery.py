@@ -79,6 +79,13 @@ def scan(
             continue
         lease = it.lease
         if lease and not lease.live(now, cfg.lease.grace_s):
+            if it.terminal:
+                # A DONE item whose lease lapsed but was never cleared reads DONE, not
+                # [expired_lease]. `complete` keeps the expired lease record (nothing
+                # clears it), and `release --note salvaged` on it is a no-op ('no
+                # lease'), so an expired-lease finding here is stale relative to the
+                # item's actual state and overstates crash-orphans (Ba73b94a6ad).
+                continue
             # Prefer whichever source actually names a tree. These should agree, and
             # after the renew fix they do -- but if they ever diverge, trusting the
             # empty one produces "nothing to salvage" over real work, which is the one
