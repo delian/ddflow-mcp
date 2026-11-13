@@ -49,6 +49,34 @@ def _whole_bug_set(repo: Path, filters: dict) -> tuple[list[dict], dict]:
     return full, dict(fresh.data)
 
 
+def _page_from_whole(repo: Path, data: dict, st, severity: str, sort: str) -> O.Outcome:
+    """The whole matched set, narrowed by `severity` and ordered per `sort`, paged at the
+    caller's offset/limit. The engine's page was already cut newest-first; the severity
+    filter narrows BEFORE the cut, so `total` is the filtered count, never the
+    unfiltered one."""
+    full, basis = _whole_bug_set(repo, dict(data["filters"]))
+    for r in full:
+        _row_edges(r, st)
+    if severity:
+        full = [r for r in full if (r.get("severity") or "").strip().lower() == severity]
+        basis["total"] = len(full)
+        basis["filters"] = {**basis.get("filters", {}), "severity": severity}
+    full.sort(key=lambda r: r["id"])
+    if sort == "severity":
+        full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
+    base = dict(basis)
+    off, lim = data["offset"], data["limit"]
+    base["offset"] = off
+    base["limit"] = lim
+    base["rows"] = full[off:] if not lim else full[off : off + lim]
+    base["shown"] = len(base["rows"])
+    base["truncated"] = base["total"] > off + base["shown"]
+    base["next"] = off + base["shown"] if base["truncated"] else None
+    if not base["rows"]:
+        return O.nothing("view.list", f"No bugs with severity {severity}.", **base)
+    return O.ok("bug", **base)
+
+
 def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "", severity: str = "") -> O.Outcome:
     """The bug facets the shared list engine defers to the domain (`services/viewers.py`
     renders the row's id/state/title/owner/updated and the newest-first page): severity,
@@ -86,41 +114,7 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "", severity: str = 
         raise ValueError(f"severity takes one of {', '.join(BUG_SEVERITIES)}, got {severity!r}")
     _log, _cfg, st = _load(repo)
     if severity or (sort == "severity" and out.exit == 0):
-        # The page the engine already cut was newest-first: re-cut it from the whole
-        # matched set, in the order asked. A refused or "nothing" call keeps its
-        # refusal; the re-cut is asked again with arguments the earlier call already
-        # validated, so it is refused again only as the earlier call was. The severity
-        # filter narrows that whole set before the page is cut (and before the order
-        # decides the page), so a filtered `total` is the filtered count, never the
-        # unfiltered one.
-        full, basis = _whole_bug_set(repo, dict(data["filters"]))
-        for r in full:
-            _row_edges(r, st)
-        if severity:
-            full = [r for r in full if (r.get("severity") or "").strip().lower() == severity]
-            basis["total"] = len(full)
-            basis["filters"] = {**basis.get("filters", {}), "severity": severity}
-        full.sort(key=lambda r: r["id"])
-        if sort == "severity":
-            full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
-        off, lim = data["offset"], data["limit"]
-        # The `not lim` arm keeps the whole-set meaning of 0 honest if a 0 ever did
-        # arrive on a caller page: the page is everything, not `rows[off:off]`, and
-        # the caller's page size stays the advertised limit.
-        page = full[off:] if not lim else full[off : off + lim]
-        base = dict(basis)
-        # The whole set was asked at offset 0; the page the caller asked for
-        # starts where the caller told the engine to start, and its advertised limit is
-        # the caller's page size, not the whole-set fetch's.
-        base["offset"] = off
-        base["limit"] = lim
-        base["rows"] = page
-        base["shown"] = len(base["rows"])
-        base["truncated"] = base["total"] > off + base["shown"]
-        base["next"] = off + base["shown"] if base["truncated"] else None
-        if not page:
-            return O.nothing("view.list", f"No bugs with severity {severity}.", **base)
-        return O.ok("bug", **base)
+        return _page_from_whole(repo, data, st, severity, sort)
     if out.exit == 0:
         for r in data.get("rows") or []:
             _row_edges(r, st)
