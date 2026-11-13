@@ -22,6 +22,7 @@ from ...services import compaction as CP
 from ...services import companions as CO
 from ...services import enforce as E
 from ...services import identity as ID
+from ...services import sessions as S
 from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
@@ -120,7 +121,9 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
             repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
         )
         st = fold(log.read_all(), strict=False)
-        held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == who.id)
+        # What it holds with each item's last and next gate: the in-flight state rides in
+        # the compaction note, not in a second one.
+        held = S.held_labels(st, who.id, cfg)
         result = CP.record(log, cfg, payload, held, set(st.sessions))
         # The defensive self-assessment pass (r-ddflow-self-assessment, default on): file
         # what the transcript just before this compaction names. Best-effort and never
@@ -222,6 +225,26 @@ def _sync_sections(repo: Path, agent: str) -> list[str]:
     return parts
 
 
+def _lifecycle_lines(repo: Path, agent: str, stdin: str, *, dry_run: bool) -> list[str]:
+    """What a session start does about the sessions before it: adopt the orphans, close the
+    dead ones `interrupted` (nothing is written on a dry run), and show the previous
+    session's last prompt and note unless this start follows a compaction."""
+    try:
+        payload = json.loads(stdin) if stdin.strip() else {}
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    cfg = Config.load(repo)
+    current = S.harness_sid(str(payload.get("session_id") or ""))
+    log, who = ID.open_log(repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0))
+    S.start_housekeeping(log, cfg, current=current, dry_run=dry_run)
+    if payload.get("source") == "compact":
+        return []
+    events = log.read_all()
+    return S.previous_lines(events, fold(events, strict=False), who.id, current, cfg)
+
+
 def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = False) -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
@@ -234,6 +257,10 @@ def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = F
     """
 
     parts = [SESSION_START_HEADER]
+    try:
+        parts += _lifecycle_lines(repo, agent, stdin, dry_run=dry_run)
+    except Exception as exc:  # never fail a session start
+        parts += [f"_(session housekeeping failed: {exc})_", ""]
     try:
         parts += _after_compaction(repo, stdin)
     except Exception as exc:  # never fail a session start

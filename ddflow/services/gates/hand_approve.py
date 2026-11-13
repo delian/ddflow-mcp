@@ -12,14 +12,47 @@ import getpass
 from collections.abc import Callable
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core.model import GATE_OUTCOMES
 from ...infra import hostinfo as H
-from ...infra.log import EventLog
+from ...infra.log import Event, EventLog
+from ...infra.log._lock import AppendLockTimeout
 from .. import gate_accept as GA
 from .. import reviewer_trust as RT
 from .defs import GateDef
 from .kinds import bare, evidence_problems
+
+
+def _append_outcome(
+    log: EventLog, kind: str, item_id: str, payload: dict[str, Any], *, wait_s: int
+) -> Event:
+    """Write a ``gate.<outcome>`` event, retrying a contended append lock.
+
+    The outcome is finished work. Losing it to a transient timeout on the events lock -- a
+    lane heartbeat holding it under load, in `record_measured` after a command ran to
+    completion (B0b0b67d5e7) -- wastes the whole run, so the append retries instead of
+    raising once.     ``wait_s`` is the TOTAL wall-clock the write may spend trying to acquire
+    the lock: each attempt waits the time left in the budget (not the log's own timeout),
+    so the bound is hard -- a record that still cannot get the lock gives up once the
+    budget is spent and reports "could not run" rather than wedging, or overshooting, the
+    bound. 0 appends once with the log's own timeout, as before.
+
+    A spent budget re-raises at once (the ``<= 0`` test), so an attempt can never retry
+    with a non-blocking timeout: every attempt with budget left waits a POSITIVE ``remaining``
+    (blocking), and the attempt that would meet ``remaining <= 0`` raises instead of
+    looping, so the loop both bounds the total and cannot spin.
+    """
+    deadline = CLOCK.monotonic() + wait_s
+    while True:
+        try:
+            if wait_s <= 0:
+                return log.append(kind, item_id, payload)
+            remaining = deadline - CLOCK.monotonic()
+            return log.append(kind, item_id, payload, lock_timeout_s=max(0.0, remaining))
+        except AppendLockTimeout:
+            if wait_s <= 0 or deadline - CLOCK.monotonic() <= 0:
+                raise
 
 
 def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements are kept apart on purpose
@@ -90,7 +123,8 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
         )
     if outcome in ("unavailable", "partial", "failed") and not reason:
         raise ValueError(f"outcome {outcome!r} must carry a --reason")
-    log.append(
+    _append_outcome(
+        log,
         f"gate.{outcome}",
         item_id,
         {
@@ -101,6 +135,7 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             # Written over another clone's live lease with --force (B90b43dd2d8); additive.
             **({"forced": True} if forced else {}),
         },
+        wait_s=cfg.lease.record_lock_wait_s,
     )
 
 

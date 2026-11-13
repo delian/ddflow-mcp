@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "verify.stack"
+new = "\"\""
+why = "The stack of this project by its name in the stack table; empty detects it from the project's files. An unknown name resolves to an explicit none."
+impact = "additive"

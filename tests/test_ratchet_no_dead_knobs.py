@@ -66,6 +66,16 @@ KNOWN_UNREAD: dict[str, str] = {
     # proves the accessors do read them.
     "prices.limit": "read via PricesConfig.limit_of (self.limit); services/limit_routing has no production caller yet",
     "prices.reset": "read via PricesConfig.reset_of (self.reset); services/limit_routing has no production caller yet",
+    # Read via the EtaConfig handed to services/eta/data.build (a parameter the name-based
+    # scan cannot see): `build(facts, eta)` reads `eta.window_days` / `eta.min_samples`, and
+    # tests/test_eta_data.py proves both are live (test_gate_durations_respect_the_rolling_window,
+    # test_figures_under_min_samples_are_withheld_not_zero). data.build has no production caller
+    # yet -- the ETA-model / ETA-simulator / ETA-cli items consume the tables after this one.
+    "eta.window_days": "read via EtaConfig in services/eta/data.build(); no production caller yet (ETA-model/simulator items follow)",
+    "eta.min_samples": "read via EtaConfig in services/eta/data.build(); no production caller yet (ETA-model/simulator items follow)",
+    # The R-eta-prediction shipping bar (the item's falsifier), declared here so a stale model
+    # is demoted rather than trusted; read by the prediction item (not yet built).
+    "eta.coverage_bar": "the R-eta-prediction shipping bar; read by the prediction item (not yet built)",
 }
 
 

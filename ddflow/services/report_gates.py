@@ -56,6 +56,57 @@ def _row(gate: str, rec, cfg) -> dict[str, Any]:
     return row
 
 
+def _review_rounds(it, gate: str, cfg) -> dict[str, Any]:
+    """The round budget line of a review gate (DX-agent-final-report-rounds): rounds used of
+    the cap, the full/delta split, every forced round's reason, whether it passed on
+    refutation (the flag, not a verdict string), and the head the last reviewer covered so
+    the report can note when that was not the commit that landed. ``it`` is the Item (never
+    None here) so the count reads the gate's HISTORY, the same fold the review budget does."""
+    used = G.rounds_used(it, gate)
+    if not used and G.on_refutation(it, gate) is None:
+        return {}
+    last_head = ""
+    for run in reversed(it.runs_of(gate)):
+        head = (run.evidence or {}).get("reviewed_head")
+        if head:
+            last_head = str(head)
+            break
+    return {
+        "used": used,
+        "full": G.full_rounds(it, gate),
+        "delta": G.delta_rounds(it, gate),
+        "max": cfg.review.max_rounds,
+        "forced": [
+            str((run.evidence or {}).get("budget_forced"))
+            for run in it.runs_of(gate)
+            if (run.evidence or {}).get("budget_forced")
+        ],
+        "refutation": G.on_refutation(it, gate),
+        "reviewed_head": last_head,
+    }
+
+
+def _same_commit(a: str, b: str) -> bool:
+    """Whether ``a`` and ``b`` spell the SAME commit, so neither an abbreviation of the other
+    nor a 7-char collision reads as a different one (a git short sha is a PREFIX)."""
+    return a == b or a.startswith(b) or b.startswith(a)
+
+
+def mark_missed_final(rows_: list[dict[str, Any]], final_head: str) -> None:
+    """Set ``missed_final`` on every review row whose last reviewer covered a commit that is
+    not the one that landed, so the report can note it (DX-agent-final-report-rounds).
+
+    ``reviewed_head`` is a full sha while ``final_head`` may be abbreviated; identity is by
+    ``_same_commit``, not by a fixed-length slice, so a short ``final_head`` spells the head
+    the reviewer already saw, and two full shas sharing a 7-char prefix still differ."""
+    if not final_head:
+        return
+    for r in rows_:
+        rr = r.get("review_rounds")
+        if rr and rr.get("reviewed_head") and not _same_commit(rr["reviewed_head"], final_head):
+            rr["missed_final"] = final_head
+
+
 def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, Any]]:
     """One row per recorded gate, in pipeline order (then any gate outside it), with the
     triage counts of a review gate."""
@@ -67,6 +118,9 @@ def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, 
         counts = G.triage_counts(it, g)
         if counts:
             row["triage"] = counts
+        rounds_ = _review_rounds(it, g, cfg)
+        if rounds_:
+            row["review_rounds"] = rounds_
         out.append(row)
     return out
 
