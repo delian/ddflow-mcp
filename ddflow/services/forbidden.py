@@ -99,7 +99,7 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(?:['\"]([^\n'\"]*)['\"]|(\S+))")
+_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(?:['\"]([^\n'\"]*)['\"]|([^\s;|&<>()'\"]+))")
 
 
 def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:

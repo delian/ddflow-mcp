@@ -134,6 +134,9 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     # a quoted delimiter may hold whitespace (its delimiter is the quoted text), so the command
     # after its terminator is a command, not a body (critic #2)
     assert _check("cat <<'EOF with spaces'\nEOF with spaces\ngit push origin main\nEOF") is not None
+    # a bare delimiter word still ends at a shell operator (`;`), so `EOF` not `EOF;` is the
+    # delimiter and `git push` after the terminator is a command (critic #3)
+    assert _check("cat <<EOF; safe\nEOF\ngit push origin main\nEOF;") is not None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
