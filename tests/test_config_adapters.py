@@ -28,7 +28,13 @@ def _cfg_with_adapters(tmp_path: Path, body: str) -> Config:
 
 
 def test_every_adapters_knob_is_declared_once():
-    for knob in ("platform", "lane_transport", "network_consent", "managed_files_consent", "managed_files_backup"):
+    for knob in (
+        "platform",
+        "lane_transport",
+        "network_consent",
+        "managed_files_consent",
+        "managed_files_backup",
+    ):
         assert f"adapters.{knob}" in DECLARED, f"adapters.{knob} is not in the knob registry"
     # a knob declared twice would have raised at import; the ratchet does the heavy lifting.
 
@@ -75,7 +81,9 @@ def test_network_consent_reads_back_per_kind_and_absent_is_declined(tmp_path: Pa
 
 
 def test_managed_files_consent_reads_back_per_kind(tmp_path: Path):
-    cfg = _cfg_with_adapters(tmp_path, '[adapters]\nmanaged_files_consent = { "settings.json" = true }\n')
+    cfg = _cfg_with_adapters(
+        tmp_path, '[adapters]\nmanaged_files_consent = { "settings.json" = true }\n'
+    )
     assert services_adapters.managed_files_consented(cfg, "settings.json") is True
     assert services_adapters.managed_files_consented(cfg, ".mcp.json") is False  # absent is refused
 
@@ -90,4 +98,10 @@ def test_adapters_section_fields_match_the_declared_knobs():
     """The section and the service a caller reaches it through stay in step (a renamed field
     breaks the reader the ratchet found by name)."""
     fields = {f.name for f in dataclasses.fields(Config().adapters)}
-    assert fields == {"platform", "lane_transport", "network_consent", "managed_files_consent", "managed_files_backup"}
+    assert fields == {
+        "platform",
+        "lane_transport",
+        "network_consent",
+        "managed_files_consent",
+        "managed_files_backup",
+    }

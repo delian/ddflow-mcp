@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-def selected_platform(cfg: "Config") -> Platform:
+def selected_platform(cfg: Config) -> Platform:
     """The `Platform` adapter `[adapters].platform` selects: the Posix adapter for 'posix',
     and for 'auto' (the default) this host's OS -- Posix here, `Windows` (unavailable) on an
     unsupported OS, per D-adapters-answers-3. A value outside the two is already refused by
@@ -39,26 +39,26 @@ def selected_platform(cfg: "Config") -> Platform:
     return Windows()
 
 
-def selected_lane_transport(cfg: "Config") -> type[Transport]:
+def selected_lane_transport(cfg: Config) -> type[Transport]:
     """The `Transport` adapter `[adapters].lane_transport` selects, resolved from the
     `TRANSPORTS` registry; `get_or_raise` lists those known when it is none of them."""
     return TRANSPORTS.get_or_raise(cfg.adapters.lane_transport)
 
 
-def network_consented(cfg: "Config", kind: str) -> bool:
+def network_consented(cfg: Config, kind: str) -> bool:
     """Whether `[adapters].network_consent` grants `kind` (one of
     `NETWORK_KINDS`). Absent is DECLINED, never granted (r-consent-outward,
     D-adapters-answers-3)."""
     return bool(cfg.adapters.network_consent.get(kind, False))
 
 
-def managed_files_consented(cfg: "Config", kind: str) -> bool:
+def managed_files_consented(cfg: Config, kind: str) -> bool:
     """Whether `[adapters].managed_files_consent` grants a `ManagedFile` merge of `kind`.
     Absent is DECLINED, never silently written (D-adapters-answers-2)."""
     return bool(cfg.adapters.managed_files_consent.get(kind, False))
 
 
-def managed_files_backup(cfg: "Config") -> bool:
+def managed_files_backup(cfg: Config) -> bool:
     """Whether the `ManagedFile` adapter writes the one-time `.ddflow-bak` beside a shared
     file before its first write (`[adapters].managed_files_backup`, D-adapters-answers-2)."""
     return bool(cfg.adapters.managed_files_backup)
