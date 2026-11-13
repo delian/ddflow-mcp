@@ -71,7 +71,18 @@ CANONICAL_EVENTS = (
 
 #: Hook styles: how an agent's hooks are configured and called.
 HOOK_STYLES = frozenset(
-    {"claude", "gemini", "copilot", "cursor", "cline", "cascade", "antigravity", "plugin", "none"}
+    {
+        "claude",
+        "gemini",
+        "copilot",
+        "cursor",
+        "cline",
+        "cascade",
+        "antigravity",
+        "plugin",
+        "vibe",
+        "none",
+    }
 )
 #: Styles where ddflow runs as a command hook and needs a normalizer and an emitter.
 COMMAND_HOOK_STYLES = HOOK_STYLES - {"plugin", "none"}

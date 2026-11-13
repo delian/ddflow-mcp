@@ -639,7 +639,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=dbab3cccc704 -->
+<!-- ddflow:begin README/agents sha=2fabd6b4b375 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -666,6 +666,7 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | Sourcegraph Cody | `cody` | none | not verified | nv |
 | dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
 | Grok Build | `grok` | `.grok/config.toml` | claude | native hook |
+| Mistral Vibe | `vibe` | `.vibe/config.toml` | vibe | wired, not injected |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
