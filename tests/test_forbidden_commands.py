@@ -112,6 +112,17 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_a_quoted_heredoc_marker_is_not_a_heredoc():
+    """Bdd23c77383: `<<EOF` inside a quoted argument is literal text, not a heredoc, so the
+    command on the following line is a real command and must still be refused. An UNQUOTED
+    `<<EOF` is a real heredoc whose body stays data."""
+    assert _check("echo '<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check('echo "<<EOF"\ngit push origin main\nEOF') is not None
+    # a multi-line single quote that swallows the marker is data too, not an opener
+    assert _check("echo 'x\n<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check("echo <<EOF\ngit push origin main\nEOF") is None
+
+
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
     """B-hook-flag-match-matches-quoted-text: matching a FLAG entry is by whole words, not by
     substrings, and a quote delimiter does not neutralize the flag. `git push '--force'` is a

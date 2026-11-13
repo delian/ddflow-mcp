@@ -102,18 +102,64 @@ class Refusal:
 _HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
 
 
+def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
+    """The `<<` heredoc markers on `line` that sit OUTSIDE a quote, and the quote (if any)
+    still open at the line's end. A `<<` inside `'...'`/`"..."` is literal text, not a heredoc
+    (Bdd23c77383); an escaped ``\\<`` is too. ``quote`` is the quote open from earlier lines
+    (``''``, ``'`` or ``"``) -- a single/double quote may span lines, and a `<<` it swallows is
+    still literal."""
+    ms: list[re.Match] = []
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if quote == "'":
+            j = line.find("'", i)
+            if j < 0:
+                return ms, "'"  # the single quote stays open to the next line
+            quote = ""
+            i = j + 1
+        elif quote == '"':
+            if c == "\\" and i + 1 < n and line[i + 1] in ('"', "\\", "$", "`"):
+                i += 2
+            elif c == '"':
+                quote = ""
+                i += 1
+            else:
+                i += 1
+        elif c == "\\":
+            i += 2 if i + 1 < n else 1  # an escaped `<` is not a marker
+        elif c == "'":
+            quote = "'"
+            i += 1
+        elif c == '"':
+            quote = '"'
+            i += 1
+        elif c == "<" and i + 1 < n and line[i + 1] == "<":
+            m = _HEREDOC.match(line, i)
+            if m is not None:
+                ms.append(m)
+                i = m.end()
+                continue
+            i += 1
+        else:
+            i += 1
+    return ms, quote
+
+
 def _strip_heredocs(text: str) -> str:
     """The command line without heredoc bodies, which are data, not commands. A `<<` that
-    opens no body (a here-string, a shift, a quoted `a<<b`) drops nothing: only a terminator
-    line that really follows makes it a heredoc."""
+    opens no body (a here-string, a shift, a quoted `a<<b`, a `<<` inside a quote) drops
+    nothing: only a terminator line that really follows makes it a heredoc."""
     lines = text.split("\n")
     out: list[str] = []
     i = 0
+    quote = ""
     while i < len(lines):
         line = lines[i]
         out.append(line)
         i += 1
-        for m in _HEREDOC.finditer(line):
+        ms, quote = _heredoc_openers(line, quote)
+        for m in ms:
             end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(1)), None)
             if end is not None:
                 i = end + 1
