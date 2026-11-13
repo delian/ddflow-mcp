@@ -336,15 +336,16 @@ def _record_gate_started(log, item, gate, forced) -> str | None:
     deadline = time.monotonic() + _GATE_START_LOCK_RETRY_S
     while True:
         try:
-            log.append(
-                "gate.started", item, {"gate": gate, **({"forced": True} if forced else {})}
-            )
+            log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
             return None
         except TimeoutError as exc:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return str(exc) or "the events.lock stayed held past the retry bound"
-            print(f"ddflow gate run: waiting to record the run start -- {exc}; retrying", file=sys.stderr)
+            print(
+                f"ddflow gate run: waiting to record the run start -- {exc}; retrying",
+                file=sys.stderr,
+            )
             time.sleep(min(5.0, remaining))
             if time.monotonic() >= deadline:
                 return "the events.lock stayed held past the retry bound"

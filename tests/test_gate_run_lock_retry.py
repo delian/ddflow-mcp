@@ -40,9 +40,7 @@ def _hold(lock: Path) -> subprocess.Popen:
     return p
 
 
-def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
-    repo, tmp_path, monkeypatch, capsys
-):
+def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(repo, tmp_path, monkeypatch, capsys):
     ran = tmp_path / "ran"
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "gate.ci.command", f"touch {shlex.quote(str(ran))}")
