@@ -195,7 +195,9 @@ def _same_failure(branch: str, base: str) -> bool:
     from a real change: a cut of one repr sits at the same raw position in both, so the heads
     have the same raw length and so do the tails; only then the blanked head of one must be a
     prefix of the other's and the blanked tail a suffix. Anything else differs: a changed
-    visible text is not read as a cut (B710b7cc84f)."""
+    visible text is not read as a cut (B710b7cc84f). What the cut hides cannot be compared; the
+    few characters one head or tail shows beyond the other's (the root-length difference) are
+    the same loss, so a change confined to them is not seen."""
     if _norm(branch) == _norm(base):
         return True
     cuts = [_cut(branch), _cut(base)]
