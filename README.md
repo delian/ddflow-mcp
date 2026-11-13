@@ -871,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7be2ba55c62d -->
-<details><summary>All 688 knobs across 63 sections</summary>
+<!-- ddflow:begin README/knobs sha=64602d15bf82 -->
+<details><summary>All 722 knobs across 67 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1303,6 +1303,7 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
 | `perf_metrics.aggregate_min_samples` | `3` |  |
@@ -1346,6 +1347,18 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `premerge.enabled` | `true` |  |
+| `premerge.stages` | `["pre-commit"]` |  |
+| `premerge.budget_s` | `120` |  |
+| `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
+| `premerge.fix` | `true` |  |
+| `premerge.commit_fixes` | `true` |  |
+| `premerge.max_fix_rounds` | `1` |  |
+| `premerge.precommit_command` | `"pre-commit"` |  |
+| `premerge.skip_hooks` | `[]` |  |
+| `premerge.generic_hooks` | `true` |  |
+| `premerge.large_file_kb` | `500` |  |
+| `premerge.test_command` | `"python -m pytest -q -x"` |  |
 | `prices.limit` | `{}` |  |
 | `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
@@ -1372,11 +1385,23 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `records.correct_digest_chars` | `12` |  |
+| `records.correct_min_digest_chars` | `8` |  |
+| `records.correct_digest_old` | `false` |  |
+| `records.correct_digest_new` | `false` |  |
+| `records.correct_reason_max_chars` | `500` |  |
+| `records.correct_max_fields` | `8` |  |
 | `reinstruct.enabled` | `true` |  |
 | `reinstruct.every_calls` | `12` |  |
 | `reinstruct.every_seconds` | `240` |  |
 | `reinstruct.max_items` | `3` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `resultcache.enabled` | `true` |  |
+| `resultcache.keep_days` | `14` |  |
+| `resultcache.max_mb` | `64` |  |
+| `resultcache.reuse_failed` | `false` |  |
+| `resultcache.probe_commands` | `["pytest --version", "uv --version"]` |  |
+| `resultcache.env_vars` | `[]` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
@@ -1479,6 +1504,15 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
 | `store.index_touch_s` | `86400.0` |  |
+| `suites.max_concurrent` | `0` |  |
+| `suites.cores_per_suite` | `96` |  |
+| `suites.load_ceiling_per_core` | `0.35` |  |
+| `suites.load_poll_s` | `2.0` |  |
+| `suites.max_wait_factor` | `3.0` |  |
+| `suites.agent_share` | `0.5` |  |
+| `suites.default_cost_s` | `600.0` |  |
+| `suites.cost_runs` | `20` |  |
+| `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
