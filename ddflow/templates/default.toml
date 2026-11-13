@@ -42,6 +42,9 @@ accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
 
+[baseline]
+keep = 14
+
 [bugs]
 file_task = true
 phase = "bugs"
@@ -551,6 +554,20 @@ mergiraf_keep_pct = 10
 [plan]
 warn_missing_globs = true
 
+[premerge]
+enabled = true
+stages = ["pre-commit"]
+budget_s = 120
+on_unavailable = "unavailable"
+fix = true
+commit_fixes = true
+max_fix_rounds = 1
+precommit_command = "pre-commit"
+skip_hooks = []
+generic_hooks = true
+large_file_kb = 500
+test_command = "python -m pytest -q -x"
+
 [prices]
 limit = {}
 reset = {}
@@ -587,6 +604,14 @@ command = ""
 model_dir = ""
 timeout_s = 60
 
+[records]
+correct_digest_chars = 12
+correct_min_digest_chars = 8
+correct_digest_old = false
+correct_digest_new = false
+correct_reason_max_chars = 500
+correct_max_fields = 8
+
 [reinstruct]
 enabled = true
 every_calls = 12
@@ -595,6 +620,14 @@ max_items = 3
 
 [release]
 manifest_lint = "block"
+
+[resultcache]
+enabled = true
+keep_days = 14
+max_mb = 64
+reuse_failed = false
+probe_commands = ["pytest --version", "uv --version"]
+env_vars = []
 
 [review]
 max_rounds = 2

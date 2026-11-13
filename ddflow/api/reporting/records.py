@@ -122,7 +122,29 @@ def new_reports(st, rid: str, since: float) -> dict[str, Any]:
     return {"count": len(adds) + len(linked), "additions": adds, "linked_from": linked}
 
 
-def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
+def _corrections(st, kind: str, rid: str) -> list[dict[str, Any]]:
+    """The `record.corrected` audit entries of one record, oldest first (REC-show-corrected-fields):
+    who, when, why and each field named, with a digest of the old/new value only where the
+    writer asked for one (never after a `--secret` correction). Empty when none."""
+    return [
+        {
+            "at": c["at"],
+            "by": c["by"],
+            "reason": c["reason"],
+            "fields": [dict(f) for f in c["fields"]],
+        }
+        for c in st.corrections.get(f"{kind}:{rid}", [])
+    ]
+
+
+def _corrected(st, kind: str, rid: str) -> dict[str, Any]:
+    """The additive `show` field of a corrected record: `corrections`, every one in order.
+    Absent when there is none, so an uncorrected record reads exactly as it did."""
+    found = _corrections(st, kind, rid)
+    return {"corrections": found} if found else {}
+
+
+def show(repo: Path, item: str, *, agent: str = "", history: bool = False) -> O.Outcome:
     """One item, with its gate status -- or one bug or research note, by its id. The wire body is the item
     (or the bug's record) itself.
 
@@ -136,9 +158,9 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     defs = G.load_gates(repo, cfg)
     it = st.items.get(item)
     if it is None and item in st.bugs:
-        return _show_bug(st, st.bugs[item], repo, cfg)
+        return _show_bug(st, st.bugs[item], repo, cfg, history)
     if it is None and item in st.research:
-        return _show_research(st, st.research[item])
+        return _show_research(st, st.research[item], history)
     if it is None or it.removed:
         if it is not None:
             return O.failed(
@@ -154,31 +176,46 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     # A task's effective dependencies are its own `needs` plus every phase ancestor's;
     # print that, not only what the task declares itself (B8981fa81bd).
     shown["needs"] = inherited_need_ids(st, it)
+    fixed = _corrected(st, "phase" if it.kind == "phase" else "task", item)
     return O.ok(
         "show",
         id=item,
         item={
             **shown,
             **addenda(st, item),
+            **fixed,
             **({"ledger": LG.summary(led)} if led else {}),
         },
         gates=plain(G.status(st, cfg, item, defs, diff=diff)),
         _render={
             "item": it,
             "gate_status": G.status(st, cfg, item, defs, diff=diff),
-            "addenda": addenda(st, item),
+            "addenda": {
+                **addenda(st, item),
+                **fixed,
+                "history": history,
+                "author": it.author_model if it.state == "done" else "",
+            },
         },
     )
 
 
-def _show_research(st, note) -> O.Outcome:
+def _show_research(st, note, history: bool = False) -> O.Outcome:
     """A research note id handed to `show`: the note, its verdict, and what was filed to
     extend it (the `addenda`). The wire body (`item`) is the record itself."""
-    record = {**plain(note), "kind": "research", "state": note.verdict, **addenda(st, note.id)}
-    return O.ok("show", id=note.id, item=record, _render={"research": record})
+    record = {
+        **plain(note),
+        "kind": "research",
+        "state": note.verdict,
+        **addenda(st, note.id),
+        **_corrected(st, "research", note.id),
+    }
+    return O.ok(
+        "show", id=note.id, item=record, _render={"research": {**record, "history": history}}
+    )
 
 
-def _show_bug(st, bug, repo=None, cfg=None) -> O.Outcome:
+def _show_bug(st, bug, repo=None, cfg=None, history: bool = False) -> O.Outcome:
     """A bug id handed to `show` (B-show-bug-id): its record, its state, and the item that
     REALLY fixes it -- the one `complete <task>` checks (`fix_task_for`: the bug's `fix_task`
     field, else a live task whose `fixes` lists it or whose id follows the `fix-<bug>`
@@ -201,9 +238,10 @@ def _show_bug(st, bug, repo=None, cfg=None) -> O.Outcome:
         "fixing": fixing,
         "mentioned_by": mentions,
         **addenda(st, bug.id),
+        **_corrected(st, "bug", bug.id),
         **RB.shown(repo, bug.repro),
     }
-    return O.ok("show", id=bug.id, item=record, _render={"bug": record})
+    return O.ok("show", id=bug.id, item=record, _render={"bug": {**record, "history": history}})
 
 
 def _contest_problems(st) -> list[str]:

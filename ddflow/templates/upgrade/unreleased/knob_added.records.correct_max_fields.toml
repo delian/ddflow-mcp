@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "records.correct_max_fields"
+new = "8"
+why = "The most fields one `ddflow correct` replaces in one event (REC-correct-surface)."
+impact = "additive"

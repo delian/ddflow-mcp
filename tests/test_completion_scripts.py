@@ -1,14 +1,14 @@
-"""The activation scripts ddflow serves for bash, zsh and fish."""
+"""The activation scripts ddflow serves for bash, zsh and fish. (The no-argcomplete message
+and the real-shell registration live in tests/test_completion_activation.py.)"""
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 
 import pytest
 
-from ddflow.services.completion import scripts
+from ddflow.services import completion_shell as scripts
 
 
 @pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
@@ -34,23 +34,3 @@ def test_script_parses_in_its_shell(shell, syntax):
         syntax, shell=True, input=scripts.for_shell(shell), text=True, capture_output=True
     )
     assert probe.returncode == 0, probe.stderr
-
-
-def test_script_without_argcomplete_returns_0_with_a_message(tmp_path):
-    """Sourced (as activation is) the script prints a message and the shell survives."""
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("bash not installed")
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    env = dict(os.environ, PATH=str(empty))
-    probe = subprocess.run(
-        [bash, "-c", "source /dev/stdin; printf 'SURVIVED:%d\\n' $?"],
-        input=scripts.for_shell("bash"),
-        text=True,
-        capture_output=True,
-        env=env,
-    )
-    assert probe.returncode == 0
-    assert "argcomplete" in probe.stderr
-    assert "SURVIVED:0" in probe.stdout

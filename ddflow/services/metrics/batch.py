@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from ...core import progress as PR
+from . import overlap as OV
 from .providers import Context
 from .stats import rate, stat
 from .summary import RAN
@@ -62,7 +63,11 @@ def _runs_by_bucket(ctx: Context, size: dict[str, int | None]) -> dict[str, list
     was triaged against that run (the item + gate a finding names)."""
     bucket_runs: dict[str, list[dict]] = defaultdict(list)
     # A run "had a finding" when the item+gate pair of the run has a triaged finding.
-    with_finding: set[tuple[str, str]] = {(f.item, f.gate) for f in ctx.facts.findings}
+    with_finding: set[tuple[str, str]] = {
+        (f.item, f.gate)
+        for f in ctx.facts.findings
+        if f.gate in REVIEW_GATES and ctx.in_scope(f.item, f.at)
+    }
     for o in ctx.facts.outcomes:
         if o.gate not in REVIEW_GATES or o.kind not in RAN or not ctx.in_scope(o.item, o.at):
             continue
@@ -78,6 +83,8 @@ def _runs_by_bucket(ctx: Context, size: dict[str, int | None]) -> dict[str, list
 def _findings_by_bucket(ctx: Context, size: dict[str, int | None]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for f in ctx.facts.findings:
+        if f.gate not in REVIEW_GATES or not ctx.in_scope(f.item, f.at):
+            continue
         out[bucket_of(size.get(f.item))][f.verdict or "unverdicted"] += 1
     return out
 
@@ -130,13 +137,21 @@ def build(ctx: Context, group_by: str = "") -> dict:
     tiny = [r for r in rows if r["runs"] and r["elapsed"]["n"] < max(minimum, 1)]
     for r in tiny:
         unavailable[f"elapsed:{r['bucket']}"] = f"{r['elapsed']['n']} timed runs, need {minimum}"
-    return {"group_by": "size", "buckets": rows, "unavailable": unavailable}
+    return {
+        "group_by": "size",
+        "buckets": rows,
+        "overlap": OV.build(ctx, size),
+        "unavailable": unavailable,
+    }
 
 
 def has_figures(data: dict) -> bool:
     """Whether any bucket has any figure (else the answer is exit 2 'not enough data')."""
+    if (data.get("overlap") or {}).get("items"):
+        return True
     return any(
         r["elapsed"]["p50_s"] is not None
+        or r["lock_wait"]["p50_s"] is not None
         or r["findings_per_run"] is not None
         or r["runs_with_finding"] is not None
         or r["confirmed_rate"] is not None
@@ -159,10 +174,13 @@ def text(data: dict) -> str:
         lines.append(
             f"  {r['bucket']:>9}  items {r['items']}  runs {r['runs']}  "
             f"elapsed p50 {secs(r['elapsed']['p50_s'])}  "
+            f"lock wait p50 {secs(r['lock_wait']['p50_s'])}  "
             f"findings/run {r['findings_per_run'] if r['findings_per_run'] is None else round(r['findings_per_run'], 2)}  "
             f"with a finding {_pct(r['runs_with_finding'])}  "
             f"confirmed {_pct(r['confirmed_rate'])}"
         )
+    if data.get("overlap"):
+        lines.append(OV.text(data["overlap"]))
     if data["unavailable"]:
         lines.append("unavailable (not zero):")
         lines += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]

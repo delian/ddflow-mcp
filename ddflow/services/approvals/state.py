@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ...core.registry import Registry
+from .. import gate_accept as GA
 
 #: verb -> (state, item, target, args) -> the state digest string the site would compute.
 PROVIDERS: Registry[Callable[[Any, str, str, dict[str, str]], str]] = Registry(
@@ -21,3 +22,6 @@ PROVIDERS: Registry[Callable[[Any, str, str, dict[str, str]], str]] = Registry(
 
 def register(verb: str, provider: Callable[[Any, str, str, dict[str, str]], str]) -> None:
     PROVIDERS.register(provider, verb)
+
+
+register("approve.partial", GA.provider)

@@ -8,10 +8,31 @@ from pathlib import Path
 from typing import Any
 
 from ....core.model import ABANDONED, DONE, State
+from ....infra import worktree as W
 from ....services import ci as CI
 from ....services import gates as G
 from ....services import phase_suite as PS
+from ....services import revalidate as RV
 from ....services.gates import failed_review as GO
+
+
+def _stands(repo: Path, cfg, log):
+    """The `PS.missing` hook: an older full pass whose commit main has moved past still counts when
+    the delta reaches no test (SV-revalidate-delta); the revalidation is recorded as a pass."""
+
+    def stands(sha: str) -> str:
+        head = W.rev(repo, "HEAD")
+        v = RV.assess(repo, sha, head, cfg)
+        if v.kind != RV.STANDS:
+            return ""
+        log.append(
+            "cadence.ran",
+            PS.CADENCE,
+            {"result": "0", "evidence": {"note": v.note, "sha": head, "from": sha}},
+        )
+        return v.note
+
+    return stands
 
 
 def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
@@ -20,7 +41,7 @@ def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
     phase = it.id
     if it.kind != "phase" or cfg.schedule.phase_full_suite == "off":
         return ""
-    why = PS.missing(log.read_all(), st, phase)
+    why = PS.missing(log.read_all(), st, phase, stands=_stands(repo, cfg, log))
     if not why or cfg.schedule.phase_full_suite != "run":
         return why
     res = CI.run(repo, cfg, ref="HEAD", full=True)

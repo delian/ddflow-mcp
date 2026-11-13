@@ -150,6 +150,28 @@ def _infrastructure(changed: list[str]) -> str:
     return ""
 
 
+def _no_test_reaches(entry: str, tree: Path, always: list[str]) -> Plan:
+    """The plan for a change no test reaches (a config-only change). The whole-suite hook is
+    skipped by pre-commit for a diff that matches no test file, so running it proves nothing and
+    the gate would be unavailable (B-ci-unavailable-config-only-change): the always-run guards run
+    instead, a real verdict. With none declared, the whole suite stays."""
+    why = "no test reaches the change (running none would pass vacuously)"
+    cmd = run_command(entry, always, tree) if always else ""
+    if not cmd:
+        return Plan("full", why)
+    return Plan(
+        "selected",
+        f"{why}: {len(always)} always-run guard file(s) run",
+        "",
+        TESTS_HOOKS,
+        [],
+        [],
+        [],
+        always,
+        cmd,
+    )
+
+
 def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     """The scope of one item's run in ``tree`` (HEAD merged with ``base``): ``requested`` is
     "selected" or "full" (the knob, or `--full`). Every refusal to select says why."""
@@ -171,10 +193,10 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     if sel.full:
         return Plan("full", f"{sel.full}: only the whole suite keeps recall")
     paths = [t.path for t in sel.tests]
-    if not paths:  # the whole suite holds the always-run guards too
-        return Plan("full", "no test reaches the change (running none would pass vacuously)")
     held = set(paths)
     always = [t for t in always_tests(cfg, tree) if t not in held]
+    if not paths:
+        return _no_test_reaches(entry, tree, always)
     cmd = run_command(entry, paths, tree)
     always_cmd = run_command(entry, always, tree) if always else ""
     if not cmd:

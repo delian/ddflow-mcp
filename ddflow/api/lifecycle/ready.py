@@ -5,11 +5,11 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 from __future__ import annotations
 
 import difflib
-import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.defaults import DEFAULT_NEXT_KIND
@@ -245,7 +245,7 @@ def _drop_leased_overlap(items, st, cfg, agent):
     WITHOUT changing the project's policy. Kept live here, not in the plan, because
     `Plan` holds only its offers -- a lease the caller must judge is a caller concern.
     """
-    live = st.active_leases(time.time(), cfg.lease.grace_s)
+    live = st.active_leases(CLOCK.wall(), cfg.lease.grace_s)
     kept: list = []
     dropped: list[Blocked] = []
     for it in items:

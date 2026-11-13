@@ -45,7 +45,7 @@ def test_the_run_timeout_does_not_override_the_suite_wait(monkeypatch):
     seen: dict[str, float | None] = {}
 
     @contextlib.contextmanager
-    def fake_hold(cfg, holder, directory=None, *, say=None, wait_s=None):
+    def fake_hold(cfg, holder, directory=None, *, say=None, wait_s=None, **_kw):
         seen["wait_s"] = wait_s
         yield
 
@@ -75,7 +75,7 @@ def test_the_gate_run_path_budgets_the_run_only_too(monkeypatch, tmp_path):
     seen: dict[str, float | None] = {}
 
     @contextlib.contextmanager
-    def fake_hold(cfg, holder, *, say=None, wait_s=None):
+    def fake_hold(cfg, holder, *, say=None, wait_s=None, **_kw):
         seen["wait_s"] = wait_s
         yield
 
