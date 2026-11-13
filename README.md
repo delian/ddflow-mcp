@@ -200,6 +200,7 @@ the same implementation, so neither drifts from the other.
 | **get a plan into the queue** | see [From plan mode to the queue](docs/guide/workflow.md#from-plan-mode-to-the-queue) | same |
 | **know what to work on** | `ddflow next` | `ddflow_next` |
 | **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
+| **turn on shell completion** (bash · zsh · fish: commands, options, values and ids) | `ddflow completion install [<shell>]` · `uninstall [<shell>]` · `bash`/`zsh`/`fish` — one guarded startup-file line, applied only with `--yes` consent; see `ddflow help completion` | none: a person's act |
 | **see everything about one item or bug** (a done task's author model; each field `ddflow correct` replaced is marked with who, when and why, never with its old text, and `--secret` corrections carry no digest) | `ddflow show <id>` (phase, task, bug or research id); `--history` lists every correction in order; `--json` and the MCP show carry the same `corrections` field | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
@@ -875,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=e6f81cc7d8f5 -->
-<details><summary>All 742 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=fa02034fdb0d -->
+<details><summary>All 744 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1221,6 +1222,8 @@ long default is left to `ddflow config --explain`.
 | `lessons.verify_output_lines` | `12` |  |
 | `lessons.verify_load_ratio` | `1.0` |  |
 | `locks.mode` | `"enforce"` | `enforce` \| `log` \| `off` |
+| `locks.acquire` | `"declared"` | `declared` \| `lazy` |
+| `locks.hot_files` | `[]` |  |
 | `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
 | `locks.suggest_globs` | `true` |  |
 | `locks.suggest_history` | `30` |  |
