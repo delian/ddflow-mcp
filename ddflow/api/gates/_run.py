@@ -451,6 +451,7 @@ def run(
             return twin_refusal
         start_refused = _record_gate_started(log, item, gate, forced)
         if start_refused is not None:
+            RUN.clear_started(marker)  # a run that never started leaves no twin marker behind
             return O.nothing(
                 "gate.run",
                 f"the run could not record its start: {start_refused}",

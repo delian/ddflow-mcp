@@ -6,6 +6,7 @@ before its command starts."""
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -41,8 +42,10 @@ def _hold(lock: Path) -> subprocess.Popen:
 def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     repo, tmp_path, monkeypatch, capsys
 ):
+    ran = tmp_path / "ran"
+    cmd = f"{shlex.quote(sys.executable)} -c \"import pathlib; pathlib.Path({str(ran)!r}).write_text('x')\""
     run_cli(repo, "init")
-    run_cli(repo, "config", "--set", "gate.ci.command", "echo ok")
+    run_cli(repo, "config", "--set", "gate.ci.command", cmd)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = repo.parent / "agent-tree"
@@ -64,6 +67,7 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     assert result.exit == 2, result.reason  # NOTHING: it could not record its start
     assert "could not record its start" in result.reason
     assert result.data["outcome"] == ""
+    assert not ran.exists()  # it gave up BEFORE its command ever started
     # Retried visibly before giving up: the note names the lock and that it is retrying.
     assert "waiting to record the run start" in capsys.readouterr().err
 
@@ -75,7 +79,7 @@ def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
     # writer must acquire the lock at once.
     began = tmp_path / "began"
     cmd = (
-        f"{sys.executable} -c \"import pathlib,time; "
+        f"{shlex.quote(sys.executable)} -c \"import pathlib,time; "
         f"pathlib.Path({str(began)!r}).write_text('x'); time.sleep(30)\""
     )
     run_cli(repo, "init")
