@@ -71,8 +71,8 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     assert result.data["outcome"] == ""
     assert not ran.exists()  # it gave up BEFORE its command ever started
     # It retried for most of the bound (one timed-out acquire, then a wait), not a single
-    # acquire that gave up at once: two acquire windows plus a wait roughly the 3s bound.
-    assert elapsed >= 2.0
+    # acquire that gave up at once, and not far longer than the bound either.
+    assert 2.0 <= elapsed < 10.0
     # Retried visibly before giving up: the note names the lock and that it is retrying.
     assert "waiting to record the run start" in capsys.readouterr().err
 
