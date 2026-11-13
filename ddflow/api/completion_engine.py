@@ -57,7 +57,8 @@ def attach(parser: argparse.ArgumentParser, record_kind: str | None = None) -> N
 
 
 def answer(parser: argparse.ArgumentParser) -> None:
-    """Answer a completion request and exit; return only when argcomplete is unavailable."""
+    """Answer a completion request and exit the process; return only when argcomplete is not
+    installed (the caller then ends the request without running the CLI)."""
     try:
         argcomplete = import_module("argcomplete")
     except ImportError:

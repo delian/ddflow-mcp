@@ -35,4 +35,6 @@ def answer_if_asked() -> None:
         return
     engine = import_module("ddflow.api.completion_engine")
     engine.answer(import_module("ddflow.surfaces.cli").build_parser())
-    # argcomplete exits the process when it answers; reaching here means it is not installed
+    # argcomplete exits the process when it answers; reaching here means it is not
+    # installed. The shell asked a question: never run the CLI with its words, say nothing.
+    sys.exit(1)

@@ -59,23 +59,21 @@ def tab(entry: list[str], line: str, cwd: Path) -> list[str]:
         os.dup2(write_fd, 8)
         os.dup2(devnull, 9)
 
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         entry,
         cwd=cwd,
         env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        preexec_fn=_fds,
-        timeout=120,
+        preexec_fn=_fds,  # noqa: PLW1509 -- the one way to give the child fd 8 and 9
         close_fds=False,  # fds 8 and 9 are set up by preexec_fn, after the default close
-        check=False,
     )
-    os.close(devnull)
     os.close(write_fd)
-    with os.fdopen(read_fd) as fh:
+    os.close(devnull)
+    with os.fdopen(read_fd) as fh:  # read while the child runs: a big answer cannot block it
         out = fh.read()
-    assert proc.returncode in (0, 1), proc.returncode
+    assert proc.wait(timeout=120) in (0, 1)
     return [w.strip() for w in out.split(IFS) if w.strip()]
 
 
@@ -176,3 +174,26 @@ def test_real_zsh_registers_the_command_it_will_ask(project):
         timeout=120,
     )
     assert "REG=_python_argcomplete" in probe.stdout, probe.stdout + probe.stderr
+
+
+def test_a_request_without_argcomplete_installed_runs_nothing(project):
+    """The shell asked a question: with argcomplete missing the CLI must not run the
+    words as a command (it exits quietly)."""
+    env = _env(
+        {
+            "_ARGCOMPLETE": "1",
+            "COMP_LINE": "ddflow bug fixed X",
+            "PYTHONPATH": f"{ROOT}:{project}",
+        }
+    )
+    (project / "argcomplete.py").write_text("raise ImportError('hidden for the test')\n")
+    probe = subprocess.run(
+        [sys.executable, "-m", "ddflow", "bug", "fixed", "X"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert probe.returncode == 1
+    assert probe.stdout == "" and probe.stderr == ""

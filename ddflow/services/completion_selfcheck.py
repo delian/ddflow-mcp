@@ -33,7 +33,7 @@ def registered(home: Path) -> list[Path]:
         path = I.target_file(shell, home)
         try:
             current = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, ValueError):  # unreadable, or not text
             continue
         if I.uninstall_text(shell, current) != current:
             found.append(path)

@@ -77,3 +77,9 @@ def test_doctor_host_notes_carry_it(home, tmp_path, monkeypatch):
     _exe(tmp_path / "bin", "#!/bin/sh\nexit 0\n")
     monkeypatch.setenv("PATH", f"{tmp_path / 'bin'}:/usr/bin:/bin")
     assert any("does not answer" in n for n in repo_hygiene.host_notes())
+
+
+def test_a_startup_file_that_is_not_text_does_not_crash_the_doctor(home):
+    rc = install.target_file("zsh", home)
+    rc.write_bytes(b"\xff\xfe not utf-8 " + install.install_text("zsh", "").encode())
+    assert CS.registered(home) == []
