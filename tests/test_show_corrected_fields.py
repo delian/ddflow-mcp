@@ -79,14 +79,19 @@ def test_an_uncorrected_task_shows_no_marker(proj):
 
 
 def test_a_secret_correction_shows_the_marker_and_no_values(proj):
-    """The old body was a leaked key: the correction replaces it, and no view carries a digest
-    of either value."""
-    _correct(proj, "T1", "body", "[redacted]", "pasted a key", "--secret")
-    for args in ((), ("--history",), ("--json",)):
+    """A correction marker never carries a value, and after `--secret` not even a digest of the
+    old or the new one. (The record's own body is its current text, as before.)"""
+    new_text = "rotated-value-9931"
+    _correct(proj, "T1", "body", new_text, "pasted a key", "--secret")
+    for args in ((), ("--history",)):
         out = _show(proj, "T1", *args)
-        assert "first body" not in out and SECRET not in out
-    assert "corrected body" in _show(proj, "T1") and "pasted a key" in _show(proj, "T1")
-    rows = json.loads(_show(proj, "T1", "--json"))["corrections"][0]["fields"]
+        marks = [ln for ln in out.splitlines() if "corrected" in ln or "by " in ln]
+        assert any("corrected body" in ln for ln in marks) and "pasted a key" in out
+        assert not any(new_text in ln or "first body" in ln for ln in marks)
+        assert SECRET not in out and "first body" not in out
+    data = json.loads(_show(proj, "T1", "--json"))
+    assert new_text not in json.dumps(data["corrections"])
+    rows = data["corrections"][0]["fields"]
     assert rows and rows[0]["field"] == "body"
     assert all(r["old"] == "" and r["new"] == "" for r in rows)
 
