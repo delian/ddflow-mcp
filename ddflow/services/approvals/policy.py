@@ -325,6 +325,28 @@ def person_only_target(it, verb: str, target: str) -> bool:
     return any(GA.person_only(it, g) for g in (target or "").split(",") if g and g in it.gates)
 
 
+def _rule_stamp(
+    log, cfg: Config, state, canon: Canon, it, work: str, reason: str, now: float
+) -> dict[str, Any] | None:
+    """The stamp of the first enabled `RULES` entry that approves ``canon`` now (``work`` is the
+    pins rule's work item: its canon names a recipe, not an item), or None."""
+    # a policy answer is a standing decision: never above L1, never a tier-3 act
+    if canon.site.min_level > 1 or canon.site.tier == sites.T3:
+        return None
+    target = canon.item if work else canon.target
+    for rule_id in cfg.approvals.policy:
+        rule = RULES.get(rule_id)
+        if rule is None or rule.verb != canon.verb:
+            continue
+        if not _window_open(canon, state, cfg, now):
+            continue
+        if used(state, rule_id, canon.subject(), work) >= cfg.approvals.policy_max_uses:
+            continue
+        if rule.when(it, target, cfg):
+            return _approved(log, cfg, canon, reason, rule_id, work_item=work)
+    return None
+
+
 def apply(
     log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
 ) -> dict[str, Any] | None:
@@ -333,22 +355,9 @@ def apply(
     it = _acting_item(state, canon, cfg) if pins else state.items.get(canon.item)
     if it is None:
         return None
-    work = it.id if pins else ""
     now = clock.now_utc().timestamp() if now is None else now
-    for rule_id in cfg.approvals.policy:
-        rule = RULES.get(rule_id)
-        if rule is None or rule.verb != canon.verb:
-            continue
-        # a policy answer is a standing decision: never above L1, never a tier-3 act
-        if canon.site.min_level > 1 or canon.site.tier == sites.T3:
-            continue
-        if not _window_open(canon, state, cfg, now):
-            continue
-        if used(state, rule_id, canon.subject(), work) >= cfg.approvals.policy_max_uses:
-            continue
-        if not rule.when(it, canon.item if pins else canon.target, cfg):
-            continue
-        return _approved(log, cfg, canon, reason, rule_id, work_item=work)
+    if stamp := _rule_stamp(log, cfg, state, canon, it, it.id if pins else "", reason, now):
+        return stamp
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
         if retry_armed(cfg, canon) and not person_only_target(it, canon.verb, canon.target):
