@@ -21,6 +21,8 @@ def _h_session_started(st: State, ev: Event) -> None:
     s = _session(st, ev)
     s.model = ev.data.get("model", "") or s.model
     s.started_at = s.started_at or ev.ts
+    if ev.data.get("resumed"):  # a prompt on an ended session reopens it
+        s.ended_at, s.how, s.last_active = "", "", ""
 
 
 def _h_session_prompt(st: State, ev: Event) -> None:
@@ -236,6 +238,14 @@ def _h_repair_applied(st: State, ev: Event) -> None:
 
 
 def _h_session_ended(st: State, ev: Event) -> None:
+    """The FIRST end of a session wins its end time and how it ended; a later end (a summary
+    added by `session end --summary`, a hook racing the interrupted close) only updates the
+    summary. A `resumed` start reopens the session, and the next end is a first end again."""
     sess = _session(st, ev)
-    sess.ended_at = ev.ts
+    if not sess.ended_at:
+        how = str(ev.data.get("how") or "")
+        last = str(ev.data.get("last_active") or "")
+        # A session found dead ended when it last wrote, not when somebody noticed.
+        sess.ended_at = last if how == "interrupted" and last else ev.ts
+        sess.how, sess.last_active = how, last
     sess.summary = (ev.data.get("summary") or "").strip() or sess.summary

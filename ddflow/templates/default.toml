@@ -154,6 +154,11 @@ behind = "warn"
 max_behind = 50
 machine_local_keys = []
 
+[eta]
+window_days = 30.0
+min_samples = 10
+coverage_bar = 0.8
+
 [evaluation]
 max_miss_rate = 0.0
 min_fixtures = 1
@@ -196,6 +201,8 @@ current_line = "current"
 port_strategy = "forward-merge"
 environments = []
 auto_promote = []
+pr_body_template = ""
+pr_body_cell_max = 200
 version_files = {}
 
 [gates]
@@ -352,6 +359,7 @@ renew_long_commands = true
 renew_log_min_s = 120
 grace_s = 120
 acquire_timeout_s = 30
+record_lock_wait_s = 180
 waiter_reservation_s = 300
 wait_max_s = 600
 wait_queue = false
@@ -714,6 +722,9 @@ first_call_max_tokens = 600
 replay_verify_diffs = true
 progress_after_complete = "on"
 compaction_digest_chars = 2000
+inflight_note = true
+interrupted_close_max = 20
+previous_session_chars = 600
 agent_rotate_tokens = 250000
 claude_autocompact_window = 0
 claude_autocompact_pct_override = 0
@@ -835,6 +846,14 @@ self = "ask"
 
 [upstream_gh]
 error_max = 400
+
+[verify]
+stack = ""
+stacks_dir = ".ddflow/stacks"
+build_cmd = ""
+smoke_cmd = ""
+lock_check_cmd = ""
+test_cmd = ""
 
 [wait]
 max_call_seconds = 240

@@ -9,6 +9,7 @@ helper in a test, patch the module that defines it, not this package.
 from __future__ import annotations
 
 from ...services.rules import Rule, RulesStorage
+from ..rulesinv import rule_inventory
 from .add import _add_checked_against_others, _answer_other_kind, _related_to_rule, rule_add  # noqa: F401
 from .dedup import (  # noqa: F401
     RuleDedupAnswer,
@@ -44,6 +45,7 @@ __all__ = [
     "rule_dedup_check",
     "rule_dedup_check_dry_run",
     "rule_get",
+    "rule_inventory",
     "rule_list",
     "rule_remove",
     "rule_search",
