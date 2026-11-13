@@ -307,8 +307,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.surfaces.mcp_upgrade",
         "ddflow.surfaces.worker",
     ),
-    "jinja2": (
-    ),
+    "jinja2": (),
     "model2vec": (),
     "radon": (),
     "rapidfuzz": (),
