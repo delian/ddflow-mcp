@@ -12,14 +12,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ddflow.services import harnessreg as HR  # noqa: E402
-from ddflow.services.parity import answers as A  # noqa: E402
-from ddflow.services.parity import catalog as C  # noqa: E402
-from ddflow.services.parity import gate as G  # noqa: E402
+from ddflow.services import harnessreg as HR
+from ddflow.services.parity import answers as A
+from ddflow.services.parity import catalog as C
+from ddflow.services.parity import gate as G
 
 
 def test_a_tier_is_a_catalog_axis_and_its_required_rows_are_its_rows():
