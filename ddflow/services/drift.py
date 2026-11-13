@@ -300,7 +300,8 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     file merge. A package split is ``X`` deleted while ``X/__init__.py`` is added: git keeps
     the module body's rename into ``__init__.py`` only when enough content survives, so the
     shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
-    split-* tasks)."""
+    split-* tasks). A many-into-one file merge is git's own ``-M`` rename links (each old
+    path into the new file), not ``-C`` copy detection: a copy is not a move."""
     r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", before, after)
     if not r.ok or ("rename" in (r.err or "") and "skipped" in (r.err or "")):
         return None

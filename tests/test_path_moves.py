@@ -80,6 +80,13 @@ def test_moves_between_detects_a_package_split(repo):
     assert any(m.old == "mod.py" and m.new == "mod/__init__.py" and m.how == "split" for m in moves), moves
 
 
+def test_moves_between_returns_none_when_git_cannot_say(repo):
+    (repo / "a.py").write_text("x\n")
+    _commit(repo, "seed")
+    after = _sha(repo)
+    assert moves_between(repo, "deadbeef00deadbeef", after) is None
+
+
 def test_merge_records_a_path_moved_event(repo):
     _claimed(repo, "T1", "src/a.py", "agent-a")
     wt = repo / ".ddflow/worktrees/T1"
