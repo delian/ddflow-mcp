@@ -340,4 +340,5 @@ def test_severity_filter_keeps_the_engine_order_without_a_sort(repo):
     plain = [r["id"] for r in api_view_list(repo, "bug", limit=50, offset=0).data["rows"]]
     out = KB.finish_bug_list(repo, api_view_list(repo, "bug", limit=50, offset=0), severity="high")
     got = [r["id"] for r in out.data["rows"]]
+    assert 0 < len(got) < len(plain)
     assert got == [i for i in plain if i in got]
