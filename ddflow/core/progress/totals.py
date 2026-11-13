@@ -3,7 +3,7 @@
 `ddflow status` (prose and JSON), the MCP status tool, the `Progress:` block a completion
 prints and the STATUS.md export each used to count for themselves, from different lists
 and under different definitions, so the same queue read "12/5065", "2222" and "1571/4146"
-on three surfaces. They all read :func:`totals` now, and print :meth:`Totals.definition`
+on three surfaces. They all read :func:`queue_totals` now, and print :meth:`Totals.definition`
 so a reader sees what each number counts.
 
 The definition, stated on the screen::
