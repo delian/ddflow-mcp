@@ -47,6 +47,11 @@ REPO_VARS = (
 )
 
 
+def _ambient(base: Mapping[str, str] | None) -> Mapping[str, str]:
+    """``base``, or the process environment: the one place this module reads it."""
+    return os.environ if base is None else base
+
+
 def own_setting_names() -> frozenset[str]:
     """The environment variable each declared knob is read from (`DDFLOW_<SECTION>_<KNOB>`): a
     setting of ddflow's, not a secret, whatever its name contains. Only these: a `DDFLOW_`-prefixed
@@ -80,7 +85,7 @@ def env_evidence(
     out: dict[str, Any] = {"env_secret_mode": gates.scrub_secret_names}
     if gates.scrub_secret_names != "off":
         keep = cfg.ci.keep_env if ci and cfg is not None else ()
-        out["env_secret_names"] = secret_names(os.environ if base is None else base, gates, keep)
+        out["env_secret_names"] = secret_names(_ambient(base), gates, keep)
     return out
 
 
@@ -118,7 +123,7 @@ def child_env(
     keep: set[str] = set(gates.keep_env)
     if ci and cfg is not None:
         keep |= set(cfg.ci.keep_env)
-    env = os.environ if base is None else base
+    env = _ambient(base)
     scrub = (set(gates.scrub_env) | set(REPO_VARS)) - keep
     if gates.scrub_secret_names == "on":
         scrub |= set(secret_names(env, gates, keep))
