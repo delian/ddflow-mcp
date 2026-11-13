@@ -42,6 +42,9 @@ accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
 
+[baseline]
+keep = 14
+
 [bugs]
 file_task = true
 phase = "bugs"
@@ -600,6 +603,14 @@ kilo_timeout_s = 10.0
 command = ""
 model_dir = ""
 timeout_s = 60
+
+[records]
+correct_digest_chars = 12
+correct_min_digest_chars = 8
+correct_digest_old = false
+correct_digest_new = false
+correct_reason_max_chars = 500
+correct_max_fields = 8
 
 [reinstruct]
 enabled = true

@@ -10,7 +10,7 @@ approximation, and the answer says not-collected, never zero.
 
 from __future__ import annotations
 
-import os
+import mmap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -64,7 +64,7 @@ def _proc_rss_kb(pid: int) -> int | None:
         pages = int(rest[21])  # rss is the 24th field: 2 before the split remainder index 21
     except (ValueError, IndexError):
         return None
-    page_kb = os.sysconf("SC_PAGE_SIZE") // 1024
+    page_kb = mmap.PAGESIZE // 1024
     return pages * page_kb
 
 

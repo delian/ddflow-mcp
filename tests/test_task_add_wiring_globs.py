@@ -38,7 +38,7 @@ def _add(draft: IT.TaskDraft, repo: Path) -> IT.Added:
 
 def test_the_wiring_map_names_exactly_the_three_feature_classes():
     assert W.FEATURE_CLASSES == ("knob", "event", "command")
-    assert W.WIRING["knob"] == ("ddflow/config_sections/*.py", "ddflow/templates/default.toml")
+    assert W.WIRING["knob"] == ("ddflow/config_sections/*.py",)
     assert W.WIRING["event"] == ("ddflow/templates/events/*.toml",)
     assert set(W.WIRING) == set(W.FEATURE_CLASSES)
 
@@ -70,7 +70,6 @@ def test_a_task_declaring_a_new_knob_is_auto_given_the_knob_wiring_globs(repo):
     )
     assert st.items["T-knob"].globs == [
         "ddflow/config_sections/*.py",
-        "ddflow/templates/default.toml",
     ]
 
 
@@ -108,7 +107,6 @@ def test_declared_globs_are_kept_beside_the_wiring_globs(repo):
     assert st.items["T"].globs == [
         "ddflow/config_sections/lease.py",
         "ddflow/config_sections/*.py",
-        "ddflow/templates/default.toml",
     ]
 
 
@@ -119,9 +117,18 @@ def test_an_added_knob_keeps_the_event_carrying_the_adds_declaration(repo):
     )
     [ev] = [e.data for e in log.read_all() if e.subject == "T" and e.kind == "task.added"]
     assert ev["adds"] == ["knob"]
-    assert ev["globs"] == ["ddflow/config_sections/*.py", "ddflow/templates/default.toml"]
+    assert ev["globs"] == ["ddflow/config_sections/*.py"]
 
 
 def test_an_unknown_adds_is_refused_like_an_unknown_kind(repo):
     out = _add(IT.TaskDraft("T", title="one", adds=["page"]), repo)
     assert not out.ok and "unknown feature class" in out.problem
+
+
+def test_the_generated_defaults_are_shared_lease_globs_not_a_per_task_lease():
+    """Bdc0f026b28: two knob tasks in different sections must claim at once, so the packaged
+    defaults (the file and its default.d drop-in directory) are shared, not leased."""
+    root = Path(__file__).resolve().parents[1]
+    shared = Config.load(root).lease.shared_globs
+    assert "ddflow/templates/default.toml" in shared
+    assert "ddflow/templates/default.d/**" in shared
