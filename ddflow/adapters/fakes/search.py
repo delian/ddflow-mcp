@@ -29,6 +29,8 @@ class FakeSearchIndex:
         self.postings = dict(postings)
 
     def index(self, con, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]) -> None:
+        # `index` writes the COMPLETE corpus into an EMPTY state (no incremental append,
+        # as the store's `_insert_similar` has none); `rebuild` is the same write.
         self.docs = list(docs)
         self.postings = dict(postings)
 

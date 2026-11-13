@@ -61,7 +61,11 @@ class SearchIndex(Protocol):
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
-        """Append ``docs`` and ``postings`` to an empty index, as the caller's own insert."""
+        """Write ``docs`` and ``postings`` -- the COMPLETE current corpus, ordinals over it --
+        into an EMPTY index, as `infra.store._insert_similar` writes without clearing. (The
+        store has no incremental append; a partial list would leave absent records' postings
+        behind, and re-writing a non-empty index is a caller error, at the database's own
+        primary keys. `rebuild` clears first and is the idempotent write.)"""
 
     def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         """The postings of ``terms``, for the terms the index holds."""
