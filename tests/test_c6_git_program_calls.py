@@ -41,16 +41,46 @@ def test_program_sites_in_c6_files_do_not_exceed_baseline() -> None:
     assert not grown, grown
 
 
+def _infra_shim_imports(src: str) -> list[str]:
+    """Imports of ``ddflow.infra.git`` / ``ddflow.infra.proc`` in any spelling (relative,
+    absolute, `import x.y`, `from x import y`)."""
+    import ast
+
+    bad = {"git", "proc"}
+    found: list[str] = []
+    for n in ast.walk(ast.parse(src)):
+        if isinstance(n, ast.ImportFrom):
+            mod = n.module or ""
+            if mod.split(".")[-1:] == ["infra"]:
+                found += [a.name for a in n.names if a.name in bad]
+            if mod.split(".")[-2:] in (["infra", "git"], ["infra", "proc"]):
+                found.append(mod)
+        elif isinstance(n, ast.Import):
+            found += [
+                a.name for a in n.names if a.name in ("ddflow.infra.git", "ddflow.infra.proc")
+            ]
+    return found
+
+
 def test_c6_files_import_the_adapters_not_the_infra_shims() -> None:
-    shims = ("from ..infra import git", "from ...infra import git", "from ..infra import proc")
-    shims += ("from ...infra import proc", "ddflow.infra.git", "ddflow.infra.proc")
-    back = [
-        f"{rel}: {s}"
+    back = {
+        rel: _infra_shim_imports((ROOT / rel).read_text())
         for rel in FILES
-        for s in shims
-        if s in (ROOT / rel).read_text() and rel != "ddflow/adapters/fs.py"
-    ]
+        if _infra_shim_imports((ROOT / rel).read_text())
+    }
     assert not back, back
+
+
+def test_shim_import_detector_sees_every_spelling() -> None:
+    for src in (
+        "from ..infra import git as G",
+        "from ...infra import proc",
+        "from ddflow.infra import git as G",
+        "from ddflow.infra.proc import run",
+        "import ddflow.infra.git",
+    ):
+        assert _infra_shim_imports(src), src
+    assert not _infra_shim_imports("from ..adapters import git as G")
 
 
 def test_dynamic_program_home_is_only_the_runner_and_the_which_port() -> None:
