@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "suites.failed_first_max_ids"
+new = '50'
+why = "The most previously failing test ids a ci run puts first (suites.failed_first). 0 puts none first."
+impact = "additive"
