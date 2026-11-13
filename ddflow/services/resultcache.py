@@ -18,6 +18,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ddflow.adapters.clock import DEFAULT as CLOCK
+
 from ..adapters import git as G
 from ..adapters.digest import hasher
 from ..core import bookkeeping
@@ -194,7 +196,7 @@ def lookup(cwd: Path, key_: str | None, cfg: Any) -> dict[str, Any] | None:
         and data.get("outcome") in STORED
         and isinstance(data.get("evidence"), dict)
         and isinstance(data.get("created"), int | float)
-        and time.time() - float(data["created"]) <= cfg.resultcache.keep_days * DAY_S
+        and CLOCK.wall() - float(data["created"]) <= cfg.resultcache.keep_days * DAY_S
     )
     if not ok:
         with contextlib.suppress(OSError):
@@ -213,7 +215,7 @@ def store(cwd: Path, key_: str | None, outcome: str, evidence: dict[str, Any], c
     body = {
         "key": key_,
         "outcome": outcome,
-        "created": time.time(),
+        "created": CLOCK.wall(),
         "evidence": {k: v for k, v in evidence.items() if k not in DROPPED},
     }
     path = entry_path(cwd, key_)
@@ -226,7 +228,7 @@ def store(cwd: Path, key_: str | None, outcome: str, evidence: dict[str, Any], c
 def prune(cwd: Path, cfg: Any) -> None:
     """Remove entries past ``keep_days``, then the oldest until the cache fits ``max_mb``."""
     d = _dir(cwd)
-    now = time.time()
+    now = CLOCK.wall()
     rows = []
     for p in d.glob("*.json"):
         with contextlib.suppress(OSError):
