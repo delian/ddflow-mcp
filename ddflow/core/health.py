@@ -519,9 +519,16 @@ def _judge(
     unanswered = ln.asked_at and ln.progress_at < ln.asked_at
     if ln.live and limits.reply_s > 0 and unanswered and now - ln.asked_at >= limits.reply_s:
         out.append(_unresponsive(ln, waiters, now))
-    if not ln.live and ln.lapsed_alive:
+    if not ln.live:
+        _lapsed(ln, now, out)
+
+
+def _lapsed(ln: Lane, now: float, out: list[Finding]) -> None:
+    """A non-live lane: LAPSED_ALIVE when its holder lives on (never a crash), else CRASHED
+    when it holds work."""
+    if ln.lapsed_alive:
         out.append(_lapsed_alive(ln, now))
-    elif not ln.live and ln.work is not False:
+    elif ln.work is not False:
         out.append(_crashed(ln, now))
 
 
