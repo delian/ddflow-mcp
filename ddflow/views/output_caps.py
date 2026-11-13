@@ -141,7 +141,25 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
 
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
-    names keep the lane, and its answer (one item and a note) pages no list."""
+    names keep the lane, and its answer (one item and a note) pages no list. ``next --state S``
+    is `next` listing one state: the calls it names keep the state, and its `items` list pages."""
+    base, _, rest = command.partition(" --state ")
+    if rest:
+        cli, tool, narrow, _paged = COMMANDS[base]
+        state, kind, phase, only, tags = _split_state(rest)
+        c_args, t_args = [f"--state {shlex.quote(state)}"], [f"state={shlex.quote(state)}"]
+        for flag, val in (("kind", kind), ("phase", phase)):
+            if val:
+                c_args.append(f"--{flag} {shlex.quote(val)}")
+                t_args.append(f"{flag}={shlex.quote(val)}")
+        if only:
+            c_args.append("--phase-only")
+            t_args.append("phase_only=true")
+        if tags:
+            for t in tags:
+                c_args.append(f"--tag {shlex.quote(t)}")
+            t_args.append("tag=" + ",".join(tags))
+        return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
     base, _, rest = command.partition(" --lane ")
     cli, tool, narrow, paged = COMMANDS[base]
     if not rest:
@@ -157,6 +175,18 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
         c_args.append("--phase-only")
         t_args.append("phase_only=true")
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
+
+
+def _split_state(rest: str) -> tuple[str, str, str, bool, tuple[str, ...]]:
+    """``'running --kind K --phase P --phase-only --tag T'`` -> (running, K, P, True, (T,));
+    all but the state value optional."""
+
+    tags = tuple(rest.split(" --tag ")[1:])
+    rest = rest.split(" --tag ", maxsplit=1)[0]
+    rest, only, _ = rest.partition(" --phase-only")
+    rest, _, phase = rest.partition(" --phase ")
+    state, _, kind = rest.partition(" --kind ")
+    return state, kind, phase, bool(only), tags
 
 
 def _split_lane(rest: str) -> tuple[str, str, str, bool]:

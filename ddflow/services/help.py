@@ -43,6 +43,7 @@ TOPICS: dict[str, str] = {
     "config": "knobs, where they live, and how to change them",
     "customise": "changing the workflow itself: pipelines, gates, prompts",
     "cli": "driving it from a terminal, a Makefile or CI, with no agent at all",
+    "completion": "shell TAB completion for commands, options, values and ids (bash, zsh, fish)",
     "mcp": "driving it as an MCP server, and what to put in AGENTS.md / CLAUDE.md",
     "export": "project documents (roadmap, bugs, status, log, ...) generated from the log",
     "verify": "checking that a done task is really done, and what to do when it is not",

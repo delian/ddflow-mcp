@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.previous_session_chars"
+new = "600"
+why = "Characters of the previous session's last prompt, note and summary the next SessionStart shows, fenced as data; 0 shows none."
+impact = "additive"

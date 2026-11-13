@@ -1,0 +1,15 @@
+[stack]
+name = "java"
+title = "Java (Maven)"
+detect = ["pom.xml"]
+priority = 50
+lock_files = []
+comment_tokens = ["//", "/*"]
+import_extractor = "regex:^\\s*import\\s+(?:static\\s+)?([\\w.]+)"
+dead_tool = ""
+dep_tool = "mvn org.owasp:dependency-check-maven:check"
+
+[commands]
+build = "mvn -B -q -DskipTests package"
+smoke = "mvn -B -q test-compile"
+test = "mvn -B -q test"

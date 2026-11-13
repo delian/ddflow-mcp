@@ -137,3 +137,26 @@ def test_target_file_resolves_tilde_from_the_injected_env_not_the_process(monkey
     assert install.target_file("zsh", "~", fake) == Path("/fake/zdot/.zshrc")
     assert install.target_file("fish", "~", fake) == Path("/fake/xdg/fish/config.fish")
     assert install.target_file("bash", "~", fake) == Path("/fake/.bashrc")
+
+
+class _JsonCtx:
+    json = True
+
+    def __init__(self):
+        self.emitted = []
+
+    def out(self, human, data=None):
+        self.emitted.append(data)
+
+
+def test_json_bodies_carry_the_script_and_the_dry_run_marker(tmp_path, monkeypatch):
+    monkeypatch.setattr(completion, "_home", lambda: str(tmp_path))
+    c = _JsonCtx()
+    assert completion._cmd_completion(argparse.Namespace(cmd="bash", shell=None, yes=False), c) == 0
+    assert c.emitted[0]["shell"] == "bash" and c.emitted[0]["script"]
+    c2 = _JsonCtx()
+    completion._cmd_completion(argparse.Namespace(cmd="install", shell="bash", yes=False), c2)
+    assert c2.emitted[0]["written"] is False and c2.emitted[0]["dry_run"] is True
+    c3 = _JsonCtx()
+    completion._cmd_completion(argparse.Namespace(cmd="install", shell="bash", yes=True), c3)
+    assert c3.emitted[0]["written"] is True and "dry_run" not in c3.emitted[0]

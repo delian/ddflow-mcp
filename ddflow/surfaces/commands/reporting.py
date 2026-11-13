@@ -295,7 +295,7 @@ def cmd_research_show(a, c: Ctx) -> int:
 
 
 def _show(a, c: Ctx, only: str = "") -> int:
-    out = A.show(c.repo, a.id, agent=c.requested_agent)
+    out = A.show(c.repo, a.id, agent=c.requested_agent, history=bool(getattr(a, "history", False)))
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL

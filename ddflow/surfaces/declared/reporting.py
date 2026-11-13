@@ -302,6 +302,14 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
+                "history",
+                type="boolean",
+                help="List every correction of the record, in order.",
+                default=False,
+                cli_only=True,
+                cli_help="list every correction of the record, in order (default: the latest per field)",
+            ),
+            Param(
                 "report",
                 type="boolean",
                 help="Its completion report.",
@@ -319,9 +327,15 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: (
             _api().show_report(repo, a["id"], agent=agent, brief=bool(a.get("brief")))
             if a.get("report")
-            else _api().show(repo, a["id"], agent=agent)
+            else _api().show(repo, a["id"], agent=agent, history=bool(a.get("history")))
         ),
         payload="item",
+        flag_exempt={
+            "--history": (
+                "CLI text view only: the MCP show body always carries every correction in "
+                "`corrections`, so nothing is withheld"
+            )
+        },
     ),
     Command(
         path=("status",),
@@ -436,6 +450,7 @@ COMMANDS: tuple[Command, ...] = (
         tier="all",
         family="ddflow_view",
         action="digest",
+        wire_shape=(["digest"], {}),
         help_group="Reading the queue",
         summary="the operator queue: what waits on a person, as askable entries",
         description=(

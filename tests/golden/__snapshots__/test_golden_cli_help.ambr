@@ -24,7 +24,7 @@
     -h, --help            show this help message and exit
     --agents AGENTS       comma-separated: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,openc
                           ode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,op
-                          enhands,goose,cody,dsh,grok (default: all)
+                          enhands,goose,cody,dsh,grok,vibe (default: all)
     --docs DOCS           where to write the drivers
     --launch {auto,uvx,docker,python}
                           how agents spawn the MCP server: 'auto' prefers uvx for an install from a
@@ -714,7 +714,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--check] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -727,6 +727,8 @@
     --approval APPROVAL   an agent: 'request' files an approval request for overriding the unmet
                           conditions (the operator answers in chat), then the approval id; a failed
                           review gate is never lifted
+    --check               read-only: print the unmet conditions and what policy would grant; never
+                          completes (exit 1 = unmet, 2 = could not run)
     --changelog CHANGELOG
                           'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip /
                           internal to keep it out of the changelog; optional
@@ -1472,9 +1474,9 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, onboard, parallel, recovery, update, upgrade, verify, viewers, workflow.
-                Omit for the overview.
+    topic       one of: cli, completion, config, customise, export, gates, import, lanes, manual,
+                mcp, memory, metrics, onboard, parallel, recovery, update, upgrade, verify, viewers,
+                workflow. Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -2086,10 +2088,10 @@
     --ignore-cap         treat items held only by the parallelism cap as ready for this call
     --blocked            list every blocked item, dependency-blocked ones too (text view)
     --kind {task,phase}
-    --lane LANE          answer this idle lane: its best item and a note for claim
-    --full               print everything: lift the default output caps ([output] max_rows,
-                         max_chars) for this call
-    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
+    --lane LANE           answer this idle lane: its best item and a note for claim
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
+    --cursor CURSOR       resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -2800,44 +2802,46 @@
 # ---
 # name: test_help[ddflow review]
   '''
-  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
+  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--approval APPROVAL] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
   
   positional arguments:
-    id                 the item; or `triage <item>`
+    id                   the item; or `triage <item>`
   
   options:
-    -h, --help         show this help message and exit
-    --gate GATE        gate to review (default critic); rubber_duck,critic reviews both -- one
-                       combined review under [review].combined_under_lines changed lines
-    --intent INTENT    what the change is meant to do (defaults to the item's title/body)
+    -h, --help           show this help message and exit
+    --gate GATE          gate to review (default critic); rubber_duck,critic reviews both -- one
+                         combined review under [review].combined_under_lines changed lines
+    --intent INTENT      what the change is meant to do (defaults to the item's title/body)
     --context CONTEXT
     --base BASE
-    --commit COMMIT    review this one landed commit (vs its first parent) instead of the item's
-                       branch
-    --branch BRANCH    review this branch against base -- for an item claimed without a worktree
-                       (default: the branch checked out in the worktree you are standing in)
-    --chunk CHUNK      re-review only chunk N (as the recorded review numbered it; repeatable, or
-                       '2,5') and merge it into that record -- same diff, chunk size and reviewer
-    --delta            recheck ONLY what changed since the head the gate's last review covered, for
-                       a diff too large to send twice: not a full round, but counted against
-                       [review].max_rounds. A plain re-review is a full round with the previous
-                       findings; [review].delta_default = true makes it a delta instead
-    --full             review the item's WHOLE diff even when [review].delta_default would make it a
-                       delta: a full round, counted against [review].max_rounds
-    --detach           review in its own session and stream to a durable log instead of this
-                       command: a harness that cuts the foreground command at its time limit kills
-                       only the launcher, and the review outlives it
-    --exclude EXCLUDE  globs left out of this review instead of [review].exclude_globs and the
-                       item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
-                       out)
-    --include-pinned   send the files pins.toml owns too, for this review
-    --force            run a round past [review].max_rounds (a delta with --delta); needs --reason,
-                       recorded in the evidence
-    --reason REASON    why --force
-    --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
-    --refuted          triage: --probe shows the finding is false
-    --confirmed        triage: --probe is the fix/test that answers it
-    --probe PROBE      triage: the evidence for the verdict
+    --commit COMMIT      review this one landed commit (vs its first parent) instead of the item's
+                         branch
+    --branch BRANCH      review this branch against base -- for an item claimed without a worktree
+                         (default: the branch checked out in the worktree you are standing in)
+    --chunk CHUNK        re-review only chunk N (as the recorded review numbered it; repeatable, or
+                         '2,5') and merge it into that record -- same diff, chunk size and reviewer
+    --delta              recheck ONLY what changed since the head the gate's last review covered,
+                         for a diff too large to send twice: not a full round, but counted against
+                         [review].max_rounds. A plain re-review is a full round with the previous
+                         findings; [review].delta_default = true makes it a delta instead
+    --full               review the item's WHOLE diff even when [review].delta_default would make it
+                         a delta: a full round, counted against [review].max_rounds
+    --detach             review in its own session and stream to a durable log instead of this
+                         command: a harness that cuts the foreground command at its time limit kills
+                         only the launcher, and the review outlives it
+    --exclude EXCLUDE    globs left out of this review instead of [review].exclude_globs and the
+                         item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave
+                         nothing out)
+    --include-pinned     send the files pins.toml owns too, for this review
+    --force              run a round past [review].max_rounds (a delta with --delta); needs
+                         --reason, recorded in the evidence
+    --reason REASON      why --force
+    --approval APPROVAL  an agent: 'request' files an operator approval for lifting the review-round
+                         budget (the operator answers in chat), then the approval id
+    --finding FINDING    triage: the finding's number (#N) or a unique digest prefix (6+ hex)
+    --refuted            triage: --probe shows the finding is false
+    --confirmed          triage: --probe is the fix/test that answers it
+    --probe PROBE        triage: the evidence for the verdict
   
   two commands share this parser:
     ddflow review <id> [G | --gate G] [--chunk N | --delta]   run the reviewer(s) (slow, shared);
@@ -2991,6 +2995,15 @@
   
   '''
 # ---
+# name: test_help[ddflow rule inventory]
+  '''
+  usage: ddflow rule inventory [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule list]
   '''
   usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
@@ -3054,10 +3067,12 @@
 # ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,inventory,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove,sync}
+    {add,edit,list,search,show,remove,inventory,sync}
+      inventory           every agent's rule and command files: who loads what, always-loaded cost,
+                          restated workflow
       sync                record hand-edited rule files in the log; write the files the log has and
                           the disk lacks
   
@@ -3224,13 +3239,14 @@
 # ---
 # name: test_help[ddflow show]
   '''
-  usage: ddflow show [-h] id
+  usage: ddflow show [-h] [--history] id
   
   positional arguments:
     id
   
   options:
     -h, --help  show this help message and exit
+    --history   list every correction of the record, in order (default: the latest per field)
   
   '''
 # ---
@@ -3263,6 +3279,15 @@
                    separated (a.py,src/**) or a JSON array; repeat the flag to add more -- every
                    value is kept
     --needs NEEDS  dependencies for the FIRST child
+  
+  '''
+# ---
+# name: test_help[ddflow stacks]
+  '''
+  usage: ddflow stacks [-h]
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -3982,6 +4007,8 @@
       digest              the operator queue: what waits on a person, as askable entries
       pair                a PERSON mints a one-time code for a named client with a role (`tokens
                           redeem` spends it)
+      stacks              show the stack this repository resolves to and its build, smoke, lock-
+                          check and test commands
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -4193,6 +4220,7 @@
     'ddflow rule',
     'ddflow rule add',
     'ddflow rule edit',
+    'ddflow rule inventory',
     'ddflow rule list',
     'ddflow rule remove',
     'ddflow rule search',
@@ -4212,6 +4240,7 @@
     'ddflow show',
     'ddflow similar',
     'ddflow split',
+    'ddflow stacks',
     'ddflow status',
     'ddflow suggest',
     'ddflow sync',

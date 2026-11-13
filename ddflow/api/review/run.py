@@ -78,6 +78,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     delta: bool = False,
     force: bool = False,
     reason: str = "",
+    approval: str = "",
     full: bool = False,
     exclude: str = "",
     include_pinned: bool = False,
@@ -504,6 +505,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     delta: bool = False,
     force: bool = False,
     reason: str = "",
+    approval: str = "",
     full: bool = False,
     exclude: str = "",
     include_pinned: bool = False,
@@ -616,6 +618,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         "called_from": called_from,
         "force": force,
         "reason": reason,
+        "agent": agent,
+        "approval": approval,
         "full": full,
     }
     kind, done, forced, diff, how, why, rerun = _scope(

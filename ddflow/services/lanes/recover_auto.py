@@ -105,6 +105,16 @@ def decide(
     )
 
 
+def adopted_flag(r: dict[str, Any], adopted_items: dict[str, bool] | None = None) -> bool:
+    """A row's own ``adopted`` flag wins where both exist, even when it is falsy: a row
+    measured as not-adopted is a real answer, not an omission to paper over with the
+    caller's item-level fallback. Shared with `unwind.decisions`, so the row-dispatch of
+    the two lane decisions keeps ONE copy of this resolution."""
+    if "adopted" in r:
+        return bool(r["adopted"])
+    return bool((adopted_items or {}).get(r["item"]))
+
+
 def decisions(rows, *, adopted_items: dict[str, bool] | None = None) -> list[RecoverAuto]:
     """``rows`` of ``{item, lane, salvageable, adopted, operator_answer}`` -> their verdicts.
 
@@ -112,20 +122,13 @@ def decisions(rows, *, adopted_items: dict[str, bool] | None = None) -> list[Rec
     ``adopted`` wins where both exist.
     """
     out: list[RecoverAuto] = []
-    adopted_items = adopted_items or {}
     for r in rows:
-        if "adopted" in r:
-            # A row's own flag wins even when it is falsy: measured not-adopted is a
-            # real answer, not an omission to paper over with the caller's fallback.
-            adopted = bool(r["adopted"])
-        else:
-            adopted = bool(adopted_items.get(r["item"]))
         out.append(
             decide(
                 r["item"],
                 r.get("lane", ""),
                 salvageable=r.get("salvageable"),
-                adopted=adopted,
+                adopted=adopted_flag(r, adopted_items),
                 operator_answer=bool(r.get("operator_answer")),
             )
         )

@@ -166,6 +166,20 @@ class SessionConfig:
         2000,
         doc="Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session note of at most this many characters, and the SessionStart hook hands it back after compaction. The hook gets no summary from Claude Code, so this digest is the record of what the session was doing. 0 turns it off.",
     )
+    inflight_note: bool = knob(
+        True,
+        doc="At the Stop and SessionEnd hooks, write what the session is doing (the items it holds, the last gate and the next one) as a session note, once per change. Off writes none; the hooks still close the session.",
+    )
+    interrupted_close_max: int = knob(
+        20,
+        doc="Most dead sessions one SessionStart closes as interrupted. A session is dead when it is open, its agent holds no live lease, a lease of that agent lapsed after the session began and the session wrote nothing since. 0 turns the close off.",
+        check=int_at_least(0),
+    )
+    previous_session_chars: int = knob(
+        600,
+        doc="Characters of the previous session's last prompt, note and summary the next SessionStart shows (fenced as data), skipped after a compaction. 0 shows none.",
+        check=int_at_least(0),
+    )
     agent_rotate_tokens: int = knob(
         250000,
         doc="Context tokens past which a lane agent should rotate instead of growing: `ddflow doctor`, `ddflow health` and the wake brief name it and the steep climb in cache-rewrite and reread cost each heartbeat then. An agent past it finishes its item, writes the hand-off note into the item's evidence and stops; the lead starts a fresh agent whose first call is `ddflow brief`. 0 turns the hint off. The advisory number, not the mechanism: DDflow never stops an agent on its own (only the harness/operator does); the auto-compact window below is the alternative a running session can still honour.",

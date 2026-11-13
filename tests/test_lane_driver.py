@@ -266,6 +266,12 @@ def test_advertise_limits_to_driver_and_vocabulary(driver):
     assert ld.advertise(driver, {"steer", "usage", "bogus"}) == {"usage"}
 
 
+def test_headless_none_wins_over_a_leftover_argv():
+    # ``none = true`` disables headless: an argv left in the record must not launch it
+    h = Headless(none=True, argv=("agent", "run"))
+    assert ld.spec_from_headless("l", h).status == "unavailable"
+
+
 def test_spec_from_headless_composes_flags_and_reports_gaps():
     h = Headless(
         argv=("agent", "run"),
