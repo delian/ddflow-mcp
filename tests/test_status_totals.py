@@ -72,7 +72,7 @@ def test_headline_counts_every_done_task_not_the_rows_it_prints(project):
     assert code == 0, err
     # 23 records: 15 done + 2 abandoned + 2 fix (one done) + 4 waiting; live = 23 - 2 - 2.
     assert "15 of 19 live tasks done" in out
-    assert "12/" not in out.split("\n")[2]
+    assert out.split("\n")[2].startswith("15 of 19 live tasks done")  # the headline line
     assert "last 12 of 16" in out  # 15 done tasks + the done fix task; the list says it is bounded
 
 

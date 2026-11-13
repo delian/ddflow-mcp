@@ -285,7 +285,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         "hours": hours,
         "tasks": len(tasks),
         "totals": tot,
-        "completed_shown": cfg.output.status_completed_shown,
+        # 0 lists every completion, unless `allow_full` is off: then it stays the default 12.
+        "completed_shown": cfg.output.status_completed_shown
+        or (0 if cfg.output.allow_full else 12),
         "phases": len(phases),
         "decisions": len(live_decisions),
         "lessons": len(st.lessons),
