@@ -140,3 +140,23 @@ def test_this_repositorys_security_md_is_the_generated_document_not_the_template
 @pytest.mark.parametrize("bad", ["", "  "])
 def test_a_blank_contact_counts_as_unset(repo: Path, bad: str) -> None:
     assert "no reporting contact is set" in _body(repo, f'[export]\nsecurity_contact = "{bad}"\n')
+
+
+def test_a_long_contact_is_published_whole(repo: Path) -> None:
+    link = "https://example.com/report?token=" + "a" * 400
+    assert link in _body(repo, f'[export]\nsecurity_contact = "{link}"\n')
+
+
+def test_the_contact_exemption_does_not_unmask_other_addresses_that_contain_it(
+    repo: Path,
+) -> None:
+    from ddflow.services.export import safe
+
+    cfg = Config()
+    cfg.export.security_contact = "example.com"
+    red = safe.redact_text("write to alice@example.com or example.com.", cfg)
+    assert "alice" not in red.text and "[REDACTED:email]" in red.text
+    assert red.text.endswith("or example.com.")
+    cfg.export.security_contact = "sec@corp.example"
+    assert "xsec@corp.example" not in safe.redact_text("xsec@corp.example", cfg).text
+    assert safe.redact_text("<sec@corp.example>.", cfg).text == "<sec@corp.example>."

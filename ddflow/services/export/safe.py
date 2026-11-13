@@ -22,6 +22,7 @@ Fencing
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -42,13 +43,20 @@ def redact_text(text: str, cfg: Config) -> Redacted:
     keep = str(getattr(getattr(cfg, "export", None), "security_contact", "")).strip()
     if not keep or keep not in text:
         return red.text(text)
-    # the operator's published reporting contact is the one text redaction leaves alone
-    parts = [red.text(part) for part in text.split(keep)]
+    # the operator's published reporting contact is the one text redaction leaves alone, where
+    # it stands on its own: inside a longer address or word it is part of that text, and stays
+    # subject to redaction with it
+    parts = [red.text(part) for part in _standing_alone(keep).split(text)]
     counts: dict[str, int] = {}
     for part in parts:
         for kind, n in part.counts.items():
             counts[kind] = counts.get(kind, 0) + n
     return Redacted(keep.join(part.text for part in parts), counts)
+
+
+def _standing_alone(contact: str) -> re.Pattern[str]:
+    """``contact`` where it is not part of a longer address, host or word."""
+    return re.compile(rf"(?<![\w@.+%-]){re.escape(contact)}(?!\.?[\w@-])")
 
 
 def redaction_attrs(counts: Mapping[str, int] | None) -> dict[str, str]:
