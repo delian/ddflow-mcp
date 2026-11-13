@@ -21,22 +21,23 @@ WORKFLOW = H.render_topic("workflow")
 
 
 def test_the_managed_block_ships_the_triage_checklist():
-    # The compact form: the full six items in one sentence, so the short block stays
-    # short. Binds BOTH a task and a bug (not tasks only), the deps/wave/phase trio and,
-    # with `no-deps`, the no-prerequisite case r-task-phase-needs-wave requires.
+    # The compact form: items 1-5 apply to a task or a bug, and the file-it clause
+    # (item 6) names the phase + --needs + no-deps a task carries; the wave tag is
+    # stamped, so it is spelled out in the help surface instead. Flat-join the wrapped
+    # line breaks so a phrase split across one still matches.
+    flat = " ".join(BLOCK.split())
     for phrase in (
         "task or bug",
-        "duplicate or closable",
+        "closable overlap",
         "check what is planned",
         "reuse core modules",
         "prior research",
         "person-decisions",
         "--needs",
         "no-deps",
-        "wave tag",
-        "phase",
+        "fix task",
     ):
-        assert phrase in BLOCK, f"the managed block lost {phrase!r}"
+        assert phrase in flat, f"the managed block lost {phrase!r}"
 
 
 def test_the_workflow_help_ships_the_full_triage_checklist_as_a_numbered_list():
@@ -47,13 +48,14 @@ def test_the_workflow_help_ships_the_full_triage_checklist_as_a_numbered_list():
         "3. Identify reusable, extensible core modules",
         "4. Reuse prior research and recorded best practice",
         "5. Ask the operator only for person-decisions",
-        "6. File it with a `wave` tag (`no-deps` when it has no prerequisite), "
-        "its `--needs`,",
+        "6. File a task in the right phase (create one if none fits) with",
+        "`no-deps` tag when it has no prerequisite",
+        "A bug's phase and `--needs` go on its fix task",
     ):
         assert must in WORKFLOW, f"the workflow help lost {must!r}"
-    # Item 6 must keep all three slots the shipped rule requires (r-task-phase-needs-wave):
-    # the wave/no-deps tag, --needs, and the phase (created when none fits).
-    for phrase in ("the right phase", "create one if none fits"):
+    # Item 6 must keep the three slots the shipped rule requires (r-task-phase-needs-wave):
+    # --needs, the no-deps tag, and the phase (created when none fits).
+    for phrase in ("its `--needs`", "the right phase", "`no-deps` tag", "fix task"):
         assert phrase in WORKFLOW, f"item 6 lost {phrase!r}"
 
 
