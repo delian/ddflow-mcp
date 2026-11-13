@@ -360,6 +360,9 @@ def test_reset_hard_only_on_primary(tmp_path):
     # (B212779e518): `FOO=bar cd /primary && git status` still runs in the primary.
     assert _check(f"FOO=bar cd {tmp_path} && git reset --hard", cwd=wt) is not None
     assert _check(f"FOO=bar pushd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # `cd`/`pushd` are builtin words, not paths: an executable named `cd` cannot change
+    # the shell's cwd, so a path to it must NOT be judged as acting elsewhere.
+    assert _check(f"FOO=bar /bin/cd {tmp_path} && git reset --hard", cwd=wt) is None
     assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None

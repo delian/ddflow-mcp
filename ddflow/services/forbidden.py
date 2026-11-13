@@ -720,7 +720,7 @@ def _elsewhere(cmds: list[list[str]]) -> bool:
     for c in cmds:
         head = _head(c)
         lead = c[: len(c) - len(head)]  # the assignments in front of the command word
-        if head and head[0].rsplit("/", 1)[-1] in ("cd", "pushd"):
+        if head and head[0] in ("cd", "pushd"):
             return True
         if any(w.startswith(("GIT_DIR=", "GIT_WORK_TREE=")) for w in lead):
             return True
