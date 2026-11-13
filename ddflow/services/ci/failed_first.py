@@ -9,8 +9,7 @@ a per-run cache directory and under xdist.
 How it reaches the project's pytest: `session` writes the ids file and the plugin
 (`ddflow/templates/pytest/ddflow_failed_first.py.txt`, standard library only, because it runs in
 whatever interpreter the project's tests use) into a scratch directory, and returns the
-environment that loads it (`PYTEST_ADDOPTS=-p ddflow_failed_first`, the directory on
-`PYTHONPATH`). The plugin orders in ``pytest_collection_modifyitems`` before xdist distributes,
+environment that finds it (the directory, with a pytest11 entry point, on `PYTHONPATH`). The plugin orders in ``pytest_collection_modifyitems`` before xdist distributes,
 identically in every worker, and appends its timestamps to a file that `read_outcome` reads. A
 missing or unreadable ids file is the ordinary order, never an error.
 """
@@ -32,7 +31,9 @@ from ...infra import fsio
 IDS_ENV = "DDFLOW_FAILED_FIRST_FILE"
 #: The JSON-lines file the plugin appends its timestamps to.
 OUT_ENV = "DDFLOW_FAILED_FIRST_OUT"
-#: The module name of the plugin copy (`-p ddflow_failed_first`).
+#: Set by the plugin to its pid: a pytest a test starts inside the run stands down.
+ACTIVE_ENV = "DDFLOW_FAILED_FIRST_ACTIVE"
+#: The module name of the plugin copy, loaded as a pytest11 entry point.
 PLUGIN = "ddflow_failed_first"
 PLUGIN_SOURCE = (
     Path(__file__).resolve().parent.parent.parent / "templates" / "pytest" / f"{PLUGIN}.py.txt"
@@ -70,7 +71,7 @@ class Session:
 @contextmanager
 def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator[Session]:
     """Write the ids file and the plugin into a scratch directory for one run, yield the
-    environment that loads them (``parent_env``'s own PYTEST_ADDOPTS and PYTHONPATH kept), and
+    environment that finds them (``parent_env``'s own PYTHONPATH kept), and
     remove the directory after. No plan: an empty session, nothing written."""
     if not plan:
         yield Session()
@@ -83,11 +84,18 @@ def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator
         fsio.atomic_write(ids_file, json.dumps({"ids": list(plan.ids), "files": list(plan.files)}))
         out = root / "out.jsonl"
         old_path = base.get("PYTHONPATH", "")
+        # Loaded as a pytest11 entry point of a dist-info beside the module, not by `-p`: a pytest
+        # whose environment lost PYTHONPATH (a test that builds its own) then simply does not
+        # find the plugin, where `-p` would stop it with "Error importing plugin".
+        info = root / f"{PLUGIN}-0.dist-info"
+        info.mkdir()
+        fsio.atomic_write(info / "METADATA", f"Metadata-Version: 2.1\nName: {PLUGIN}\nVersion: 0\n")
+        fsio.atomic_write(info / "entry_points.txt", f"[pytest11]\n{PLUGIN} = {PLUGIN}\n")
+        old_path = base.get("PYTHONPATH", "")
         env = {
             IDS_ENV: str(ids_file),
             OUT_ENV: str(out),
             "PYTHONPATH": f"{root}{os.pathsep}{old_path}" if old_path else str(root),
-            "PYTEST_ADDOPTS": f"{base.get('PYTEST_ADDOPTS', '')} -p {PLUGIN}".strip(),
         }
         yield Session(env=env, out=out)
 

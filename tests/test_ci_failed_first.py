@@ -70,6 +70,7 @@ def _env(extra: dict[str, str]) -> dict[str, str]:
         k: v
         for k, v in os.environ.items()
         if k not in ("PYTEST_ADDOPTS", "PYTHONPATH", "PY_COLORS")
+        and not k.startswith("DDFLOW_FAILED_FIRST_")
     } | extra
 
 
@@ -120,12 +121,50 @@ def test_a_missing_ids_file_is_the_ordinary_order_never_an_error(tmp_path):
 def test_the_session_keeps_the_environment_the_project_already_set(tmp_path):
     parent = _env({"PYTEST_ADDOPTS": "-q", "PYTHONPATH": "/x/y"})
     with FF.session(FF.Plan(ids=("a::b",)), parent_env=parent) as sess:
-        assert sess.env["PYTEST_ADDOPTS"].startswith("-q ")
-        assert f"-p {FF.PLUGIN}" in sess.env["PYTEST_ADDOPTS"]
+        assert "PYTEST_ADDOPTS" not in sess.env  # no `-p`: a lost PYTHONPATH must not break pytest
         assert sess.env["PYTHONPATH"].endswith("/x/y")
-        plugin_dir = sess.env["PYTHONPATH"].split(":")[0]
-        assert (Path(plugin_dir) / f"{FF.PLUGIN}.py").is_file()
-    assert not Path(plugin_dir).exists()  # a run leaves nothing behind
+        plugin_dir = Path(sess.env["PYTHONPATH"].split(":")[0])
+        assert (plugin_dir / f"{FF.PLUGIN}.py").is_file()
+        assert (
+            "[pytest11]"
+            in (plugin_dir / f"{FF.PLUGIN}-0.dist-info" / "entry_points.txt").read_text()
+        )
+    assert not plugin_dir.exists()  # a run leaves nothing behind
+
+
+def test_a_pytest_that_lost_pythonpath_runs_normally_and_orders_nothing(tmp_path):
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\ndef test_a2(): pass\n")
+    with FF.session(FF.Plan(ids=("test_a.py::test_a2",)), parent_env=_env({})) as sess:
+        bare = {k: v for k, v in sess.env.items() if k != "PYTHONPATH"}
+        ran = _pytest(tmp_path, _env(bare))
+        assert sess.outcome().get("ran_failed_first", []) == []
+    assert ran == ["test_a.py::test_a1", "test_a.py::test_a2"]
+
+
+def test_a_pytest_a_test_starts_inside_the_run_stands_down(tmp_path):
+    """A test that runs pytest itself (a fixture project, a bisect) must not order its tests by
+    the outer run's ids or note its own failures into the outer run's evidence."""
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\ndef test_a2(): pass\n")
+    outer = tmp_path / "outer.py"
+    outer.write_text(
+        "import subprocess, sys\n"
+        "def test_outer():\n"
+        "    r = subprocess.run([sys.executable, '-m', 'pytest', '-p', 'no:cacheprovider', '-v',"
+        " '--color=no', 'test_a.py'], capture_output=True, text=True)\n"
+        "    ids = [l.split()[0] for l in r.stdout.splitlines() if l.startswith('test_a.py::')]\n"
+        "    assert ids == ['test_a.py::test_a1', 'test_a.py::test_a2'], r.stdout\n"
+    )
+    plan = FF.Plan(ids=("test_a.py::test_a2",))
+    with FF.session(plan, parent_env=_env({})) as sess:
+        run = subprocess.run(
+            [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "outer.py"],
+            cwd=tmp_path, env=sess.env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        assert run.returncode == 0, run.stdout + run.stderr
+        rows = [json.loads(x) for x in Path(sess.env[FF.OUT_ENV]).read_text().splitlines()]
+    assert [r["ev"] for r in rows] == [
+        "start"
+    ]  # the outer session only; the nested one noted nothing
 
 
 def test_no_plan_no_session(tmp_path):
