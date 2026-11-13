@@ -11,11 +11,22 @@ them from the child's environment. `[gates].secret_name_patterns` says which nam
 from __future__ import annotations
 
 import json
+import os
 from types import SimpleNamespace
+
+import pytest
 
 from ddflow.config import Config
 from ddflow.services import gates as G
 from ddflow.services.gateenv import child_env, doctor_notes, secret_names
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_secrets(monkeypatch):
+    """The shell that runs the suite may export its own keys and tokens: none is the test's."""
+    for name in secret_names(os.environ, Config().gates):
+        monkeypatch.delenv(name, raising=False)
+
 
 VALUE = "plainvalue-not-a-real-key"
 SHOW = 'printf "[%s]" "${MY_SERVICE_API_KEY-unset}"'
