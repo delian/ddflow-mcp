@@ -225,3 +225,13 @@ def test_the_knob_is_settable_in_the_project_file_and_by_the_cli(repo, value):
 def test_the_knob_is_settable_by_the_environment(repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_WORKTREE_BEHIND_IGNORE_GLOBS", '["a/"]')
     assert _cfg(repo).worktree.behind_ignore_globs == ["a/"]
+
+
+def test_the_commit_gate_still_blocks_on_a_rulebook_under_the_ignored_directory(repo):
+    """The stale-rules remedy is `ddflow sync`: it must merge what the gate refuses over."""
+    wt = _claimed(repo)
+    _land(repo, RULES)
+    verdict = DC.check_drift(repo, _cfg(repo), here=wt)
+    assert verdict[0] != 0 and RULES in verdict[1], verdict
+    assert sync(repo, item="T1", agent=ME).data["status"] == "merged"
+    assert DC.check_drift(repo, _cfg(repo), here=wt).message == ""
