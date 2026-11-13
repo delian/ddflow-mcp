@@ -73,6 +73,10 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
     except (OSError, UnicodeError):
         _record(m, cur)  # unreadable: unknown previous, never a reboot from it
         return {"boot_id": cur, "previous": "", "changed": False}
+    if not prev:
+        # absent OR empty: no previous READABLE id -> a baseline, not a reboot.
+        _record(m, cur)
+        return {"boot_id": cur, "previous": "", "changed": False}
     if prev == cur:
         return {"boot_id": cur, "previous": prev, "changed": False}
     _record(m, cur)
