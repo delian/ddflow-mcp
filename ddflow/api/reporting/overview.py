@@ -285,9 +285,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         "hours": hours,
         "tasks": len(tasks),
         "totals": tot,
-        # 0 lists every completion, unless `allow_full` is off: then it stays the default 12.
-        "completed_shown": cfg.output.status_completed_shown
-        or (0 if cfg.output.allow_full else 12),
+        "completed_shown": _completed_shown(cfg),
         "phases": len(phases),
         "decisions": len(live_decisions),
         "lessons": len(st.lessons),
@@ -440,6 +438,11 @@ def _by_tag_lines(view: dict[str, Any]) -> list[str]:
                 tops += f", {v['blockers_cut']} more"
             lines.append(f"    top blockers: {tops}")
     return lines
+
+
+def _completed_shown(cfg: Any) -> int:
+    """Completions the prose lists: the knob; 0 lists all, unless `allow_full` is off (12)."""
+    return cfg.output.status_completed_shown or (0 if cfg.output.allow_full else 12)
 
 
 def _bound(data: dict[str, Any]) -> None:
