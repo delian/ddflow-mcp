@@ -85,7 +85,7 @@ class ExportConfig:
     )
     security_contact: str = knob(
         "",
-        doc="The private reporting contact the security document publishes in its Reporting a Vulnerability section of SECURITY.md: an email address or the URL of a private reporting page, written exactly as given (it is the one text the export redaction leaves alone, because publishing it is the point). EMPTY by default and never filled in by ddflow: it is a person's data, so the operator supplies it. While it is empty the section says plainly that no contact is set and `ddflow doctor` notes it once the security document is selected. Set it with the config file, `ddflow config --set export.security_contact ...`, or ask the agent to; `ddflow export security --update` then refreshes the section.",
+        doc="The private reporting contact the security document publishes in its Reporting a Vulnerability section of SECURITY.md: an email address or the URL of a private reporting page, written as given, whitespace collapsed, with a single address or link shown as a markdown autolink in angle brackets (it is the one text the export redaction leaves alone, because publishing it is the point; search and session views still redact it). EMPTY by default and never filled in by ddflow: it is a person's data, so the operator supplies it. While it is empty the section says plainly that no contact is set and `ddflow doctor` notes it once the security document is selected. Set it with the config file, `ddflow config --set export.security_contact ...`, or ask the agent to; `ddflow export security --update` then refreshes the section.",
         check=lambda v: "" if isinstance(v, str) else "must be a string",
     )
     security_response_days: int = knob(

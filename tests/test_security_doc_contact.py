@@ -154,12 +154,18 @@ def test_the_contact_exemption_does_not_unmask_other_addresses_that_contain_it(
 
     cfg = Config()
     cfg.export.security_contact = "example.com"
-    red = safe.redact_text("write to alice@example.com or example.com.", cfg)
+    red = safe.redact_text("write to alice@example.com or example.com.", cfg, exempt_contact=True)
     assert "alice" not in red.text and "[REDACTED:email]" in red.text
     assert red.text.endswith("or example.com.")
     cfg.export.security_contact = "sec@corp.example"
-    assert "xsec@corp.example" not in safe.redact_text("xsec@corp.example", cfg).text
-    assert safe.redact_text("<sec@corp.example>.", cfg).text == "<sec@corp.example>."
+    assert (
+        "xsec@corp.example"
+        not in safe.redact_text("xsec@corp.example", cfg, exempt_contact=True).text
+    )
+    assert (
+        safe.redact_text("<sec@corp.example>.", cfg, exempt_contact=True).text
+        == "<sec@corp.example>."
+    )
 
 
 def test_a_contact_that_is_a_local_part_does_not_unmask_the_address_it_starts(repo: Path) -> None:
@@ -167,10 +173,20 @@ def test_a_contact_that_is_a_local_part_does_not_unmask_the_address_it_starts(re
 
     cfg = Config()
     cfg.export.security_contact = "alice"
-    assert "alice" not in safe.redact_text("write to alice@example.com", cfg).text
+    assert (
+        "alice" not in safe.redact_text("write to alice@example.com", cfg, exempt_contact=True).text
+    )
 
 
 def test_a_contact_with_inner_whitespace_is_published_as_the_document_writes_it(repo: Path) -> None:
     contact = "mail  security@corp.example\nor call the desk"
     text = _body(repo, f'[export]\nsecurity_contact = """{contact}"""\n')
     assert "mail security@corp.example or call the desk" in text and "[REDACTED" not in text
+
+
+def test_outside_the_export_the_contact_is_still_redacted() -> None:
+    from ddflow.services.export import safe
+
+    cfg = Config()
+    cfg.export.security_contact = "sec@corp.example"
+    assert safe.redact_text("mail sec@corp.example", cfg).text == "mail [REDACTED:email]"

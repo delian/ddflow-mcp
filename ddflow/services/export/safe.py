@@ -33,15 +33,17 @@ from ..redact_report import Redacted, names_for, redactor  # noqa: F401 -- names
 _MAX_AUTHORS = 5
 
 
-def redact_text(text: str, cfg: Config) -> Redacted:
+def redact_text(text: str, cfg: Config, *, exempt_contact: bool = False) -> Redacted:
     """``text`` with secrets, private addresses, hosts and home paths removed.
 
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
-    project's own and stays; absolute home paths still go.
+    project's own and stays; absolute home paths still go. ``exempt_contact`` (the export render
+    path only, never a search or a viewer) leaves ``[export].security_contact`` readable.
     """
     red = redactor("export", cfg)
     # the contact as the security document writes it: whitespace collapsed
-    keep = " ".join(str(getattr(getattr(cfg, "export", None), "security_contact", "")).split())
+    contact = getattr(getattr(cfg, "export", None), "security_contact", "")
+    keep = " ".join(str(contact).split()) if exempt_contact else ""
     if not keep or keep not in text:
         return red.text(text)
     # the operator's published reporting contact is the one text redaction leaves alone, where

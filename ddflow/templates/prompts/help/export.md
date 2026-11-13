@@ -29,7 +29,7 @@ copy): the version lines from the tags and `[export.security]` `supported_lines`
 `deprecated_lines`, known issues from bugs tagged `security` or `secbug`, and the reporting
 section. A row shows id and severity; `disclose` (`ids`, `fixed`, `all`) adds titles. The
 reporting region carries `[export].security_contact` (an address or URL, published as written
-and never redacted) and `security_response_days`. ddflow never invents a contact: while none is
+and not redacted by the export) and `security_response_days`. ddflow never invents a contact: while none is
 set the region says so and `ddflow doctor` notes it. Set it by file, CLI or a prompt:
 
     ddflow config --set export.security_contact security@example.org
