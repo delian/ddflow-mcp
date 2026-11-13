@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
-from ...core.model import fold
+from ...core.model import DONE, fold
 from ...services import eventcommit as EC
 from ...services import healthwatch as HW
 from ...services import identity as ID
@@ -41,31 +41,8 @@ def heartbeat(
         if missing is not None:
             return missing
     gone = st.items.get(item)
-    if (
-        gone is not None
-        and gone.removed
-        and gone.lease
-        and gone.lease.live(time.time(), cfg.lease.grace_s)
-    ):
-        # Renewing would keep a lease on an item nobody can finish (B71dedb76d2).
-        ls = gone.lease
-        return O.refused(
-            "lease.renewed",
-            stranded_text(
-                item,
-                ls.holder,
-                ls.branch or gone.branch,
-                ls.worktree,
-                ls.clone,
-                log.clone_id(create=False),
-            ),
-            id=item,
-            renewed=False,
-            waiters=[],
-            globs_withheld="",
-            yield_requested="",
-            recall="",
-        )
+    if (early := _no_renewal(log, cfg, gone, item)) is not None:
+        return early
     began = time.time()  # before the renewal: the lease is live at this instant once renewed
     renewed = L.renew(log, item)
     holder = log.agent_id  # whose lease the catch-up may point at the item
@@ -108,6 +85,76 @@ def heartbeat(
         yield_requested="",
         recall="",
     )
+
+
+#: The word a finished item's note uses (`item is completed; nothing to renew`).
+_STATE_WORD = {DONE: "completed"}
+
+
+def _last_lease_event(log, item: str) -> str:
+    """The kind of the newest lease event on ``item`` (waiting notices are not the lease's)."""
+    kinds = [
+        e.kind
+        for e in log.read_all()
+        if e.subject == item and e.kind.startswith("lease.") and e.kind != "lease.waiting"
+    ]
+    return kinds[-1] if kinds else ""
+
+
+def _no_renewal(log, cfg, gone, item: str) -> O.Outcome | None:
+    """The answer for an item whose lease must not be renewed, or None to renew."""
+    finished = gone is not None and gone.terminal
+    released = (
+        gone is not None
+        and gone.lease is None
+        and not gone.removed
+        and _last_lease_event(log, item) == "lease.released"
+        and not [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
+    )
+    if finished or released:
+        # A loop that outlives its item or its lease must not fail or extend anything
+        # (LK-auto-heartbeat); a lease TAKEN from this agent still says so.
+        why = (
+            f"item is {_STATE_WORD.get(gone.state, gone.state)}"
+            if finished
+            else "item has no lease (released)"
+        )
+        return O.ok(
+            "lease.renewed",
+            id=item,
+            renewed=False,
+            note=f"{why}; nothing to renew",
+            waiters=[],
+            globs_withheld="",
+            yield_requested="",
+            recall="",
+        )
+    if (
+        gone is not None
+        and gone.removed
+        and gone.lease
+        and gone.lease.live(time.time(), cfg.lease.grace_s)
+    ):
+        # Renewing would keep a lease on an item nobody can finish (B71dedb76d2).
+        ls = gone.lease
+        return O.refused(
+            "lease.renewed",
+            stranded_text(
+                item,
+                ls.holder,
+                ls.branch or gone.branch,
+                ls.worktree,
+                ls.clone,
+                log.clone_id(create=False),
+            ),
+            id=item,
+            renewed=False,
+            waiters=[],
+            globs_withheld="",
+            yield_requested="",
+            recall="",
+        )
+    return None
 
 
 def _the_held_item(repo: Path, st, me: str, called_from) -> tuple[str, O.Outcome | None]:

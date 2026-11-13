@@ -12,7 +12,10 @@ ends at init or a user `systemd`)."""
 from __future__ import annotations
 
 import os
+import re
+import shlex
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -182,6 +185,84 @@ def _kill(o: Orphan) -> str:
     return f"kill -- -{o.pgid}" if o.pgid > 1 else f"kill {o.pid}"
 
 
-def notes() -> list[str]:
+#: `ddflow [options] heartbeat <item>` (heartbeat IS the subcommand: `ddflow task comment --body heartbeat T1` is not) anywhere in a command line, a `while true; do ...` loop included;
+#: group 1 is the rest of that command (up to `;`, `|` or `&`), where the item is found.
+_HEARTBEAT = re.compile(r"\bddflow\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+heartbeat\b([^;|&]*)")
+#: Valued global options: their value is not the item.
+_VALUED = frozenset({"--agent", "--repo", "--reason"})
+
+
+def _heartbeat_item(tail: str) -> str:
+    """The item id in the words after `heartbeat`: the first that is not an option or the
+    value of a valued one (`--agent worker T1` -> T1)."""
+    try:
+        words = shlex.split(tail)  # a quoted value with spaces is one word
+    except ValueError:
+        words = tail.split()
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if w in _VALUED:
+            i += 2
+        elif w.startswith("-"):
+            i += 1
+        else:
+            return w
+    return ""
+
+
+def stale_heartbeats(
+    finished: Iterable[str], proc: Path | str = "/proc", *, uid: int | None = None
+) -> list[tuple[int, str, str]]:
+    """(pid, item, command line) of the caller's processes that heartbeat an item already
+    finished: a shell loop outliving its item (LK-auto-heartbeat). A heartbeat for a finished
+    item renews nothing now, so the loop is only noise; ending it stays the operator's call."""
+    done = set(finished)
+    if not done:
+        return []
+    proc = Path(proc)
+    uid = os.getuid() if uid is None else uid
+    try:
+        entries = sorted(int(d.name) for d in proc.iterdir() if d.name.isdigit())
+    except OSError:
+        return []
+    found = []
+    for pid in entries:
+        if pid == os.getpid():
+            continue
+        cmd = " ".join(_argv(proc, pid))
+        hit = next(
+            (
+                i
+                for i in (_heartbeat_item(m.group(1)) for m in _HEARTBEAT.finditer(cmd))
+                if i in done
+            ),
+            "",
+        )
+        if not hit:
+            continue
+        try:
+            if (proc / str(pid)).stat().st_uid != uid:
+                continue
+        except OSError:
+            continue
+        found.append((pid, hit, cmd))
+    return found
+
+
+def heartbeat_notes(stale: list[tuple[int, str, str]]) -> list[str]:
+    """One NOTE per heartbeat process whose item is finished, with how to end it."""
+    return [
+        f"heartbeat process for a finished item: pid {pid} heartbeats {item}, which is done or "
+        f"abandoned (`{cmd[:120]}`); it renews nothing, `ddflow gate run` and `merge` renew the "
+        f"lease themselves -- end it with `kill {pid}` (by pid, never pkill)"
+        for pid, item, cmd in stale
+    ]
+
+
+def notes(finished: Iterable[str] = ()) -> list[str]:
     """The `doctor` NOTEs for this host right now: advice only, never a kill."""
-    return doctor_notes(orphaned_ci_suites())
+    return [
+        *doctor_notes(orphaned_ci_suites()),
+        *heartbeat_notes(stale_heartbeats(finished)),
+    ]
