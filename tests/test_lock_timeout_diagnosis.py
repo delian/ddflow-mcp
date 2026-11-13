@@ -68,8 +68,7 @@ def test_a_lock_timeout_maps_to_a_clean_exit_not_a_traceback(tmp_path, monkeypat
     with pytest.raises(TimeoutError) as e, _flock(tmp_path / "events.lock", 0.3):
         pass
     assert O.exit_for(e.value) == O.NOTHING, (
-        f"mapped to {O.exit_for(e.value)!r}, not {O.NOTHING}: the CLI re-raises it "
-        f"as a traceback"
+        f"mapped to {O.exit_for(e.value)!r}, not {O.NOTHING}: the CLI re-raises it as a traceback"
     )
     assert "overloaded" in str(e.value), str(e.value)
 
