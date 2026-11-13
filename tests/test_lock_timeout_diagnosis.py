@@ -49,6 +49,29 @@ def test_timeout_reports_the_wait_and_this_process(tmp_path):
         p.wait()
 
 
+def test_a_lock_timeout_maps_to_a_clean_exit_not_a_traceback(tmp_path):
+    """B-lock-timeout-raw-traceback: when the append lock is still held at its bound,
+    `_flock` raises a timeout that `exit_for` maps to a CLEAN exit code. The CLI re-raises
+    whatever maps to `None` (a bug), and a bare `TimeoutError` does exactly that -- so
+    `ddflow rename` / `update` / `review triage` printed a raw Python traceback instead of
+    one line and an exit 1/2. The timeout message is still the informative one."""
+    from ddflow.core import outcome as O
+
+    lock = tmp_path / "events.lock"
+    p = _hold(lock)
+    try:
+        with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
+            pass
+        assert O.exit_for(e.value) == O.NOTHING, (
+            f"mapped to {O.exit_for(e.value)!r}, not {O.NOTHING}: the CLI re-raises it "
+            f"as a traceback"
+        )
+        assert "overloaded" in str(e.value), str(e.value)
+    finally:
+        p.kill()
+        p.wait()
+
+
 @needs_proc_locks
 def test_timeout_names_the_holder_and_its_command(tmp_path):
     lock = tmp_path / "events.lock"
