@@ -34,7 +34,7 @@ def _a_person(monkeypatch):
 def proj(repo):
     run_cli(repo, "init")
     log = EventLog(repo, "alice")
-    log.append("task.added", "T1", {"title": "t", "body": "first body"})
+    log.append("task.added", "T1", {"title": "t", "body": SECRET})
     log.append("item.completed", "T1", {"author_model": "model-wrong"})
     log.append("bug.found", "B1", {"summary": "wrong claim", "title": "bt"})
     return repo
@@ -87,11 +87,11 @@ def test_a_secret_correction_shows_the_marker_and_no_values(proj):
         out = _show(proj, "T1", *args)
         marks = [ln for ln in out.splitlines() if "corrected" in ln or "by " in ln]
         assert any("corrected body" in ln for ln in marks) and "pasted a key" in out
-        assert not any(new_text in ln or "first body" in ln for ln in marks)
-        assert SECRET not in out and "first body" not in out
+        assert not any(new_text in ln or SECRET in ln for ln in marks)
+        assert SECRET not in out
     data = json.loads(_show(proj, "T1", "--json"))
     dumped = json.dumps(data["corrections"])
-    assert new_text not in dumped and "first body" not in dumped and SECRET not in dumped
+    assert new_text not in dumped and SECRET not in dumped
     assert set(data["corrections"][0]) == {"at", "by", "reason", "fields"}
     rows = data["corrections"][0]["fields"]
     assert rows and rows[0]["field"] == "body"
