@@ -875,8 +875,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b050771f0fb5 -->
-<details><summary>All 724 knobs across 67 sections</summary>
+<!-- ddflow:begin README/knobs sha=1bcade8fd2b3 -->
+<details><summary>All 738 knobs across 69 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1007,6 +1007,9 @@ long default is left to `ddflow config --explain`.
 | `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.max_behind` | `50` |  |
 | `enforce.machine_local_keys` | `[]` |  |
+| `eta.window_days` | `30.0` |  |
+| `eta.min_samples` | `10` |  |
+| `eta.coverage_bar` | `0.8` |  |
 | `evaluation.max_miss_rate` | `0.0` |  |
 | `evaluation.min_fixtures` | `1` |  |
 | `export.documents` | `[]` |  |
@@ -1042,6 +1045,8 @@ long default is left to `ddflow config --explain`.
 | `flow.port_strategy` | `"forward-merge"` | `forward-merge` \| `cherry-pick` |
 | `flow.environments` | `[]` |  |
 | `flow.auto_promote` | `[]` |  |
+| `flow.pr_body_template` | `""` |  |
+| `flow.pr_body_cell_max` | `200` |  |
 | `flow.version_files` | `{}` |  |
 | `gates.max_run_timeout_s` | `21600` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
@@ -1480,6 +1485,9 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.inflight_note` | `true` |  |
+| `session.interrupted_close_max` | `20` |  |
+| `session.previous_session_chars` | `600` |  |
 | `session.agent_rotate_tokens` | `250000` |  |
 | `session.claude_autocompact_window` | `0` |  |
 | `session.claude_autocompact_pct_override` | `0` |  |
@@ -1587,6 +1595,12 @@ long default is left to `ddflow config --explain`.
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `upstream_gh.error_max` | `400` |  |
+| `verify.stack` | `""` |  |
+| `verify.stacks_dir` | `".ddflow/stacks"` |  |
+| `verify.build_cmd` | `""` |  |
+| `verify.smoke_cmd` | `""` |  |
+| `verify.lock_check_cmd` | `""` |  |
+| `verify.test_cmd` | `""` |  |
 | `wait.max_call_seconds` | `240` |  |
 | `waves.auto_stamp` | `true` |  |
 | `worktree.enabled` | `true` |  |
