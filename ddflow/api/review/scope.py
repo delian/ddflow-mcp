@@ -297,8 +297,17 @@ def _budget_on_grants(log, repo, cfg, st, it, a: dict[str, Any], used: int, say)
     if 0 < cfg.review.max_rounds <= used:
         grant = GNT.pick(st, item, gate, a["force"], ctx=_grant_ctx(repo, it, gate, a))
     why, forced = _budget(
-        cfg, item, gate, used, a["force"], a["reason"], say, grant,
-        log=log, agent=a.get("agent", ""), approval=a.get("approval", ""),
+        cfg,
+        item,
+        gate,
+        used,
+        a["force"],
+        a["reason"],
+        say,
+        grant,
+        log=log,
+        agent=a.get("agent", ""),
+        approval=a.get("approval", ""),
     )
     a["grant"] = grant.id if grant and forced else ""
     return why, forced
@@ -370,7 +379,9 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
     return True
 
 
-def _budget(cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval="") -> tuple[str, str]:  # noqa: PLR0913, PLR0917 -- the approval route threads the operator-gate args `_budget` needs past the cap
+def _budget(
+    cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval=""
+) -> tuple[str, str]:
     """(why this round is refused, "") or ("", the reason it was forced past the cap).
     ``done`` is every round used so far, full and delta (`_rounds_used`). ``grant`` is the
     operator grant (`services.grants.pick`) this round may cite: it stands in for the
