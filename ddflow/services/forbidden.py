@@ -99,7 +99,7 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
+_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(['\"]?)([^\s;|&<>()'\"]+)\1?")
 
 
 def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
@@ -176,7 +176,7 @@ def _strip_heredocs(text: str) -> str:
         i += 1
         ms, quote = _heredoc_openers(line, quote)
         for m in ms:
-            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(1)), None)
+            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(2)), None)
             if end is not None:
                 i = end + 1
                 break

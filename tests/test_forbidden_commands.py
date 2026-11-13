@@ -128,6 +128,9 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     # an empty ``""`` that closes at the line's last char still CLOSES the quote, so the next
     # line's `" <<EOF"` is a fresh quote and `git push` after it is a command
     assert _check('echo ""\nfoo " <<EOF"\ngit push origin main\nEOF') is not None
+    # a quoted heredoc delimiter's closing quote is part of the marker, not a string quote, so
+    # a LATER heredoc's body is still stripped (critic #1)
+    assert _check("cat <<'EOF'\nsafe\nEOF\ncat <<EOF\ngit push origin main\nEOF") is None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
