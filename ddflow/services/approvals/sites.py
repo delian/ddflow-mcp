@@ -35,6 +35,13 @@ INFRASTRUCTURE: dict[str, int] = {
     "ddflow/services/actors.py:_role": 1,  # resolves an identity to a role for the ask engine
     "ddflow/api/surf_setup.py:reviewer_agent_marker": 1,
     "ddflow/services/approvals/answer.py:why_not_a_person": 1,  # the answer verbs' early refusal  # a shim over reviewer_trust
+    # A refusal with NO approval route: an agent may not merge an item a same-clone peer holds
+    # live (the operator recovering a crashed item is not an agent), so there is no verb to digest.
+    "ddflow/api/lifecycle/merge.py:merge": 1,
+    # `output_budget.is_agent` reads the harness marker only to choose the OUTPUT form (bounded
+    # for an agent, whole for a person); it refuses nothing and gates no verb.
+    "ddflow/services/output_budget.py:apply": 1,
+    "ddflow/services/output_budget.py:wants_bounded": 1,
 }
 
 #: Marker calls per enclosing function ("module:function" -> number of AST `Call` nodes naming
@@ -55,6 +62,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/lifecycle/complete/approval.py:_ask_hint": 1,
     "ddflow/services/merge_force.py:authorise": 1,
     "ddflow/services/phase_complete.py:complete_phase": 1,
+    "ddflow/api/record_correct.py:_permission": 1,
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
@@ -64,10 +72,13 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/export/select.py:disable": 1,
     "ddflow/services/export/select.py:acknowledge": 1,
     "ddflow/services/export/select.py:gate_force": 1,
+    "ddflow/api/review/scope.py:_review_force": 1,
     "ddflow/services/approvals/relayed.py:gate": 1,  # upgrade.self and plan.confirm
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup/config.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
+    "ddflow/api/pin_files.py:_regenerate_tail": 1,  # routes an agent's regenerate to the approval
+    "ddflow/services/leases/claim.py:_take_over": 1,  # names the claim take-over route owed
     "ddflow/services/repairs/accepted.py:gate": 1,
 }
 
@@ -243,7 +254,10 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the pin files as recorded before the re-record",
-        ("ddflow/api/pin_files.py:_regenerate_approval",),
+        (
+            "ddflow/api/pin_files.py:_regenerate_approval",
+            "ddflow/api/pin_files.py:_regenerate_tail",
+        ),
         "ddflow pins regenerate [--only NAME] --approval request|ID",
     ),
     Site(
@@ -283,6 +297,7 @@ SITES: tuple[Site, ...] = (
         (
             "ddflow/api/lifecycle/claim.py:_claim_by_approval",
             "ddflow/api/lifecycle/claim.py:_agent_marker_of",
+            "ddflow/services/leases/claim.py:_take_over",
         ),
         "ddflow claim <id> --approval request|ID",
     ),
@@ -325,6 +340,24 @@ SITES: tuple[Site, ...] = (
         "the phase and the settled state of every task under it",
         ("ddflow/services/phase_complete.py:complete_phase",),
         "ddflow phase complete <id> --approval request|ID",
+    ),
+    Site(
+        "record.correct",
+        "C",
+        T2,
+        L1,
+        "the record, the fields replaced, the reason and the new text (for --secret only its length and the choice, so the ask never carries a digest of a possible secret)",
+        ("ddflow/api/record_correct.py:_permission",),
+        "ddflow correct <id> --field NAME --text TEXT --reason WHY --approval request|ID",
+    ),
+    Site(
+        "review.force",
+        "C",
+        T2,
+        L1,
+        "the item, the gate and the review rounds already spent (lifting the review-round budget belongs to the operator)",
+        ("ddflow/api/review/scope.py:_review_force",),
+        "ddflow review <id> --gate G --force --reason ... --approval request|ID",
     ),
 )
 

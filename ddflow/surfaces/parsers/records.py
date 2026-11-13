@@ -13,6 +13,7 @@ from .. import cliexec
 from ..commands.knowledge import cmd_bug, cmd_research, cmd_session
 from ..commands.reporting import cmd_status
 from ..commands.viewers_sessions import COMMANDS as SESSION_VIEWS
+from ..declared.record_correct import COMMANDS as CORRECT_COMMANDS
 from ..declared.records import COMMANDS
 from ..declared.reporting import COMMANDS as _REPORTING
 from ..registry import add_commands
@@ -37,4 +38,9 @@ HANDLERS = {
 def register(s: argparse._SubParsersAction) -> None:
     """Add the records subcommands to `s`, the root `ddflow` subparsers."""
     add_commands(s, [REPORTING["status"]], handlers={("status",): cmd_status})
-    add_commands(s, [*COMMANDS, *SESSION_VIEWS], handlers=HANDLERS, executor=cliexec.handler)
+    add_commands(
+        s,
+        [*COMMANDS, *CORRECT_COMMANDS, *SESSION_VIEWS],
+        handlers=HANDLERS,
+        executor=cliexec.handler,
+    )

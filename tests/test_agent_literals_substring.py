@@ -20,6 +20,10 @@ DOC = Path(NAL.PKG).parent / "docs" / "ddflow" / "research" / "driver-inventory.
 
 #: ids shorter than this are not counted as substrings (`pi`, `amp` hit ordinary words)
 MIN_ID_LEN = 4
+#: an id that is also the tail of an ordinary word is matched with that word's head ruled out
+#: (`cline` is not read inside `decline`): the match is narrowed, nothing is deleted from the text,
+#: so no other id can be hidden or joined. The agent literal itself (`cline`, `Cline`) still counts.
+NOT_AFTER = {"cline": "de"}
 #: the substring total may not jump past this (report-only below it); lower it as sites move
 #: into descriptors. grok.toml (DX-grok-hook-descriptor) added 'grok' substring matches: 171 today.
 SUBSTRING_CEILING = 180
@@ -29,7 +33,10 @@ def substring_sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
     """Lines of string constants that contain an id (any case), or a root, but are not exact sites."""
     tree = ast.parse(source)
     skip = NAL._docstrings(tree)
-    words = [i.lower() for i in ids if len(i) >= MIN_ID_LEN]
+    words = [
+        re.compile((f"(?<!{NOT_AFTER[w]})" if w in NOT_AFTER else "") + re.escape(w))
+        for w in (i.lower() for i in ids if len(i) >= MIN_ID_LEN)
+    ]
     found = []
     for n in ast.walk(tree):
         if not (isinstance(n, ast.Constant) and isinstance(n.value, str)) or id(n) in skip:
@@ -37,7 +44,8 @@ def substring_sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
         v = n.value
         if NAL.sites(f"x = {v!r}\n", ids, roots):
             continue  # already counted by the exact ratchet
-        if any(w in v.lower() for w in words) or any(r in v for r in roots):
+        low = v.lower()
+        if any(w.search(low) for w in words) or any(r in v for r in roots):
             found.append(n.lineno)
     return found
 
@@ -63,6 +71,12 @@ def test_the_substring_detector_can_fail():
     assert substring_sites('x = "claude"\n', ids, roots) == []  # exact: the ratchet's
     assert substring_sites('x = "Claude Code"\n', ids, roots) == [1]  # case-insensitive
     assert substring_sites('"""run claude"""\nx = 1\n', ids, roots) == []  # docstring
+    # an ordinary word that holds an id is no agent name; the agent itself still counts
+    assert substring_sites('x = "the source declined it"\n', {"cline"}, set()) == []
+    assert substring_sites('x = "declinedecline"\n', {"cline"}, set()) == []
+    assert substring_sites('x = "install cline, then decline"\n', {"cline"}, set()) == [1]
+    assert substring_sites('x = "declineswarm"\n', {"swarm"}, set()) == [1]
+    assert substring_sites('x = "CLAUDECODE"\n', {"claude"}, set()) == [1]
 
 
 def test_the_substring_total_is_reported_and_bounded():

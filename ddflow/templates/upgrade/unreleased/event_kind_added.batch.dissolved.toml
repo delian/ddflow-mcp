@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "batch.dissolved"
+why = "The batch record of batched gates (D-BG-3): grouped items, one gate run and its fan-out to every member, the culprit search, the landing or the dissolving. Batching itself stays off by default."
+impact = "additive"

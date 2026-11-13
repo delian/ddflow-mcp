@@ -438,6 +438,10 @@ class Session:
     #: `session end --summary`: what the session did, in its own words (B194). The last
     #: non-empty one wins, so a bare `session.ended` never blanks it.
     summary: str = ""
+    #: How it ended: `ended` (a hook or the agent said so) or `interrupted` (a later session
+    #: found it dead); "" while open. `last_active` is when it last wrote (interrupted only).
+    how: str = ""
+    last_active: str = ""
 
 
 @dataclass(frozen=True)

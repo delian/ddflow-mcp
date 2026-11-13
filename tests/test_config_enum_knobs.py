@@ -390,6 +390,9 @@ def test_the_modules_that_use_an_enum_take_its_values_from_config() -> None:
     assert F.PORT_STRATEGIES is choices["flow.port_strategy"]
 
 
+_NOTIFY_OUTWARD = {"email", "n8n", "openclaw", "slack", "teams", "webhook"}
+
+
 def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
     # Every enum knob answers the question, so a new one cannot skip it (roborev on
     # 573fe3d9: a test-side allowlist passed for a knob nobody added to it).
@@ -400,8 +403,8 @@ def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
         "flow.integration": {"pr"},
         "flow.claims": {"remote"},
         "flow.pr_merge": {"on_approval", "auto"},
-        "notify.channel": {"email", "n8n", "openclaw", "slack", "teams", "webhook"},
-        "notify.ask_channel": {"email", "n8n", "openclaw", "slack", "teams", "webhook"},
+        "notify.channel": _NOTIFY_OUTWARD,
+        "notify.ask_channel": _NOTIFY_OUTWARD,
     }
     for key, values in C.KNOB_OUTWARD.items():
         assert values <= set(C.KNOB_CHOICES[key]), key  # the table names real values

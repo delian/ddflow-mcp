@@ -315,7 +315,7 @@ def cmd_review(a, c: Ctx) -> int:
         base=a.base or "",
         commit=a.commit or "",
         branch=a.branch or "",
-        called_from=c.called_from,
+        called_from=c._start,
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
         on_progress=lambda line: print(line, file=_progress_stream(c), flush=True),
@@ -327,6 +327,7 @@ def cmd_review(a, c: Ctx) -> int:
         include_pinned=bool(getattr(a, "include_pinned", False)),
         force=bool(a.force),
         reason=a.reason or "",
+        approval=getattr(a, "approval", "") or "",
     )
     _report_refusal(a, c, out)
     return out.exit

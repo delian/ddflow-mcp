@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "verify.test_cmd"
+new = "\"\""
+why = "Overrides the stack's test command as `ddflow stacks` reports it (not the unit_tests gate); empty uses the stack table's."
+impact = "additive"

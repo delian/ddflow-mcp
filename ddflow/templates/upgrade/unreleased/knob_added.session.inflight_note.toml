@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.inflight_note"
+new = "true"
+why = "At the Stop and SessionEnd hooks, write what the session is doing (items held, last gate, next gate) as a session note, once per change."
+impact = "additive"

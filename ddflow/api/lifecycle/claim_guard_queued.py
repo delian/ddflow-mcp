@@ -7,6 +7,7 @@ import time
 from ...core import outcome as O
 from ...services import waiting as WG
 from ...services.claimguards import ClaimContext, register
+from ...services.leases.claim import _take_over
 
 
 def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
@@ -21,7 +22,8 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
         return None
     return O.refused(
         "item.claimed",
-        f"{ctx.item}: {WG.queued_names(mine, aheads, ctx.cfg)}.",
+        f"{ctx.item}: {WG.queued_names(mine, aheads, ctx.cfg)}. "
+        f"To take it over: {_take_over(ctx.item, ctx.me)}.",
         id=ctx.item,
         alternatives=[],
         queued_behind=aheads[0].item,

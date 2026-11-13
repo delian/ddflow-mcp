@@ -159,7 +159,7 @@ def predicted_cost(directory: Path, key: str, *, keep: int) -> float:
 
 def write_note(path: Path, klass: str, cost_s: float, agent: str) -> None:
     with contextlib.suppress(OSError):
-        path.write_text(json.dumps({"class": klass, "cost_s": cost_s, "agent": agent}))
+        fsio.write_in_place(path, json.dumps({"class": klass, "cost_s": cost_s, "agent": agent}))
 
 
 def read_note(path: Path) -> dict[str, Any]:

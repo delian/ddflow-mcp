@@ -3,6 +3,13 @@
 # set it in .ddflow/config.toml. Rewrite this file with `ddflow config defaults --write`.
 # What each knob means: `ddflow config --explain`.
 
+[adapters]
+platform = "auto"
+lane_transport = "local"
+network_consent = {}
+managed_files_consent = {}
+managed_files_backup = true
+
 [agent]
 id = ""
 reviewer_family_must_differ = true
@@ -41,6 +48,9 @@ standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "a
 accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
+
+[baseline]
+keep = 14
 
 [bugs]
 file_task = true
@@ -151,6 +161,11 @@ behind = "warn"
 max_behind = 50
 machine_local_keys = []
 
+[eta]
+window_days = 30.0
+min_samples = 10
+coverage_bar = 0.8
+
 [evaluation]
 max_miss_rate = 0.0
 min_fixtures = 1
@@ -193,6 +208,8 @@ current_line = "current"
 port_strategy = "forward-merge"
 environments = []
 auto_promote = []
+pr_body_template = ""
+pr_body_cell_max = 200
 version_files = {}
 
 [gates]
@@ -349,6 +366,7 @@ renew_long_commands = true
 renew_log_min_s = 120
 grace_s = 120
 acquire_timeout_s = 30
+record_lock_wait_s = 180
 waiter_reservation_s = 300
 wait_max_s = 600
 wait_queue = false
@@ -551,6 +569,20 @@ mergiraf_keep_pct = 10
 [plan]
 warn_missing_globs = true
 
+[premerge]
+enabled = true
+stages = ["pre-commit"]
+budget_s = 120
+on_unavailable = "unavailable"
+fix = true
+commit_fixes = true
+max_fix_rounds = 1
+precommit_command = "pre-commit"
+skip_hooks = []
+generic_hooks = true
+large_file_kb = 500
+test_command = "python -m pytest -q -x"
+
 [prices]
 limit = {}
 reset = {}
@@ -586,6 +618,14 @@ kilo_timeout_s = 10.0
 command = ""
 model_dir = ""
 timeout_s = 60
+
+[records]
+correct_digest_chars = 12
+correct_min_digest_chars = 8
+correct_digest_old = false
+correct_digest_new = false
+correct_reason_max_chars = 500
+correct_max_fields = 8
 
 [reinstruct]
 enabled = true
@@ -689,6 +729,9 @@ first_call_max_tokens = 600
 replay_verify_diffs = true
 progress_after_complete = "on"
 compaction_digest_chars = 2000
+inflight_note = true
+interrupted_close_max = 20
+previous_session_chars = 600
 agent_rotate_tokens = 250000
 claude_autocompact_window = 0
 claude_autocompact_pct_override = 0
@@ -810,6 +853,14 @@ self = "ask"
 
 [upstream_gh]
 error_max = 400
+
+[verify]
+stack = ""
+stacks_dir = ".ddflow/stacks"
+build_cmd = ""
+smoke_cmd = ""
+lock_check_cmd = ""
+test_cmd = ""
 
 [wait]
 max_call_seconds = 240

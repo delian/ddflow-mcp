@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import json
 import shlex
-import time
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import outcome as O
 from ..infra import fsio
 from ..services.metrics import service as MS
@@ -140,7 +140,7 @@ def run_perf_report(
     ``format`` is one of text|md|json|svg|html; ``out`` is where svg/html are written
     (default ``.ddflow/local/perf/reports/``). Deterministic for the same log and config."""
     log, cfg, st = _load(repo, agent)
-    at = time.time() if now is None else now
+    at = CLOCK.wall() if now is None else now
     fmt = (format or "text").strip().lower()
     if fmt not in FORMATS:
         return O.refused("perf_report", f"format {format!r}: one of {', '.join(FORMATS)}")

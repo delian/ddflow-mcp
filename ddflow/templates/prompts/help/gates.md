@@ -17,6 +17,15 @@ Two kinds, and the difference is the whole design:
 `ddflow gate status <id>` shows the pipeline, where the item is in it, and the
 instruction for the next gate.
 
+## The base branch's failures
+
+ci and unit_tests read how the base fails from a per-project store, one entry per base
+sha and gate command (`.ddflow/local/baseline-store/`, git-ignored). A sha not in it is
+measured once under the suite lock and stored; a partial measurement is never treated as
+complete; a failure that exists only for being in a worktree is not stored. Each failing
+test id keeps a digest of its failure text. `[baseline].keep` days bounds it (0 keeps
+nothing).
+
 ## Proving a gate can fail
 
 A gate that cannot go red is worse than no gate: it reports success on every change and
@@ -41,7 +50,7 @@ unavailable — never as a pass.
 A gate gets `[review].max_rounds` (default 2) review rounds per item, full and delta
 alike; a third is refused. After that, `ddflow review triage` settles each remaining
 finding (always allowed): refute it with the run that shows it false, or confirm it with
-the test that now passes; the triage that settles the last finding records the gate passed on refutation (flagged in `gate status`), and one you cannot settle goes to the operator. Change the cap with `ddflow config review.max_rounds N` (0 =
+the test that now passes; the triage that settles the last finding records the gate passed on refutation (flagged in `gate status`), and one you cannot settle goes to the operator. An extra round past the cap is `ddflow review <id> --gate G --force --reason "..."`; an agent adds `--approval request` to file the operator approval and re-runs with the id it names (the route `gate skip` and `merge` have). Change the cap with `ddflow config review.max_rounds N` (0 =
 unlimited; add `--local` for this machine) or `review.on_exceed = "warn"`.
 
 Once a gate has a recorded review, `ddflow review <id> --gate G` is a full re-review: the
@@ -52,3 +61,11 @@ says "delta review of N commits since <sha>", the delta's findings merge into th
 record and earlier triage stays on the findings that are unchanged; a rebased branch falls
 back to a full round and says why. `ddflow config review.delta_default true [--local]` makes
 every plain re-review a delta (`--full` then still asks for a full round).
+
+## Failure text across trees
+
+A failure that prints a path prints the checkout it ran in. Before two failures are
+compared by digest, the ci scratch tree, a base scratch tree and a lane worktree are
+rewritten to `<tree>` and a pytest temp directory to `<pytest-tmp>` (`ddflow/services/ci/failure_text.py`), so the same
+failure on the base and on the candidate has one digest and an old red is not read as new.
+A different message or a different repo-relative path still differs.

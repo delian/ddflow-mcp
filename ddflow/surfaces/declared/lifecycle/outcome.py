@@ -39,6 +39,7 @@ COMMANDS: tuple[Command, ...] = (
             shell_cwd=shell_cwd,
             agent=agent,
             approval=a.get("approval", "") or "",
+            check=bool(a.get("check")),
         ),
         payload=(
             *L.COMPLETE_BODY[:10],
@@ -82,6 +83,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "check",
+                type="boolean",
+                help="Read-only: print the unmet conditions, approvals needed and what policy would grant; never completes. Exit 0 nothing unmet, 1 unmet, 2 could not run.",
+                cli_help="read-only: print the unmet conditions and what policy would grant; never completes (exit 1 = unmet, 2 = could not run)",
+            ),
+            Param(
                 "changelog",
                 help="Optional 'Added|Changed|Deprecated|Removed|Fixed|Security: text', or skip.",
                 cli_help="'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip / internal to keep it out of the changelog; optional",
@@ -112,6 +119,7 @@ COMMANDS: tuple[Command, ...] = (
             *MUTATION_ORDER,
             "force",
             "approval",
+            "check",
         ),
     ),
     Command(

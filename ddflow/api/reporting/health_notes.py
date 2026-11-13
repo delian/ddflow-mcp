@@ -88,7 +88,7 @@ def _untitled(st) -> list[str]:
     items were titled `B30`, `B157`...), and every board, brief and gate prompt then
     shows a number. Nothing else here asks whether an item can be told apart from it.
     """
-    ids = sorted(it.id for it in st.items.values() if not it.removed and _only_ids(it.title))
+    ids = sorted(it.id for it in st.live_items() if _only_ids(it.title))
     if not ids:
         return []
     shown = ", ".join(ids[:_UNTITLED_SHOWN]) + (" ..." if len(ids) > _UNTITLED_SHOWN else "")

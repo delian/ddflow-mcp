@@ -36,13 +36,14 @@ mode only, invisible to the agent reading JSON that most needed it.
 
 from __future__ import annotations
 
+from ..services import completion_shell as completion_scripts
+
 # Service helpers the surfaces reach only through this package (surfaces-through-api):
 # `output_budget` caps a prose answer for an agent, `completion_kinds` names an argument's
 # completion value kind, `completion_scripts` serves the shell activation script. Imported
 # here, so a surface never imports `ddflow.services` directly.
 from ..services import output_budget
 from ..services.completion import kinds as completion_kinds
-from ..services.completion import scripts as completion_scripts
 
 # Re-exported so `api.progress(...)` keeps working after the split. The surfaces reach
 # this layer through the PACKAGE (`_api().progress`), never through a family module, so

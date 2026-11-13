@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..adapters import git as G
 from ..config import Config
 from ..core import outcome as O
 from ..core.events import SkewRefused
-from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import approval as AP
 from ..services import drift as DR

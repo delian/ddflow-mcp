@@ -236,7 +236,18 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     holds = _runs_whole_suite(gdef)
     queued_at = time.monotonic()
     who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
-    with SL.hold(cfg, who, scope=gdef.id) if holds else nullcontext():
+    ticking = on_tick is not None and tick_s > 0
+    with (
+        SL.hold(
+            cfg,
+            who,
+            scope=gdef.id,
+            on_tick=on_tick if ticking else None,
+            tick_s=tick_s if ticking else 0,
+        )
+        if holds
+        else nullcontext()
+    ):
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
@@ -253,7 +264,6 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
             # 0 like the `SL.hold` consumer that applies it does, so a negative
             # [ci].suite_wait_s cannot SHRINK the run budget it is meant to extend.
             timeout_s += max(0, int(cfg.ci.suite_wait_s))
-        ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
             cwd=cwd,
@@ -263,6 +273,40 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
             tick_s=tick_s if ticking else 0,
         )
     return p, command, auto, lock_wait
+
+
+def _run_evidence(
+    gdef: GateDef, cwd: Path, p: Any, out: str, command: str, auto: Any, lock_wait: Any
+) -> dict[str, Any]:
+    """The evidence of a command that RAN: what it was, how long it took, which tree it looked at."""
+    ev = {
+        "command": gdef.command,
+        **({"command_run": command, "workers": {"n": auto.n, **auto.inputs}} if auto else {}),
+        **command_layer_evidence(gdef, cwd),
+        "exit": p.code,
+        "elapsed_s": round(p.elapsed_s, 1),
+        **_cost_evidence(p),
+        **output_evidence(out),
+        # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
+        **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
+        # How much of elapsed_s was queueing for the host suite lock or an admission slot,
+        # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
+        **_wait_evidence(gdef, p, out, lock_wait),
+        # WHICH tree this is evidence about. Without it "the tests passed" names
+        # nothing: a concurrent agent can move the tree underneath a running probe, and
+        # one agent editing between two gates makes the earlier gate's evidence describe
+        # source that no longer exists.
+        # One identity: the commit plus the tree's exact content, so `complete` can compare
+        # it with the branch that landed once the worktree is gone (`tree_identity`).
+        "tree_sha": tree_identity(cwd),
+        # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
+        # opaque; this answers "how big was the change", which is what makes a recorded
+        # pass auditable after the fact. A review gate that passed over 4,000 changed
+        # lines in two minutes is a different claim from one that passed over 12, and
+        # without this the log cannot tell them apart.
+        "diff_stat": diff_stat(cwd),
+    }
+    return ev
 
 
 def run_command_gate(
@@ -363,33 +407,7 @@ def run_command_gate(
     if not p.ran:
         return "unavailable", _unavailable_evidence(gdef, p)
     out = p.output
-    ev = {
-        "command": gdef.command,
-        **({"command_run": command, "workers": {"n": auto.n, **auto.inputs}} if auto else {}),
-        **command_layer_evidence(gdef, cwd),
-        "exit": p.code,
-        "elapsed_s": round(p.elapsed_s, 1),
-        **_cost_evidence(p),
-        **output_evidence(out),
-        # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
-        **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
-        # How much of elapsed_s was queueing for the host suite lock or an admission slot,
-        # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
-        **_wait_evidence(gdef, p, out, lock_wait),
-        # WHICH tree this is evidence about. Without it "the tests passed" names
-        # nothing: a concurrent agent can move the tree underneath a running probe, and
-        # one agent editing between two gates makes the earlier gate's evidence describe
-        # source that no longer exists.
-        # One identity: the commit plus the tree's exact content, so `complete` can compare
-        # it with the branch that landed once the worktree is gone (`tree_identity`).
-        "tree_sha": tree_identity(cwd),
-        # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
-        # opaque; this answers "how big was the change", which is what makes a recorded
-        # pass auditable after the fact. A review gate that passed over 4,000 changed
-        # lines in two minutes is a different claim from one that passed over 12, and
-        # without this the log cannot tell them apart.
-        "diff_stat": diff_stat(cwd),
-    }
+    ev = _run_evidence(gdef, cwd, p, out, command, auto, lock_wait)
     if keep_output is not None:
         # The full output the digest is over, so the digest can be checked. A log that
         # cannot be written is said so in the evidence; it does not change the outcome.
