@@ -334,6 +334,15 @@ def test_unmet_needs_ignore_finished_dependencies():
     assert not _unmet(it("done", needs=["o"]), st)
 
 
+def test_bug_status_counts_a_removed_fix_task_as_no_fix_task(repo):
+    _seed_fix_edges(repo)
+    code, out, err = run_cli(repo, "remove", "fix-B1", "--force")
+    assert code == 0, (out, err)
+    code, out, err = run_cli(repo, "bug", "status", "--json")
+    body = json.loads(out)
+    assert (body["blocked"], body["unblocked"], body["no_fix_task"]) == (0, 0, 2)
+
+
 def test_severity_filter_keeps_the_engine_order_without_a_sort(repo):
     """A severity filter alone narrows the set; it does not reorder it by id."""
     _seed_mix(repo)

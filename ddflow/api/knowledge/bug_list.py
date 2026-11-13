@@ -146,7 +146,7 @@ def bug_status(repo: Path) -> O.Outcome:
         key = sev if sev in BUG_SEVERITIES else ""
         by_sev[key] = by_sev.get(key, 0) + 1
         fix = st.items.get(bug.fix_task) if bug.fix_task else None
-        if fix is None:
+        if fix is None or fix.removed:
             no_task += 1
         elif _unmet(fix, st):
             blocked += 1
