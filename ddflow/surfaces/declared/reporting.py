@@ -302,6 +302,14 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
+                "history",
+                type="boolean",
+                help="List every correction of the record, in order.",
+                default=False,
+                cli_only=True,
+                cli_help="list every correction of the record, in order (default: the latest per field)",
+            ),
+            Param(
                 "report",
                 type="boolean",
                 help="Its completion report.",
@@ -319,7 +327,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: (
             _api().show_report(repo, a["id"], agent=agent, brief=bool(a.get("brief")))
             if a.get("report")
-            else _api().show(repo, a["id"], agent=agent)
+            else _api().show(repo, a["id"], agent=agent, history=bool(a.get("history")))
         ),
         payload="item",
     ),
