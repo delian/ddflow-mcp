@@ -64,7 +64,7 @@ from .render import (
     reset_command,
     set_command,
 )
-from .tools import TOOLS
+from .tools import TOOLS, families
 from .update_message import update_message
 from .vocabulary import provide
 
@@ -323,8 +323,8 @@ def build_parser() -> argparse.ArgumentParser:
 _NOTICES = Notices()
 
 
-# What the stale-reference scan (`doctor`) checks names against: this parser and the tool table.
-provide(parser=build_parser, tools=TOOLS)
+# What the stale-reference scan (`doctor`) checks names against: this parser, every tool.
+provide(parser=build_parser, tools=families.named_tools(TOOLS))
 provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names against
 
 
