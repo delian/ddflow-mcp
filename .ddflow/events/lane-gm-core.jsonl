@@ -333,3 +333,4 @@
 {"agent":"lane-gm-core","data":{"exit_code":3,"note":"exited 3 (from its log); `job end` records it (collected)"},"id":"e8d0358c02c91b5f2cf46af5f","kind":"job.ended","lamport":188462,"schema":1,"subject":"J895892fc04","ts":"2026-11-13T03:03:34.300108Z"}
 {"agent":"lane-gm-core","data":{"exit_code":1,"note":"exited 1 (from its log); `job end` records it (collected)"},"id":"e05bf711345ada42395d3a7ea","kind":"job.ended","lamport":188463,"schema":1,"subject":"J1c30393dfd","ts":"2026-11-13T03:03:34.407142Z"}
 {"agent":"lane-gm-core","data":{"at":1794539065.0889685,"holder":"lane-gm-core"},"id":"e142983db66d339e36036beab","kind":"lease.renewed","lamport":188472,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T03:04:25.256545Z"}
+{"agent":"lane-gm-core","data":{"gate":"ci"},"id":"ecf6619a229b7ddaa1b23b7d7","kind":"gate.started","lamport":188478,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T03:04:57.805991Z"}
