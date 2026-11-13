@@ -340,6 +340,8 @@ def ci_tool(
             timeout_s=timeout_s,
         )
     if action == "failed-first":
+        if base or command or full or timeout_s is not None:
+            return O.refused("ci", "base, command, full and timeout are for action=run")
         return failed_first(repo, ref=ref, agent=agent)
     if action == "status":
         if base or command or ref not in ("", "HEAD") or timeout_s is not None:

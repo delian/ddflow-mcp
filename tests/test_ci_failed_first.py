@@ -36,7 +36,17 @@ def _suite(root: Path, n: int = 40, failing: int = 37) -> Path:
 def _pytest(root: Path, env: dict[str, str]) -> list[str]:
     """The test ids in the order pytest ran them."""
     run = subprocess.run(
-        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-v", "--rootdir", str(root)],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "-v",
+            "--color=no",
+            "--rootdir",
+            str(root),
+        ],
         cwd=root,
         env=env,
         capture_output=True,
@@ -52,7 +62,9 @@ def _env(extra: dict[str, str]) -> dict[str, str]:
     import os
 
     return {
-        k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTHONPATH")
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("PYTEST_ADDOPTS", "PYTHONPATH", "PY_COLORS")
     } | extra
 
 
@@ -293,3 +305,14 @@ def test_a_second_session_in_one_interpreter_notes_its_own_failure(tmp_path):
         )
         rows = [json.loads(x) for x in Path(sess.env[FF.OUT_ENV]).read_text().splitlines()]
     assert [r["ev"] for r in rows] == ["start", "fail", "start", "fail"]
+
+
+def test_the_failed_first_action_refuses_the_run_only_parameters(repo, monkeypatch):
+    from test_ci_gate import _item_with_ci
+
+    from ddflow.api import cirun as AR
+
+    _item_with_ci(repo, monkeypatch, agent="holder-ff4")
+    for extra in ({"base": "main"}, {"command": "true"}, {"full": True}, {"timeout_s": 5}):
+        out = AR.ci_tool(repo, action="failed-first", ref="T1", agent="holder-ff4", **extra)
+        assert out.exit == 3, extra
