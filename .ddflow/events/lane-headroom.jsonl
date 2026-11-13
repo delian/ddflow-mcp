@@ -18,3 +18,4 @@
 {"agent":"lane-headroom","data":{"at":1794550379.1014352,"holder":"lane-headroom"},"id":"edf49612cb5a14450d1bd5285","kind":"lease.renewed","lamport":190900,"schema":1,"subject":"SW-headroom","ts":"2026-11-13T06:12:59.262824Z"}
 {"agent":"lane-headroom","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e73a2d4d68334e2b398412ec7","kind":"cadence.ran","lamport":190904,"schema":1,"subject":"recall_recheck:SW-headroom","ts":"2026-11-13T06:13:11.862662Z"}
 {"agent":"lane-headroom","data":{"tags":["bugfix","no-deps","wave:0"]},"id":"e14b808223d970f66b7e833b4","kind":"task.updated","lamport":190905,"schema":1,"subject":"fix-Bdd23c77383","ts":"2026-11-13T06:13:18.743265Z"}
+{"agent":"lane-headroom","data":{"at":1794550651.6221843,"holder":"lane-headroom"},"id":"e247e59a97cc9a39d7815104c","kind":"lease.renewed","lamport":190989,"schema":1,"subject":"SW-headroom","ts":"2026-11-13T06:17:31.776967Z"}
