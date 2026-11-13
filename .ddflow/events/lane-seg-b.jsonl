@@ -19,3 +19,4 @@
 {"agent":"lane-seg-b","data":{"at":1794557294.7923112,"holder":"lane-seg-b"},"id":"e0f880b940101e7ab11494df0","kind":"lease.renewed","lamport":191775,"schema":1,"subject":"SEG-inflight-registry","ts":"2026-11-13T08:08:14.941982Z"}
 {"agent":"lane-seg-b","data":{"at":1794558467.6999838,"holder":"lane-seg-b"},"id":"ec09fb84ac950cba2ca50716b","kind":"lease.renewed","lamport":191944,"schema":1,"subject":"SEG-inflight-registry","ts":"2026-11-13T08:27:47.811919Z"}
 {"agent":"lane-seg-b","data":{"at":1794559561.822779,"holder":"lane-seg-b"},"id":"ee41b59eb81efad5589a6a52d","kind":"lease.renewed","lamport":192033,"schema":1,"subject":"SEG-inflight-registry","ts":"2026-11-13T08:46:01.962860Z"}
+{"agent":"lane-seg-b","data":{"at":1794560746.828538,"holder":"lane-seg-b"},"id":"ed14f7ed92f00572fb9de3cff","kind":"lease.renewed","lamport":192181,"schema":1,"subject":"SEG-inflight-registry","ts":"2026-11-13T09:05:46.977135Z"}
