@@ -353,12 +353,13 @@ def _name_the_item(
             )
             return {**(extra or {}), "reviewed_unleased": True}
         return extra
-    me = ID.resolve(repo, cfg, agent).id
+    who = ID.resolve(repo, cfg, agent)
+    me = who.id
     if me == lease.holder:
         return extra
     if (
         called_from is not None
-        and ID.resolve(repo, cfg, agent).source == "derived"
+        and who.id == ID.default_agent_id(repo)
         and _in_its_own_tree(repo, lease.worktree, called_from)
     ):
         # Standing in the tree the lease made IS being its holder under the DEFAULT

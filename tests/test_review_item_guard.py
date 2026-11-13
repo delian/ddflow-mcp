@@ -91,12 +91,13 @@ def test_an_unleased_item_leaves_a_mark_in_the_evidence(repo: Path):
     assert ev == {"reviewed_unleased": True}
 
 
-def test_review_from_the_items_own_tree_under_the_default_identity_does_not_warn(repo: Path):
+def test_review_from_the_items_own_tree_under_the_default_identity_does_not_warn(repo: Path, monkeypatch):
     """B090201fcef: the agent working in the tree `claim` made under the DEFAULT (derived,
     not declared) identity is NOT another agent -- standing in that tree IS being its
     holder, so the review warns nothing (heartbeat already renews on the holder's behalf
-    from that same tree). The config is loaded UNBOUND so the default identity resolves as
-    `derived`, not `config`."""
+    from that same tree). The DFFLOW_AGENT env is cleared so the default resolves as
+    `derived`, not an env-declared identity."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     from ddflow.api import review as R
     from ddflow.api._base import _load
 
