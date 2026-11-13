@@ -1,0 +1,32 @@
+[stack]
+name = "node"
+title = "JavaScript / TypeScript (npm, yarn, pnpm)"
+detect = ["package.json"]
+priority = 50
+lock_files = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
+comment_tokens = ["//", "/*"]
+import_extractor = "regex:(?:import\\s.*?from\\s+|require\\()['\"]([^'\"]+)['\"]"
+dead_tool = "knip"
+dep_tool = "npm audit"
+
+[commands]
+build = [
+  { when = "pnpm-lock.yaml", run = "pnpm install --frozen-lockfile && pnpm run --if-present build" },
+  { when = "yarn.lock", run = "yarn install --frozen-lockfile && yarn run build" },
+  { when = "package-lock.json", run = "npm ci && npm run --if-present build" },
+  { run = "npm install && npm run --if-present build" },
+]
+smoke = [
+  { when = "pnpm-lock.yaml", run = "pnpm ls --depth 0" },
+  { when = "yarn.lock", run = "yarn check --integrity" },
+  { run = "npm ls --depth 0" },
+]
+lock_check = [
+  { when = "package-lock.json", run = "npm ci --dry-run" },
+  { when = "pnpm-lock.yaml", run = "pnpm install --frozen-lockfile --lockfile-only" },
+]
+test = [
+  { when = "pnpm-lock.yaml", run = "pnpm test" },
+  { when = "yarn.lock", run = "yarn test" },
+  { run = "npm test --silent" },
+]
