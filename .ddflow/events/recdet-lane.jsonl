@@ -88,3 +88,5 @@
 {"agent":"recdet-lane","data":{"at":1794595688.9117584,"holder":"recdet-lane"},"id":"e2c474b75598176857182bae4","kind":"lease.renewed","lamport":195546,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T18:48:09.144425Z"}
 {"agent":"recdet-lane","data":{"gate":"ci"},"id":"e6e95ed4b9815a3cfd9dcc498","kind":"gate.started","lamport":195645,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T18:53:10.157340Z"}
 {"agent":"recdet-lane","data":{"at":1794596895.1313896,"holder":"recdet-lane"},"id":"eef80c40c94d8d1baf25a9c09","kind":"lease.renewed","lamport":195810,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T19:08:15.288001Z"}
+{"agent":"recdet-lane","data":{"at":1794597245.603816,"holder":"recdet-lane"},"id":"ed43f3020755d7cdad7913d09","kind":"lease.renewed","lamport":195899,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T19:14:05.770033Z"}
+{"agent":"recdet-lane","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e0ba1155aef062b2215eaa1fc","kind":"cadence.ran","lamport":195902,"schema":1,"subject":"recall_recheck:DX-recovery-detectors","ts":"2026-11-13T19:14:15.112670Z"}
