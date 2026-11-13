@@ -28,6 +28,8 @@ def _module_run(orig_argv: list[str]) -> bool:
         if arg == "-m":  # the interpreter's own module switch, before any script word
             module = next(args, "")
             return module == "ddflow" or module.startswith("ddflow.")
+        if arg == "-c" or arg == "--":
+            return False  # an inline program, or the end of the options: not a module run
         if arg in ("-W", "-X"):
             next(args, None)  # an interpreter option that takes a value
         elif not arg.startswith("-"):

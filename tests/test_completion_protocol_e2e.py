@@ -216,6 +216,7 @@ def test_a_request_without_argcomplete_installed_runs_nothing(project):
         ("/x/ddflow/__main__.py", ["python", "-m", "ddflow"], True),
         ("/x/__main__.py", ["python", "/x/__main__.py", "-m", "ddflow"], False),
         ("-m", ["python", "-X", "dev", "-m", "ddflow"], True),
+        ("-m", ["python", "-c", "-0 or 1", "-m", "ddflow"], False),
         ("/x/bin/other", [], False),
     ],
 )
