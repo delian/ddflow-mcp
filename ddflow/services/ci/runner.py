@@ -34,7 +34,7 @@ from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
 from .types import CONFLICT, Check, Result
 
-_HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(r"^(?P<name>\S.*?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 CHECK_DETAIL_CHARS = 2000  #: one failing hook's own output kept as its check detail
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
@@ -56,7 +56,9 @@ def parse_checks(output: str) -> list[Check]:
     failed: Check | None = None
     lines: list[str] = []
     for line in output.splitlines():
-        m = _HOOK_LINE.match(line.strip())
+        # Hook result lines are flush-left; a hook's own output is indented, so an
+        # indented output line that merely ends in the status word is output, not a boundary.
+        m = _HOOK_LINE.match(line)
         if m:
             if failed is not None:
                 failed.detail = _check_detail(lines)
