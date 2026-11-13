@@ -31,11 +31,10 @@ def _pct_of(n: PR.Tally) -> str:
     return _pct(n.done, n.live)
 
 
-def _progress(st: State, items: list) -> str:
-    """The `Progress:` line: tasks, bugs and phases done."""
-    work = [it for it in items if it.kind != "phase" and not it.fixes]
+def _progress(st: State, items: list, tot: PR.Totals) -> str:
+    """The `Progress:` line: tasks, bugs and phases done. The pairs are `core.progress.totals`'
+    (the one owner `ddflow status` reads too), labelled as live tasks."""
     bugs = [b for b in st.bugs.values() if b.resolution != "invalid"]
-    fixed = sum(b.resolution == "fixed" for b in bugs)
     still = [b for b in bugs if b.open]
     severe = sum(b.severity in ("high", "critical") for b in still)
     phases = [it for it in items if it.kind == "phase"]
@@ -43,11 +42,17 @@ def _progress(st: State, items: list) -> str:
     # (core.progress; Bb24939611d: direct children only missed every sub-task).
     closable = [p.id for p in phases if p.state != DONE and PR.phase_tally(st, p.id).complete]
     return (
-        f"Progress: tasks {_pct_of(PR.tally(work))}"
-        f" · bugs fixed {_pct(fixed, len(bugs))}"
+        f"Progress: tasks {_pct(tot.live_done, tot.live)}"
+        f" · bugs fixed {_pct(tot.bugs['fixed'], tot.bugs_live)}"
         + (f", {len(still)} open" + (f" ({severe} high)" if severe else "") if still else "")
-        + f" · phases {_pct(sum(p.state == DONE for p in phases), len(phases))}"
+        + f" · phases {_pct(tot.phases['done'], tot.phases_live)}"
         + (f", {len(closable)} ready to close" if closable else "")
+        + " · live tasks"
+        + (
+            ", fix tasks included"
+            if tot.fix_in_headline
+            else f", {tot.fix} fix tasks and {tot.abandoned} abandoned listed apart (`ddflow status`)"
+        )
     )
 
 
@@ -70,7 +75,8 @@ def report(
     items = _live(st)
     phase = PR.phase_of(st, item)
     if mode == "on":
-        lines.append(_progress(st, items))
+        tot = PR.queue_totals(st, fix_in_headline=cfg.output.status_fix_tasks_in_headline)
+        lines.append(_progress(st, items, tot))
     if phase:
         lines.append(f"Phase {phase}: {_pct_of(PR.phase_tally(st, phase))}")
     plan = plan if plan is not None else S.plan(st, cfg)

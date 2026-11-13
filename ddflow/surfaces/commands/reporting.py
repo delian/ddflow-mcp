@@ -101,8 +101,13 @@ def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
     if r["done"]:
-        out.append("Completed:")
-        for t in sorted(r["done"], key=lambda x: x.completed_at)[-12:]:
+        # The count is the whole queue's (totals), never the rows this cut list holds.
+        want = r.get("completed_shown", 12)
+        rows = sorted(r["done"], key=lambda x: x.completed_at)
+        rows = rows[-want:] if want else rows
+        n = r["totals"].counts["done"]
+        out.append(f"Completed (last {len(rows)} of {n}):" if len(rows) < n else "Completed:")
+        for t in rows:
             sha = f"  ({t.merged_sha[:8]})" if t.merged_sha else ""
             out.append(f"  [x] {t.id:<12} {t.title}{sha}")
     if r["running"]:
@@ -211,10 +216,10 @@ def _status_body(d: dict, r: dict, by_tag_lines: tuple = ()) -> list[str]:
     return [
         f"# {r['repo']}",
         "",
-        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
+        f"{r['totals'].definition()} across {r['phases']} phase(s); "
         f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
         "",
-        status_tasks_note(),
+        status_tasks_note(r["totals"]),
         "",
         *_queue_lines(r),
         *_recorded_line(r),

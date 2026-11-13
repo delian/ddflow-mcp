@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...config import Config
 from ...core import progress
 from ...core.model import DONE, REVIEW, RUNNING
 from . import registry
@@ -34,6 +35,8 @@ def _seconds(q: Query) -> float:
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     tasks = q.tasks()
     phases = q.phases()
+    cfg = Config.load(q.repo) if q.repo is not None else Config()
+    tot = progress.queue_totals(q.state, fix_in_headline=cfg.output.status_fix_tasks_in_headline)
     counts = progress.state_counts(tasks)
     seconds = _seconds(q)
     live = [d for d in q.decisions() if getattr(d, "live", False)]
@@ -53,6 +56,8 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         "tasks_total": len(tasks),
         "task_counts": [{"state": s, "n": n} for s, n in counts.items() if n],
         "tasks_done": counts[DONE],
+        "definition": tot.definition(),
+        "totals": tot.lines(),
         "agent_hours": round(seconds / 3600, 1),
         "in_flight": in_flight,
         "open_bugs": sum(1 for b in q.bugs() if b.open),

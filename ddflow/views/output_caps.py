@@ -48,7 +48,7 @@ _BOARD_KEYS = ("phases", "unphased", "critical_path")
 #: The prose list that is the same rows as a paged list, under another name (`recover --plan`).
 RENDERED_PAGE = {"found": "actions"}
 #: Lists whose NEWEST rows are the ones a reader wants (kept from the end).
-TAIL_KEYS = frozenset({"completed_tasks"})
+TAIL_KEYS = frozenset({"completed_tasks", "done"})
 
 #: The footer of the last capped call, for a tool whose wire body is a bare array (recover):
 #: the MCP layer reads it once with `take_note` and sends it as a second content block.

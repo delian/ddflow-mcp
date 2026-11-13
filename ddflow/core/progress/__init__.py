@@ -53,6 +53,9 @@ _SUBMODULE_OF = {
     "phase_tally": "tallies",
     "state_counts": "tallies",
     "tally": "tallies",
+    # totals
+    "Totals": "totals",
+    "queue_totals": "totals",
     # board
     "BoardSection": "board",
     "board_rows": "board",
