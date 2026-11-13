@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "baseline.keep"
+new = '14'
+why = "The per-sha baseline store (GM-baseline-store) keeps a measured base sha this many days, then prunes it."
+impact = "additive"

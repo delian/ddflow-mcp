@@ -871,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=4198bbc84a32 -->
-<details><summary>All 721 knobs across 66 sections</summary>
+<!-- ddflow:begin README/knobs sha=64602d15bf82 -->
+<details><summary>All 722 knobs across 67 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -911,6 +911,7 @@ long default is left to `ddflow config --explain`.
 | `approvals.accept_chat_for_t3` | `false` |  |
 | `approvals.forbid_chat_for_t3` | `false` |  |
 | `approvals.require_approval` | `[]` |  |
+| `baseline.keep` | `14` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
