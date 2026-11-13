@@ -180,6 +180,16 @@ def test_a_done_item_with_a_lapsed_lease_reads_done_not_expired_lease(repo):
     assert not [r for r in _recs(repo, "T1") if r.kind == "expired_lease"]
 
 
+def test_an_abandoned_item_with_a_lapsed_lease_is_still_recoverable(repo):
+    """Ba73b94a6ad narrows the skip to DONE: an ABANDONED item is not "done", its
+    branch may still hold work worth salvaging, so its lapsed lease stays reportable."""
+    _merged(repo, "T1", "src/T1/a.py")
+    log = EventLog(repo, "worker")
+    assert L.expire(log, "T1", reason="lapsed"), "the lease lapsed on the record"
+    log.append("item.abandoned", "T1", {"reason": "superseded"})
+    assert [r for r in _recs(repo, "T1") if r.kind == "expired_lease"]
+
+
 def test_the_advice_counts_the_blockers_it_does_not_list(repo, monkeypatch):
     _merged(repo, "T1", "src/T1/a.py")
     monkeypatch.setattr(L, "_SHOWN_BLOCKERS", 1)

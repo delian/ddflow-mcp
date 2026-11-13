@@ -14,7 +14,7 @@ from ...adapters import git as G
 from ...config import Config
 from ...config_sections._layers import read_toml
 from ...core import schedule
-from ...core.model import REVIEW, Item, Lease, State
+from ...core.model import DONE, REVIEW, Item, Lease, State
 from ...infra import worktree as W
 from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
@@ -31,9 +31,10 @@ def _expired_lease(it: Item, lease: Lease | None, now: float, grace_s: int) -> b
     A DONE item whose lease lapsed but was never cleared is owed nothing: ``complete``
     keeps the expired lease record (nothing clears it) and `release --note salvaged` on
     it is a no-op ('no lease'), so an expired-lease finding would read stale relative to
-    the item's actual state and overstate crash-orphans (Ba73b94a6ad).
+    the item's actual state and overstate crash-orphans (Ba73b94a6ad). An ABANDONED item
+    is not "done": its branch may still hold work worth salvaging, so it stays reportable.
     """
-    return bool(lease) and not lease.live(now, grace_s) and not it.terminal
+    return bool(lease) and not lease.live(now, grace_s) and it.state != DONE
 
 
 def scan(
