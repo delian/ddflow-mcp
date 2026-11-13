@@ -45,9 +45,6 @@ class CycleTable(Table):
     id_classes: dict[str, str] = field(default_factory=dict)
 
 
-#: The review gate over which review rounds are counted (a round is a review verdict, so
-#: the count is over a review gate). The one with the most RAN verdicts is chosen.
-DEFAULT_REVIEW_GATE = "rubber_duck"
 def _id_class(item: str) -> str:
     """The leading letters of an item id, before its first digit: the "class" a per-prefix
     sample median belongs to (``'T'`` for ``T1``/``T2`` siblings), ``'(none)'`` for an id
@@ -132,22 +129,23 @@ def lease_waits(facts: Facts, spans: list) -> list[float]:
             out.append(s.first_claim - wait)
     return out
 
-
-def _review_gate(facts: Facts) -> str:
+def _review_gate(facts: Facts, spans: list) -> str:
     """The review gate to count rounds over (both review gates belong to one item life, so
-    only one can be counted). The one with the most RAN verdicts; ``""`` when no review
-    round ran."""
+    only one can be counted). The one with the most RAN verdicts among the spans being
+    counted; ``""`` when none of those ran one."""
     review = PR.REVIEW_GATES if PR.REVIEW_GATES else {"rubber_duck", "critic"}
+    items = {s.item for s in spans}
     per_gate: Counter[str] = Counter(
-        o.gate for o in facts.outcomes if o.gate in review and o.kind in RAN
+        o.gate for o in facts.outcomes if o.item in items and o.gate in review and o.kind in RAN
     )
     return max(review, key=lambda g: per_gate[g]) if per_gate else ""
+
 
 def _rounds(facts: Facts, spans: list) -> tuple[str, list[int]]:
     """The review round count per completed item over ONE review gate (both review gates
     belong to the same item life, so totalling both would over-count the reported gate's
-    rounds). No verdict ran: no sample, never a fabricated zero."""
-    gate = _review_gate(facts)
+    rounds). No verdict ran over the counted spans: no sample, never a fabricated zero."""
+    gate = _review_gate(facts, spans)
     if not gate:
         return "", []
     values = [
