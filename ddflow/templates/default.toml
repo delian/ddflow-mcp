@@ -175,6 +175,8 @@ documents = []
 redact = true
 max_bytes = 60000
 refresh = "off"
+security_contact = ""
+security_response_days = 0
 tables = {}
 
 [fasttrack]
