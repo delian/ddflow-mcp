@@ -102,8 +102,8 @@ class Refusal:
 def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
     """The here-doc delimiter name (quotes removed) and the index one past the word, parsed from
     `i`: the word ends at the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside
-    it is part of the word and may hold those chars (a backslash quote-removes to the char it
-    escapes) (Bdd23c77383)."""
+    it is part of the word and may hold those chars (inside a double quote a backslash escapes
+    only dollar, backtick, double quote or backslash) (Bdd23c77383)."""
     name: list[str] = []
     while i < n and line[i] not in " \t;|&()<>\n":
         c = line[i]
@@ -114,7 +114,7 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
             q = c
             i += 1
             while i < n and line[i] != q:
-                if q == '"' and line[i] == "\\" and i + 1 < n:
+                if q == '"' and line[i] == "\\" and i + 1 < n and line[i + 1] in ('$', '`', '"', '\\'):
                     name.append(line[i + 1])
                     i += 2
                 else:

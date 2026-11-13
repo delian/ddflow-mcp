@@ -143,6 +143,9 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     # a `\X` inside a DOUBLE-quoted delimiter quote-removes to `X`, so `"a\"b"` names `a"b`
     # and the `git push` after that terminator is a command (critic #5)
     assert _check('cat <<"a\\"b"\ngit push origin main\na"b\ngit push origin main') is not None
+    # a backslash escapes only $/backtick/"/\ in a double-quoted delimiter, so `"a\b"` names
+    # `a\b` (not `ab`) and `git push` after it is a command (critic #6/#7)
+    assert _check('cat <<"a\\b"\ngit push origin main\na\\b\ngit push origin main') is not None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
