@@ -33,7 +33,6 @@ _SUBMODULE_OF = {
     "Failure": "types",
     "NOT_MERGEABLE": "types",
     "Result": "types",
-    "failure_text": "types",
     # precommit
     "DEFAULT_COMMAND": "precommit",
     "PRE_COMMIT_CONFIG": "precommit",

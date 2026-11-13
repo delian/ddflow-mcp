@@ -1,2 +1,0 @@
-[knob]
-"ddflow/services/completion/scripts.py:_MAX_BYTES" = 'completion.max_script_bytes'

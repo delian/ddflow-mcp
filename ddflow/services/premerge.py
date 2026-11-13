@@ -28,9 +28,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..adapters import git as G
+from ..adapters import proc as P
 from ..adapters.clock import DEFAULT as _CLOCK
-from ..infra import git as G
-from ..infra import proc as P
 from .ci.ruff import ruff_bin
 from .gateenv import child_env
 

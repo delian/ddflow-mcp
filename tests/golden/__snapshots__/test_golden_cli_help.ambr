@@ -793,6 +793,27 @@
   
   '''
 # ---
+# name: test_help[ddflow correct]
+  '''
+  usage: ddflow correct [-h] --field FIELD [--text TEXT | --from-file FROM_FILE] --reason REASON [--kind KIND] [--secret] [--approval APPROVAL] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --field FIELD         the field to replace (body, title, summary, author_model, ...)
+    --text TEXT           the new text (or --from-file)
+    --from-file FROM_FILE
+                          read the new text from this file
+    --reason REASON       why it was wrong (required; never the old value)
+    --kind KIND           the record kind, when the id names more than one
+    --secret              the value may be a secret: keep digests of it out of the audit entry
+    --approval APPROVAL   an agent: 'request' files an approval request (the operator answers in
+                          chat), then the approval id; a person corrects directly
+  
+  '''
+# ---
 # name: test_help[ddflow decision add]
   '''
   usage: ddflow decision add [-h] [--id ID] --title TITLE --decision DECISION [--context CONTEXT] [--consequences CONSEQUENCES] [--alternatives ALTERNATIVES] [--globs GLOBS] [--tags TAGS] [--sources SOURCES] [--item ITEM] [--by BY] [--status {proposed,accepted,superseded}] [--supersedes SUPERSEDES] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
