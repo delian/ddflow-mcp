@@ -223,14 +223,17 @@ def _next_notes(out, a, ctx):
 
 
 def _next_text(out, a, ctx):
+    if a.get("lane"):
+        if out.exit == OK:
+            d = out.data
+            return (
+                f"{d['lane']}: take {d['item']}\n"
+                f"  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
+            )
+        return f"{a['lane']}: {out.reason}"
     if a.get("state"):
         return _state_text(out, a, ctx)
-    if not a.get("lane"):
-        return L.next_text(out, a, ctx)
-    if out.exit == OK:
-        d = out.data
-        return f"{d['lane']}: take {d['item']}\n  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
-    return f"{a['lane']}: {out.reason}"
+    return L.next_text(out, a, ctx)
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -303,7 +306,6 @@ COMMANDS: tuple[Command, ...] = (
                 "blocked, ready, merged, held, review or blocking_deps",
                 default="",
                 choices=STATES,
-                exclusive="purpose",
             ),
             Param(
                 "kind",
@@ -317,7 +319,6 @@ COMMANDS: tuple[Command, ...] = (
                 help="Answer this idle lane.",
                 cli_help="answer this idle lane: its best item and a note for claim",
                 default="",
-                exclusive="purpose",
             ),
             *capped(True),
         ),
