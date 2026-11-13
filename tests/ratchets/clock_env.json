@@ -42,7 +42,7 @@
  "ddflow/services/onboard_tests.py": 2,
  "ddflow/services/onboard_verify.py": 2,
  "ddflow/services/orphan_suites.py": 1,
- "ddflow/services/pins.py": 11,
+ "ddflow/services/pins.py": 9,
  "ddflow/services/quota.py": 1,
  "ddflow/services/repro_facts.py": 4,
  "ddflow/services/review/engine.py": 3,

@@ -17,9 +17,10 @@ is quiet and a kill ends the process only after the reply was written.
 
 from __future__ import annotations
 
-import os
 import sys
 
+from ..adapters.env import DEFAULT as ENV
+from ..adapters.proc import hard_exit
 from ..core import outcome as O
 
 #: The environment that declares how this server is hosted (`local` | `remote`).
@@ -35,7 +36,7 @@ def hosting() -> str:
     Otherwise it is detected: a local stdio server owns a real descriptor and re-execs onto
     the same one (`mcp_upgrade.StdinLines`); a server whose stdin is not one is remote.
     """
-    declared = os.environ.get(HOSTING_ENV, "").strip().lower()
+    declared = (ENV.get(HOSTING_ENV, "") or "").strip().lower()
     if declared in HOSTINGS:
         return declared
     from . import mcp_upgrade as _upgrade  # deferred: importing it imports the config layer
@@ -120,4 +121,4 @@ def exit_process(exit_code: int = 1) -> None:
         sys.stdout.flush()
         sys.stderr.flush()
     finally:
-        os._exit(exit_code)
+        hard_exit(exit_code)

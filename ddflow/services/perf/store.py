@@ -15,13 +15,13 @@ timestamp, an env key, a value, a gate id and a content digest -- nothing else.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ddflow.adapters.clock import DEFAULT as CLOCK
+from ddflow.adapters.fsio import append_line
 from ddflow.config import Config
 from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.infra.fsio import atomic_write
@@ -93,20 +93,8 @@ def rollup(samples: Iterable[Sample], minimum: int) -> Rollup:
 
 
 def _append_line(path: Path, line: str) -> None:
-    """One whole line appended to an O_APPEND descriptor; a short write is retried so a
-    torn tail cannot glue onto the next line."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        data = (line + "\n").encode("utf-8")
-        written = 0
-        while written < len(data):
-            n = os.write(fd, data[written:])
-            if n <= 0:
-                break
-            written += n
-    finally:
-        os.close(fd)
+    """One whole line appended (see `ddflow.adapters.fsio.append_line`)."""
+    append_line(path, line)
 
 
 def _replace(path: Path, body: str) -> None:
@@ -239,7 +227,7 @@ def merge_series(
 
 #: The committed daily aggregates, keyed by series then UTC day -- NOT under the git-ignored
 #: ``.ddflow/local``, so the compacted numbers survive a lost ring (only raw detail is lost).
-AGGREGATE_DIR = ".ddflow" + os.sep + "metrics" + os.sep + "perf"
+AGGREGATE_DIR = str(Path(".ddflow") / "metrics" / "perf")
 
 
 def aggregate_path(repo: Path, series: str, day: float) -> Path:

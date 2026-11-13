@@ -34,8 +34,9 @@ from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
 from .types import CONFLICT, Check, Result
 
-_HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(r"^(?P<name>\S.*?)\.{3,}.*?\b(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
+CHECK_DETAIL_CHARS = 2000  #: one failing hook's own output kept as its check detail
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
@@ -46,13 +47,38 @@ def _killed(p) -> bool:
 
 
 def parse_checks(output: str) -> list[Check]:
-    """Per-hook results from pre-commit's report ("ruff check ......... Failed")."""
+    """Per-hook results from pre-commit's report ("ruff check ......... Failed").
+
+    A failing hook's ``detail`` is the output pre-commit printed for it -- the lines after
+    its "Failed" line and before the next hook's line -- kept so a red merge's cause can be
+    read back (B-post-merge-ci-failure-carries-no-detail)."""
     checks = []
+    failed: Check | None = None
+    lines: list[str] = []
     for line in output.splitlines():
-        m = _HOOK_LINE.match(line.strip())
-        if m and m["status"] != "Skipped":
-            checks.append(Check(m["name"].strip(), m["status"] == "Passed"))
+        # Hook result lines are flush-left; a hook's own output is indented, so an
+        # indented output line that merely ends in the status word is output, not a boundary.
+        m = _HOOK_LINE.match(line)
+        if m:
+            if failed is not None:
+                failed.detail = _check_detail(lines)
+            failed = None
+            lines = []
+            if m["status"] != "Skipped":
+                check = Check(m["name"].strip(), m["status"] == "Passed")
+                checks.append(check)
+                failed = check if m["status"] == "Failed" else None
+        elif failed is not None:
+            lines.append(line)
+    if failed is not None:
+        failed.detail = _check_detail(lines)
     return checks
+
+
+def _check_detail(lines: list[str]) -> str:
+    """The tail of a failed hook's own output, capped, for its check's ``detail``."""
+    kept = [ln.strip() for ln in lines if ln.strip()]
+    return "\n".join(kept)[-CHECK_DETAIL_CHARS:]
 
 
 def _merge_base(
@@ -227,6 +253,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     holder = _holder(repo, ref)
     override = bool(command.strip())
     used: dict[str, dict] = {}
+    env_extra = _merged_range_env(repo, changed_from)
 
     def plan(tree):
         return _plan(
@@ -260,6 +287,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             tick,
             used,
             False,
+            env_extra,
         )
         return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
 
@@ -301,6 +329,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             tick,
             used,
             plan=merged,
+            env_extra=env_extra,
         )
     except SL.SuiteBusy as busy:
         return _busy_result(cmd, sha, busy)
@@ -310,7 +339,9 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan):
+def _run_under_slot(  # noqa: PLR0913 -- the run's whole context, one parameter per facet
+    cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan, env_extra=None
+):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
@@ -339,13 +370,14 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
                 return None, planned, waited, cmd, None, None
             cmd, scope = planned
             p, out_prefix, elapsed = _execute(
-                cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used
-            )
+                cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used,
+                **_extra(env_extra),
+            )  # fmt: skip
             return p, out_prefix, waited, cmd, scope, elapsed
     raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
 
-def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, env_extra=None):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
     its output prefix, the seconds spent queued for the slot (None without one), and the run's
     own elapsed seconds (B28537b615d). ``holder``
@@ -359,8 +391,9 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(CLOCK.monotonic() - queued_at, 6)
         p, out_prefix, elapsed = _execute(
-            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
-        )
+            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used,
+            **_extra(env_extra),
+        )  # fmt: skip
     return p, out_prefix, waited, elapsed
 
 
@@ -443,6 +476,17 @@ def _default_on_the_diff(
     return scope_to_diff(cmd, tree, since)
 
 
+def _merged_range_env(repo: Path, changed_from: str) -> dict[str, str]:
+    """The range a merge added as ``PRE_COMMIT_FROM_REF``/``PRE_COMMIT_TO_REF``, for the run's
+    environment (never spliced into the command text, which may be any shell). An unscoped run
+    (`--all-files`: a whole-suite or operator-written command) has pre-commit export no range,
+    and a hook that scans commits (gitleaks-pushed.sh) would fall back to `origin/main..HEAD`,
+    every unpushed local commit. A command already scoped (`--from-ref`) sets the same values
+    itself. {} when no range is known."""
+    since = W.rev(repo, changed_from) if changed_from else ""
+    return {"PRE_COMMIT_FROM_REF": since, "PRE_COMMIT_TO_REF": "HEAD"} if since else {}
+
+
 def _worker_log(scope) -> dict[str, dict]:
     """The scope's record of the worker counts used, stage -> the count and its inputs."""
     used: dict[str, dict] = {}
@@ -518,8 +562,21 @@ def localize_hooks(
         yield cmd.replace("pre-commit run", f"pre-commit run -c {shlex.quote(str(name))}")
 
 
+def _extra(env_extra) -> dict:
+    """``env_extra`` as the keyword the executors take, absent when empty."""
+    return {"env_extra": env_extra} if env_extra else {}
+
+
 def _execute(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, holding_suite=False, used=None
+    cfg: Config,
+    tree: Path,
+    cmd: str,
+    scope,
+    budget: int,
+    tick=None,
+    holding_suite=False,
+    used=None,
+    env_extra=None,
 ):
     """(the run that decided the verdict, the output of the run before it, and the run's own
     elapsed seconds summed across its stages): the command as written, or -- for a selected
@@ -532,11 +589,22 @@ def _execute(
         if holding_suite
         else nullcontext(cmd) as cmd
     ):
-        return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected, holding_suite)
+        return _run_stages(
+            cfg, tree, cmd, scope, budget, tick, used, selected, holding_suite, env_extra
+        )
 
 
 def _run_stages(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected, holding_suite=False
+    cfg: Config,
+    tree: Path,
+    cmd: str,
+    scope,
+    budget: int,
+    tick,
+    used,
+    selected,
+    holding_suite=False,
+    env_extra=None,
 ):
     """Returns ``(run, prefix, elapsed)`` on BOTH paths: the run that decided the verdict, the
     output emitted before it, and the run's own elapsed seconds summed across its stages
@@ -548,7 +616,11 @@ def _run_stages(
     p = CommandRunner().run(
         Declared(cmd, "[ci].command"),
         cwd=tree,
-        env={**child_env(cfg, ci=True), **({"SKIP": scope.skip} if selected else {})},
+        env={
+            **child_env(cfg, ci=True),
+            **(env_extra or {}),
+            **({"SKIP": scope.skip} if selected else {}),
+        },
         timeout_s=budget,
         check_installed=False,  # checked before the scratch worktree was made
         on_tick=on_tick,
