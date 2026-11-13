@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=93c8e7d2112f -->
-<details><summary>All 745 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=61bc60983657 -->
+<details><summary>All 747 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1083,6 +1083,8 @@ long default is left to `ddflow config --explain`.
 | `gates.baseline_red_notify_to` | `"coordinator"` |  |
 | `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
 | `gates.keep_env` | `[]` |  |
+| `gates.scrub_secret_names` | `"warn"` | `off` \| `warn` \| `on` |
+| `gates.secret_name_patterns` | (long: see `ddflow config --explain`) |  |
 | `gates.standards_wait_s` | `900` |  |
 | `govern.quota_mark_1` | `0.4` |  |
 | `govern.quota_mark_2` | `0.6` |  |
