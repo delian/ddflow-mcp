@@ -3191,8 +3191,7 @@
   
   options:
     -h, --help  show this help message and exit
-    --history   list every correction of the record, in order (default: the
-                latest per field)
+    --history   list every correction of the record, in order (default: the latest per field)
   
   '''
 # ---
