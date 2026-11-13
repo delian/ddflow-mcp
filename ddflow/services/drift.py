@@ -284,6 +284,15 @@ class Move:
     how: str  # "rename" | "split"
 
 
+def _split_target(old: str) -> str:
+    """The ``module/__init__.py`` path a deleted python module ``old`` split into, or "".
+    A package split only splits a python module into its OWN package directory, so a
+    deleted non-module never fakes a split (MV-path-moves)."""
+    if not old.endswith(".py") or not old[:-3]:
+        return ""
+    return f"{old[:-3]}/__init__.py"
+
+
 def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     """Every rename, move and package split in what ``after`` did since ``before``, or None
     when git could not say (never "nothing moved"). A rename is git's own ``-M`` content
@@ -293,15 +302,13 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
     split-* tasks)."""
     r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", before, after)
-    if not r.ok or "rename" in (r.err or "") and "skipped" in (r.err or ""):
+    if not r.ok or ("rename" in (r.err or "") and "skipped" in (r.err or "")):
         return None
     added: set[str] = set()
     deleted: set[str] = set()
     out: list[Move] = []
     for line in r.out.splitlines():
         kind, *names = line.split("\t")
-        if not kind:
-            continue
         if kind.startswith("R") and len(names) >= 2:
             out.append(Move(names[0], names[-1], "rename"))
         elif kind == "A" and names:
@@ -309,9 +316,7 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
         elif kind == "D" and names:
             deleted.add(names[0])
     for old in sorted(deleted):
-        if not old.endswith(".py") or not old[:-3]:
-            continue  # a package split only splits a python module into a directory
-        stem = old[:-3]  # foo/bar.py -> foo/bar
-        if f"{stem}/__init__.py" in added:
-            out.append(Move(old, f"{stem}/__init__.py", "split"))
+        target = _split_target(old)
+        if target in added:
+            out.append(Move(old, target, "split"))
     return out
