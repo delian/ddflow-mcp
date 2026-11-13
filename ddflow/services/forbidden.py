@@ -99,12 +99,37 @@ class Refusal:
         )
 
 
+def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
+    """The here-doc delimiter name (quotes removed) and the index one past the word, parsed from
+    `i`: the word ends at the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside
+    it is part of the word and may hold those chars (a backslash quote-removes to the char it
+    escapes) (Bdd23c77383)."""
+    name: list[str] = []
+    while i < n and line[i] not in " \t;|&()<>\n":
+        c = line[i]
+        if c == "\\":
+            name.append(line[i + 1] if i + 1 < n else "\\")
+            i += 2
+        elif c == "'" or c == '"':
+            q = c
+            i += 1
+            while i < n and line[i] != q:
+                if q == '"' and line[i] == "\\" and i + 1 < n:
+                    name.append(line[i + 1])
+                    i += 2
+                else:
+                    name.append(line[i])
+                    i += 1
+            i += 1
+        else:
+            name.append(c)
+            i += 1
+    return "".join(name), i
+
+
 def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
     """The here-doc delimiter name and the index one past the `<<` word at `i` (its first `<`),
-    or None when the `<<` opens none: a `<<<` here-string, a `(<<` or `1<<` shift. The word ends at
-    the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside it is part of the word
-    -- quotes removed into the name, and may hold those chars -- so `<<safe'end'` names `safeend`
-    (Bdd23c77383)."""
+    or None when the `<<` opens none: a `<<<` here-string, a `(<<` or `1<<` shift."""
     if i > 0 and (line[i - 1] == "<" or line[i - 1] == "(" or line[i - 1].isdigit()):
         return None  # `<<<`, `(<<` or a shift: not a here-doc (the `(?<![<\d(])` guard)
     i += 2  # past `<<`
@@ -114,28 +139,7 @@ def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
         i += 1
     while i < n and line[i] in " \t":
         i += 1
-    name: list[str] = []
-    while i < n and line[i] not in " \t;|&()<>\n":
-        c = line[i]
-        if c == "\\":
-            name.append(line[i + 1] if i + 1 < n else "\\")
-            i += 2
-        elif c == "'" or c == '"':
-            q = c
-            double = q == '"'
-            i += 1
-            while i < n and line[i] != q:
-                if double and line[i] == "\\" and i + 1 < n:
-                    name.append(line[i + 1])  # a `\X` quote-removes to `X` in a double quote
-                    i += 2
-                else:
-                    name.append(line[i])
-                    i += 1
-            i += 1  # the closing quote is name text, not a string quote
-        else:
-            name.append(c)
-            i += 1
-    return "".join(name), i
+    return _heredoc_name(line, i, n)
 
 
 def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
