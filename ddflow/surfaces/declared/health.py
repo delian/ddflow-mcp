@@ -22,6 +22,7 @@ COMMANDS: tuple[Command, ...] = (
         tier="all",
         family="ddflow_view",
         action="vigil",
+        wire_shape=(["vigil"], {}),
         description=(
             "One compact health snapshot in one pass: open bugs by severity + fixed in the "
             "window, stale pins, active lanes with their items and lane age, the interrupted "

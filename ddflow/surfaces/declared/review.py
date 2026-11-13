@@ -154,6 +154,7 @@ COMMANDS: tuple[Command, ...] = (
             full=bool(a.get("full")),
             exclude=a.get("exclude", "") or "",
             include_pinned=bool(a.get("include_pinned")),
+            approval=a.get("approval", "") or "",
         ),
         # The TRANSCRIPT the run produced — findings already formatted with their
         # severities, which is what this tool has always returned.
@@ -246,6 +247,12 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("reason", help="why --force", default="", cli_only=True),
             Param(
+                "approval",
+                help="an agent: 'request' files an operator approval to lift the review-round budget, then the approval id the refusal names (the route gate skip and merge have)",
+                cli_help="an agent: 'request' files an operator approval for lifting the review-round budget (the operator answers in chat), then the approval id",
+                default="",
+            ),
+            Param(
                 "finding",
                 help="triage: the finding's number (#N) or a unique digest prefix (6+ hex)",
                 cli_only=True,
@@ -277,6 +284,7 @@ COMMANDS: tuple[Command, ...] = (
             "exclude",
             "include_pinned",
             "chunk",
+            "approval",
         ),
     ),
     Command(

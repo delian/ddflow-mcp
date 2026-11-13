@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=fa02034fdb0d -->
-<details><summary>All 744 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=93c8e7d2112f -->
+<details><summary>All 745 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1222,8 +1222,6 @@ long default is left to `ddflow config --explain`.
 | `lessons.verify_output_lines` | `12` |  |
 | `lessons.verify_load_ratio` | `1.0` |  |
 | `locks.mode` | `"enforce"` | `enforce` \| `log` \| `off` |
-| `locks.acquire` | `"declared"` | `declared` \| `lazy` |
-| `locks.hot_files` | `[]` |  |
 | `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
 | `locks.suggest_globs` | `true` |  |
 | `locks.suggest_history` | `30` |  |
@@ -1569,6 +1567,9 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.budget_stop_enabled` | `true` |  |
+| `swarm.budget_warn_fraction` | `0.5` |  |
+| `swarm.budget_stop_grace_s` | `10.0` |  |
 | `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
 | `swarm.remote_bundle_max_bytes` | `104857600` |  |
 | `swarm.remote_return_max_bytes` | `52428800` |  |
