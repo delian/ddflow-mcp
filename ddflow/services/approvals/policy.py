@@ -251,18 +251,24 @@ def _work_item_of(text: str) -> str:
     return ""
 
 
+def _another_item(state, work_item: str, text: str) -> bool:
+    named = _work_item_of(text)
+    return bool(named) and named != work_item and named in state.items
+
+
 def used(state, rule_id: str, subject: str, work_item: str = "") -> int:
     """How many times ``rule_id`` already approved this subject (item and target); with
     ``work_item`` only the uses recorded for that work item (the pins rule, whose subject is the
-    recipe alone). Fails CLOSED: a use whose text records no work item counts against every one,
-    so a drifted text can only make the cap tighter, never unbounded."""
+    recipe alone). Fails CLOSED: a use is left out of the count only when its text names ANOTHER
+    work item that exists; a text that names none, or something that is no item, counts against
+    this one, so a drifted text can only make the cap tighter, never unbounded."""
     return sum(
         1
         for r in asks_of(state).values()
         if r["policy"]
         and r["answered_by"] == f"policy:{rule_id}"
         and r["subject"] == subject
-        and (not work_item or _work_item_of(r["text"]) in ("", work_item))
+        and (not work_item or not _another_item(state, work_item, r["text"]))
     )
 
 

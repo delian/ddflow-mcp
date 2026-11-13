@@ -312,5 +312,8 @@ def test_a_use_with_no_recorded_work_item_counts_against_every_item(proj):
     state = _state(proj)
     assert PO.used(state, RULE, _canon().subject(), "T1") == 1
     assert PO.used(state, RULE, _canon().subject(), "T2") == 0
-    asks_of(state)[got.ask_id]["text"] = "reworded, no marker"
+    row = asks_of(state)[got.ask_id]
+    row["text"] = "reworded, no marker"
     assert PO.used(state, RULE, _canon().subject(), "T2") == 1
+    row["text"] = "x\n  work item: T1 (auto)\n  approved by standing rule: pins_regenerate"
+    assert PO.used(state, RULE, _canon().subject(), "T1") == 1  # names no item that exists
