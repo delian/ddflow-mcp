@@ -30,7 +30,7 @@ import os
 import signal
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, NoReturn, Protocol, runtime_checkable
 
 from . import resources as R
 from .ports import port
@@ -92,6 +92,25 @@ def replace_process(path: str, argv: list[str], env: dict[str, str]) -> None:
     raising `OSError`: the one `exec` in the package, here so the stdin-guard ratchet has one
     place to look. Flush what the caller owns first; nothing runs after this succeeds."""
     os.execve(path, argv, env)
+
+
+def current_pid() -> int:
+    """This process's id (`os.getpid`)."""
+    return os.getpid()
+
+
+def hard_exit(code: int) -> NoReturn:
+    """End this process NOW with ``code``, skipping interpreter shutdown (`os._exit`)."""
+    os._exit(code)
+
+
+def wait_rusage(pid: int) -> tuple[int, Any]:
+    """Block until child ``pid`` ends; ``(returncode, rusage)`` with a signal death as the
+    negative signal number, as `subprocess` reports it (`os.wait4`). Raises OSError."""
+    _, status, ru = os.wait4(pid, 0)
+    if os.WIFSIGNALED(status):
+        return -os.WTERMSIG(status), ru
+    return os.WEXITSTATUS(status), ru
 
 
 def popen(*args: Any, cls: type = subprocess.Popen, **kwargs: Any) -> subprocess.Popen:

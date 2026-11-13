@@ -12,11 +12,11 @@ the value may be a secret, which keeps every digest off. A scrub removes the old
 
 from __future__ import annotations
 
-import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import digest as D
 from ..core import outcome as O
 from ..core import record_fields as RF
@@ -86,7 +86,7 @@ def _holds(st: Any, kind: str, rid: str, rec: Any, agent: str, grace_s: int) -> 
     item = rid if kind in ("task", "phase") else str(getattr(rec, "item", "") or "")
     it = st.items.get(item) if item else None
     lease = getattr(it, "lease", None)
-    return bool(lease and lease.holder == agent and lease.live(time.time(), grace_s))
+    return bool(lease and lease.holder == agent and lease.live(CLOCK.wall(), grace_s))
 
 
 def _check_request(rc: Any, reason: str, fields: Mapping[str, Any]) -> O.Outcome | None:

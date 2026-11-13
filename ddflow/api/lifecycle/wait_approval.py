@@ -10,10 +10,10 @@ helpers and `_wait_approval` / `_wait_job` HERE; this module imports nothing bac
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
 from ...core.clock import epoch as _epoch
@@ -65,11 +65,11 @@ def _keep_alive(log, cfg, st):
     tick, every = LK.for_holder(log, cfg, st)
     if tick is None:
         return lambda: None
-    last = [time.monotonic()]
+    last = [CLOCK.monotonic()]
 
     def paced() -> None:
-        if time.monotonic() - last[0] >= every:
-            last[0] = time.monotonic()
+        if CLOCK.monotonic() - last[0] >= every:
+            last[0] = CLOCK.monotonic()
             tick()
 
     return paced
@@ -84,7 +84,7 @@ def _poll(
 
     Shared by the item wait and the approval wait: the sleep-keepalive-fingerprint-reload
     skeleton is one loop, not two copies (the architecture guard counts duplicates).
-    ``timer`` is the caller's ``time`` MODULE (tests patch `wait.time` to skew the clock).
+    ``timer`` is the `Clock` (tests patch the `time` functions it reads to skew it).
     """
     seen = None  # the first pass always re-judges: whatever landed since the load above
     checked = timer.monotonic()
@@ -253,24 +253,24 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
         )
         return _approval_outcome(v, data, waited, approval)
 
-    v = _judge_approval(st, approval, time.time())
+    v = _judge_approval(st, approval, CLOCK.wall())
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
-    started = time.monotonic()
+    started = CLOCK.monotonic()
     deadline = started + timeout
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
     # The lane's OWN leases stay alive while it waits on its approval (the same keepalive
     # the item-wait uses): hours of waiting must not lapse the very claim the answer is for.
     keep_alive = _keep_alive(log, cfg, st)
-    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, time):
+    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, CLOCK):
         was = v
-        v = _judge_approval(st, approval, time.time())
+        v = _judge_approval(st, approval, CLOCK.wall())
         if v["status"] != "blocked":
-            return result(v, time.monotonic() - started, [f"{approval}: {v['status']}"])
+            return result(v, CLOCK.monotonic() - started, [f"{approval}: {v['status']}"])
         if v["why"] != was["why"]:
             say(f"still waiting: {v['why']}")
-    return result(v, time.monotonic() - started, [])  # the deadline passed still pending
+    return result(v, CLOCK.monotonic() - started, [])  # the deadline passed still pending
 
 
 def _round_recorded_after(st, it, started: str) -> bool:
@@ -456,21 +456,21 @@ def _wait_job(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
         )
         return _job_outcome(v, data, waited, job)
 
-    v = _judge_job(st, job, time.time())
+    v = _judge_job(st, job, CLOCK.wall())
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
-    started = time.monotonic()
+    started = CLOCK.monotonic()
     deadline = started + timeout
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
     # The lane's OWN leases stay alive while it waits on its review (the same keepalive
     # the item-wait uses): hours of waiting must not lapse the very claim the round covers.
     keep_alive = _keep_alive(log, cfg, st)
-    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, time):
+    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, CLOCK):
         was = v
-        v = _judge_job(st, job, time.time())
+        v = _judge_job(st, job, CLOCK.wall())
         if v["status"] != "blocked":
-            return result(v, time.monotonic() - started, [f"{job}: {v['status']}"])
+            return result(v, CLOCK.monotonic() - started, [f"{job}: {v['status']}"])
         if v["why"] != was["why"]:
             say(f"still waiting: {v['why']}")
-    return result(v, time.monotonic() - started, [])  # the deadline passed still running
+    return result(v, CLOCK.monotonic() - started, [])  # the deadline passed still running
