@@ -3184,13 +3184,15 @@
 # ---
 # name: test_help[ddflow show]
   '''
-  usage: ddflow show [-h] id
+  usage: ddflow show [-h] [--history] id
   
   positional arguments:
     id
   
   options:
     -h, --help  show this help message and exit
+    --history   list every correction of the record, in order (default: the
+                latest per field)
   
   '''
 # ---
