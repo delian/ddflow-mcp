@@ -288,10 +288,12 @@ def _ahead(repo: Path, base: str, branch: str) -> int:
         return -1
 
 
-def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
+def _readies(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> list[H.Ready]:
     """Items that finished their gates but never merged (research row b): their lane is
     dropped (lapsed or released), work sits ahead of the base, and only ``merge`` (or
-    nothing) is owed. PROPOSE only — never landed here."""
+    nothing) is owed. PROPOSE only — never landed here. A holder whose process is provably
+    alive (the lapsed_alive case) is NOT "finished, forgotten"; it is that finding's."""
+    check = alive or (lambda who: HI.liveness(repo, who))
     out: list[H.Ready] = []
     for i, it in st.items.items():
         if it.removed or it.terminal or not it.branch:
@@ -299,6 +301,8 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
         lease = it.lease
         if lease is not None and lease.live(now, cfg.lease.grace_s):
             continue  # still working it: not "finished, forgotten"
+        if check(lease.holder)[0] is True:
+            continue  # holder alive (lapsed_alive): resume_own, not ready-to-land
         if it.gate_outcome("merge") == "passed":
             continue  # already merged: the landed case, not the ready-to-land one
         ahead = _ahead(repo, _base(cfg, repo), it.branch)
@@ -323,17 +327,20 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
     return out
 
 
-def _merges(repo: Path, st, cfg, now: float) -> list[H.MergeHang]:
+def _merges(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> list[H.MergeHang]:
     """A merge mid-flight in an item's worktree: MERGE_HEAD set, or a path left unmerged
     (research row h). Only the UNAMBIGUOUS, holder-DEAD signal is detected here. A live
     holder with MERGE_HEAD is resolving a conflict, not interrupted; only a dropped lane
     (lapsed or released) whose tree is still mid-merge is a merge that was interrupted."""
+    check = alive or (lambda who: HI.liveness(repo, who))
     out: list[H.MergeHang] = []
     for i, it in st.items.items():
         if it.removed or it.terminal:
             continue
         if it.lease is not None and it.lease.live(now, cfg.lease.grace_s):
             continue  # a live holder is resolving it: not interrupted, the merge is in flight
+        if check(it.lease.holder)[0] is True:
+            continue  # holder alive (lapsed_alive): it is resolving the merge, not interrupted
         wt = W.load_path(repo, it.worktree) if it.worktree else None
         if wt is not None and wt.exists() and W.merging(wt) is True:
             out.append(H.MergeHang(i, it.lease.holder if it.lease else "(none)", str(wt), merging=True))
@@ -424,8 +431,8 @@ def inspect(
         now,
         limits(cfg),
         _runs(repo, st),
-        _readies(repo, st, cfg, now),
-        _merges(repo, st, cfg, now),
+        _readies(repo, st, cfg, now, alive),
+        _merges(repo, st, cfg, now, alive),
     )
     found += _loop_runaways(events, st, cfg)
     return list({f.key: f for f in found}.values())

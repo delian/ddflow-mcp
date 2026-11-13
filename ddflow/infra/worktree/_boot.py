@@ -41,14 +41,23 @@ def stored_boot(repo: Path | str) -> str:
         return ""
 
 
+def _record(m: Path, cur: str) -> None:
+    """Persist the current boot id (best-effort): a torn or unwritable marker is never a
+    proof of anything, so a failed write is swallowed after leaving the old value intact."""
+    try:
+        m.parent.mkdir(parents=True, exist_ok=True)
+        fsio.atomic_write(m, cur + "\n")
+    except OSError:
+        pass
+
+
 def observe_boot(repo: Path | str) -> dict[str, object]:
     """Record the current boot id and say whether it CHANGED since ddflow last looked.
 
-    Returns ``{"boot_id": cur, "previous": stored, "changed": bool}``. ``changed`` is what
-    READABLE values prove: it is True when the current id differs from a previously-recorded
-    readable id, or on a first sighting; the marker write only persists the new id, and a
-    failed write does NOT clear a change the two values already prove. An UNREADABLE previous
-    value is unknown -- never a reboot from it.
+    Returns ``{"boot_id": cur, "previous": stored, "changed": bool}``. ``changed`` is True
+    ONLY when the current id differs from a previous READABLE id -- a reboot proven. A
+    missing marker is a baseline, not a reboot; an unreadable one is unknown. The write is
+    best-effort: an unwritable marker cannot un-prove a change two readable values prove.
     """
     cur = boot_id()
     if not cur:
@@ -57,25 +66,11 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
     try:
         prev = m.read_text("utf-8").strip()
     except FileNotFoundError:
-        prev = ""  # never seen this machine: the one change from nothing
+        prev = ""  # never seen this machine: a baseline, recorded once below, not a reboot
     except (OSError, UnicodeError):
-        # The marker is present but cannot be read: its previous value is unknown -- never
-        # a reboot from it. Still RECORD the current id when the write works, so a corrupt
-        # or unreadable marker is replaced rather than stuck forever; report no change
-        # (unknown is not no).
-        try:
-            m.parent.mkdir(parents=True, exist_ok=True)
-            fsio.atomic_write(m, cur + "\n")
-        except OSError:
-            pass
+        _record(m, cur)  # unreadable: unknown previous, never a reboot from it
         return {"boot_id": cur, "previous": "", "changed": False}
-    if cur != prev:
-        # The CHANGE is known (both values readable and they differ); the write only
-        # persists it. A failed write erases nothing: report the change the values prove.
-        try:
-            m.parent.mkdir(parents=True, exist_ok=True)
-            fsio.atomic_write(m, cur + "\n")
-        except OSError:
-            pass
-        return {"boot_id": cur, "previous": prev, "changed": True}
-    return {"boot_id": cur, "previous": prev, "changed": False}
+    if prev == cur:
+        return {"boot_id": cur, "previous": prev, "changed": False}
+    _record(m, cur)
+    return {"boot_id": cur, "previous": prev, "changed": True}
