@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -16,6 +17,7 @@ from conftest import run_cli
 from helpers import git as _git
 
 from ddflow.api.gates import _run
+from ddflow.infra.log import _flock
 
 HOLDER = """
 import sys, time
@@ -64,3 +66,44 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     assert result.data["outcome"] == ""
     # Retried visibly before giving up: the note names the lock and that it is retrying.
     assert "waiting to record the run start" in capsys.readouterr().err
+
+
+def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
+    # The second half of B-gate-run-dies-on-events-lock: a long gate run must record its
+    # start (briefly) and then NOT hold events.lock while its command runs, or every other
+    # lane's heartbeat blocks behind this run's commit. While the command sleeps, another
+    # writer must acquire the lock at once.
+    began = tmp_path / "began"
+    cmd = (
+        f"{sys.executable} -c \"import pathlib,time; "
+        f"pathlib.Path({str(began)!r}).write_text('x'); time.sleep(30)\""
+    )
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "gate.ci.command", cmd)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    tree = repo.parent / "agent-tree"
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "agent-work")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    assert run_cli(tree, "claim", "T1", "--no-worktree")[0] == 0
+
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    p = subprocess.Popen(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "gate", "run", "T1", "ci"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not began.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert began.exists(), "the gate command never started"
+        # Taken while the command runs: a held lock would wait past 5s and raise TimeoutError.
+        with _flock(repo / ".ddflow" / "events.lock", 5):
+            pass
+    finally:
+        p.kill()
+        p.wait(timeout=30)
