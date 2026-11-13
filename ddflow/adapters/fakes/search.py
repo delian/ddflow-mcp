@@ -36,7 +36,12 @@ class FakeSearchIndex:
         self.docs.extend(docs)
         for term, (ords, weights) in postings.items():
             off = ords if not start else array(ords.typecode, (start + o for o in ords))
-            self.postings[term] = (off, weights)
+            held = self.postings.get(term)
+            if held is None:
+                self.postings[term] = (off, weights)
+            else:  # a term already indexed gains the batch's ordinals and weights beside its own
+                held[0].extend(off)
+                held[1].extend(weights)
 
     def query(self, con, terms: Sequence[str]) -> dict[str, Postings]:
         return {t: self.postings[t] for t in terms if t in self.postings}

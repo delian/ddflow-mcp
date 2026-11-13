@@ -68,6 +68,15 @@ def test_index_appends_instead_of_replacing():
     con.close()
 
 
+def test_the_fake_merges_a_term_already_indexed():
+    idx = FakeSearchIndex()
+    idx.rebuild(None, [("a", "task", "", "d1")], {"a": (array("q", [0]), array("d", [1.0]))})
+    idx.index(None, [("b", "bug", "", "d2")], {"a": (array("q", [0]), array("d", [2.0]))})
+    ords, weights = idx.query(None, ["a"])["a"]
+    assert tuple(ords.tolist()) == (0, 1)
+    assert tuple(weights.tolist()) == (1.0, 2.0)
+
+
 def test_the_default_refuses_a_foreign_typecode():
     con = connect_memory()
     idx = N.SqliteSearchIndex()
