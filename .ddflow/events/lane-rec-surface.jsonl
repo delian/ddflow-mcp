@@ -84,3 +84,4 @@
 {"agent":"lane-rec-surface","data":{"at":1794530470.4368665,"holder":"lane-rec-surface"},"id":"ea401f273339fcd1aa200c18e","kind":"lease.renewed","lamport":188157,"schema":1,"subject":"REC-correct-surface","ts":"2026-11-13T00:41:10.578077Z"}
 {"agent":"lane-rec-surface","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e54976da0a600aec57f95570d","kind":"cadence.ran","lamport":188158,"schema":1,"subject":"recall_recheck:REC-correct-surface","ts":"2026-11-13T00:41:17.045036Z"}
 {"agent":"lane-rec-surface","data":{"at":1794530692.2997863,"holder":"lane-rec-surface"},"id":"e58717fd16847cb84955e08bf","kind":"lease.renewed","lamport":188167,"schema":1,"subject":"REC-correct-surface","ts":"2026-11-13T00:44:52.431925Z"}
+{"agent":"lane-rec-surface","data":{"at":1794531597.7815683,"holder":"lane-rec-surface"},"id":"ed21c713ec0a373bb28929716","kind":"lease.renewed","lamport":188194,"schema":1,"subject":"REC-correct-surface","ts":"2026-11-13T00:59:57.951471Z"}
