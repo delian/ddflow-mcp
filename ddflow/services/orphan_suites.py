@@ -12,7 +12,6 @@ ends at init or a user `systemd`)."""
 from __future__ import annotations
 
 import os
-import re
 import shlex
 import time
 from collections.abc import Iterable
@@ -185,30 +184,62 @@ def _kill(o: Orphan) -> str:
     return f"kill -- -{o.pgid}" if o.pgid > 1 else f"kill {o.pid}"
 
 
-#: `ddflow [options] heartbeat <item>` (heartbeat IS the subcommand: `ddflow task comment --body heartbeat T1` is not) anywhere in a command line, a `while true; do ...` loop included;
-#: group 1 is the rest of that command (up to `;`, `|` or `&`), where the item is found.
-_HEARTBEAT = re.compile(r"\bddflow\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+heartbeat\b([^;|&]*)")
-#: Valued global options: their value is not the item.
+#: Valued global options: their value is the next argv token, never the item. Reading
+#: ``argv`` as tokens (not a space-joined string) keeps a value with a space one token
+#: (`ddflow --repo "/my repo" heartbeat T1` -> T1) so it is seen as the value, not part
+#: of the option scan.
 _VALUED = frozenset({"--agent", "--repo", "--reason"})
+_DD_EXE = ("ddflow", "ddflow-mcp")
 
 
-def _heartbeat_item(tail: str) -> str:
-    """The item id in the words after `heartbeat`: the first that is not an option or the
-    value of a valued one (`--agent worker T1` -> T1)."""
-    try:
-        words = shlex.split(tail)  # a quoted value with spaces is one word
-    except ValueError:
-        words = tail.split()
-    i = 0
-    while i < len(words):
-        w = words[i]
-        if w in _VALUED:
+def _item_after(argv: list[str], i: int) -> str:
+    """The first item token after ``argv[i]``'s `heartbeat` subcommand, or ""."""
+    n = len(argv)
+    i += 1
+    while i < n:
+        w = argv[i]
+        if w in _VALUED and i + 1 < n:
             i += 2
         elif w.startswith("-"):
             i += 1
         else:
-            return w
+            return w  # an option that swallows one value keeps it; a flag swallows nothing
     return ""
+
+
+def _heartbeat_items(argv: list[str]) -> list[str]:
+    """The item ids a `heartbeat` subcommand in ``argv`` targets, in order. `heartbeat` is
+    the subcommand (`ddflow task comment --body heartbeat T1` is not one). Handles a direct
+    fetch (`ddflow [options] heartbeat <item>`) and the body of a `sh -c '<loop>'`."""
+    words = list(argv)
+    if len(words) >= 3 and _base(words[0]) in ("sh", "bash", "zsh", "ksh") and words[1] == "-c":
+        words = _shell_words(" ".join(words[2:]))
+    out: list[str] = []
+    i = 0
+    while i < len(words):
+        if _base(words[i]) in _DD_EXE:
+            j = i + 1
+            while j < len(words) and words[j].startswith("-"):
+                j += 2 if words[j] in _VALUED and j + 1 < len(words) else 1
+            if j < len(words) and words[j] == "heartbeat":
+                item = _item_after(words, j)
+                if item:
+                    out.append(item)
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def _shell_words(body: str) -> list[str]:
+    """``body`` split with `;` `&` `|` as separators, so a loop's `ddflow heartbeat T1;`
+    yields `T1` (never `T1;`); a value with a space stays one token."""
+    try:
+        lex = shlex.shlex(body, posix=True, punctuation_chars=";&|")
+        lex.commenters = ""
+        return [w for w in lex if w not in ";&|"]
+    except ValueError:
+        return []
 
 
 def stale_heartbeats(
@@ -230,15 +261,8 @@ def stale_heartbeats(
     for pid in entries:
         if pid == os.getpid():
             continue
-        cmd = " ".join(_argv(proc, pid))
-        hit = next(
-            (
-                i
-                for i in (_heartbeat_item(m.group(1)) for m in _HEARTBEAT.finditer(cmd))
-                if i in done
-            ),
-            "",
-        )
+        argv = _argv(proc, pid)
+        hit = next((i for i in _heartbeat_items(argv) if i in done), "")
         if not hit:
             continue
         try:
@@ -246,7 +270,7 @@ def stale_heartbeats(
                 continue
         except OSError:
             continue
-        found.append((pid, hit, cmd))
+        found.append((pid, hit, " ".join(argv)))
     return found
 
 

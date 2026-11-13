@@ -150,3 +150,10 @@ def test_a_quoted_option_value_with_spaces_does_not_hide_the_item(tmp_path):
 def test_a_command_that_only_mentions_heartbeat_is_not_one(tmp_path):
     _proc(tmp_path, 4001, "ddflow", "task", "comment", "--body", "heartbeat", "T1")
     assert OS.stale_heartbeats(["T1"], tmp_path, uid=os.getuid()) == []
+
+
+def test_a_valued_option_value_with_a_space_before_the_item_is_the_value(tmp_path):
+    """`--repo "/my repo"` is one argv token: it is the value, never the item scan."""
+    _proc(tmp_path, 4001, "ddflow", "--repo", "/my repo", "heartbeat", "T1")
+    found = OS.stale_heartbeats(["T1"], tmp_path, uid=os.getuid())
+    assert [(p, i) for p, i, _ in found] == [(4001, "T1")]
