@@ -7,10 +7,10 @@ from fnmatch import fnmatch
 from pathlib import Path
 from posixpath import basename
 
+from ..adapters import git as GIT
 from ..config import Config
 from ..core import globspec as GS
 from ..core.model import State
-from ..infra import git as GIT
 from . import testreach as TR
 from .completion import fixes_of
 from .testselect import (

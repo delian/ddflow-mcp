@@ -3105,6 +3105,41 @@
   },
   "array_schema": null
  },
+ "ddflow_correct": {
+  "command": "correct",
+  "schema": "correct@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "record_kind",
+   "fields",
+   "why",
+   "old_text_in_log",
+   "follow_ups"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "correct@1"
+    },
+    "id": {},
+    "record_kind": {},
+    "fields": {},
+    "why": {},
+    "old_text_in_log": {},
+    "follow_ups": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_bug_dedupe": {
   "command": "bug_dedupe",
   "schema": "bug_dedupe@1",

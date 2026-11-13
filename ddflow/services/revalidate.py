@@ -24,8 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..adapters import git as G
 from ..core import bookkeeping
-from ..infra import git as G
 from . import testselect as TS
 
 STANDS, SELECTED, FULL, UNAVAILABLE = "stands", "selected", "full", "unavailable"

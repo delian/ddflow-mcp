@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-# `ddflow.services.ci.failure_text` is also the lazy name of `flakes.failure_text`, so the
-# package attribute is not reliable: import the module by name.
+# import the module by name (B663d174cba: the package attribute is this submodule too).
 FT = importlib.import_module("ddflow.services.ci.failure_text")
 
 TEXT = "FAILED tests/test_a.py::test_x - AssertionError: {root}/tests/data/x.json not found"
