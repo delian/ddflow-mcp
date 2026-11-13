@@ -57,14 +57,15 @@ def parse_checks(output: str) -> list[Check]:
     lines: list[str] = []
     for line in output.splitlines():
         m = _HOOK_LINE.match(line.strip())
-        if m and m["status"] != "Skipped":
+        if m:
             if failed is not None:
                 failed.detail = _check_detail(lines)
             failed = None
             lines = []
-            check = Check(m["name"].strip(), m["status"] == "Passed")
-            checks.append(check)
-            failed = check if m["status"] == "Failed" else None
+            if m["status"] != "Skipped":
+                check = Check(m["name"].strip(), m["status"] == "Passed")
+                checks.append(check)
+                failed = check if m["status"] == "Failed" else None
         elif failed is not None:
             lines.append(line)
     if failed is not None:

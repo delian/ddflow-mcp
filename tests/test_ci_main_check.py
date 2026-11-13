@@ -142,7 +142,8 @@ def test_a_failed_check_keeps_the_hooks_output_tail(repo, tmp_path):
         "gitleaks.......Failed\n"
         "- exit code: 1\n"
         "finding: secret in file.txt\n"
-        "bandit.......Passed\n"
+        "bandit.......Skipped\n"
+        "doc8.......Passed\n"
     )
     code, out, _ = run_cli(
         repo, "ci", "record", "--stage", "merge", "--result", "failed", "--report", str(report)
@@ -151,6 +152,9 @@ def test_a_failed_check_keeps_the_hooks_output_tail(repo, tmp_path):
     checks = _state(repo).ci_results[-1]["checks"]
     gitleaks = next(c for c in checks if c["id"] == "gitleaks")
     assert not gitleaks["ok"] and "secret in file.txt" in gitleaks["detail"]
+    # a Skipped hook ends the failed hook's output; its own lines are not the failure's detail
+    assert "bandit" not in gitleaks["detail"]
+    assert [c["id"] for c in checks if not c["ok"]] == ["gitleaks"]
 
 
 def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
