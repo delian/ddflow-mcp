@@ -323,8 +323,9 @@ def build_parser() -> argparse.ArgumentParser:
 _NOTICES = Notices()
 
 
-# What the stale-reference scan (`doctor`) checks names against: this parser and the tool table.
-provide(parser=build_parser, tools=TOOLS)
+# What the stale-reference scan (`doctor`) checks names against: this parser (the tool table,
+# flat tools and family tools, registers itself in `tools/__init__`).
+provide(parser=build_parser)
 provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names against
 
 

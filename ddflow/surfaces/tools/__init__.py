@@ -71,7 +71,12 @@ DEDUPE_PROPERTIES: dict[str, tuple[str, str, bool]] = {
     ),
 }
 
-provide(tools=TOOLS)  # what `doctor` checks tool names against
 
 for _name in ADD_TOOLS:
     TOOLS[_name]["properties"].update(DEDUPE_PROPERTIES)
+
+# What `doctor` checks tool names against: every flat tool and every family tool, for a
+# template or doc that names `ddflow_session` names a tool the lean profile really lists.
+from .families import FAMILIES as _FAMILIES  # noqa: E402  (families imports TOOLS from here)
+
+provide(tools={**{name: {} for name in _FAMILIES}, **TOOLS})
