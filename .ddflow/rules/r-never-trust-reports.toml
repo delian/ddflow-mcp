@@ -1,0 +1,10 @@
+id = "r-never-trust-reports"
+title = "A report is a claim: verify it by an independent read of the state before relying on it or relaying it"
+tags = ["verification", "principle", "coordination"]
+scope = "project"
+priority = 95
+globs = ["ddflow/**"]
+created = "2026-11-13T04:15:43.005093+00:00"
+updated = "2026-11-13T04:15:43.005101+00:00"
+
+Operator 2026-11-13, after an agent reported it was filing 15 tasks and a new phase and filed none (it ran a background script that never ran, then stopped with 'waiting on background work'). Never trust a report, a status line or a notification blindly: (1) a claim that a record was filed, changed, merged, completed, approved or deleted is verified by an independent read of the state (ddflow show <id>, the event log, git log) before it is relied on or relayed; the verification output is quoted, not assumed. (2) Agents write records in the foreground, one command per call, never from a background script or a detached job, and check each with a read-back before the next. (3) An agent that stops 'waiting on its own background work' has made no claim: confirm the work exists (process alive by its real pid, output file growing) before saying it is running. (4) A completion report lists the ids it created with the read-back output. (5) A coordinator that dispatches filing, re-scoping or other record work checks it by a list of expected ids/phases/needs/tags (ddflow verify-filed once it exists) and corrects what is missing; counts that disagree between surfaces are a bug, not a rounding. (6) The same holds for approvals (check the answered time: 1h expiry), gates (a gate marked running needs a live process) and tests (a green claim needs the node id and a run). Extends r-evidence-over-assertion.
