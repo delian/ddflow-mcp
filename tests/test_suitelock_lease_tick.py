@@ -24,6 +24,7 @@ def _cfg(wait: float) -> Config:
 
 def test_a_waiter_in_the_queue_beats_the_lease_tick(tmp_path: Path):
     ticks: list[float] = []
+    tick_s = 0.1  # well under the 0.25s poll, so a tick fires every poll once the interval elapses
     with SL.hold(_cfg(30), "holder", tmp_path, say=lambda _t: None):
         with pytest.raises(SL.SuiteBusy):
             with SL.hold(
@@ -33,12 +34,13 @@ def test_a_waiter_in_the_queue_beats_the_lease_tick(tmp_path: Path):
                 say=lambda _t: None,
                 source=FakeSource([{}]),
                 on_tick=lambda: ticks.append(time.monotonic()),
-                tick_s=0.1,
+                tick_s=tick_s,
             ):
                 pass
-    # The poll loop is 0.25s and the wait is 2s, so once the 0.1s interval elapses a tick
-    # fires every poll (~8 ticks): >=3 leaves slack for a slow cold start.
+    # Not just "some ticks" (a burst at entry that then stops would renew nothing): the
+    # ticks must be SPREAD over the 2s wait. >=3 with a >=2*tick_s span leaves headroom.
     assert len(ticks) >= 3, ticks
+    assert ticks[-1] - ticks[0] >= 2 * tick_s, ticks
 
 
 def test_a_zero_interval_never_ticks(tmp_path: Path):
