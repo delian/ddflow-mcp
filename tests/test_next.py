@@ -92,11 +92,12 @@ def test_state_is_paged_and_footer_names_the_state(repo):
     for i in range(12):
         run_cli(repo, "task", "add", f"B{i}", "--title", f"blocked {i}")
         run_cli(repo, "block", f"B{i}", "--reason", "parked")
-    d, _items = _json_state(repo, "blocked")
+    d, items = _json_state(repo, "blocked")
     assert d["state"] == "blocked"
     # The capped list is cut the way `next` cuts its own lists: the total is said, and the
     # footer's next-page call carries the state so the cursor keeps the same listing.
     assert d["count"] == 12, d["count"]
+    assert len(items) == 5, items
     assert d["truncated"]["lists"]["items"] == 12, d["truncated"]
     assert "state=blocked" in d["next"].get("cursor_mcp", ""), d["next"]
 
