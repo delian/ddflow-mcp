@@ -304,6 +304,7 @@ def test_mcp_severity_filter_is_applied_before_paging(repo):
     )
     assert done.exit == 0
     assert done.data["total"] == 2
+    assert len(done.data["rows"]) == 1
     assert {r["severity"] for r in done.data["rows"]} == {"high"}
 
 
@@ -311,3 +312,32 @@ def test_mcp_list_tool_declares_the_severity_argument(repo):
     from ddflow.surfaces.mcp import TOOLS, _properties
 
     assert "severity" in _properties(TOOLS["ddflow_list"])
+
+
+def test_unmet_needs_ignore_finished_dependencies():
+    """Blocked means UNMET needs: a done or abandoned dependency is met, a missing,
+    removed or open one is not, and a finished fix task is never blocked."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.api.knowledge.bug_list import _unmet
+
+    def it(state="open", needs=(), removed=False):
+        return NS(
+            state=state, needs=list(needs), removed=removed, terminal=state in ("done", "abandoned")
+        )
+
+    st = NS(items={"d": it("done"), "a": it("abandoned"), "o": it(), "r": it("done", removed=True)})
+    assert not _unmet(it(needs=["d", "a"]), st)
+    assert _unmet(it(needs=["d", "o"]), st)
+    assert _unmet(it(needs=["missing"]), st)
+    assert _unmet(it(needs=["r"]), st)
+    assert not _unmet(it("done", needs=["o"]), st)
+
+
+def test_severity_filter_keeps_the_engine_order_without_a_sort(repo):
+    """A severity filter alone narrows the set; it does not reorder it by id."""
+    _seed_mix(repo)
+    plain = [r["id"] for r in api_view_list(repo, "bug", limit=50, offset=0).data["rows"]]
+    out = KB.finish_bug_list(repo, api_view_list(repo, "bug", limit=50, offset=0), severity="high")
+    got = [r["id"] for r in out.data["rows"]]
+    assert got == [i for i in plain if i in got]

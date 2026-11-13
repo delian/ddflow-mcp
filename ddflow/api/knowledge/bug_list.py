@@ -61,8 +61,8 @@ def _page_from_whole(repo: Path, data: dict, st, severity: str, sort: str) -> O.
         full = [r for r in full if (r.get("severity") or "").strip().lower() == severity]
         basis["total"] = len(full)
         basis["filters"] = {**basis.get("filters", {}), "severity": severity}
-    full.sort(key=lambda r: r["id"])
     if sort == "severity":
+        full.sort(key=lambda r: r["id"])
         full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
     base = dict(basis)
     off, lim = data["offset"], data["limit"]
@@ -121,6 +121,16 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "", severity: str = 
     return out
 
 
+def _unmet(fix, st) -> bool:
+    """The fix task is blocked: its state says so, or a need is not finished (a need
+    that is done or abandoned is met; a missing or removed one still blocks)."""
+    if fix.terminal:
+        return False
+    if fix.state == BLOCKED:
+        return True
+    return any((d := st.items.get(n)) is None or d.removed or not d.terminal for n in fix.needs)
+
+
 def bug_status(repo: Path) -> O.Outcome:
     """One answer to 'how many open bugs, and where': the open count, the severity
     spread, and the open bugs that are blocked (their fix task is blocked or still has
@@ -138,7 +148,7 @@ def bug_status(repo: Path) -> O.Outcome:
         fix = st.items.get(bug.fix_task) if bug.fix_task else None
         if fix is None:
             no_task += 1
-        elif fix.state == BLOCKED or fix.needs:
+        elif _unmet(fix, st):
             blocked += 1
     return O.ok(
         "bug.status",
