@@ -110,7 +110,7 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
         if c == "\\":
             name.append(line[i + 1] if i + 1 < n else "\\")
             i += 2
-        elif c == "'" or c == '"':
+        elif c in {"'", '"'}:
             q = c
             i += 1
             while i < n and line[i] != q:
