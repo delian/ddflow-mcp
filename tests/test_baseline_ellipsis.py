@@ -60,3 +60,17 @@ def test_an_equal_length_change_inside_the_visible_text_is_not_read_as_a_cut():
     a, b = {"t::x": "AssertionError abc...def"}, {"t::x": "AssertionError ab...defg"}
     assert BR._differs("t::x", a, b)
     assert BR._differs("t::x", b, a)
+
+
+def test_a_change_in_the_text_outside_the_cut_is_not_read_as_a_cut():
+    a = {"t::x": "/tmp/ddflow-ci.h56ye4wg AssertionError abc...xxdef"}
+    b = {"t::x": "/tmp/ddflow-base.k3j2h1x9 AssertionError abc...def"}
+    assert len(a["t::x"]) == len(b["t::x"])  # equal raw length, but the cut is not at one place
+    assert BR._differs("t::x", a, b)
+    assert BR._differs("t::x", b, a)
+
+
+def test_a_literal_ellipsis_in_the_tail_does_not_hide_a_cut():
+    a, b = _text(CI, TAIL + "..."), _text(BASE, TAIL + "...")
+    assert a != b
+    assert not BR._differs("t::x", {"t::x": a}, {"t::x": b})

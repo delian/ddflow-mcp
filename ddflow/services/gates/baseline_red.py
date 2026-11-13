@@ -176,29 +176,37 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
 
 #: pytest cuts a long repr to a fixed length, ``head...tail`` (`_pytest._io.saferepr._ellipsize`).
 _ELLIPSIS = "..."
+_RUN = re.compile(r"\.{3,}")
+
+
+def _cut(text: str) -> tuple[int, int] | None:
+    """The span ``(first, last)`` of positions where the first ellipsis of ``text`` may start,
+    or None without one. A run of more than three dots is a cut next to a literal dot (the
+    head ends in ``.`` or the tail starts with one): the cut is one of its last-three windows."""
+    m = _RUN.search(text)
+    return (m.start(), m.end() - len(_ELLIPSIS)) if m else None
 
 
 def _same_failure(branch: str, base: str) -> bool:
     """Whether two failure texts are one failure, tree paths and addresses blanked. pytest
     ellipsizes a long repr by LENGTH (``head...tail``, each a fixed number of characters), and
     the ci tree and the base's scratch tree have paths of different lengths, so the same
-    failure is cut at a different place once the paths are blanked. That is told from a real
-    change by the RAW texts: a cut of one repr leaves texts of equal raw length, and then the
-    blanked head of one is a prefix of the other's and the tail a suffix, both longer on the
-    same side. Exactly one cut and the same raw length, else the texts differ: a changed visible value is not read as a cut
-    (B710b7cc84f)."""
-    a, b = _norm(branch), _norm(base)
-    if a == b:
+    failure is cut at a different place once the paths are blanked. The RAW texts tell that
+    from a real change: a cut of one repr sits at the same raw position in both, so the heads
+    have the same raw length and so do the tails; only then the blanked head of one must be a
+    prefix of the other's and the blanked tail a suffix. Anything else differs: a changed
+    visible text is not read as a cut (B710b7cc84f)."""
+    if _norm(branch) == _norm(base):
         return True
-    parts = [t.split(_ELLIPSIS) for t in (a, b)]
-    if any(len(p) != len((_ELLIPSIS, _ELLIPSIS)) for p in parts) or len(branch) != len(base):
+    cuts = [_cut(branch), _cut(base)]
+    if None in cuts or len(branch) != len(base):
         return False
-    (head_a, tail_a), (head_b, tail_b) = parts
-    # Equal raw length: whichever tree has the shorter path keeps MORE text on BOTH sides of the
-    # cut, so the head and the tail of one are each longer (or equal) than the other's. A head
-    # longer with a tail shorter is a changed visible text, not a cut.
-    if (len(head_a) - len(head_b)) * (len(tail_a) - len(tail_b)) < 0:
+    lo, hi = max(c[0] for c in cuts), min(c[1] for c in cuts)  # type: ignore[index]
+    if lo > hi:  # no one position is a cut in both
         return False
+    k = lo
+    head_a, tail_a = _norm(branch[:k]), _norm(branch[k + len(_ELLIPSIS) :])
+    head_b, tail_b = _norm(base[:k]), _norm(base[k + len(_ELLIPSIS) :])
     heads = head_a.startswith(head_b) or head_b.startswith(head_a)
     tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
     return heads and tails
