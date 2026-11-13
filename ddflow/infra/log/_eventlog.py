@@ -296,7 +296,9 @@ class EventLog(_GuardMixin, _ReadMixin):
         ctx = (
             contextlib.nullcontext()
             if _HELD.get(_held_key(self.lock_path), 0)
-            else _flock(self.lock_path, self.lock_timeout_s if lock_timeout_s is None else lock_timeout_s)
+            else _flock(
+                self.lock_path, self.lock_timeout_s if lock_timeout_s is None else lock_timeout_s
+            )
         )
         with ctx:
             payload = dict(data or {})
