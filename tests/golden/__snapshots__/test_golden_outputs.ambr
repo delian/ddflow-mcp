@@ -3714,6 +3714,29 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      records.correct_digest_chars = 12   [default]
+          Characters of the SHA-256 digest `ddflow correct` keeps in a correction's
+          audit entry when a digest is asked for (`correct_digest_old`,
+          `correct_digest_new`). At most the width of the hash.
+      records.correct_min_digest_chars = 8   [default]
+          A value shorter than this many characters gets no digest even when one is
+          asked for: the digest of a short value (a password, a token) lets anyone
+          holding the log confirm a guess.
+      records.correct_digest_old = False   [default]
+          Keep a digest of the OLD value in a correction's audit entry. Off by
+          default: the log cannot tell a secret from a typo, and a digest of a low-
+          entropy value lets a guess be confirmed. `ddflow correct --secret` keeps it
+          off whatever this says. The old text itself stays in the log until a scrub,
+          with or without a digest.
+      records.correct_digest_new = False   [default]
+          Keep a digest of the NEW value in a correction's audit entry. Off by
+          default, for the reason `correct_digest_old` gives; `ddflow correct
+          --secret` keeps it off whatever this says.
+      records.correct_reason_max_chars = 500   [default]
+          Longest reason `ddflow correct` accepts. The reason says why the value was
+          wrong, never what it was: a long one is usually the old text pasted in.
+      records.correct_max_fields = 8   [default]
+          Most fields one `ddflow correct` may replace in one event.
       reinstruct.enabled = True   [default]
           Whether tool results may carry a short footer naming what this project has
           left undone. The instruction block is delivered once at connect; after a

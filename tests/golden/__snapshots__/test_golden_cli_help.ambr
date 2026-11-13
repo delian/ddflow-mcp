@@ -791,25 +791,6 @@
   
   '''
 # ---
-# name: test_help[ddflow decide]
-  '''
-  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--append] [--body BODY] [--model MODEL] id
-  
-  positional arguments:
-    id                    the decide task
-  
-  options:
-    -h, --help            show this help message and exit
-    --decision-id DECISION_ID
-                          the recorded decision (D-x) whose document is written
-    --path PATH           the document (default: a docs/ddflow/decisions/<name>.md glob the task
-                          names, else <slug>.md)
-    --append              append to the document instead of replacing it (keeps an existing doc)
-    --body BODY           the body to append below the restated record (no second merge needed)
-    --model MODEL         the author's model family
-  
-  '''
-# ---
 # name: test_help[ddflow correct]
   '''
   usage: ddflow correct [-h] --field FIELD [--text TEXT | --from-file FROM_FILE] --reason REASON [--kind KIND] [--secret] [--approval APPROVAL] id
@@ -828,6 +809,25 @@
     --secret              the value may be a secret: keep digests of it out of the audit entry
     --approval APPROVAL   an agent: 'request' files an approval request (the operator answers in
                           chat), then the approval id; a person corrects directly
+  
+  '''
+# ---
+# name: test_help[ddflow decide]
+  '''
+  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--append] [--body BODY] [--model MODEL] id
+  
+  positional arguments:
+    id                    the decide task
+  
+  options:
+    -h, --help            show this help message and exit
+    --decision-id DECISION_ID
+                          the recorded decision (D-x) whose document is written
+    --path PATH           the document (default: a docs/ddflow/decisions/<name>.md glob the task
+                          names, else <slug>.md)
+    --append              append to the document instead of replacing it (keeps an existing doc)
+    --body BODY           the body to append below the restated record (no second merge needed)
+    --model MODEL         the author's model family
   
   '''
 # ---
@@ -3837,13 +3837,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3897,6 +3897,7 @@
       onboard             run an onboarding stage: one report, propose by default
                           (status|preflight|legacy|memory|test-gate|verify|harness)
       status              one answer to 'what is the state of this project?'
+      correct             correct a wrongly recorded value, history kept
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
       replay              reconstruct the decision history from the log
@@ -4052,6 +4053,7 @@
     'ddflow complete',
     'ddflow completion',
     'ddflow config',
+    'ddflow correct',
     'ddflow decide',
     'ddflow decision',
     'ddflow decision add',
