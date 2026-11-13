@@ -39,21 +39,21 @@ LEGACY_END = "<!-- DDFLOW:END -->"
 _SECTION = """## Work queue — ddflow
 
 Work here is a queue of **phases** containing **tasks**, with declared dependencies
-and file globs, managed by ddflow. The event log in `.ddflow/events/` is the committed
+and globs, managed by ddflow. The event log in `.ddflow/events/` is the committed
 source of truth; everything else is derived.
 
 **Start every session with `ddflow_brief`** (MCP) or `ddflow brief` (shell). It
-returns work left over from a crash, what is ready now, why the rest is blocked, and
+returns work left from a crash, what is ready, why the rest is blocked, and
 past lessons — it replaces reading this project's lesson and rule files.
 
 **Claim before you edit.** `ddflow_claim` leases the item and gives you an isolated
 git worktree. An unclaimed edit can be destroyed by a parallel agent.
 
 **Pre-file triage.** Before adding a task or bug: check for a duplicate or
-closable overlap, check what is planned, reuse core modules and prior research
-(never re-derive), ask the operator only for person-decisions; then file in the
-right phase (create one if none fits) with `--needs` and `no-deps` when it has no
-prerequisite. A bug's phase and `--needs` go on its fix task.
+closable overlap, check what is planned, reuse core modules and prior research,
+ask the operator only for person-decisions; then file in the right phase (create
+one if none fits) with `--needs` and `no-deps` when it has no prerequisite. A
+bug's phase and `--needs` go on its fix task.
 
 Then: `ddflow_next` → `ddflow_claim` → work in the worktree → `ddflow_gate_status`
 and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
