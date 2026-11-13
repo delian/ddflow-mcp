@@ -81,6 +81,16 @@ def _packed(ords: array, weights: array, start: int) -> tuple[bytes, bytes]:
     return off.tobytes(), weights.tobytes()
 
 
+def _packed_rows(postings: Mapping[str, Postings], start: int) -> list[tuple[str, bytes, bytes]]:
+    """Every term's ``(term, ords_bytes, weights_bytes)``, validating ALL of them up
+    front so an invalid `postings` raises before the caller writes or clears anything."""
+    out = []
+    for term, (ords, weights) in postings.items():
+        ords_bytes, weights_bytes = _packed(ords, weights, start)
+        out.append((term, ords_bytes, weights_bytes))
+    return out
+
+
 class SqliteSearchIndex:
     """The default adapter: the ``similar_docs`` / ``similar_terms`` tables in a SQLite database.
 
@@ -96,22 +106,27 @@ class SqliteSearchIndex:
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         self.create(con)
+        # Validate first: a bad `postings` must not remove the index it will not replace.
+        rows = _packed_rows(postings, 0)
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
-        self.index(con, docs, postings)
+        con.executemany(
+            "insert into similar_docs values(?,?,?,?,?)",
+            [(i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
+        )
+        con.executemany("insert into similar_terms values(?,?,?)", rows)
 
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         start = con.execute("select count(*) from similar_docs").fetchone()[0]
+        # Validate first: a bad `postings` must not leave docs with no postings written.
+        rows = _packed_rows(postings, start)
         con.executemany(
             "insert into similar_docs values(?,?,?,?,?)",
             [(start + i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
         )
-        con.executemany(
-            "insert into similar_terms values(?,?,?)",
-            [(t, *_packed(ords, weights, start),) for t, (ords, weights) in postings.items()],
-        )
+        con.executemany("insert into similar_terms values(?,?,?)", rows)
 
     def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         out: dict[str, Postings] = {}
