@@ -171,31 +171,32 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    return not _same_failure(_norm(branch), _norm(base))
+    return not _same_failure(branch, base)
 
 
 #: pytest cuts a long repr to a fixed length, ``head...tail`` (`_pytest._io.saferepr._ellipsize`).
 _ELLIPSIS = "..."
 
 
-def _same_failure(a: str, b: str) -> bool:
-    """Whether two failure texts (their tree paths already blanked) are one failure. pytest
-    ellipsizes a long repr by LENGTH, and the ci tree and the base's scratch tree have paths of
-    different lengths, so the same failure is cut at different places: the head of one is a
-    prefix of the other's and the tail of one a suffix of the other's. What the cut hides cannot
-    be compared, and the visible head and tail still must agree, so a different cause shown in
-    either still differs (B710b7cc84f)."""
+def _same_failure(branch: str, base: str) -> bool:
+    """Whether two failure texts are one failure, tree paths and addresses blanked. pytest
+    ellipsizes a long repr by LENGTH (``head...tail``, each a fixed number of characters), and
+    the ci tree and the base's scratch tree have paths of different lengths, so the same
+    failure is cut at a different place once the paths are blanked. That is told from a real
+    change by the RAW texts: a cut of one repr leaves texts of equal raw length, and then the
+    blanked head of one is a prefix of the other's and the tail a suffix. Exactly one cut and
+    the same raw length, else the texts differ: a changed visible value is not read as a cut
+    (B710b7cc84f)."""
+    a, b = _norm(branch), _norm(base)
     if a == b:
         return True
-    pa, pb = a.split(_ELLIPSIS), b.split(_ELLIPSIS)
-    if _ELLIPSIS not in a or len(pa) != len(pb):
+    parts = [t.split(_ELLIPSIS) for t in (a, b)]
+    if any(len(p) != len((_ELLIPSIS, _ELLIPSIS)) for p in parts) or len(branch) != len(base):
         return False
-    # each cut shifts the text on both sides of its ellipsis, so a part between two cuts agrees
-    # when one holds the other
-    inner = all(x in y or y in x for x, y in zip(pa[1:-1], pb[1:-1], strict=True))
-    heads = pa[0].startswith(pb[0]) or pb[0].startswith(pa[0])
-    tails = pa[-1].endswith(pb[-1]) or pb[-1].endswith(pa[-1])
-    return heads and tails and inner
+    (head_a, tail_a), (head_b, tail_b) = parts
+    heads = head_a.startswith(head_b) or head_b.startswith(head_a)
+    tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
+    return heads and tails
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
