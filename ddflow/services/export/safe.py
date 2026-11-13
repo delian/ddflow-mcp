@@ -5,7 +5,8 @@ Redaction
     ``services.redact_report`` over the RENDERED body, before it is truncated, framed or
     digested, so the header digest and ``--check`` both cover the redacted bytes. The names
     redacted as words are ``[upstream].redact_extra`` when that section exists; the project's
-    own name is NOT one (it is the project's own public document). Secrets use the
+    own name is NOT one (it is the project's own public document), and neither is
+    ``[export].security_contact``, which the operator publishes on purpose. Secrets use the
     session patterns of the loaded config. The header says what happened:
     ``redacted=N redacted-kinds=ipv4:1,path:2`` or ``redacted=off``.
 
@@ -37,7 +38,17 @@ def redact_text(text: str, cfg: Config) -> Redacted:
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
     project's own and stays; absolute home paths still go.
     """
-    return redactor("export", cfg).text(text)
+    red = redactor("export", cfg)
+    keep = str(getattr(getattr(cfg, "export", None), "security_contact", "")).strip()
+    if not keep or keep not in text:
+        return red.text(text)
+    # the operator's published reporting contact is the one text redaction leaves alone
+    parts = [red.text(part) for part in text.split(keep)]
+    counts: dict[str, int] = {}
+    for part in parts:
+        for kind, n in part.counts.items():
+            counts[kind] = counts.get(kind, 0) + n
+    return Redacted(keep.join(part.text for part in parts), counts)
 
 
 def redaction_attrs(counts: Mapping[str, int] | None) -> dict[str, str]:

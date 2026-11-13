@@ -49,8 +49,18 @@ Source: the bugs recorded as security issues in this project's log. Dependency a
 security-pass findings are not recorded there, so they are not covered here.
 {% endcall %}
 
+{% call region("reporting") %}
 ## Reporting a Vulnerability
 
-TODO (project owner): replace this paragraph. Say how to report a vulnerability privately (a
-contact, or the repository's private vulnerability reporting link) and how soon a reporter can
-expect an answer. ddflow keeps the two sections above up to date and never writes this one again.
+{% if reporting.contact %}
+Please report a vulnerability privately, not in a public issue: {{ reporting.contact }}.
+{% if reporting.response_days %}
+
+You can expect a first answer within {{ reporting.response_days }} {{ "day" if reporting.response_days == 1 else "days" }}.
+{% endif %}
+{% else %}
+TODO (project owner): no reporting contact is set for this project, so a reporter has nowhere
+private to go. Set one with `ddflow config --set export.security_contact "<address or URL>"`
+(ddflow never invents a contact), then run `ddflow export security --update`.
+{% endif %}
+{% endcall %}

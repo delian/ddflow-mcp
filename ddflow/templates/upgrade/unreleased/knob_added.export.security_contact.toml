@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "export.security_contact"
+new = '""'
+why = "The private reporting contact the generated SECURITY.md publishes in its Reporting a Vulnerability region (an address or a URL, never redacted). Empty by default: ddflow never invents a contact, the region says none is set and `ddflow doctor` notes it while the security document is selected. The region is now a named region (security/reporting); an existing SECURITY.md without it is left alone."
+impact = "additive"
