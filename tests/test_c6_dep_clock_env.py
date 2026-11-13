@@ -74,3 +74,18 @@ def test_completion_dir_probe_treats_an_unstattable_entry_as_not_a_directory(mon
 
     monkeypatch.setattr(Path, "stat", denied)
     assert values._is_dir(str(tmp_path / "d")) is False
+
+
+def test_resultcache_reads_the_wall_clock_only_through_the_clock_port():
+    import ast
+
+    tree = ast.parse((ROOT / "ddflow/services/resultcache.py").read_text(encoding="utf-8"))
+    direct = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "time"
+        and n.attr in {"time", "monotonic"}
+    ]
+    assert direct == []
