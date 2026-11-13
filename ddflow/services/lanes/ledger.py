@@ -302,7 +302,9 @@ def _lane(
     return _with_session(lane, f, st, cfg, held_live, mid_gates.get(lane.name, ""))
 
 
-def _with_session(lane: Lane, f: _Facts, st: State, cfg: Config, held: Item | None, mid_gate: str) -> Lane:
+def _with_session(
+    lane: Lane, f: _Facts, st: State, cfg: Config, held: Item | None, mid_gate: str
+) -> Lane:
     worktree = lane.worktree or (st.items[f.item].worktree if f.item in st.items else "")
     lane = Lane(
         **{
