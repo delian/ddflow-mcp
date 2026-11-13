@@ -188,7 +188,7 @@ def _same_failure(a: str, b: str) -> bool:
     if a == b:
         return True
     pa, pb = a.split(_ELLIPSIS), b.split(_ELLIPSIS)
-    if len(pa) < 2 or len(pa) != len(pb):
+    if _ELLIPSIS not in a or len(pa) != len(pb):
         return False
     # each cut shifts the text on both sides of its ellipsis, so a part between two cuts agrees
     # when one holds the other
