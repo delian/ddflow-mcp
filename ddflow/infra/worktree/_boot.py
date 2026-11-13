@@ -69,9 +69,12 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
             pass
         return {"boot_id": cur, "previous": "", "changed": False}
     if cur != prev:
+        # The CHANGE is known (both values readable and they differ); the write only
+        # persists it. A failed write erases nothing: report the change the values prove.
         try:
             m.parent.mkdir(parents=True, exist_ok=True)
             fsio.atomic_write(m, cur + "\n")
         except OSError:
-            return {"boot_id": cur, "previous": prev, "changed": False}
-    return {"boot_id": cur, "previous": prev, "changed": cur != prev}
+            pass
+        return {"boot_id": cur, "previous": prev, "changed": True}
+    return {"boot_id": cur, "previous": prev, "changed": False}

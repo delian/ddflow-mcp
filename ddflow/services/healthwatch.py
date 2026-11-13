@@ -117,10 +117,11 @@ def modes(cfg, override: str = "") -> dict[str, str]:
     # `propose`: a global `--mode apply` still only REPORTS them; `recover` performs the
     # SAFE_AUTO half, never the health pass.
     out = {}
+    detectors = {H.LAPSED_ALIVE, H.READY_TO_LAND, H.MERGE_INTERRUPTED}
     for k in H.KINDS:
         m = own.get(k, "inherit")
         mode = override or (h.mode if m == "inherit" else m)
-        if mode == "apply" and k not in own:
+        if k in detectors and mode == "apply":
             mode = "propose"
         out[k] = mode
     return out
@@ -312,6 +313,11 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
         # Ready to land only when nothing but `merge` is owed: work beyond merge means the
         # lane is not finished, so proposing it to land is wrong (research row b).
         if any(g != "merge" for g in missing):
+            continue
+        # A worktree whose merge is in flight is MERGE_INTERRUPTED, not ready to land: two
+        # detectors must not disagree about one item.
+        wt = W.load_path(repo, it.worktree) if it.worktree else None
+        if wt is not None and wt.exists() and W.merging(wt) is True:
             continue
         out.append(H.Ready(i, lease.holder if lease else "(none)", ahead, missing, it.branch))
     return out
