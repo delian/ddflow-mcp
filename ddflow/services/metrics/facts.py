@@ -52,14 +52,20 @@ def _changed_lines(evidence: dict) -> int | None:
     )
 
 
+def _gate_name(gate: object) -> str | None:
+    """``gate`` as a real gate id, or None when absent; a redaction marker is not a gate name
+    (the log censored it), so it reads as the stable `[REDACTED]` marker (bug B829400ae7e)."""
+    if not isinstance(gate, str) or not gate:
+        return None
+    return REDACTED if _CENSORED_GATE.fullmatch(gate) else gate
+
+
 def _outcome(at: float, ev: Event) -> Outcome | None:
     verdict = ev.kind.partition(".")[2]
     d = ev.data if isinstance(ev.data, dict) else {}
-    gate = d.get("gate")
-    if verdict not in OUTCOMES or not isinstance(gate, str) or not gate:
+    gate = _gate_name(d.get("gate"))
+    if verdict not in OUTCOMES or gate is None:
         return None
-    if _CENSORED_GATE.fullmatch(gate):  # a censored gate id is not a phantom gate (B829400ae7e)
-        gate = REDACTED
     evidence = d.get("evidence") if isinstance(d.get("evidence"), dict) else {}
     model = evidence.get("model")
     return Outcome(
