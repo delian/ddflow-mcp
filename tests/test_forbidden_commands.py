@@ -125,6 +125,9 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     assert _check("# don't run\ncat <<EOF\ngit push origin main\nEOF") is None
     # a double quote left open on one line keeps a `<<` on the next line quoted: not a heredoc
     assert _check('echo "\n<<EOF"\ngit push origin main\nEOF') is not None
+    # an empty ``""`` that closes at the line's last char still CLOSES the quote, so the next
+    # line's `" <<EOF"` is a fresh quote and `git push` after it is a command
+    assert _check('echo ""\nfoo " <<EOF"\ngit push origin main\nEOF') is not None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():

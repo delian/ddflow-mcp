@@ -102,16 +102,18 @@ class Refusal:
 _HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
 
 
-def _dquote_close(line: str, i: int, n: int) -> int:
-    """Index past the ``"`` closing a double quote, scanning from `i` (a char INSIDE it), or
-    `n` when it stays open to the line's end; a backslash escapes the quote (and ``$`` / `` ` ``),
-    so the next ``"`` is not the close."""
-    while i < n and line[i] != '"':
-        if line[i] == "\\" and i + 1 < n:
-            i += 2
+def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
+    """The ``(quote open, index past the close)`` of a double quote, scanning from `i` (a char
+    INSIDE it): ``("", past the close)``, or (``'"'``, `n`) when it stays open to the line's
+    end (including an empty ``""`` whose close is the line's last char, which still CLOSES it);
+    a backslash escapes the next char, so a ``\\"`` is not the close."""
+    j = i
+    while j < n and line[j] != '"':
+        if line[j] == "\\" and j + 1 < n:
+            j += 2
         else:
-            i += 1
-    return i + 1 if i < n else n
+            j += 1
+    return ("", j + 1) if j < n else ('"', n)
 
 
 def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
@@ -137,8 +139,7 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
                 return ms, "'"  # the single quote stays open to the next line
             quote, i = "", j + 1
         elif quote == '"':
-            j = _dquote_close(line, i, n)  # a quote that opened on an earlier line: its close
-            quote, i = ('"' if j == n else "", j)
+            quote, i = _dquote_close(line, i, n)  # a quote opened on an earlier line: its close
         elif c == "\\":
             if i + 1 < n:
                 escaped.add(i + 1)
@@ -148,8 +149,7 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
         elif c == "'":
             quote, i = "'", i + 1
         elif c == '"':
-            j = _dquote_close(line, i + 1, n)
-            quote, i = ('"' if j == n else "", j)
+            quote, i = _dquote_close(line, i + 1, n)
         elif c == "<" and i + 1 < n and line[i + 1] == "<":
             m = _HEREDOC.match(line, i)
             if m is not None:
