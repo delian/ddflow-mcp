@@ -68,7 +68,15 @@ def test_an_agent_can_file_a_review_force_approval(repo, tmp_path):
     calls_before = seen.read_text().count("call")
     code, out, err = run_cli(
         repo,
-        "review", "T1", "--gate", "critic", "--force", "--reason", "x", "--approval", "request",
+        "review",
+        "T1",
+        "--gate",
+        "critic",
+        "--force",
+        "--reason",
+        "x",
+        "--approval",
+        "request",
         agent="bot",
     )
     assert "unrecognized arguments" not in err, err
@@ -77,7 +85,9 @@ def test_an_agent_can_file_a_review_force_approval(repo, tmp_path):
     assert "approval" in err, err  # the route it files and names
     # Filing the request must NOT itself run a reviewer past the cap (the sibling bare-force
     # guard holds here too): no reviewer call is paid for the budget-bypass.
-    assert seen.read_text().count("call") == calls_before, "a reviewer was called on --approval request"
+    assert seen.read_text().count("call") == calls_before, (
+        "a reviewer was called on --approval request"
+    )
     # ...and the request is really FILED, bound to exactly T1's critic gate (verb, item,
     # target) -- not just a phrase in the refusal.
     code, out, _e = run_cli(repo, "--json", "approvals", "pending")
