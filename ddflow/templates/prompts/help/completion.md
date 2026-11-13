@@ -25,7 +25,8 @@ name.
 
 ## The stdlib-only decision
 
-Completing needs no required third-party dependency. argcomplete is an OPTIONAL extra
-(D-completion-scope): without it there is no TAB completion and `ddflow` runs normally.
-A TAB through argcomplete starts `ddflow` once (~1 s); record ids are read from the
-newest read-only `.ddflow/index.db-*` sqlite file in under 100 ms.
+Candidate generation is standard-library only. argcomplete is an OPTIONAL extra
+(D-completion-scope) that turns a TAB into candidates: without it there is no TAB
+completion and `ddflow` runs normally. A TAB through argcomplete starts `ddflow` once
+(~1 s); record ids are read from the newest read-only `.ddflow/index.db-*` sqlite file
+in under 100 ms.

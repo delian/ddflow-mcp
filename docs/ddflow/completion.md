@@ -54,12 +54,13 @@ carry no command, option or choice name.
 
 ## The stdlib-only decision
 
-Completing needs no required third-party dependency: the candidate sources are the Python
-standard library and the argparse parser. **argcomplete is an OPTIONAL extra**
-(D-completion-scope): install the `argcomplete` extra to turn the activation line on.
-Without it there is no TAB completion and `ddflow` runs normally; a plain `ddflow`
-invocation is unchanged. Stdlib-generated per-shell scripts — which a per-TAB `ddflow`
-start would have made necessary — were considered and rejected for the argcomplete extra.
+Candidate *generation* is standard-library only: the value kinds, their inference and the
+id lookup import nothing third-party. What turns a TAB into candidates is **argcomplete,
+an OPTIONAL extra** (D-completion-scope), not a runtime dependency: install the
+`argcomplete` extra to make the activation line register anything. Without it there is no
+TAB completion and `ddflow` runs normally; a plain `ddflow` invocation is unchanged.
+Stdlib-generated per-shell scripts — which a per-TAB `ddflow` start would otherwise make
+necessary — were considered and rejected for the argcomplete extra.
 
 ## How a TAB is answered
 
