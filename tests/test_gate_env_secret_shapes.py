@@ -107,6 +107,23 @@ def test_child_env_scrubs_only_in_on_mode_and_ci_keep_env_applies():
     assert child_env(cfg, base, ci=True) == {"B_TOKEN": "2", "PATH": "/bin"}
 
 
+def test_ddflows_own_settings_are_never_secret_shaped():
+    base = {"DDFLOW_GATES_SCRUB_SECRET_NAMES": "on", "DDFLOW_X_TOKEN": "t", "MY_TOKEN": "x"}
+    assert secret_names(base, Config().gates) == ["MY_TOKEN"]
+    cfg = Config()
+    cfg.gates.scrub_secret_names = "on"
+    assert child_env(cfg, base) == {
+        "DDFLOW_GATES_SCRUB_SECRET_NAMES": "on",
+        "DDFLOW_X_TOKEN": "t",
+    }
+
+
+def test_the_doctor_note_names_the_ci_exception():
+    seen = SimpleNamespace(evidence={"env_secret_mode": "warn", "env_secret_names": ["A_TOKEN"]})
+    state = SimpleNamespace(items={"i": SimpleNamespace(gates={"a": seen})})
+    assert "[ci].keep_env" in doctor_notes(state, Config())[0]
+
+
 def test_a_name_in_scrub_env_is_not_reported_as_visible():
     cfg = Config()
     cfg.gates.scrub_env = ["X_TOKEN"]

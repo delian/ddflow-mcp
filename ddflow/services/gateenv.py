@@ -24,6 +24,9 @@ from typing import Any
 from ..config import Config
 from ..config_sections.gates import GatesConfig
 
+#: ddflow's own environment settings are never secret-shaped.
+OWN_PREFIX = "DDFLOW_"
+
 #: Names `doctor` lists before it says "(+N more)".
 MAX_NAMES_SHOWN = 8
 
@@ -51,10 +54,17 @@ def secret_names(
 ) -> list[str]:
     """The names in ``base`` that look like secrets (a case-blind pattern of
     `[gates].secret_name_patterns` is part of the name), without the kept ones and without those
-    `scrub_env` or `REPO_VARS` already remove. Names only: a value never passes through here."""
+    `scrub_env` or `REPO_VARS` already remove, and without ddflow's own settings (`DDFLOW_*`:
+    `DDFLOW_GATES_SCRUB_SECRET_NAMES` contains `_SECRET`, and a nested ddflow must keep it). Names only: a value never passes through here."""
     pats = [p.upper() for p in gates.secret_name_patterns if p]
     skip = set(keep) | set(gates.keep_env) | set(gates.scrub_env) | set(REPO_VARS)
-    return sorted(k for k in base if k not in skip and any(p in k.upper() for p in pats))
+    return sorted(
+        k
+        for k in base
+        if k not in skip
+        and not k.upper().startswith(OWN_PREFIX)
+        and any(p in k.upper() for p in pats)
+    )
 
 
 def env_evidence(
@@ -87,8 +97,8 @@ def doctor_notes(st: Any, cfg: Config) -> list[str]:
     more = f" (+{len(seen) - len(shown)} more)" if len(seen) > len(shown) else ""
     return [
         f"gate commands ran with secret-shaped variables in their environment: {', '.join(shown)}{more}; "
-        "`ddflow config --set gates.scrub_secret_names on` removes them from every gate and CI child "
-        "([gates].keep_env preserves one)"
+        "`ddflow config --set gates.scrub_secret_names on` removes them from every gate child and the CI "
+        "command ([gates].keep_env preserves one, [ci].keep_env one for CI)"
     ]
 
 

@@ -72,7 +72,7 @@ a value) of the secret-shaped variables in the gate's evidence (`env_secret_mode
 and `ddflow doctor` notes them; `on` removes them from every gate and CI child; `off` does neither.
 `[gates].secret_name_patterns` says which names match (default `_API_KEY`, `_TOKEN`, `_SECRET`,
 `_PASSWORD`, `_PASSWD`; a variable whose name contains one, compared case-blind), and
-`[gates].keep_env` (`[ci].keep_env` for CI) preserves one a gate needs. Four ways to set it:
+`[gates].keep_env` (`[ci].keep_env` for CI) preserves one a gate needs (a gate that runs `ddflow review` lists its reviewer key variable there); ddflow's own `DDFLOW_*` settings never match. Four ways to set it:
 
 - the file: `[gates]` `scrub_secret_names = "on"` in `.ddflow/config.toml` (or `.ddflow/local/config.toml` for this machine);
 - the CLI: `ddflow config --set gates.scrub_secret_names on`; per run, `DDFLOW_GATES_SCRUB_SECRET_NAMES=on`;
