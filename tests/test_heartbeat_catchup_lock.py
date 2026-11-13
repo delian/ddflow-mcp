@@ -26,7 +26,9 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.infra.log._lock import _HELD, _held_key
 
-HB = importlib.import_module("ddflow.api.lifecycle.heartbeat")  # the module, not the re-exported function
+HB = importlib.import_module(
+    "ddflow.api.lifecycle.heartbeat"
+)  # the module, not the re-exported function
 OK = 0
 TTL_S = 6
 
