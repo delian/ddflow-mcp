@@ -21,6 +21,29 @@ from ddflow.services import leasekeep as LK
 from ddflow.services import pins as PN
 
 
+def test_run_cli_anchors_the_subprocess_in_the_repository_under_test(repo, monkeypatch):
+    """B93e00ef048: run_cli runs the CLI subprocess IN the repository under test, so a
+    deliberate launch of the tree under test is the explicit external launch the
+    foreign-launch guard allows, not a cross-lane run from inside the checkout family
+    (which the guard refuses). Pre-fix the subprocess inherited the caller's cwd."""
+    import subprocess
+
+    seen: dict = {}
+
+    class _Ran:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda args, **kwargs: seen.update(cwd=kwargs.get("cwd")) or _Ran(),
+    )
+    run_cli(repo, "status")
+    assert seen["cwd"] == str(repo), seen
+
+
 def _held(repo: Path, agent: str = "me"):
     run_cli(repo, "init")
     log = EventLog(repo, "seed")
