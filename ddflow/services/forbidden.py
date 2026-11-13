@@ -128,6 +128,8 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
                 i += 1
         elif c == "\\":
             i += 2 if i + 1 < n else 1  # an escaped `<` is not a marker
+        elif c == "#" and (i == 0 or line[i - 1] in _COMMENT_BOUNDARY):
+            i = n  # a comment runs to end of line: its `'`/`"` are data, not quote openers
         elif c == "'":
             quote = "'"
             i += 1

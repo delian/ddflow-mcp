@@ -121,6 +121,8 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     # a multi-line single quote that swallows the marker is data too, not an opener
     assert _check("echo 'x\n<<EOF'\ngit push origin main\nEOF") is not None
     assert _check("echo <<EOF\ngit push origin main\nEOF") is None
+    # a `'` inside a comment is not a quote opener, so the real heredoc still strips its body
+    assert _check("# don't run\ncat <<EOF\ngit push origin main\nEOF") is None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
