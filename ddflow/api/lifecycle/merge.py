@@ -117,9 +117,11 @@ def _record_moves(
     from git rename detection on the branch's diff (MV-path-moves). Each record is
     self-contained (old path, new path, the merge sha), so replay rebuilds the move list
     from history alone -- nothing is stored that is not in the log. git that could not
-    answer records NOTHING (unavailable is never "nothing moved")."""
+    answer DOES record an unavailable record (``how = "unavailable"``), never nothing:
+    "could not tell" is never read as "nothing moved"."""
     moves = DR.moves_between(repo, before, after)
     if moves is None:
+        log.append("path.moved", item, {"old": "", "new": "", "sha": sha, "how": "unavailable"})
         return
     for m in moves:
         log.append("path.moved", item, {"old": m.old, "new": m.new, "sha": sha, "how": m.how})
@@ -374,7 +376,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         landed_after=landed_after,
     )
     _record_reconciled(repo, cfg, log, it, item, landed_before, landed_after, branch_head)
-    _record_moves(log, repo, item, landed_before, branch_head, sha)
+    _record_moves(log, repo, item, landed_before, landed_after, sha)
     return _finish_merge(
         repo,
         cfg,
