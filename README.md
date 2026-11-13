@@ -875,11 +875,16 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=428934f42962 -->
-<details><summary>All 737 knobs across 69 sections</summary>
+<!-- ddflow:begin README/knobs sha=e6f81cc7d8f5 -->
+<details><summary>All 742 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
+| `adapters.platform` | `"auto"` | `auto` \| `posix` |
+| `adapters.lane_transport` | `"local"` | `local` |
+| `adapters.network_consent` | `{}` |  |
+| `adapters.managed_files_consent` | `{}` |  |
+| `adapters.managed_files_backup` | `true` |  |
 | `agent.id` | `""` |  |
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.reviewer_independence` | `"model"` | `family` \| `model` \| `off` |

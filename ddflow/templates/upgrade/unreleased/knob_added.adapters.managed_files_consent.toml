@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "adapters.managed_files_consent"
+new = '{}'
+why = "Consent for the `ManagedFile` adapter to merge one shared file kind (settings.json, .mcp.json, opencode.json, hooks.toml, AGENTS.md/README regions), once per kind; a kind with no recorded consent is refused, never silently written (D-adapters-answers-2)."
+impact = "additive"

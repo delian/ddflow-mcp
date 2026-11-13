@@ -48,6 +48,18 @@ adapter at the call site; in a test pass the fake. A module that migrates behind
 a thin re-export at its old import path until its import-linter baseline is empty
 (ADP-migrate-homes): no behaviour change, and every baseline only shrinks (D-unify).
 
+## Configuration: `[adapters]`
+
+Which adapter serves a multi-adapter port is a config knob. A port with a dedicated section
+keeps its selector next to its reader -- `[flow].forge`, `[schedule].optimizer`,
+`[notify].channel` -- and the ports without one (`[adapters].platform`,
+`[adapters].lane_transport`) and the consent knobs of D-adapters-answers-2/3
+(`[adapters].network_consent`, `[adapters].managed_files_consent`,
+`[adapters].managed_files_backup`) live in `ddflow/config_sections/adapters.py`. The code
+that reads them is `ddflow.services.adapters` (the bottom `ddflow.adapters` layer cannot
+import config, r-core-pure); a caller that must pick a `Platform`, a `Transport`, or honour
+consent asks it, and never imports the adapter at the call site.
+
 ## Families planned in P-adapters
 
 http, sqlite, toml, fs (atomic write, lock, scratch), templates, clock and env, search,

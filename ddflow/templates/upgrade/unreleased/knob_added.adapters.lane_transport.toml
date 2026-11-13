@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "adapters.lane_transport"
+new = '"local"'
+why = "Which `Transport` adapter runs a lane's process and brings its files back; 'local' spawns it on this host. A remote executor registers into the same registry and is selectable once one exists."
+impact = "additive"
