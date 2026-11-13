@@ -12,6 +12,7 @@ Git unable to answer is silence here, never a claim (the checks are advisory).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from ..core.bookkeeping import STATE_DIR
@@ -131,9 +132,9 @@ def doctor_notes(repo: Path) -> list[str]:
     ]
 
 
-def host_notes() -> list[str]:
+def host_notes(finished: Iterable[str] = ()) -> list[str]:
     """Notes about this HOST, not the repository: a ci suite that outlived its ddflow owner
     (named, never killed), and a shell completion registration the `ddflow` on PATH does not
     answer. Kept apart from `doctor_notes` so a repository check does not depend on what else
     is running."""
-    return [*OS.notes(), *CSC.notes()]
+    return [*OS.notes(finished), *CSC.notes()]

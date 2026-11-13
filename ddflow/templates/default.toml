@@ -3,6 +3,13 @@
 # set it in .ddflow/config.toml. Rewrite this file with `ddflow config defaults --write`.
 # What each knob means: `ddflow config --explain`.
 
+[adapters]
+platform = "auto"
+lane_transport = "local"
+network_consent = {}
+managed_files_consent = {}
+managed_files_backup = true
+
 [agent]
 id = ""
 reviewer_family_must_differ = true
@@ -359,6 +366,7 @@ renew_long_commands = true
 renew_log_min_s = 120
 grace_s = 120
 acquire_timeout_s = 30
+record_lock_wait_s = 180
 waiter_reservation_s = 300
 wait_max_s = 600
 wait_queue = false
@@ -806,6 +814,9 @@ dispatch_why_items = 5
 launch_enabled = false
 launch_templates_file = ".ddflow/local/lane-templates.toml"
 launch_max_budget_usd = 5.0
+budget_stop_enabled = true
+budget_warn_fraction = 0.5
+budget_stop_grace_s = 10.0
 remote_exclude = [".ddflow", ".env", "**/.env"]
 remote_bundle_max_bytes = 104857600
 remote_return_max_bytes = 52428800

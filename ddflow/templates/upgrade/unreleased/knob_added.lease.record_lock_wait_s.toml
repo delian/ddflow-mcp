@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.record_lock_wait_s"
+new = "180"
+why = "B0b0b67d5e7: the record step of a finished gate outcome retries the events lock across attempts, so a transient timeout does not lose the result."
+impact = "additive"

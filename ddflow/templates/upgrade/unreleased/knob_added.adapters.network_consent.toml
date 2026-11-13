@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "adapters.network_consent"
+new = '{}'
+why = "Network consent once per kind (forge, chat, webhook, email); a kind with no recorded consent reads as declined (r-consent-outward, D-adapters-answers-3). An org bundle layer can pre-approve or forbid a kind and lock it."
+impact = "additive"

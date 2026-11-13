@@ -99,22 +99,129 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
+def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
+    """The here-doc delimiter name (quotes removed) and the index one past the word, parsed from
+    `i`: the word ends at the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside
+    it is part of the word and may hold those chars (inside a double quote a backslash escapes
+    only dollar, backtick, double quote or backslash) (Bdd23c77383)."""
+    name: list[str] = []
+    while i < n and line[i] not in " \t\r;|&()<>\n":
+        c = line[i]
+        if c == "\\":
+            name.append(line[i + 1] if i + 1 < n else "\\")
+            i += 2
+        elif c in {"'", '"'}:
+            q = c
+            i += 1
+            while i < n and line[i] != q:
+                if line[i] == "\\" and i + 1 < n:
+                    nxt = line[i + 1]
+                    if q == '"' and nxt in ("$", "`", '"', "\\"):
+                        name.append(nxt)  # a backslash quote-removes these four
+                        i += 2
+                    else:
+                        name.append(line[i])  # an unmatched backslash stays, the next char too
+                        i += 1
+                else:
+                    name.append(line[i])
+                    i += 1
+            i += 1
+        else:
+            name.append(c)
+            i += 1
+    return "".join(name), i
+
+
+def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
+    """The here-doc delimiter name and the index one past the `<<` word at `i` (its first `<`),
+    or None when the `<<` opens none: a `<<<` here-string, a `(<<` or `1<<` shift."""
+    if i > 0 and (line[i - 1] == "<" or line[i - 1] == "(" or line[i - 1].isdigit()):
+        return None  # `<<<`, `(<<` or a shift: not a here-doc (the `(?<![<\d(])` guard)
+    i += 2  # past `<<`
+    if i < n and line[i] == "<":
+        return None  # `<<<` here-string and shell additions to it
+    if i < n and line[i] == "-":
+        i += 1
+    while i < n and line[i] in " \t\r":
+        i += 1
+    return _heredoc_name(line, i, n)
+
+
+def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
+    """The ``(quote open, index past the close)`` of a double quote, scanning from `i` (a char
+    INSIDE it): ``("", past the close)``, or (``'"'``, `n`) when it stays open to the line's
+    end (including an empty ``""`` whose close is the line's last char, which still CLOSES it);
+    a backslash escapes the next char, so a ``\\"`` is not the close."""
+    j = i
+    while j < n and line[j] != '"':
+        if line[j] == "\\" and j + 1 < n:
+            j += 2
+        else:
+            j += 1
+    return ("", j + 1) if j < n else ('"', n)
+
+
+def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
+    """The ``#`` at `i` begins a comment: at the line's start, or after a `_COMMENT_BOUNDARY`
+    char that is not a backslash-escaped data char (an escaped boundary is literal text)."""
+    return i == 0 or (line[i - 1] in _COMMENT_BOUNDARY and i - 1 not in escaped)
+
+
+def _heredoc_openers(line: str, quote: str) -> tuple[list[str], str]:
+    """The `<<` heredoc markers on `line` that sit OUTSIDE a quote, and the quote (if any)
+    still open at the line's end. A `<<` inside `'...'`/`"..."` is literal text, not a heredoc
+    (Bdd23c77383); an escaped ``\\<`` is not a marker, and a `'`/`"` inside a comment is data,
+    not a quote opener. ``quote`` is the quote open from earlier lines: a quote may span lines,
+    and a `<<` it swallows is still literal."""
+    ms: list[str] = []
+    i, n = 0, len(line)
+    escaped: set[int] = set()
+    while i < n:
+        c = line[i]
+        if quote == "'":
+            j = line.find("'", i)
+            if j < 0:
+                return ms, "'"  # the single quote stays open to the next line
+            quote, i = "", j + 1
+        elif quote == '"':
+            quote, i = _dquote_close(line, i, n)  # a quote opened on an earlier line: its close
+        elif c == "\\":
+            if i + 1 < n:
+                escaped.add(i + 1)
+            i += 2 if i + 1 < n else 1
+        elif c == "#" and _comment_here(line, i, escaped):
+            i = n  # a comment runs to end of line: its `'`/`"` are data, not quote openers
+        elif c == "'":
+            quote, i = "'", i + 1
+        elif c == '"':
+            quote, i = _dquote_close(line, i + 1, n)
+        elif c == "<" and i + 1 < n and line[i + 1] == "<":
+            w = _heredoc_word(line, i, n)
+            if w is not None:
+                ms.append(w[0])
+                i = w[1]
+                continue
+            i += 1
+        else:
+            i += 1
+    return ms, quote
 
 
 def _strip_heredocs(text: str) -> str:
     """The command line without heredoc bodies, which are data, not commands. A `<<` that
-    opens no body (a here-string, a shift, a quoted `a<<b`) drops nothing: only a terminator
-    line that really follows makes it a heredoc."""
+    opens no body (a here-string, a shift, a quoted `a<<b`, a `<<` inside a quote) drops
+    nothing: only a terminator line that really follows makes it a heredoc."""
     lines = text.split("\n")
     out: list[str] = []
     i = 0
+    quote = ""
     while i < len(lines):
         line = lines[i]
         out.append(line)
         i += 1
-        for m in _HEREDOC.finditer(line):
-            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(1)), None)
+        ms, quote = _heredoc_openers(line, quote)
+        for m in ms:
+            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m), None)
             if end is not None:
                 i = end + 1
                 break

@@ -1,0 +1,2 @@
+{"agent":"assess-workflow","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"efa1780ee5c64e1b630cc307f","kind":"ddflow.seen","lamport":194862,"schema":1,"subject":"ddflow","ts":"2026-11-13T17:22:23.333110Z"}
+{"agent":"assess-workflow","data":{"how":"interrupted","lapse_at":"2026-11-13T17:12:21.517528Z","last_active":"2026-11-13T14:06:17.041321Z","summary":""},"id":"e7f060465afa9c07e80442346","kind":"session.ended","lamport":194863,"schema":1,"subject":"s20261113T140616-3983903","ts":"2026-11-13T17:22:23.408416Z"}

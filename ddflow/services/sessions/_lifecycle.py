@@ -9,10 +9,10 @@ test seeds a log with explicit times and the hooks only add the writes.
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import clock
 from ...core import provenance as PV
@@ -175,7 +175,7 @@ def find_dead(
 ) -> list[Dead]:
     """Open sessions that are dead: not `current`, their agent holds no live lease, a lease
     of the agent lapsed at or after the session began, and the session wrote nothing since."""
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     grace = cfg.lease.grace_s
     last, ended = _activity(events)
     live_agents = {

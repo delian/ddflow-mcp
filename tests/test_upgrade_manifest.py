@@ -190,6 +190,17 @@ def test_every_unreleased_fragment_loads_cleanly():
     )
 
 
+def test_budget_stop_fragment_declares_a_valid_impact():
+    """B-budget-stop-fragment-impact: swarm.budget_stop_enabled hand-wrote impact =
+    "behavior", not one of the compatibility contract's classes, so `load()` raised
+    ManifestError and every upgrade command reddened on main. A knob_added is additive:
+    the fragment must load and replay to the code's default with a valid impact."""
+    (c,) = [c for c in UM.load().changes() if c.key == "swarm.budget_stop_enabled"]
+    assert c.kind == "knob_added"
+    assert c.impact == "additive"
+    assert c.new is True
+
+
 def test_a_null_default_round_trips():
     frag = '[[change]]\nkind = "knob_added"\nkey = "x.z"\nnew = \'null\'\n'
     (c,) = UM.parse(BASE, [("f.toml", frag)]).changes()
