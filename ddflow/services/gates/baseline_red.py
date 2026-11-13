@@ -187,13 +187,15 @@ def _same_failure(a: str, b: str) -> bool:
     either still differs (B710b7cc84f)."""
     if a == b:
         return True
-    if _ELLIPSIS not in a or _ELLIPSIS not in b:
+    pa, pb = a.split(_ELLIPSIS), b.split(_ELLIPSIS)
+    if len(pa) < 2 or len(pa) != len(pb):
         return False
-    head_a, head_b = a.partition(_ELLIPSIS)[0], b.partition(_ELLIPSIS)[0]
-    tail_a, tail_b = a.rpartition(_ELLIPSIS)[2], b.rpartition(_ELLIPSIS)[2]
-    heads = head_a.startswith(head_b) or head_b.startswith(head_a)
-    tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
-    return heads and tails
+    # each cut shifts the text on both sides of its ellipsis, so a part between two cuts agrees
+    # when one holds the other
+    inner = all(x in y or y in x for x, y in zip(pa[1:-1], pb[1:-1], strict=True))
+    heads = pa[0].startswith(pb[0]) or pb[0].startswith(pa[0])
+    tails = pa[-1].endswith(pb[-1]) or pb[-1].endswith(pa[-1])
+    return heads and tails and inner
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:

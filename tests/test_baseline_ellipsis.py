@@ -43,3 +43,12 @@ def test_a_different_head_in_an_ellipsized_text_is_still_a_new_offender():
 
 def test_whole_texts_that_differ_still_differ():
     assert BR._differs("t::x", {"t::x": "boom 1"}, {"t::x": "boom 2"})
+
+
+def test_a_different_text_between_two_ellipses_is_still_a_new_offender():
+    assert BR._differs("t::x", {"t::x": "foo...A...bar"}, {"t::x": "foo...B...bar"})
+    assert not BR._differs("t::x", {"t::x": "foo...A...bar"}, {"t::x": "foo...A...bar"})
+
+
+def test_texts_with_a_different_number_of_cuts_differ():
+    assert BR._differs("t::x", {"t::x": "foo...bar"}, {"t::x": "foo...A...bar"})
