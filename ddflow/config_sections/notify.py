@@ -24,14 +24,14 @@ class NotifyConfig:
 
     channel: str = knob(
         "terminal",
-        doc="Where notifications go. 'terminal' writes to the operator's terminal; each other choice is one network channel, reach outward (r-consent-outward), and needs a grant before any adapter will send.",
+        doc="Where notifications go. 'terminal' writes to the operator's terminal; each other choice ('email', 'n8n', 'openclaw', 'slack', 'teams', 'webhook') is one network channel, reaches outward (r-consent-outward), and needs a grant before any adapter will send.",
         choices=_CHANNELS,
         strictest=("terminal", "a typo across clones is local, never a network send"),
         outward=_OUTWARD,
     )
     ask_channel: str = knob(
         "harness",
-        doc="Where questions and approvals go. 'harness' is the in-band agent chat; each other choice is one network channel and needs a grant first.",
+        doc="Where questions and approvals go. 'harness' is the in-band agent chat; each other choice ('email', 'n8n', 'openclaw', 'slack', 'teams', 'webhook') is one network channel and needs a grant first.",
         choices=_ASK_CHANNELS,
         strictest=("harness", "a typo across clones stays local, never a network send"),
         outward=_OUTWARD,

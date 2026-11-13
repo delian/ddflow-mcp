@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..infra import git as G
+from ..adapters import git as G
 
 #: The baseline of exempt files, relative to the repository root. It lives outside
 #: `tests/guard_baselines/` (that directory is reserved for the architecture guards,

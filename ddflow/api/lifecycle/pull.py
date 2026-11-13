@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ...adapters import git as G
 from ...adapters.clock import DEFAULT as CLOCK
 from ...adapters.toml import TomlError, TomlLibIo
 from ...config import Config
@@ -20,7 +21,6 @@ from ...core.admission import shared_globs
 from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import RUNNING, State
 from ...core.schedule import Caps, caps, critical_path, needs_tree, open_slots
-from ...infra import git as G
 from ...services import flowstate as FL
 from ...services import modelreg
 from ...services.lanes import launch as LN
