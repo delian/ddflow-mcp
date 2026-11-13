@@ -58,11 +58,11 @@ def _say_drift(keys: list[str]) -> None:
 def packaged() -> dict[str, Any]:
     """The parsed packaged defaults, or `{}` (having warned) when they can not be read: the
     `default.d` drop-in directory when it holds files, else the single `default.toml`."""
-    source = PACKAGED_DEFAULTS
+    source = PACKAGED_DIR  # what a failure names, from the probe on
     try:  # the probe is inside the try: an unreadable directory must warn, not crash
         if dropin_files(PACKAGED_DIR):
-            source = PACKAGED_DIR
             return read_dropin_dir(PACKAGED_DIR)
+        source = PACKAGED_DEFAULTS
         return read_toml(source)
     except (OSError, ValueError, ConfigConflict) as exc:  # ValueError: bad UTF-8 or TOML
         _say(f"cannot read the packaged {source}: {exc}; {_BUILT_IN}")

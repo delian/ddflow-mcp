@@ -223,7 +223,8 @@ def test_an_unreadable_drop_in_directory_warns_and_leaves_the_built_in_defaults(
 
     monkeypatch.setattr(_packaged, "dropin_files", refuse)
     assert _packaged.packaged() == {}
-    assert "Permission denied" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Permission denied" in err and str(d) in err and "default.toml:" not in err
 
 
 def test_the_conflict_names_the_file_that_defined_the_table_not_one_that_only_held_it(tmp_path):
