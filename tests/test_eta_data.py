@@ -8,15 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from ddflow.config import Config
+from ddflow.core.model import fold
+from ddflow.services.eta import data as ED
+from ddflow.services.metrics.facts import collect
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lanes_fixture import T0, Log
-
-from ddflow.config import Config
-from ddflow.core.model import fold
-from ddflow.services.metrics.facts import collect
-
-from ddflow.services.eta import data as ED
 
 H = 3600.0
 
@@ -73,7 +72,7 @@ def test_cycle_times_are_first_claim_to_first_completion():
         t += n * H + 60
     facts, _, _st = facts_of(log)
     table = ED.build(facts, Config().eta)
-    assert [s for s in table.cycles.samples] == [pytest.approx(n * H) for n in (1, 2, 3)]
+    assert list(table.cycles.samples) == [pytest.approx(n * H) for n in (1, 2, 3)]
     assert table.cycles.n_samples == 3
     assert table.cycles.id_classes == {f"T{n}": "T" for n in (1, 2, 3)}
 

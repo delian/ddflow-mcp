@@ -72,9 +72,7 @@ def _completed(facts: Facts) -> list:
     """Items with a claim and a completion: the only ones the duration tables have samples
     from (a missing duration is never a zero)."""
     spans = [
-        s
-        for s in facts.spans.values()
-        if s.cycle_s is not None and s.completed_at is not None
+        s for s in facts.spans.values() if s.cycle_s is not None and s.completed_at is not None
     ]
     return sorted(spans, key=lambda s: s.completed_at or 0.0)
 
@@ -107,7 +105,11 @@ def gate_durations(facts: Facts, inside_items: set[str] | None = None) -> dict[s
             (x.at for x in outcomes if x.item == o.item and x.gate == o.gate and x.at < o.at),
             default=None,
         )
-        began = [t for t in facts.starts.get((o.item, o.gate), ()) if t <= o.at and (prev is None or t > prev)]
+        began = [
+            t
+            for t in facts.starts.get((o.item, o.gate), ())
+            if t <= o.at and (prev is None or t > prev)
+        ]
         if began:
             by_gate[o.gate].append(o.at - max(began))
         elif o.elapsed_s is not None:
@@ -130,6 +132,7 @@ def lease_waits(facts: Facts, spans: list) -> list[float]:
         if s.first_claim >= wait:
             out.append(s.first_claim - wait)
     return out
+
 
 def _review_gate(facts: Facts, spans: list) -> str:
     """The review gate to count rounds over (both review gates belong to one item life, so
@@ -205,9 +208,7 @@ def apply_min_samples(tables: Tables, min_samples: int) -> None:
     tables.rounds.samples_summary = _stat_summary(tables.rounds.samples, minimum)
     tables.insufficient = {
         table.name: f"{len(table.samples)} samples, need {minimum}"
-        for table in (
-            [tables.cycles, tables.lease_waits, tables.rounds] + tables.gate_durations
-        )
+        for table in ([tables.cycles, tables.lease_waits, tables.rounds, *tables.gate_durations])
         if len(table.samples) < minimum
     }
 
