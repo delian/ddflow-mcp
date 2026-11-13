@@ -37,7 +37,15 @@ def test_soft_unwind_stops_and_releases_but_preserves_the_worktree():
 def test_hard_kill_discards_the_worktree_on_purpose():
     d = decide("T1", "lane-a", hard=True, salvageable=False)
     assert d.effect == HARD and d.hard is True and d.preserve is False
-    assert "discard the worktree" in d.rationale and "on purpose" in d.rationale
+    assert "discard a clean worktree" in d.rationale and "nothing is lost" in d.rationale
+
+
+def test_hard_kill_discards_salvageable_uncommitted_work_on_purpose():
+    """A hard kill still discards a tree measured to hold work -- that is what the
+    controller asked for; ``salvageable`` names what is lost, it does not block the kill."""
+    d = decide("T1", "lane-a", hard=True, salvageable=True)
+    assert d.effect == HARD and d.hard is True and d.preserve is False
+    assert "uncommitted work" in d.rationale and "on purpose" in d.rationale
 
 
 def test_a_hard_kill_never_discards_an_adopted_harness_tree():

@@ -58,9 +58,11 @@ def decide(
 
     ``hard`` is the switch: False unwinds soft (preserve the worktree), True kills hard
     (discard it). Guardrails first -- a hard kill never discards an adopted tree or a
-    tree it could not measure, it falls back to a soft unwind -- then the worktree is
-    discarded only when the switch says hard and the tree is measured discardable. A soft
-    unwind always preserves.
+    tree it could not measure, it falls back to a soft unwind. Only when the switch says
+    hard AND the tree is measured (``salvageable`` True or False) is the worktree
+    discarded: ``salvageable`` then names what the discard throws away (True = its
+    uncommitted work is lost; False = clean, nothing is lost), so it never blocks the
+    discard the controller asked for. A soft unwind always preserves.
     """
     if not hard:
         return Kill(
@@ -92,12 +94,22 @@ def decide(
             False,
             True,
         )
+    if salvageable:
+        return Kill(
+            item,
+            lane,
+            HARD,
+            "hard kill: stop the subagent, release the lease, and discard the worktree with "
+            "its uncommitted work; the work is thrown away on purpose",
+            True,
+            False,
+        )
     return Kill(
         item,
         lane,
         HARD,
-        "hard kill: stop the subagent, release the lease, and discard the worktree; the work "
-        "is thrown away on purpose",
+        "hard kill: stop the subagent, release the lease, and discard a clean worktree; "
+        "nothing is lost",
         True,
         False,
     )
