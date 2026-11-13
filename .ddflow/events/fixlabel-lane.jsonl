@@ -1,0 +1,2 @@
+{"agent":"fixlabel-lane","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"ee95a4e98e776813c17e39bdc","kind":"ddflow.seen","lamport":197214,"schema":1,"subject":"ddflow","ts":"2026-11-13T22:26:15.252067Z"}
+{"agent":"fixlabel-lane","data":{"gate":"rubber_duck"},"id":"e15ef2d36b8e612fbd0e4ec4a","kind":"gate.started","lamport":197215,"schema":1,"subject":"fix-Ba73b94a6ad","ts":"2026-11-13T22:26:15.396523Z"}
