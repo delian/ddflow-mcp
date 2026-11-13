@@ -58,10 +58,24 @@ def test_a_fresh_lease_on_the_same_item_is_expired_again(repo, monkeypatch):
     log = _expired_empty(repo)
     cfg = Config.load(repo)
     recovery.sweep(log, cfg, repo, apply=True)
+    assert _expiries(repo) == 1
     monkeypatch.setattr(
         "ddflow.services.approval.agent_marker", lambda _a="": ""
     )  # a person forcing
     assert LC.claim(repo, "T1", agent="next", force=True).exit == 0
+    assert _expiries(repo) == 1, "a takeover records no expiry of its own"
     time.sleep(2.2)
-    recovery.sweep(log, cfg, repo, apply=True)
-    assert _expiries(repo) == 2
+    swept = recovery.sweep(log, cfg, repo, apply=True)
+    assert [r.item for r in swept] == ["T1"]
+    assert _expiries(repo) == 2, "the final sweep recorded the new lease's expiry"
+
+
+def test_expire_itself_records_a_lease_once_even_on_a_stale_snapshot(repo):
+    """The guard sits where the append is decided: a second caller that read the state
+    before the first one's event (two concurrent sweeps) still adds nothing."""
+    from ddflow.services.leases import lifecycle
+
+    log = _expired_empty(repo)
+    assert lifecycle.expire(log, "T1", reason="first") is True
+    assert lifecycle.expire(log, "T1", reason="second") is False
+    assert _expiries(repo) == 1
