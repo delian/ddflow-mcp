@@ -55,7 +55,7 @@ def answers(exe: str) -> tuple[bool, str]:
             }
             done = P.capture([exe], timeout=TIMEOUT_S, env=env)
             words = out.read_text(encoding="utf-8").replace("\x0b", " ").split()
-    except OSError:
+    except (OSError, ValueError):  # no file, or not text: it did not answer
         return False, "no answer"
     if done.error is not None:
         return False, f"it did not finish ({type(done.error).__name__})"
@@ -71,8 +71,9 @@ def notes(home: Path | None = None) -> list[str]:
     exe = FS.which("ddflow")
     if exe is None:
         return [
-            f"shell completion is registered in {where} but no `ddflow` is on PATH, so a TAB "
-            "runs nothing: put ddflow on PATH, or `ddflow completion uninstall`"
+            f"shell completion is registered in {where} but no `ddflow` executable is on PATH "
+            "(a shell function or alias is not seen here), so a TAB runs nothing unless one "
+            "answers: put ddflow on PATH, or `ddflow completion uninstall`"
         ]
     ok, said = answers(exe)
     if ok:

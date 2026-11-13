@@ -203,3 +203,24 @@ def test_a_request_without_argcomplete_installed_runs_nothing(project):
     )
     assert probe.returncode == 1
     assert probe.stdout == "" and probe.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("argv0", "orig", "want"),
+    [
+        ("/x/bin/ddflow", [], True),
+        ("-m", ["python", "-m", "ddflow", "list"], True),
+        ("-m", ["python", "-m", "ddflow.surfaces.cli"], True),
+        ("-m", ["python", "-m", "pytest"], False),
+        ("/x/__main__.py", ["python", "/x/__main__.py"], False),
+        ("/x/ddflow/__main__.py", ["python", "-m", "ddflow"], True),
+        ("/x/bin/other", [], False),
+    ],
+)
+def test_only_ddflow_launches_count_as_a_request(monkeypatch, argv0, orig, want):
+    from ddflow.surfaces import completion_boot as B
+
+    monkeypatch.setenv("_ARGCOMPLETE", "1")
+    assert B.asked(argv0, orig) is want
+    monkeypatch.delenv("_ARGCOMPLETE")
+    assert B.asked(argv0, orig) is False

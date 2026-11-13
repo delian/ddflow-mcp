@@ -59,7 +59,7 @@ def test_registered_without_ddflow_on_path_is_named(home, monkeypatch, tmp_path)
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
     (note,) = CS.notes(home)
-    assert "no `ddflow` is on PATH" in note
+    assert "no `ddflow` executable is on PATH" in note
 
 
 def test_registered_and_answering_engine_is_silent(home, tmp_path, monkeypatch):
@@ -83,3 +83,14 @@ def test_a_startup_file_that_is_not_text_does_not_crash_the_doctor(home):
     rc = install.target_file("zsh", home)
     rc.write_bytes(b"\xff\xfe not utf-8 " + install.install_text("zsh", "").encode())
     assert CS.registered(home) == []
+
+
+def test_an_engine_that_writes_non_text_is_a_note_not_a_crash(home, tmp_path, monkeypatch):
+    _register(home)
+    _exe(
+        tmp_path / "bin",
+        "#!/bin/sh\nprintf '\\377\\376' > \"$_ARGCOMPLETE_STDOUT_FILENAME\"\n",
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path / 'bin'}:/usr/bin:/bin")
+    (note,) = CS.notes(home)
+    assert "does not answer" in note

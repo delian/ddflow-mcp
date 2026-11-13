@@ -18,15 +18,25 @@ from ..adapters import env as E
 
 #: The environment variable argcomplete's registration sets on the program it asks.
 REQUEST_ENV = "_ARGCOMPLETE"
-#: The program names that answer (a console script, or `python -m ddflow`, whose argv[0] is `-m` while the package imports).
-_NAMES = ("ddflow", "__main__.py", "-m")
 
 
-def asked(argv0: str | None = None) -> bool:
+def _module_run(orig_argv: list[str]) -> bool:
+    """Was this process started as ``python -m ddflow`` (or a submodule of it)? ``sys.argv[0]`` is only ``-m`` (or the path of ``__main__.py``), so the module name
+    comes from the interpreter's original arguments."""
+    if "-m" not in orig_argv[:-1]:
+        return False
+    module = orig_argv[orig_argv.index("-m") + 1]
+    return module == "ddflow" or module.startswith("ddflow.")
+
+
+def asked(argv0: str | None = None, orig_argv: list[str] | None = None) -> bool:
     """Is this process a completion request for the ``ddflow`` command?"""
     if E.SystemEnv().get(REQUEST_ENV) is None:
         return False
-    return (sys.argv[0] if argv0 is None else argv0).rsplit("/", 1)[-1] in _NAMES
+    name = (sys.argv[0] if argv0 is None else argv0).rsplit("/", 1)[-1]
+    if name in ("-m", "__main__.py"):  # `-m` while a package imports, the path once __main__ runs
+        return _module_run(sys.orig_argv if orig_argv is None else orig_argv)
+    return name == "ddflow"
 
 
 def answer_if_asked() -> None:
