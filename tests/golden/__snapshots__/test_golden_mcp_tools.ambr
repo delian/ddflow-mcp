@@ -725,6 +725,10 @@
           "type": "boolean",
           "description": "List every blocked item."
          },
+         "state": {
+          "type": "string",
+          "description": "List the items in one report state (interrupted, running, blocked, ready, merged, held, review, blocking_deps). Echoed in --json under `state` and `filter.state`; the list is cut with the same --full / --cursor caps."
+         },
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
