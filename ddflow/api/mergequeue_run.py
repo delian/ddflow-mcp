@@ -20,6 +20,7 @@ from ..core import outcome as O
 from ..core.globs import under_any
 from ..infra import git as G
 from ..infra import worktree as W
+from ..services import drift as D
 from ..services import flakes as FL
 from ..services import flow as FS
 from ..services import lanerelease as LR
@@ -27,6 +28,7 @@ from ..services import mergequeue as MQ
 from ..services import pins as PN
 from ..services import pins_text as PT
 from ..services import suitelock as SL
+from ..services.enforce.driftchecks import rulebooks
 from ..services.pipeline_diff import effective_pipeline
 from ._base import _load
 from .cirun import run as ci_run
@@ -68,7 +70,10 @@ def _bring_in_base(repo: Path, cfg, wt: W.Worktree) -> str:
     """Merge the base into the item's branch, in its own tree. "" on success, else why not
     (the tree is then as it was). A conflict in a pin file alone is not a conflict: the
     file is re-recorded from its recipe next, so our side is kept and regeneration decides."""
-    if W.behind(wt) == 0:
+    # Behind in CODE (GM-code-behind): a base that gained only event-log commits, or nothing,
+    # is not merged in; a rulebook change under an ignored path still is. Could-not-tell merges.
+    rep = D.measure(repo, wt.path, wt.base, cfg=cfg, rulebooks=rulebooks())
+    if rep.behind == 0 or (rep.code_behind == 0 and not rep.rules):
         return ""
     ident = _ident(wt.path)
     r = G.run(wt.path, *ident, "merge", "--no-edit", wt.base)

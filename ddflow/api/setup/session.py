@@ -49,9 +49,12 @@ def _worktree_drift(repo: Path, here: Path) -> str:
     d = E.drift(repo, here)
     if d.behind is None:
         return f"Could not tell whether this checkout is behind `{d.base}`: {d.detail}"
-    if d.behind == 0:
-        return ""
-    msg = f"This worktree is {d.behind} commit(s) behind `{d.base}`: `git merge {d.base}` before starting."
+    if d.behind == 0 or (d.code == 0 and not d.rules):
+        return ""  # only the event log moved: nothing to merge
+    msg = (
+        f"This worktree is {d.behind} commit(s) behind `{d.base}` ({d.code} touch code): "
+        f"`git merge {d.base}` before starting."
+    )
     if d.rules:
         msg += f" The rules changed there: {', '.join(d.rules)} -- re-read them after merging."
     return msg

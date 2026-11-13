@@ -46,6 +46,9 @@ class DriftReport:
     #: rulebooks changed on the base since the fork AND still different here.
     rules: tuple[str, ...] = ()
     detail: str = ""
+    #: of the ``behind`` commits, those touching a path outside `[worktree].behind_ignore_globs`
+    #: (the event log by default): behind in CODE. None = could not tell, like ``behind``.
+    code_behind: int | None = None
 
     @property
     def unrelated(self) -> tuple[Commit, ...]:
@@ -133,6 +136,23 @@ def _commits(tree: Path, *rng: str) -> tuple[Commit, ...] | None:
     return tuple(Commit(sha, subj, tuple(ps)) for sha, (subj, ps) in seen.items())
 
 
+def _touches_code(c: Commit, ignore: Iterable[str]) -> bool:
+    """Does the commit change any path the ignore list does not cover?"""
+    gl = tuple(ignore)
+    return any(not any(inside(p, g) for g in gl) for p in c.paths)
+
+
+def _code_behind(
+    tree: Path, base: str, ignore: tuple[str, ...], listed: tuple[Commit, ...] | None, ranged: bool
+) -> int | None:
+    """How many commits of HEAD..base touch code. ``listed`` is that range's commit list when
+    the caller already holds it whole (``ranged``); else it is read here."""
+    commits = listed if ranged else _commits(tree, f"HEAD..{base}")
+    if commits is None:
+        return None
+    return sum(1 for c in commits if _touches_code(c, ignore))
+
+
 def _touches(c: Commit, globs: Iterable[str]) -> bool:
     gl = tuple(globs)
     return any(inside(p, g) for p in c.paths for g in gl)
@@ -172,6 +192,7 @@ def measure(
     """How far ``tree`` is behind ``base`` (default `base_of`). With ``since`` (a sha)
     the commits are those the base gained after it, so a notice fires once per change."""
     base = base or base_of(repo, tree, cfg)
+    ignore = _ignore_globs(repo, cfg)
     n = git(tree, "rev-list", "--count", f"HEAD..{base}")
     if not n.ok or not n.out.isdigit():
         return DriftReport(base, None, detail=n.err or n.out or "git rev-list failed")
@@ -179,7 +200,7 @@ def measure(
     a = git(tree, "rev-list", "--count", f"{base}..HEAD")
     ahead = int(a.out) if a.ok and a.out.isdigit() else 0
     if behind == 0:
-        return DriftReport(base, 0, ahead)
+        return DriftReport(base, 0, ahead, code_behind=0)
     # Never more than HEAD..base: what the tree already carries is not drift.
     rng = [base, f"^{since}", "^HEAD"] if since else [f"HEAD..{base}"]
     commits = _commits(tree, *rng)
@@ -193,7 +214,17 @@ def measure(
         rules = got
     spec = (*globs, *pin_files, *diff_paths)
     relevant = tuple(c for c in commits if spec and _touches(c, spec))
-    return DriftReport(base, behind, ahead, commits, relevant, rules)
+    code = _code_behind(tree, base, ignore, commits, ranged=since is None)
+    return DriftReport(base, behind, ahead, commits, relevant, rules, code_behind=code)
+
+
+def _ignore_globs(repo: Path, cfg: Config | None) -> tuple[str, ...]:
+    """`[worktree].behind_ignore_globs`; an unreadable config ignores nothing (every commit counts)."""
+    try:
+        cfg = cfg or Config.load(repo)
+    except Exception:
+        return ()
+    return tuple(cfg.worktree.behind_ignore_globs)
 
 
 def moved_or_gone(
