@@ -22,10 +22,8 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from ..config import Config
+from ..config_sections._docs import KNOB_DOCS
 from ..config_sections.gates import GatesConfig
-
-#: ddflow's own environment settings are never secret-shaped.
-OWN_PREFIX = "DDFLOW_"
 
 #: Names `doctor` lists before it says "(+N more)".
 MAX_NAMES_SHOWN = 8
@@ -49,21 +47,27 @@ REPO_VARS = (
 )
 
 
+def own_setting_names() -> frozenset[str]:
+    """The environment variable each declared knob is read from (`DDFLOW_<SECTION>_<KNOB>`): a
+    setting of ddflow's, not a secret, whatever its name contains. Only these: a `DDFLOW_`-prefixed
+    name that is no knob (`DDFLOW_MY_API_KEY`) is a variable like any other."""
+    return frozenset("DDFLOW_" + k.replace(".", "_").upper() for k in KNOB_DOCS)
+
+
 def secret_names(
     base: Mapping[str, str], gates: GatesConfig, keep: Iterable[str] = ()
 ) -> list[str]:
     """The names in ``base`` that look like secrets (a case-blind pattern of
     `[gates].secret_name_patterns` is part of the name), without the kept ones and without those
-    `scrub_env` or `REPO_VARS` already remove, and without ddflow's own settings (`DDFLOW_*`:
-    `DDFLOW_GATES_SCRUB_SECRET_NAMES` contains `_SECRET`, and a nested ddflow must keep it). Names only: a value never passes through here."""
+    `scrub_env` or `REPO_VARS` already remove, and without the environment variable of a declared
+    knob (`DDFLOW_GATES_SCRUB_SECRET_NAMES` contains `_SECRET`, and a nested ddflow must keep it). Names only: a value never passes through here."""
+    own = own_setting_names()
     pats = [p.upper() for p in gates.secret_name_patterns if p]
     skip = set(keep) | set(gates.keep_env) | set(gates.scrub_env) | set(REPO_VARS)
     return sorted(
         k
         for k in base
-        if k not in skip
-        and not k.upper().startswith(OWN_PREFIX)
-        and any(p in k.upper() for p in pats)
+        if k not in skip and k.upper() not in own and any(p in k.upper() for p in pats)
     )
 
 

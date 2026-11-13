@@ -107,14 +107,13 @@ def test_child_env_scrubs_only_in_on_mode_and_ci_keep_env_applies():
     assert child_env(cfg, base, ci=True) == {"B_TOKEN": "2", "PATH": "/bin"}
 
 
-def test_ddflows_own_settings_are_never_secret_shaped():
-    base = {"DDFLOW_GATES_SCRUB_SECRET_NAMES": "on", "DDFLOW_X_TOKEN": "t", "MY_TOKEN": "x"}
-    assert secret_names(base, Config().gates) == ["MY_TOKEN"]
+def test_a_knobs_own_variable_is_never_secret_shaped_but_another_ddflow_name_is():
+    base = {"DDFLOW_GATES_SCRUB_SECRET_NAMES": "on", "DDFLOW_MY_API_KEY": "t", "MY_TOKEN": "x"}
+    assert secret_names(base, Config().gates) == ["DDFLOW_MY_API_KEY", "MY_TOKEN"]
     cfg = Config()
     cfg.gates.scrub_secret_names = "on"
     assert child_env(cfg, base) == {
         "DDFLOW_GATES_SCRUB_SECRET_NAMES": "on",
-        "DDFLOW_X_TOKEN": "t",
     }
 
 
