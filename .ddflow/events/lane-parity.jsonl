@@ -181,3 +181,4 @@
 {"agent":"lane-parity","data":{"at":1794557873.908072,"holder":"lane-parity"},"id":"ec6d216776da242892e1559bf","kind":"lease.renewed","lamport":191841,"schema":1,"subject":"RP-record-parity-audit","ts":"2026-11-13T08:17:54.035451Z"}
 {"agent":"lane-parity","data":{"at":1794558453.8638628,"holder":"lane-parity"},"id":"e551ddb923fd544b6b449fb0b","kind":"lease.renewed","lamport":191943,"schema":1,"subject":"RP-record-parity-audit","ts":"2026-11-13T08:27:34.815771Z"}
 {"agent":"lane-parity","data":{"at":1794559049.588614,"holder":"lane-parity"},"id":"e9cc5c460ff8487db6fb1e0f0","kind":"lease.renewed","lamport":191985,"schema":1,"subject":"RP-record-parity-audit","ts":"2026-11-13T08:37:29.738748Z"}
+{"agent":"lane-parity","data":{"at":1794559633.2309787,"holder":"lane-parity"},"id":"ede6c5a1d22bd9e56ff16c239","kind":"lease.renewed","lamport":192041,"schema":1,"subject":"RP-record-parity-audit","ts":"2026-11-13T08:47:13.318380Z"}
