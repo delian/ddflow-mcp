@@ -116,7 +116,7 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
             while i < n and line[i] != q:
                 if line[i] == "\\" and i + 1 < n:
                     nxt = line[i + 1]
-                    if q == '"' and nxt in ('$', '`', '"', '\\'):
+                    if q == '"' and nxt in ("$", "`", '"', "\\"):
                         name.append(nxt)  # a backslash quote-removes these four
                         i += 2
                     else:
