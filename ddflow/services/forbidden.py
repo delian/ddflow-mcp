@@ -105,7 +105,7 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
     it is part of the word and may hold those chars (inside a double quote a backslash escapes
     only dollar, backtick, double quote or backslash) (Bdd23c77383)."""
     name: list[str] = []
-    while i < n and line[i] not in " \t;|&()<>\n":
+    while i < n and line[i] not in " \t\r;|&()<>\n":
         c = line[i]
         if c == "\\":
             name.append(line[i + 1] if i + 1 < n else "\\")
@@ -119,8 +119,6 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
                     if q == '"' and nxt in ('$', '`', '"', '\\'):
                         name.append(nxt)  # a backslash quote-removes these four
                         i += 2
-                    elif nxt == "\n":
-                        i += 2  # a \newline in a double quote joins the line: both chars go
                     else:
                         name.append(line[i])  # an unmatched backslash stays, the next char too
                         i += 1
@@ -144,7 +142,7 @@ def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
         return None  # `<<<` here-string and shell additions to it
     if i < n and line[i] == "-":
         i += 1
-    while i < n and line[i] in " \t":
+    while i < n and line[i] in " \t\r":
         i += 1
     return _heredoc_name(line, i, n)
 
