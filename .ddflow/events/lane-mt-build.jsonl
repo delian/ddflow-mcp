@@ -1,0 +1,3 @@
+{"agent":"lane-mt-build","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e18106e8017af88cd4e61086a","kind":"ddflow.seen","lamport":192362,"schema":1,"subject":"ddflow","ts":"2026-11-13T09:44:31.801969Z"}
+{"agent":"lane-mt-build","data":{"path":".ddflow/worktrees/ADP-search"},"id":"ea955bd4fe0b1a92a2d9a1e35","kind":"worktree.removed","lamport":192363,"schema":1,"subject":"ADP-search","ts":"2026-11-13T09:44:31.947155Z"}
+{"agent":"lane-mt-build","data":{"path":".ddflow/worktrees/fix-B-lock-timeout-raw-traceback"},"id":"eca09bfaa3ffb1eaa9ce170f6","kind":"worktree.removed","lamport":192365,"schema":1,"subject":"fix-B-lock-timeout-raw-traceback","ts":"2026-11-13T09:45:05.405930Z"}
