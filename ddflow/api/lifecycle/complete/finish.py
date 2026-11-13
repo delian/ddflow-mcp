@@ -95,7 +95,7 @@ def _check_report(item: str, v, hard: list[str], it, agent: str) -> O.Outcome:
     return O.failed("item.checked", "\n".join(lines), **data)
 
 
-def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
+def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
