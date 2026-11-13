@@ -89,23 +89,25 @@ def _within(completed_at: float, facts: Facts, window_days: float) -> bool:
     return completed_at >= newest - 86400.0 * window_days
 
 
-def gate_durations(facts: Facts) -> dict[str, list[float]]:
+def gate_durations(facts: Facts, inside_items: set[str] | None = None) -> dict[str, list[float]]:
     """gate -> seconds from a run's start to its verdict, per run. The start is the latest
     ``gate.started`` since the item's PREVIOUS verdict on that gate; a verdict with no
     ``gate.started`` falls back to the review's own recorded ``elapsed_s`` (an event neither
-    timed nor started contributes no sample)."""
+    timed nor started contributes no sample).``inside_items`` limits the runs to the
+    rolling-window items (the window applies to every table, gate durations included)."""
     outcomes = sorted(facts.outcomes, key=lambda o: o.at)
     by_gate: dict[str, list[float]] = defaultdict(list)
     for o in outcomes:
         if o.kind not in RAN:
             continue
-        key = (o.item, o.gate)
+        if inside_items is not None and o.item not in inside_items:
+            continue
         # latest start no earlier than the previous verdict of (item, gate)
         prev = max(
             (x.at for x in outcomes if x.item == o.item and x.gate == o.gate and x.at < o.at),
             default=None,
         )
-        began = [t for t in facts.starts.get(key, ()) if t <= o.at and (prev is None or t > prev)]
+        began = [t for t in facts.starts.get((o.item, o.gate), ()) if t <= o.at and (prev is None or t > prev)]
         if began:
             by_gate[o.gate].append(o.at - max(began))
         elif o.elapsed_s is not None:
@@ -138,7 +140,7 @@ def _review_gate(facts: Facts, spans: list) -> str:
     per_gate: Counter[str] = Counter(
         o.gate for o in facts.outcomes if o.item in items and o.gate in review and o.kind in RAN
     )
-    return max(review, key=lambda g: per_gate[g]) if per_gate else ""
+    return max(sorted(review), key=lambda g: per_gate[g]) if per_gate else ""
 
 
 def _rounds(facts: Facts, spans: list) -> tuple[str, list[int]]:
@@ -169,7 +171,7 @@ def build(facts: Facts, eta: EtaConfig) -> Tables:
 
     gates = [
         Table(name=name, samples=vals)
-        for name, vals in sorted(gate_durations(facts).items())
+        for name, vals in sorted(gate_durations(facts, {s.item for s in inside}).items())
     ]
 
     waits = Table(name="lease_wait", samples=lease_waits(facts, inside))
