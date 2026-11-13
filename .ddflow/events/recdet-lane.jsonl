@@ -92,3 +92,4 @@
 {"agent":"recdet-lane","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e0ba1155aef062b2215eaa1fc","kind":"cadence.ran","lamport":195902,"schema":1,"subject":"recall_recheck:DX-recovery-detectors","ts":"2026-11-13T19:14:15.112670Z"}
 {"agent":"recdet-lane","data":{"at":1794597790.9203272,"holder":"recdet-lane"},"id":"e1b6f4652b585d575c1a584c1","kind":"lease.renewed","lamport":196004,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T19:23:11.088693Z"}
 {"agent":"recdet-lane","data":{"at":1794598680.2890399,"holder":"recdet-lane"},"id":"e56e9788e8840ddbb72fa8b8e","kind":"lease.renewed","lamport":196214,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T19:38:00.459873Z"}
+{"agent":"recdet-lane","data":{"gate":"ci"},"id":"eed28b0536ff7b48caf2673df","kind":"gate.started","lamport":196252,"schema":1,"subject":"DX-recovery-detectors","ts":"2026-11-13T19:40:24.242322Z"}
