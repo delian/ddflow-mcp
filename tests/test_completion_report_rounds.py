@@ -75,12 +75,12 @@ def test_two_full_shas_sharing_a_prefix_still_read_as_a_missed_final():
     rows = [
         {
             "gate": "critic",
-            # the reviewer saw "abc1234" + 29 zeros; the final commit is "abc1234" + 29 ones
-            "review_rounds": {"used": 1, "max": 4, "reviewed_head": "abc1234" + "0" * 36},
+            # the reviewer saw "abc1234" + 33 zeros; the final commit is "abc1234" + 33 ones
+            "review_rounds": {"used": 1, "max": 4, "reviewed_head": "abc1234" + "0" * 33},
         },
     ]
-    RG.mark_missed_final(rows, "abc1234" + "1" * 36)
-    assert rows[0]["review_rounds"]["missed_final"] == "abc1234" + "1" * 36, rows[0]["review_rounds"]
+    RG.mark_missed_final(rows, "abc1234" + "1" * 33)
+    assert rows[0]["review_rounds"]["missed_final"] == "abc1234" + "1" * 33, rows[0]["review_rounds"]
 
 
 def test_the_brief_review_line_is_rounds_of_the_cap_and_refutation():
