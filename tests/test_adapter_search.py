@@ -77,6 +77,15 @@ def test_the_fake_merges_a_term_already_indexed():
     assert tuple(weights.tolist()) == (1.0, 2.0)
 
 
+def test_the_fake_does_not_mutate_the_callers_postings():
+    ords, weights = array("q", [0]), array("d", [1.0])
+    idx = FakeSearchIndex()
+    idx.rebuild(None, [("a", "task", "", "d1")], {"a": (ords, weights)})
+    idx.index(None, [("b", "bug", "", "d2")], {"a": (array("q", [0]), array("d", [2.0]))})
+    assert tuple(ords.tolist()) == (0,)  # the caller's array is untouched
+    assert tuple(weights.tolist()) == (1.0,)
+
+
 def test_the_default_refuses_a_foreign_typecode():
     con = connect_memory()
     idx = N.SqliteSearchIndex()
