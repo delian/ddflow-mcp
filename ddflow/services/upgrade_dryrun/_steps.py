@@ -402,7 +402,7 @@ class _RehearsalSteps:
             not problems,
             "; ".join(problems)
             or f"proposed on connect, nothing applied until consent, then applied; "
-            f"tools/list {size} bytes; {told}",
+            f"tools/list {size} bytes (budget {self.opt.tools_budget}); {told}",
         )
 
     @staticmethod
@@ -440,7 +440,7 @@ class _RehearsalSteps:
         text = connect_text(first)
         if "newer than this project" not in text or "Ask the operator" not in text:
             problems.append("the handshake did not propose the upgrade and ask the operator")
-        size, bad = tools_problems((first.get(2) or {}).get("tools") or [], self.opt.tools_budget)
+        size, bad = tools_problems((first.get(2) or {}).get("tools") or [])
         return size, problems + bad
 
     def _consented(self, repo: Path) -> list[str]:

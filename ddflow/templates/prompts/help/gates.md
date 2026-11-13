@@ -17,6 +17,15 @@ Two kinds, and the difference is the whole design:
 `ddflow gate status <id>` shows the pipeline, where the item is in it, and the
 instruction for the next gate.
 
+## The base branch's failures
+
+ci and unit_tests read how the base fails from a per-project store, one entry per base
+sha and gate command (`.ddflow/local/baseline-store/`, git-ignored). A sha not in it is
+measured once under the suite lock and stored; a partial measurement is never treated as
+complete; a failure that exists only for being in a worktree is not stored. Each failing
+test id keeps a digest of its failure text. `[baseline].keep` days bounds it (0 keeps
+nothing).
+
 ## Proving a gate can fail
 
 A gate that cannot go red is worse than no gate: it reports success on every change and

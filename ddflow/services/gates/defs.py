@@ -36,10 +36,6 @@ class GateDef:
     #: restored. A gate with no registered mutation is a gate nobody has shown can go
     #: red — see `verify`.
     mutations: list[dict[str, str]] = field(default_factory=list)
-    #: Exit codes that mean "could not run" / "ran part of it", for tools that SAY so by
-    #: exit code. A cross-family critic that exits 2 when its endpoint is down and 3 when
-    #: only some files were reviewed was recorded as FAILED either way -- and a failure
-    #: that is really an outage sends the author off to fix code that nobody reviewed.
     #: Path globs that put this gate in an item's pipeline only when the work touches them:
     #: the gate applies when one of its patterns can match one of the item's declared
     #: globs (`gate_applies`). Empty (the default) means always. An item that declares no
@@ -59,6 +55,10 @@ class GateDef:
     #: Names a passing record must fill in with real content (not empty or boilerplate);
     #: listing any implies the "fields" form.
     evidence_fields: list[str] = field(default_factory=list)
+    #: Exit codes that mean "could not run" / "ran part of it", for tools that SAY so by
+    #: exit code. A cross-family critic that exits 2 when its endpoint is down and 3 when
+    #: only some files were reviewed was recorded as FAILED either way -- and a failure
+    #: that is really an outage sends the author off to fix code that nobody reviewed.
     unavailable_exits: list[int] = field(default_factory=list)
     partial_exits: list[int] = field(default_factory=list)
     #: For tools whose exit code does not carry the verdict. `require_output`: a regex

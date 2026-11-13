@@ -18,7 +18,7 @@
 # ---
 # name: test_help[ddflow adopt]
   '''
-  usage: ddflow adopt [-h] [--agents AGENTS] [--docs DOCS] [--launch {auto,uvx,docker,python}] [--image IMAGE] [--refresh-docs]
+  usage: ddflow adopt [-h] [--agents AGENTS] [--docs DOCS] [--launch {auto,uvx,docker,python}] [--image IMAGE] [--refresh-docs] [--plan]
   
   options:
     -h, --help            show this help message and exit
@@ -34,6 +34,8 @@
     --refresh-docs        rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the
                           agents' native rules from this ddflow's templates; leaves MCP launches,
                           hooks and command files alone (what `doctor` points to when drivers lag)
+    --plan                with --refresh-docs: report what it would rewrite without writing anything
+                          (a diff/plan mode)
   
   '''
 # ---
@@ -712,7 +714,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--check] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -725,6 +727,8 @@
     --approval APPROVAL   an agent: 'request' files an approval request for overriding the unmet
                           conditions (the operator answers in chat), then the approval id; a failed
                           review gate is never lifted
+    --check               read-only: print the unmet conditions and what policy would grant; never
+                          completes (exit 1 = unmet, 2 = could not run)
     --changelog CHANGELOG
                           'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip /
                           internal to keep it out of the changelog; optional
@@ -745,6 +749,21 @@
     --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
                           three mutation-file/-old/-new flags in one (as the MCP parameter); wins
                           when both forms are given
+  
+  '''
+# ---
+# name: test_help[ddflow completion]
+  '''
+  usage: ddflow completion [-h] [--yes] {bash,zsh,fish,install,uninstall} [{bash,zsh,fish}]
+  
+  positional arguments:
+    {bash,zsh,fish,install,uninstall}
+                          the shell to activate, or install/uninstall the activation block
+    {bash,zsh,fish}       for install/uninstall: the shell to edit (default bash)
+  
+  options:
+    -h, --help            show this help message and exit
+    --yes                 consent to write (never written silently)
   
   '''
 # ---
@@ -774,25 +793,6 @@
   
   '''
 # ---
-# name: test_help[ddflow decide]
-  '''
-  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--append] [--body BODY] [--model MODEL] id
-  
-  positional arguments:
-    id                    the decide task
-  
-  options:
-    -h, --help            show this help message and exit
-    --decision-id DECISION_ID
-                          the recorded decision (D-x) whose document is written
-    --path PATH           the document (default: a docs/ddflow/decisions/<name>.md glob the task
-                          names, else <slug>.md)
-    --append              append to the document instead of replacing it (keeps an existing doc)
-    --body BODY           the body to append below the restated record (no second merge needed)
-    --model MODEL         the author's model family
-  
-  '''
-# ---
 # name: test_help[ddflow correct]
   '''
   usage: ddflow correct [-h] --field FIELD [--text TEXT | --from-file FROM_FILE] --reason REASON [--kind KIND] [--secret] [--approval APPROVAL] id
@@ -811,6 +811,25 @@
     --secret              the value may be a secret: keep digests of it out of the audit entry
     --approval APPROVAL   an agent: 'request' files an approval request (the operator answers in
                           chat), then the approval id; a person corrects directly
+  
+  '''
+# ---
+# name: test_help[ddflow decide]
+  '''
+  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--append] [--body BODY] [--model MODEL] id
+  
+  positional arguments:
+    id                    the decide task
+  
+  options:
+    -h, --help            show this help message and exit
+    --decision-id DECISION_ID
+                          the recorded decision (D-x) whose document is written
+    --path PATH           the document (default: a docs/ddflow/decisions/<name>.md glob the task
+                          names, else <slug>.md)
+    --append              append to the document instead of replacing it (keeps an existing doc)
+    --body BODY           the body to append below the restated record (no second merge needed)
+    --model MODEL         the author's model family
   
   '''
 # ---
@@ -1719,6 +1738,15 @@
   
   '''
 # ---
+# name: test_help[ddflow kill]
+  '''
+  usage: ddflow kill [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lanes]
   '''
   usage: ddflow lanes [-h] [--coordinator] [--item ITEM] [--watch] [{state,brief,advise,fleet,resume,lead,approve,coordinator}] [lane]
@@ -2047,13 +2075,18 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--ignore-cap] [--blocked] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
     --phase-only         with --phase: the phase's own ready items only (skip its ready blocking-
                          dependencies)
+    --tag TAG            only items carrying this tag (repeatable: all must match); exit 1 if no
+                         item carries it
+    --wave WAVE          shorthand for --tag wave:N
+    --ignore-cap         treat items held only by the parallelism cap as ready for this call
+    --blocked            list every blocked item, dependency-blocked ones too (text view)
     --kind {task,phase}
     --lane LANE          answer this idle lane: its best item and a note for claim
     --full               print everything: lift the default output caps ([output] max_rows,
@@ -2758,6 +2791,15 @@
   
   '''
 # ---
+# name: test_help[ddflow restart]
+  '''
+  usage: ddflow restart [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow review]
   '''
   usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
@@ -2951,6 +2993,15 @@
   
   '''
 # ---
+# name: test_help[ddflow rule inventory]
+  '''
+  usage: ddflow rule inventory [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule list]
   '''
   usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
@@ -3014,10 +3065,12 @@
 # ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,inventory,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove,sync}
+    {add,edit,list,search,show,remove,inventory,sync}
+      inventory           every agent's rule and command files: who loads what, always-loaded cost,
+                          restated workflow
       sync                record hand-edited rule files in the log; write the files the log has and
                           the disk lacks
   
@@ -3184,13 +3237,14 @@
 # ---
 # name: test_help[ddflow show]
   '''
-  usage: ddflow show [-h] id
+  usage: ddflow show [-h] [--history] id
   
   positional arguments:
     id
   
   options:
     -h, --help  show this help message and exit
+    --history   list every correction of the record, in order (default: the latest per field)
   
   '''
 # ---
@@ -3797,13 +3851,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3819,7 +3873,8 @@
       approvals           approval requests for operator-gated commands (a person answers)
       plan                check a proposed plan, filed it PROPOSED, confirm it, or lint the whole
                           open queue
-      next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
+      next                what may start now (exit 2 = nothing ready or held, exit 1 = unknown
+                          --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
       release             give up a lease
@@ -3856,6 +3911,7 @@
       onboard             run an onboarding stage: one report, propose by default
                           (status|preflight|legacy|memory|test-gate|verify|harness)
       status              one answer to 'what is the state of this project?'
+      correct             correct a wrongly recorded value, history kept
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
       replay              reconstruct the decision history from the log
@@ -3892,6 +3948,7 @@
                           the periodic watchdog pass
       decide              close a decide task: write its decision document from the record, land,
                           complete
+      completion          activate, install or uninstall ddflow completion
       docs                the mechanical documentation check: `docs check [--diff BASE]`
       metrics             metrics from the log: cycle time, review rounds, waits; `forecast`, `retro
                           <id>`, `skips`
@@ -3926,6 +3983,10 @@
       suggest             send a bounded change to the lease holder of an item, as a suggestion
       lease               the lease holders and how long each has been quiet (idle ones flagged);
                           the holders of `lanes --coordinator`
+      restart             soft upgrade: reload this MCP server's code and re-bind its tools, keeping
+                          the connection
+      kill                hard upgrade: end this MCP server's process so your client respawns it
+                          fresh
       paths               workflow-path variants: directly-follows, top variants, burst overlap,
                           superseded passes, out-of-order
       perf                perf of the host (fingerprint, measuring wrapper) and the perf report
@@ -4004,7 +4065,9 @@
     'ddflow companions add',
     'ddflow companions list',
     'ddflow complete',
+    'ddflow completion',
     'ddflow config',
+    'ddflow correct',
     'ddflow decide',
     'ddflow decision',
     'ddflow decision add',
@@ -4066,6 +4129,7 @@
     'ddflow job end',
     'ddflow job list',
     'ddflow job run',
+    'ddflow kill',
     'ddflow lanes',
     'ddflow lease',
     'ddflow lesson',
@@ -4131,6 +4195,7 @@
     'ddflow report',
     'ddflow research',
     'ddflow resolve',
+    'ddflow restart',
     'ddflow review',
     'ddflow reviewers',
     'ddflow reviewers add',
@@ -4142,6 +4207,7 @@
     'ddflow rule',
     'ddflow rule add',
     'ddflow rule edit',
+    'ddflow rule inventory',
     'ddflow rule list',
     'ddflow rule remove',
     'ddflow rule search',

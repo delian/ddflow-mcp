@@ -7,6 +7,7 @@ so does a register entry nothing matches any more, so the register only shrinks.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -101,6 +102,25 @@ def test_lane_headless_secret_min_is_exempt_and_reasoned() -> None:
     reg = ca.load_register(ROOT)
     key = "ddflow/services/lane_headless.py:SECRET_MIN"
     assert reg.exempt.get(key), f"SECRET_MIN left [exempt] (or lost its reason): {key}"
+
+
+def test_B36d96290a5_rc_resultcache_clock_and_classifications() -> None:
+    """B36d96290a5: main went red when C6-clock-resultcache left resultcache.py's two
+    os.environ reads un-routed and its DAY_S (same in baseline_store.py) plus overlap.py's
+    ELIGIBLE_MAX_LINES/MAX_PAIRS unclassified. Pin the Env migration (no direct clock/env
+    read left) and that each constant is a reasoned exemption, so any re-introduction fails."""
+    from tests.test_adapters_clock_env import count_reads
+
+    reg = ca.load_register(ROOT)
+    for key in (
+        "ddflow/services/resultcache.py:DAY_S",
+        "ddflow/services/baseline_store.py:DAY_S",
+        "ddflow/services/metrics/overlap.py:ELIGIBLE_MAX_LINES",
+        "ddflow/services/metrics/overlap.py:MAX_PAIRS",
+    ):
+        assert reg.exempt.get(key), f"constant left [exempt] (or lost its reason): {key}"
+    src = (ROOT / "ddflow" / "services" / "resultcache.py").read_text(encoding="utf-8")
+    assert count_reads(ast.parse(src)) == 0
 
 
 def test_ci_main_drift_reclassifies_moves_and_new_constants() -> None:

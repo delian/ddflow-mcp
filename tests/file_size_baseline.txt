@@ -5,4 +5,3 @@
 tests/test_flow.py | 32216 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_rubber_duck_findings.py | 31166 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_gates.py | 30905 | test module over the limit before the ratchet existed; split pending (one task per file)
-tests/test_shard_high_water.py | 30545 | test module over the limit before the ratchet existed; split pending (one task per file)

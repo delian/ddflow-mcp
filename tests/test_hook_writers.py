@@ -99,7 +99,7 @@ def test_cursor_gets_the_flat_list_layout_and_keeps_foreign_entries(repo):
     hooks = json.loads(first)["hooks"]
     ev = HR.get("cursor").hooks.events["prompt"]
     assert "hooks run prompt --harness cursor" in hooks[ev][0]["command"]
-    assert hooks["stop"] == [{"command": "mine"}]
+    assert hooks["stop"][0] == {"command": "mine"} and len(hooks["stop"]) == 2  # ours beside it
     assert run_cli(repo, "hooks", "uninstall", "--harness", "cursor")[0] == 0
     assert json.loads(path.read_text()) == {"version": 1, "hooks": {"stop": [{"command": "mine"}]}}
 
