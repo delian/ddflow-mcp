@@ -154,5 +154,5 @@ ways). `extends` always files a new task, phase or research note linked to the t
 
 A duplicate bug closes only once its original is fixed: `ddflow_bug_fixed` returns
 `open_duplicates` (the open bugs linked to it as duplicates) and closes none of them;
-`ddflow_bug action=duplicate id=<dup> of=<original>` closes one, citing the original's
+`ddflow_bug_duplicate id=<dup> of=<original>` closes one, citing the original's
 regression test, and is refused while the original is open or has no test.
