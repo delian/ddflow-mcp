@@ -614,11 +614,21 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
 
 
 def complete_body(out, a) -> Any:
+    if out.data.get("check_only"):
+        return out.body()
     return out.body(COMPLETE_BODY + tuple(k for k in COMPLETE_OPTIONAL if k in out.data))
 
 
 def complete_text(out, a, ctx) -> str:
     data = out.data
+    if data.get("check_only"):
+        blockers = data.get("blockers", [])
+        if not blockers:
+            return f"{a['id']} may complete (0 unmet conditions)."
+        return (
+            f"{len(blockers)} unmet condition(s) for {a['id']}:"
+            + "".join(f"\n  - {b}" for b in blockers)
+        )
     blockers = data["blockers"]
     return (
         (f"NOTE: {data['note']}\n" if data["note"] else "")

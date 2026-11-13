@@ -1638,7 +1638,7 @@
     0,
     '''
       {
-        "schema": "research_add@1",
+        "schema": "list@1",
         "record_kind": "research",
         "rows": [
           {
@@ -1671,7 +1671,7 @@
     0,
     '''
       {
-        "schema": "research_add@1",
+        "schema": "list@1",
         "record_kind": "research",
         "rows": [
           {

@@ -29,7 +29,7 @@ from ..author import (
 )
 from ..heartbeat import _commit_events, _inbox, _waiters
 from ..planning import plan_for
-from .approval import _ask_hint, _auto_complete_unavailable, _override_by_approval, _person_force
+from .approval import _ask_hint, _auto_complete_unavailable, _only_unavailable, _override_by_approval, _person_force
 from .checks import _failed_review, _na_map, _phase_suite, _refuted_extra, _umbrella_children
 from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
@@ -47,6 +47,41 @@ def _closing_tail(hard: bool, agent: str, it, gates: list[str]) -> str:
     return "--force overrides, and the override is recorded." + _ask_hint(agent)
 
 
+def _check_report(item: str, v, hard: list[str], it, agent: str) -> O.Outcome:
+    """The `--check` answer (B7372065218): the completion's verdict, read-only.
+
+    Exit 0 when nothing is unmet, 1 when conditions remain (and which policy would grant the
+    override), never a completion. `check_only` switches the MCP reply to the full data
+    (the blockers must reach the caller), the same marker the `add` dry run carries."""
+    blockers = list(v.blockers)
+    data = {
+        "id": item,
+        "check_only": True,
+        "may_complete": not blockers,
+        "blockers": blockers,
+        "unmet_gates": list(v.unmet_gates),
+        "coverage_gaps": list(v.coverage_gaps),
+        "coverage_note": v.coverage_note,
+        "warnings": list(v.warnings),
+        "independence": v.independence,
+    }
+    if not blockers:
+        return O.ok("item.checked", **data)
+    reason = f"{len(blockers)} unmet condition(s) for {item}:\n" + "\n".join(
+        f"  - {b}" for b in blockers
+    )
+    if hard:
+        reason += "\nNone of these is lifted by --force or an approval: satisfy them on the record."
+    elif _only_unavailable(v, it):
+        reason += (
+            "\nWhat policy would grant it: the standing `complete_unavailable` rule answers a "
+            "completion whose only unmet required gates are unavailable/partial/skipped."
+        )
+    else:
+        reason += "\n" + _closing_tail(False, agent, it, list(v.unmet_gates))
+    return O.failed("item.checked", reason, **data)
+
+
 def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
@@ -62,8 +97,15 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     shell_cwd: Path | None = None,
     approval: str = "",
     lint_exempt: str = "",
+    check: bool = False,
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
+
+    ``check`` (B7372065218): a read-only preview of the same verdict a completion would
+    judge. It writes nothing and never completes: it prints the unmet conditions, the
+    approvals a person would have to give, and which standing policy would grant the
+    override. Exit 0 = nothing unmet, 1 = unmet conditions, 2 = could not run. The lone
+    `--regression-test` blocker is left in place (a check closes no bug).
 
     ``approval`` (RA-consume-sites-3): an agent may not use `--force`, but it may spend an
     operator's approval of exactly these unmet conditions (`--approval request` files the
@@ -104,6 +146,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         it if isinstance(it, O.Outcome) else L.contest_refusal(it, "item.completed", "completed")
     )
     if refusal is not None:
+        if check:
+            return O.nothing("item.checked", refusal.reason, check_only=True, id=item)
         return refusal
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
@@ -139,6 +183,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     v.blockers += [b for b in (_phase_suite(repo, cfg, log, st, it, agent),) if b]
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     hard += CM._own_branch_unmerged(st, cfg, it, repo)
+    if check:
+        return _check_report(item, v, hard, it, agent)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
