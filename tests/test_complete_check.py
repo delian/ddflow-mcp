@@ -55,3 +55,5 @@ def test_complete_check_could_not_run_on_a_missing_item(repo: Path) -> None:
     _add_task(repo)
     code, out, err = run_cli(repo, "complete", "NOPE", "--check", agent="bot")
     assert code == 2, out + err
+    # It went through the check path, not argparse (which also exits 2 on the unknown flag).
+    assert "no such item" in out + err, out + err
