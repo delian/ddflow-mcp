@@ -580,7 +580,8 @@ def test_the_mcp_server_vocabulary_names_the_family_tools():
 
     code = (
         "import ddflow.surfaces.mcp; from ddflow.surfaces.vocabulary import sources;"
-        "print('ddflow_session' in sources()[1], 'ddflow_brief' in sources()[1])"
+        "from ddflow.surfaces.tools.families import FAMILIES;"
+        "print(all(n in sources()[1] for n in FAMILIES), 'ddflow_brief' in sources()[1])"
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.stdout.split() == ["True", "True"], out.stderr
