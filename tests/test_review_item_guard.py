@@ -30,6 +30,16 @@ def _review(repo: Path, who: str, *args: str) -> str:
     return out + err
 
 
+def _setup_with_tree(repo: Path) -> Path:
+    """`_setup`, returning the item's own worktree `claim` made for it (resolved absolute)."""
+    _setup(repo)
+    from ddflow.api._base import _load
+
+    _log, _cfg, st = _load(repo, "alice")
+    tree = Path(st.items["T1"].worktree)
+    return tree if tree.is_absolute() else (repo / tree).resolve()
+
+
 def test_a_review_of_another_agents_item_warns_loudly(repo: Path):
     _setup(repo)
     said = _review(repo, "bob", "T1")
@@ -79,3 +89,28 @@ def test_an_unleased_item_leaves_a_mark_in_the_evidence(repo: Path):
     _log, cfg, st = _load(repo, "bob")
     ev = R._name_the_item(repo, cfg, st, "T9", "critic", "bob", lambda _l: None, None)
     assert ev == {"reviewed_unleased": True}
+
+
+def test_review_from_the_items_own_tree_under_another_identity_does_not_warn(repo: Path):
+    """B090201fcef: the agent working in the tree `claim` made is a DIFFERENT resolved
+    identity than the holder, but standing in that tree IS being that identity -- so the
+    review is not "another agent's item" and warns nothing (heartbeat already renews on the
+    holder's behalf from that same tree)."""
+    from ddflow.api import review as R
+    from ddflow.api._base import _load
+
+    tree = _setup_with_tree(repo)
+    _log, cfg, st = _load(repo, "bob")
+    said: list[str] = []
+    ev = R._name_the_item(
+        repo, cfg, st, "T1", "rubber_duck", "bob", said.append, None, called_from=tree
+    )
+    assert ev is None, ev  # no "reviewed_for_holder": this IS the holder's own tree
+    assert not said, said
+    # Somewhere else, the resolved identity genuinely is another agent: it still warns.
+    said2: list[str] = []
+    ev2 = R._name_the_item(
+        repo, cfg, st, "T1", "rubber_duck", "bob", said2.append, None, called_from=repo
+    )
+    assert ev2 == {"reviewed_for_holder": "bob reviewed alice's T1"}, ev2
+    assert any("leased to alice" in s for s in said2), said2

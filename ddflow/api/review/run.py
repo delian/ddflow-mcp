@@ -570,7 +570,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if refused is not None:
         return refused
 
-    extra_evidence = _name_the_item(repo, cfg, st, item, gate, agent, say, extra_evidence)
+    extra_evidence = _name_the_item(repo, cfg, st, item, gate, agent, say, extra_evidence, called_from)
     dispatch = RV.ReviewerDispatch()
     selected = dispatch.select(RV.load_reviewers(repo), gate, gates.get(gate))
     revs = selected.reviewers
