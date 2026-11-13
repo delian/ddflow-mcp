@@ -871,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=64602d15bf82 -->
-<details><summary>All 722 knobs across 67 sections</summary>
+<!-- ddflow:begin README/knobs sha=33062d8a0833 -->
+<details><summary>All 727 knobs across 68 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1003,6 +1003,9 @@ long default is left to `ddflow config --explain`.
 | `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.max_behind` | `50` |  |
 | `enforce.machine_local_keys` | `[]` |  |
+| `eta.window_days` | `30.0` |  |
+| `eta.min_samples` | `10` |  |
+| `eta.coverage_bar` | `0.8` |  |
 | `evaluation.max_miss_rate` | `0.0` |  |
 | `evaluation.min_fixtures` | `1` |  |
 | `export.documents` | `[]` |  |
@@ -1038,6 +1041,8 @@ long default is left to `ddflow config --explain`.
 | `flow.port_strategy` | `"forward-merge"` | `forward-merge` \| `cherry-pick` |
 | `flow.environments` | `[]` |  |
 | `flow.auto_promote` | `[]` |  |
+| `flow.pr_body_template` | `""` |  |
+| `flow.pr_body_cell_max` | `200` |  |
 | `flow.version_files` | `{}` |  |
 | `gates.max_run_timeout_s` | `21600` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
