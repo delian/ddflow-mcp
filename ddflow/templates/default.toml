@@ -41,6 +41,7 @@ transcript_dirs = []
 expiry_warn_s = 600
 policy = []
 policy_max_uses = 1
+policy_pin_recipes = ["readme-knobs", "default-toml", "golden-snapshots", "result-schemas"]
 policy_unavailable_runs = 3
 auto_approve_after_retries = 0
 standing_window_s = 3600
