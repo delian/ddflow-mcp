@@ -71,11 +71,12 @@ def test_state_interrupted_lists_expired_running_only(repo, monkeypatch):
     assert run_cli(repo, "claim", "A")[0] == 0
     assert run_cli(repo, "claim", "B")[0] == 0
     # Both are RUNNING for now (live leases): `--state running` lists them, `interrupted`
-    # lists none.
+    # lists none -- a leased-running item is running but NOT interrupted.
     run = {r["id"] for r in _next_call(repo, state="running").data["items"]}
     assert run == {"A", "B"}, run
     assert _next_call(repo, state="interrupted").data["items"] == []
-    # Expire both leases: each RUNNING item is now interrupted (no live lease).
+    # Expire both leases: each RUNNING item is now interrupted (no live lease) -- still
+    # RUNNING (so PRESENT in `running`), now also orphaned (so PRESENT in `interrupted`).
     from ddflow.core.schedule import _plan
 
     monkeypatch.setattr(_plan.time, "time", lambda: 1e12)
@@ -83,21 +84,6 @@ def test_state_interrupted_lists_expired_running_only(repo, monkeypatch):
     assert inter == {"A", "B"}, inter
     run = {r["id"] for r in _next_call(repo, state="running").data["items"]}
     assert run == {"A", "B"}, run
-
-
-def test_state_running_is_distinct_from_interrupted(repo, monkeypatch):
-    run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--title", "a", "--globs", "a.py")
-    run_cli(repo, "task", "add", "B", "--title", "b", "--globs", "b.py")
-    assert run_cli(repo, "claim", "A")[0] == 0
-    assert run_cli(repo, "claim", "B")[0] == 0
-    from ddflow.core.schedule import _plan
-
-    monkeypatch.setattr(_plan.time, "time", lambda: 1e12)
-    running = {r["id"] for r in _next_call(repo, state="running").data["items"]}
-    interrupted = {r["id"] for r in _next_call(repo, state="interrupted").data["items"]}
-    assert interrupted == {"A", "B"}, interrupted
-    assert running == interrupted  # both leases expired: RUNNING items, no live lease
 
 
 def test_state_is_paged_and_footer_names_the_state(repo):
