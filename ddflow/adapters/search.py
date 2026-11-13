@@ -7,9 +7,10 @@ and weighting stay in ``core.textsim`` -- the one tokenizer both a stored vector
 fresh query use, which is what keeps them comparable -- so this port is the SQLite
 storage and retrieval seam and nothing else: a caller reaches the index through
 ``ddflow.adapters.indexdb`` (the ``sqlite-home`` contract, ``D-unify-r2``) instead of
-importing ``sqlite3`` here too. ``index`` adds documents and their postings to the
-index; ``rebuild`` replaces the whole index; ``query`` reads the postings of the terms
-asked.
+importing ``sqlite3`` here too. ``index`` writes the COMPLETE corpus into an empty
+index; ``rebuild`` clears the whole index and writes it; ``query`` reads the postings of
+the terms asked. There is no incremental append: the store's ``_insert_similar`` writes
+the whole corpus at once, so a partial list would leave the records it omits behind.
 """
 
 from __future__ import annotations
@@ -55,40 +56,28 @@ class SearchIndex(Protocol):
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         """Replace the WHOLE index with ``docs`` and ``postings`` (the COMPLETE current
-        corpus). Any previous rows are removed first, so a repeated rebuild of a partial
-        list is safe, as it would not be for `index`."""
+        corpus), removing every previous row first."""
 
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
-        """Add ``docs`` and ``postings`` to the index (their ordinals are over ``docs`` and
-        are offset past rows already indexed). `rebuild` replaces the whole index."""
+        """Write ``docs`` and ``postings``, the COMPLETE current corpus, into an EMPTY
+        index (the ordinals are over ``docs``). `rebuild` clears first."""
 
     def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         """The postings of ``terms``, for the terms the index holds."""
 
 
-def _packed(ords: array, weights: array, start: int) -> tuple[bytes, bytes]:
+def _packed(ords: array, weights: array) -> tuple[bytes, bytes]:
     """``(ords_bytes, weights_bytes)`` for the write, refusing a typecode other than
-    ``"q"``/``"d"`` and offsetting the ordinals past ``start`` already-indexed rows."""
+    ``"q"``/``"d"``."""
     if ords.typecode != _ORD_TYPECODE or weights.typecode != _W_TYPECODE:
         raise ValueError(
             f"postings pack ordinals as array({_ORD_TYPECODE!r}) and weights as "
             f"array({_W_TYPECODE!r}) (core.textsim.invert's); got "
             f"array({ords.typecode!r})/array({weights.typecode!r})"
         )
-    off = ords if not start else array(_ORD_TYPECODE, (start + o for o in ords))
-    return off.tobytes(), weights.tobytes()
-
-
-def _packed_rows(postings: Mapping[str, Postings], start: int) -> list[tuple[str, bytes, bytes]]:
-    """Every term's ``(term, ords_bytes, weights_bytes)``, validating ALL of them up
-    front so an invalid `postings` raises before the caller writes or clears anything."""
-    out = []
-    for term, (ords, weights) in postings.items():
-        ords_bytes, weights_bytes = _packed(ords, weights, start)
-        out.append((term, ords_bytes, weights_bytes))
-    return out
+    return ords.tobytes(), weights.tobytes()
 
 
 class SqliteSearchIndex:
@@ -107,24 +96,22 @@ class SqliteSearchIndex:
     ) -> None:
         self.create(con)
         # Validate first: a bad `postings` must not remove the index it will not replace.
-        rows = _packed_rows(postings, 0)
+        rows = [(t, *_packed(ords, weights),) for t, (ords, weights) in postings.items()]
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
-        con.executemany(
-            "insert into similar_docs values(?,?,?,?,?)",
-            [(i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
-        )
-        con.executemany("insert into similar_terms values(?,?,?)", rows)
+        self._write(con, docs, rows)
 
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
-        start = con.execute("select count(*) from similar_docs").fetchone()[0]
         # Validate first: a bad `postings` must not leave docs with no postings written.
-        rows = _packed_rows(postings, start)
+        rows = [(t, *_packed(ords, weights),) for t, (ords, weights) in postings.items()]
+        self._write(con, docs, rows)
+
+    def _write(self, con: Connection, docs: Sequence[SearchDoc], rows) -> None:
         con.executemany(
             "insert into similar_docs values(?,?,?,?,?)",
-            [(start + i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
+            [(i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
         )
         con.executemany("insert into similar_terms values(?,?,?)", rows)
 

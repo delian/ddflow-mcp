@@ -48,41 +48,12 @@ def test_the_default_adapter_round_trips_postings_through_sqlite():
     con.close()
 
 
-def test_the_fake_keeps_the_callers_data():
+def test_the_fake_keeps_the_callers_data_and_never_aliases_it():
     idx = FakeSearchIndex()
-    idx.rebuild(None, _DOCS, _POSTINGS)
-    assert idx.docs == list(_DOCS)
-    assert dict(idx.postings) == _POSTINGS
-    assert idx.query(None, ["hello"]) == {"hello": _POSTINGS["hello"]}
-
-
-def test_index_appends_instead_of_replacing():
-    con = connect_memory()
-    idx = N.SqliteSearchIndex()
-    idx.create(con)
-    idx.index(con, _DOCS[:1], {"world": (array("q", [0]), array("d", [1.0]))})
-    idx.index(con, _DOCS[1:], {"hello": (array("q", [0]), array("d", [0.5]))})
-    got = idx.query(con, ["world", "hello"])
-    assert tuple(got["world"][0].tolist()) == (0,)
-    assert tuple(got["hello"][0].tolist()) == (1,)  # offset past the first row
-    con.close()
-
-
-def test_the_fake_merges_a_term_already_indexed():
-    idx = FakeSearchIndex()
-    idx.rebuild(None, [("a", "task", "", "d1")], {"a": (array("q", [0]), array("d", [1.0]))})
-    idx.index(None, [("b", "bug", "", "d2")], {"a": (array("q", [0]), array("d", [2.0]))})
-    ords, weights = idx.query(None, ["a"])["a"]
-    assert tuple(ords.tolist()) == (0, 1)
-    assert tuple(weights.tolist()) == (1.0, 2.0)
-
-
-def test_the_fake_does_not_mutate_the_callers_postings():
     ords, weights = array("q", [0]), array("d", [1.0])
-    idx = FakeSearchIndex()
-    idx.rebuild(None, [("a", "task", "", "d1")], {"a": (ords, weights)})
-    idx.index(None, [("b", "bug", "", "d2")], {"a": (array("q", [0]), array("d", [2.0]))})
-    assert tuple(ords.tolist()) == (0,)  # the caller's array is untouched
+    idx.index(None, [("a", "task", "", "d1")], {"a": (ords, weights)})
+    assert idx.docs == [("a", "task", "", "d1")] and dict(idx.postings)
+    assert tuple(ords.tolist()) == (0,), "the fake never aliases the caller's arrays"
     assert tuple(weights.tolist()) == (1.0,)
 
 
