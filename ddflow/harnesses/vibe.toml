@@ -60,7 +60,7 @@ note = ".vibe/hooks.toml (project) after the trust step; project entry wins by n
 s = "documented"
 src = "https://github.com/mistralai/mistral-vibe"
 d = "2026-10-31"
-note = "exactly three events pre_tool, post_tool, post_agent (post_agent is not canonical); no session-start or session-end hook"
+note = "vibe has three native hook events pre_tool, post_tool, post_agent; only pre_tool and post_tool are mapped here because post_agent has no canonical counterpart; no session-start or session-end hook"
 
 [facts."hooks.block"]
 s = "documented"
