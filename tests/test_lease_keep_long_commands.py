@@ -41,7 +41,7 @@ def test_run_cli_anchors_the_subprocess_in_the_repository_under_test(repo, monke
         lambda args, **kwargs: seen.update(cwd=kwargs.get("cwd")) or _Ran(),
     )
     run_cli(repo, "status")
-    assert seen["cwd"] == str(repo), seen
+    assert seen["cwd"] == str(Path(repo).resolve()), seen
 
 
 def _held(repo: Path, agent: str = "me"):
