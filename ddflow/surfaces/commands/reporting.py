@@ -97,19 +97,26 @@ def _yield_lines(r) -> list[str]:
     return ["", "Yield requested:", *(f"  [y] {t}" for t in r["yields"])]
 
 
+def _completed_lines(r) -> list[str]:
+    """The newest completions. The count is the whole queue's (`core.progress.totals`),
+    never the rows a cut list holds (B6341fe42ca); a bounded list says "last N of TOTAL"."""
+    if not r["done"]:
+        return []
+    want = r.get("completed_shown", 12)
+    rows = sorted(r["done"], key=lambda x: x.completed_at)
+    rows = rows[-want:] if want else rows
+    n = r["totals"].counts["done"]
+    out = [f"Completed (last {len(rows)} of {n}):" if len(rows) < n else "Completed:"]
+    for t in rows:
+        sha = f"  ({t.merged_sha[:8]})" if t.merged_sha else ""
+        out.append(f"  [x] {t.id:<12} {t.title}{sha}")
+    return out
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
-    if r["done"]:
-        # The count is the whole queue's (totals), never the rows this cut list holds.
-        want = r.get("completed_shown", 12)
-        rows = sorted(r["done"], key=lambda x: x.completed_at)
-        rows = rows[-want:] if want else rows
-        n = r["totals"].counts["done"]
-        out.append(f"Completed (last {len(rows)} of {n}):" if len(rows) < n else "Completed:")
-        for t in rows:
-            sha = f"  ({t.merged_sha[:8]})" if t.merged_sha else ""
-            out.append(f"  [x] {t.id:<12} {t.title}{sha}")
+    out += _completed_lines(r)
     if r["running"]:
         out.append("")
         out.append("In flight:")

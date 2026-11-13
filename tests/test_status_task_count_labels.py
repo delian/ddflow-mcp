@@ -61,40 +61,37 @@ def test_status_headline_says_what_it_counts(repo):
     assert code == 0, err
     # The headline pair must carry its definition: the abandoned T3 and the auto-filed
     # fix task stay in this count, and the contracts they name either definition with.
-    assert "1/4 tasks complete across" in out
-    assert "abandoned tasks and fix tasks included" in out
-    assert "counts live work items only" in out
+    assert "1 of 2 live tasks done (1 abandoned and 1 fix tasks listed separately)" in out
+    assert "= 4" in out
 
 
 def test_progress_block_and_status_headline_count_different_sets_reconcilably(repo):
     _project(repo, abandon=True)
     code, status_out, _ = run_cli(repo, "status")
     assert code == 0
-    m = re.search(r"(\d+)/(\d+) tasks complete across (\d+) phase", status_out)
+    m = re.search(r"(\d+) of (\d+) live tasks done .* across (\d+) phase", status_out)
     assert m, status_out
-    # Every task record: T1 done, plus T2, the abandoned T3 and the auto-filed fix task.
-    assert (int(m[1]), int(m[2])) == (1, 4)
+    # Live work tasks: T1 done and T2; the abandoned T3 and the auto-filed fix task are
+    # listed apart, and all four records are in the printed buckets.
+    assert (int(m[1]), int(m[2])) == (1, 2)
+    assert "= 4" in status_out
     code, complete_out, err = run_cli(repo, "complete", "T2", "--force")
     assert code == 0, err
     # Live work items only: the abandoned T3 and the fix task are out of this pair.
     assert "tasks 2/2 (100%)" in complete_out
-    assert "abandoned tasks and fix tasks included" in status_out
-    assert "counts live work items only" in status_out
+    assert "live tasks" in complete_out  # the block says it is the live pair
+    assert "2 of 2 live tasks done" in run_cli(repo, "status")[1]  # the same pair
 
 
-def test_note_says_the_pairs_can_differ_not_that_they_do(repo):
-    """With no abandoned or fix records at all the two pairs agree; the note calls the
-    difference a possibility, not a fact."""
+def test_with_no_abandoned_or_fix_records_headline_and_progress_agree(repo):
+    """With no abandoned or fix records at all the two pairs agree, and say it."""
     _project_without_bug(repo)
     code, out, _ = run_cli(repo, "status")
     assert code == 0
-    assert "1/3 tasks complete across" in out
+    assert "1 of 3 live tasks done (0 abandoned and 0 fix tasks listed separately)" in out
     code, complete_out, err = run_cli(repo, "complete", "T2", "--force")
     assert code == 0, err
     assert "tasks 2/3 (66%)" in complete_out
-    # With T1 and T2 done the two surfaces agree (2/3); the note stays, phrased as a
-    # possibility.
+    # With T1 and T2 done the two surfaces agree (2/3).
     code, status_after, _ = run_cli(repo, "status")
-    assert "2/3 tasks complete across" in status_after
-    assert "so the two totals can differ" in status_after
-    assert "so the two totals differ" not in status_after
+    assert "2 of 3 live tasks done" in status_after
