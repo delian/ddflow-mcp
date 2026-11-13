@@ -17,6 +17,7 @@ from pathlib import Path
 from ..core.bookkeeping import STATE_DIR
 from ..infra import git as G
 from ..infra import paths as PA
+from . import completion_selfcheck as CSC
 from . import orphan_suites as OS
 from . import tree_bin as TB
 
@@ -132,6 +133,7 @@ def doctor_notes(repo: Path) -> list[str]:
 
 def host_notes() -> list[str]:
     """Notes about this HOST, not the repository: a ci suite that outlived its ddflow owner
-    (named, never killed). Kept apart from `doctor_notes` so a repository check does not depend
-    on what else is running."""
-    return OS.notes()
+    (named, never killed), and a shell completion registration the `ddflow` on PATH does not
+    answer. Kept apart from `doctor_notes` so a repository check does not depend on what else
+    is running."""
+    return [*OS.notes(), *CSC.notes()]
