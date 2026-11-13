@@ -422,7 +422,7 @@ def _measure(kind: str) -> list[str]:
     return _sites(kind)
 
 
-_RUFF_CACHE: dict[str, list[str]] | None = None
+_RUFF_CACHE: dict[str, list[str]] = {}
 
 
 def _ruff_bin() -> list[str]:
@@ -438,36 +438,37 @@ def _ruff_sites() -> dict[str, list[str]]:
     is shared: `--output-format=json` over the four new rule groups, each violation bucketed by
     ``_RUFF_KIND``; an outcome that is not clean and not a violations-only run is "ruff could
     not run", skipped, never read as zero."""
-    global _RUFF_CACHE
-    if _RUFF_CACHE is None:
-        _RUFF_CACHE = {k: [] for k in _RUFF_KIND.values()}
-        args = _ruff_bin()
-        if not args:
-            pytest.skip("ruff (a dev dependency) is not installed")
-        proc = subprocess.run(
-            [*args, "check", "--select", ",".join(_RUFF_SELECT), "--output-format=json", "ddflow"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=180,
-            check=False,
-        )
-        if proc.returncode not in (0, 1):  # 1 = violations found (still measured); 0 = clean
-            pytest.skip(f"ruff could not run (exit {proc.returncode}):\n{proc.stderr}")
-        root = ROOT.resolve()
-        for row in json.loads(proc.stdout) if proc.stdout.strip() else []:
-            for prefix, kind in _RUFF_KIND.items():
-                if row["code"].startswith(prefix):
-                    fn = Path(row["filename"])
-                    rel = fn.resolve().relative_to(root) if fn.is_absolute() else fn
-                    rendered = str(rel)
-                    # `print()` in `ddflow/surfaces` is the interface, not a violation
-                    # ("T20 (outside surfaces)"), so it never reaches the `t201` baseline.
-                    if kind == "t201" and rendered.startswith("ddflow/surfaces/"):
-                        break
-                    _RUFF_CACHE[kind].append(f"{rendered}:{row['location']['row']}")
+    if _RUFF_CACHE:  # measured once: it holds all four kind keys, so "not yet" is an empty dict
+        return _RUFF_CACHE
+    args = _ruff_bin()
+    if not args:
+        pytest.skip("ruff (a dev dependency) is not installed")
+    proc = subprocess.run(
+        [*args, "check", "--select", ",".join(_RUFF_SELECT), "--output-format=json", "ddflow"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=180,
+        check=False,
+    )
+    if proc.returncode not in (0, 1):  # 1 = violations found (still measured); 0 = clean
+        pytest.skip(f"ruff could not run (exit {proc.returncode}):\n{proc.stderr}")
+    root = ROOT.resolve()
+    out = {k: [] for k in _RUFF_KIND.values()}
+    for row in json.loads(proc.stdout) if proc.stdout.strip() else []:
+        for prefix, kind in _RUFF_KIND.items():
+            if row["code"].startswith(prefix):
+                fn = Path(row["filename"])
+                rel = fn.resolve().relative_to(root) if fn.is_absolute() else fn
+                rendered = str(rel)
+                # `print()` in `ddflow/surfaces` is the interface, not a violation
+                # ("T20 (outside surfaces)"), so it never reaches the `t201` baseline.
+                if kind == "t201" and rendered.startswith("ddflow/surfaces/"):
                     break
+                out[kind].append(f"{rendered}:{row['location']['row']}")
+                break
+    _RUFF_CACHE.update(out)
     return _RUFF_CACHE
 
 
