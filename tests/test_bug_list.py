@@ -247,3 +247,67 @@ def test_bug_sort_pages_rows_past_the_engine_cap(repo, monkeypatch):
     assert [r["severity"] for r in tail.data["rows"]] == ["medium", ""]
     assert first.data["next"] == 3
     assert tail.data["next"] is None
+
+
+def test_bug_list_severity_filter_narrows_the_page_to_one_severity(repo):
+    """`severity="high"` narrows the whole matched set before the page is cut: every row
+    is high, `total` is the high-only count (not the unfiltered one), and the CLI
+    `--severity` flag reflects it."""
+    _seed_mix(repo)
+    code, out, err = run_cli(repo, "list", "bug", "--all", "--severity", "high", "--json")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert body["total"] == 2
+    assert {r["severity"] for r in body["rows"]} == {"high"}
+    assert body["filters"]["severity"] == "high"
+
+
+def test_finish_bug_list_refuses_an_unknown_severity(repo):
+    _seed_mix(repo)
+    out = api_view_list(repo, "bug", limit=50, offset=0)
+    with pytest.raises(ValueError):
+        KB.finish_bug_list(repo, out, severity="urgent")
+
+
+def test_bug_status_reports_open_totals_and_partition(repo):
+    """`bug status` is one answer: the open count, the severity spread, and which open
+    bugs are blocked (their fix task has unmet needs), unblocked, or have no fix task.
+    The empty severity key is the unset bucket."""
+    _seed_fix_edges(repo)
+    code, out, err = run_cli(repo, "bug", "status", "--json")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert body["open"] == 2
+    assert body["severity"] == {
+        "critical": 0,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "": 1,
+    }
+    # "bound broken" -> fix-B1 needs T1 (unmet) -> blocked; "loose broken" -> no task.
+    assert body["blocked"] == 1
+    assert body["no_fix_task"] == 1
+    assert body["unblocked"] == 0
+
+
+def test_mcp_severity_filter_is_applied_before_paging(repo):
+    """The MCP `ddflow_list` with `severity` goes through `finish_bug_list` like the CLI
+    read: the served `total` is the filtered count. The one shared schema says the
+    severity before paging."""
+    from ddflow.api.viewers import view_list as _vl
+    from ddflow.surfaces.mcp import _finish_list_read
+
+    _seed_mix(repo)
+    done = _finish_list_read(
+        repo, _vl(repo, "bug", limit=1, offset=0), {"kind": "bug", "severity": "high"}
+    )
+    assert done.exit == 0
+    assert done.data["total"] == 2
+    assert {r["severity"] for r in done.data["rows"]} == {"high"}
+
+
+def test_mcp_list_tool_declares_the_severity_argument(repo):
+    from ddflow.surfaces.mcp import TOOLS, _properties
+
+    assert "severity" in _properties(TOOLS["ddflow_list"])

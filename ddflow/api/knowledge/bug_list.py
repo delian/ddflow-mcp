@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core import outcome as O
-from ...core.records import SIGHTINGS_THAT_CONFIRM
+from ...core.records import BLOCKED, SIGHTINGS_THAT_CONFIRM
 from .._base import _load
 from ..viewers import view_list
 
@@ -49,7 +49,7 @@ def _whole_bug_set(repo: Path, filters: dict) -> tuple[list[dict], dict]:
     return full, dict(fresh.data)
 
 
-def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
+def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "", severity: str = "") -> O.Outcome:
     """The bug facets the shared list engine defers to the domain (`services/viewers.py`
     renders the row's id/state/title/owner/updated and the newest-first page): severity,
     the fix-task edge and that task's dependency edges. One function, so the CLI
@@ -61,10 +61,16 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
     re-cut from the whole matched set, fetched at the engine's cap in cap-sized pages,
     so the order decides the page, not the page the order. Any other word raises
     `ValueError`: an order the surface does not declare is refused, never silently
-    dropped."""
+    dropped.
+
+    ``severity`` is "" (no severity filter) or one of `BUG_SEVERITIES`: the whole
+    matched set narrowed to that severity BEFORE paging and before any ``sort`` order,
+    so `total` counts what survived the filter, not what filters on top of an
+    already-cut page."""
 
     data = out.data
     sort = (sort or "").strip().lower()
+    severity = (severity or "").strip().lower()
     if sort and data.get("record_kind") != "bug":
         # The same refusal the CLI parser gives every other kind (--sort is a bug-only
         # selector there): MCP declares one schema for the whole ddflow_list tool, so the
@@ -76,17 +82,27 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         return out
     if sort not in ("", "severity"):
         raise ValueError(f"sort takes 'severity' (default: newest change first), got {sort!r}")
+    if severity and severity not in BUG_SEVERITIES:
+        raise ValueError(f"severity takes one of {', '.join(BUG_SEVERITIES)}, got {severity!r}")
     _log, _cfg, st = _load(repo)
-    if sort == "severity" and out.exit == 0:
+    if severity or (sort == "severity" and out.exit == 0):
         # The page the engine already cut was newest-first: re-cut it from the whole
         # matched set, in the order asked. A refused or "nothing" call keeps its
         # refusal; the re-cut is asked again with arguments the earlier call already
-        # validated, so it is refused again only as the earlier call was.
+        # validated, so it is refused again only as the earlier call was. The severity
+        # filter narrows that whole set before the page is cut (and before the order
+        # decides the page), so a filtered `total` is the filtered count, never the
+        # unfiltered one.
         full, basis = _whole_bug_set(repo, dict(data["filters"]))
         for r in full:
             _row_edges(r, st)
+        if severity:
+            full = [r for r in full if (r.get("severity") or "").strip().lower() == severity]
+            basis["total"] = len(full)
+            basis["filters"] = {**basis.get("filters", {}), "severity": severity}
         full.sort(key=lambda r: r["id"])
-        full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
+        if sort == "severity":
+            full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
         off, lim = data["offset"], data["limit"]
         # The `not lim` arm keeps the whole-set meaning of 0 honest if a 0 ever did
         # arrive on a caller page: the page is everything, not `rows[off:off]`, and
@@ -102,11 +118,42 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         base["shown"] = len(base["rows"])
         base["truncated"] = base["total"] > off + base["shown"]
         base["next"] = off + base["shown"] if base["truncated"] else None
+        if not page:
+            return O.nothing("view.list", f"No bugs with severity {severity}.", **base)
         return O.ok("bug", **base)
     if out.exit == 0:
         for r in data.get("rows") or []:
             _row_edges(r, st)
     return out
+
+
+def bug_status(repo: Path) -> O.Outcome:
+    """One answer to 'how many open bugs, and where': the open count, the severity
+    spread, and the open bugs that are blocked (their fix task is blocked or still has
+    unmet needs), unblocked, or have no fix task yet. Read-only; no log mutation."""
+    _log, _cfg, st = _load(repo)
+    by_sev: dict[str, int] = {}
+    blocked = no_task = total = 0
+    for bug in st.bugs.values():
+        if not bug.open:
+            continue
+        total += 1
+        sev = (bug.severity or "").strip().lower()
+        key = sev if sev in BUG_SEVERITIES else ""
+        by_sev[key] = by_sev.get(key, 0) + 1
+        fix = st.items.get(bug.fix_task) if bug.fix_task else None
+        if fix is None:
+            no_task += 1
+        elif fix.state == BLOCKED or fix.needs:
+            blocked += 1
+    return O.ok(
+        "bug.status",
+        open=total,
+        severity={sev: by_sev.get(sev, 0) for sev in (*BUG_SEVERITIES, "")},
+        blocked=blocked,
+        unblocked=total - blocked - no_task,
+        no_fix_task=no_task,
+    )
 
 
 def _row_edges(row: dict, st) -> None:
