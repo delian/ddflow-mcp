@@ -20,7 +20,7 @@ from helpers import git as _git
 
 import ddflow.api.review as api
 
-OK, REFUSED = 0, 3
+REFUSED = 3
 
 
 @pytest.fixture(autouse=True)
