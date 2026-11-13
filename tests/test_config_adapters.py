@@ -20,15 +20,6 @@ from ddflow.config import Config
 from ddflow.config_sections._docs import DECLARED
 from ddflow.services import adapters as services_adapters
 
-ACCEPTANCE = [
-    # (knob, a good value set through the FILE route, the read-back over that value)
-    ("platform", "posix", "Posix"),
-    ("lane_transport", "local", "LocalTransport"),
-    ("network_consent", 'forge = true\nchat = true\n', "forge"),
-    ("managed_files_consent", '{ "settings.json" = true }', "settings.json"),
-    ("managed_files_backup", "false", False),
-]
-
 
 def _cfg_with_adapters(tmp_path: Path, body: str) -> Config:
     (tmp_path / ".ddflow").mkdir(exist_ok=True)
@@ -42,7 +33,7 @@ def test_every_adapters_knob_is_declared_once():
     # a knob declared twice would have raised at import; the ratchet does the heavy lifting.
 
 
-def test_defaults_are_posix_local_empty_and_backup_on():
+def test_defaults_are_auto_local_empty_and_backup_on():
     a = Config().adapters
     assert a.platform == "auto"
     assert a.lane_transport == "local"

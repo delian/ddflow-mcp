@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ddflow.adapters.platform import Posix, Windows
+from ddflow.adapters.platform import Platform, Posix, Windows
 from ddflow.adapters.transport import TRANSPORTS, Transport
 
 if TYPE_CHECKING:  # the runtime import is a no-op here: selection takes the cfg it reads
@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-def selected_platform(cfg: "Config") -> "Platform":
+def selected_platform(cfg: "Config") -> Platform:
     """The `Platform` adapter `[adapters].platform` selects: the Posix adapter for 'posix',
     and for 'auto' (the default) this host's OS -- Posix here, `Windows` (unavailable) on an
     unsupported OS, per D-adapters-answers-3. A value outside the two is already refused by
