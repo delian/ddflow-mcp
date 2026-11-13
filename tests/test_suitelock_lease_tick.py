@@ -24,11 +24,12 @@ def _cfg(wait: float) -> Config:
 
 def test_a_waiter_in_the_queue_beats_the_lease_tick(tmp_path: Path):
     ticks: list[float] = []
+    wait = 2.0
     tick_s = 0.1  # well under the 0.25s poll, so a tick fires every poll once the interval elapses
     with SL.hold(_cfg(30), "holder", tmp_path, say=lambda _t: None):
         with pytest.raises(SL.SuiteBusy):
             with SL.hold(
-                _cfg(2.0),
+                _cfg(wait),
                 "late",
                 tmp_path,
                 say=lambda _t: None,
@@ -37,10 +38,11 @@ def test_a_waiter_in_the_queue_beats_the_lease_tick(tmp_path: Path):
                 tick_s=tick_s,
             ):
                 pass
-    # Not just "some ticks" (a burst at entry that then stops would renew nothing): the
-    # ticks must be SPREAD over the 2s wait. >=3 with a >=2*tick_s span leaves headroom.
+    # Renewals must keep firing through the WHOLE wait: a burst at entry that then stops
+    # still lets the lease go idle (the bug). Poll is 0.25s < wait, so a real wait yields
+    # ~8 ticks spread over ~1.8s; require >=3 ticks spanning at least HALF the wait.
     assert len(ticks) >= 3, ticks
-    assert ticks[-1] - ticks[0] >= 2 * tick_s, ticks
+    assert ticks[-1] - ticks[0] >= wait / 2, ticks
 
 
 def test_a_zero_interval_never_ticks(tmp_path: Path):
