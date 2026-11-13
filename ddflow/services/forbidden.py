@@ -99,7 +99,38 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(?:['\"]([^\n'\"]*)['\"]|([^\s;|&<>()'\"]+))")
+def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
+    """The here-doc delimiter name and the index one past the `<<` word at `i` (its first `<`),
+    or None when the `<<` opens none: a `<<<` here-string, a `(<<` or `1<<` shift. The word ends at
+    the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside it is part of the word
+    -- quotes removed into the name, and may hold those chars -- so `<<safe'end'` names `safeend`
+    (Bdd23c77383)."""
+    if i > 0 and (line[i - 1] == "<" or line[i - 1] == "(" or line[i - 1].isdigit()):
+        return None  # `<<<`, `(<<` or a shift: not a here-doc (the `(?<![<\d(])` guard)
+    i += 2  # past `<<`
+    if i < n and line[i] == "<":
+        return None  # `<<<` here-string and shell additions to it
+    if i < n and line[i] == "-":
+        i += 1
+    while i < n and line[i] in " \t":
+        i += 1
+    name: list[str] = []
+    while i < n and line[i] not in " \t;|&()<>\n":
+        c = line[i]
+        if c == "\\":
+            name.append(line[i + 1] if i + 1 < n else "\\")
+            i += 2
+        elif c == "'" or c == '"':
+            q = c
+            i += 1
+            while i < n and line[i] != q:
+                name.append(line[i])
+                i += 1
+            i += 1  # the closing quote is name text, not a string quote
+        else:
+            name.append(c)
+            i += 1
+    return "".join(name), i
 
 
 def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
@@ -151,10 +182,10 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[str], str]:
         elif c == '"':
             quote, i = _dquote_close(line, i + 1, n)
         elif c == "<" and i + 1 < n and line[i + 1] == "<":
-            m = _HEREDOC.match(line, i)
-            if m is not None:
-                ms.append(m.group(1) if m.group(1) is not None else m.group(2))
-                i = m.end()
+            w = _heredoc_word(line, i, n)
+            if w is not None:
+                ms.append(w[0])
+                i = w[1]
                 continue
             i += 1
         else:

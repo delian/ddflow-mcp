@@ -137,6 +137,9 @@ def test_a_quoted_heredoc_marker_is_not_a_heredoc():
     # a bare delimiter word still ends at a shell operator (`;`), so `EOF` not `EOF;` is the
     # delimiter and `git push` after the terminator is a command (critic #3)
     assert _check("cat <<EOF; safe\nEOF\ngit push origin main\nEOF;") is not None
+    # a quote AFTER an unquoted prefix is part of the delimiter word (quote-removed), so the
+    # `git push` after the `safeend` terminator is a command (critic #4)
+    assert _check("cat <<safe'end'\nsafeend\ngit push origin main\nsafe") is not None
 
 
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
