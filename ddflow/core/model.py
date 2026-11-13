@@ -230,10 +230,15 @@ def _h_branch_synced(st: State, ev: Event) -> None:
 
 
 def _h_path_moved(st: State, ev: Event) -> None:
-    """`path.moved`: a rename, move or package split a merge landed, one event per move. The
-    list is derived from these alone (MV-path-moves), so replay rebuilds it. A reconstituted
-    move is kept; no field is rewritten from another."""
-    if {"old", "new", "sha", "how"}.issubset(ev.data):
+    """`path.moved`: a rename, move or package split a merge landed, one event per move, plus
+    an ``how = "unavailable"`` record when git could not detect (never read as a move). The
+    move list is derived from these alone (MV-path-moves), so replay rebuilds it. A git
+    failure stays OUT of `State.moves` and only its merge sha is kept as `moves_unavailable`."""
+    if not {"old", "new", "sha", "how"}.issubset(ev.data):
+        return
+    if ev.data["how"] == "unavailable":
+        st.moves_unavailable.append(ev.data["sha"])
+    else:
         st.moves.append(ev.data)
 
 

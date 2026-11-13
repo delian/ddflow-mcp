@@ -293,7 +293,7 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
     split-* tasks)."""
     r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", before, after)
-    if not r.ok:
+    if not r.ok or "rename" in (r.err or "") and "skipped" in (r.err or ""):
         return None
     added: set[str] = set()
     deleted: set[str] = set()
