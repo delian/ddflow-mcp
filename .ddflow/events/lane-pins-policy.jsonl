@@ -56,3 +56,4 @@
 {"agent":"lane-pins-policy","data":{"tags":["bugfix","no-deps","wave:0"]},"id":"e4f908747f931c8d2360d2da1","kind":"task.updated","lamport":197409,"schema":1,"subject":"fix-B6e5e17ccda","ts":"2026-11-13T23:02:37.737928Z"}
 {"agent":"lane-pins-policy","data":{"at":1794610986.8199167,"holder":"lane-pins-policy"},"id":"ea6194ee04383c1c904e0a61b","kind":"lease.renewed","lamport":197412,"schema":1,"subject":"WF-pins-regen-policy","ts":"2026-11-13T23:03:06.985443Z"}
 {"agent":"lane-pins-policy","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e2f7b522cbee92423304a8843","kind":"cadence.ran","lamport":197413,"schema":1,"subject":"recall_recheck:WF-pins-regen-policy","ts":"2026-11-13T23:03:16.208723Z"}
+{"agent":"lane-pins-policy","data":{"at":1794611557.1524992,"holder":"lane-pins-policy"},"id":"e48a6da5f5088b536b84087d7","kind":"lease.renewed","lamport":197441,"schema":1,"subject":"WF-pins-regen-policy","ts":"2026-11-13T23:12:37.327787Z"}
