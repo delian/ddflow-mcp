@@ -466,9 +466,7 @@ def _ruff_sites() -> dict[str, list[str]]:
         for prefix, kind in _RUFF_KIND.items():
             if row["code"].startswith(prefix):
                 fn = Path(row["filename"])
-                rendered = fn
-                if fn.is_absolute():
-                    rendered = fn.relative_to(root)
+                rendered = fn.resolve().relative_to(root) if fn.is_absolute() else fn
                 # `print()` in `ddflow/surfaces` is the interface, not a violation
                 # ("T20 (outside surfaces)"), so it never reaches the `t201` baseline.
                 if kind == "t201" and rendered.parts[:2] == ("ddflow", "surfaces"):
