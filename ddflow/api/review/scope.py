@@ -7,8 +7,12 @@ from typing import Any
 
 from ...core import blobref as B
 from ...core import outcome as O
+from ...core.digest import content_digest
 from ...infra import worktree as W
 from ...services import grants as GNT
+from ...services import identity as ID
+from ...services.approvals import consume as CN
+from ...services.approvals.canon import Canon
 from ...services.gates import reviewed_paths as RP
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import kept_copy as _kept_copy
@@ -62,7 +66,7 @@ def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
         "  the triage that settles the last finding records the gate passed on refutation "
         "(flagged); one you cannot settle goes to the operator\n"
         f'  ddflow review {item} --gate {gate} --force --reason "..."    one more round, '
-        "recorded\n"
+        "recorded (an agent adds --approval request and the operator answers in chat)\n"
         "To change the budget: ddflow config --set review.max_rounds N [--local] "
         '(0 = unlimited), or [review].on_exceed = "warn".'
     )
@@ -244,7 +248,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
         used = _rounds_used(it, gate)
-        why, forced = _budget_on_grants(repo, cfg, st, it, a, used, say)
+        why, forced = _budget_on_grants(log, repo, cfg, st, it, a, used, say)
     if why:
         return kind, done, forced, diff, how, why, None
     diff, how, why = _pick_diff(repo, cfg, st, it, a, delta)
@@ -282,7 +286,7 @@ def _flagged_unchanged_delta(a: dict[str, Any], why: str) -> bool:
     return bool(a["unchanged_delta"])
 
 
-def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
+def _budget_on_grants(log, repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
     """`_budget` for this call, with the operator grant (`services.grants.pick`) a round past
     the budget may cite. Says the item's grants for the gate; ``a["grant"]`` is the id the
     round ran on (set only when it did: a round the budget allows anyway spends none)."""
@@ -292,7 +296,10 @@ def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> t
     grant = None
     if 0 < cfg.review.max_rounds <= used:
         grant = GNT.pick(st, item, gate, a["force"], ctx=_grant_ctx(repo, it, gate, a))
-    why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say, grant)
+    why, forced = _budget(
+        cfg, item, gate, used, a["force"], a["reason"], say, grant,
+        log=log, agent=a.get("agent", ""), approval=a.get("approval", ""),
+    )
     a["grant"] = grant.id if grant and forced else ""
     return why, forced
 
@@ -363,7 +370,7 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
     return True
 
 
-def _budget(cfg, item, gate, done, force, reason, say, grant=None) -> tuple[str, str]:
+def _budget(cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval="") -> tuple[str, str]:
     """(why this round is refused, "") or ("", the reason it was forced past the cap).
     ``done`` is every round used so far, full and delta (`_rounds_used`). ``grant`` is the
     operator grant (`services.grants.pick`) this round may cite: it stands in for the
@@ -383,9 +390,49 @@ def _budget(cfg, item, gate, done, force, reason, say, grant=None) -> tuple[str,
         )
         note = f"; agent: {reason.strip()}" if reason.strip() else ""
         return "", f"operator grant {grant.id}: {grant.reason}{note}"
-    if force and reason.strip():
-        say(f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap}.")
-        return "", reason.strip()
     if force:
-        return '--force needs --reason "...": the exception is recorded.', ""
+        return _review_force(cfg, item, gate, done, cap, reason, say, log, agent, approval)
     return _budget_refusal(item, gate, done, cap), ""
+
+
+def _review_force(
+    cfg,
+    item: str,
+    gate: str,
+    done: int,
+    cap: int,
+    reason: str,
+    say,
+    log,
+    agent: str,
+    approval: str,
+) -> tuple[str, str]:
+    """(why refused, forced reason) for `--force` past the review-round cap.
+
+    A person's `--force --reason` lifts the budget alone and is recorded; an agent's is the
+    operator's act, so an agent needs a `review.force` approval bound to exactly this item
+    and gate, filed with `--approval request` and spent with the returned id (bug
+    B6cbaeebc00) -- the same route `gate skip` and `merge` already have. The marker call is
+    inventoried as site `review.force` (`services/appance/sites`).
+    """
+    if not ID.agent_marker(agent):
+        if reason.strip():
+            say(f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap}.")
+            return "", reason.strip()
+        return '--force needs --reason "...": the exception is recorded.', ""
+    canon = Canon(
+        verb="review.force",
+        agent=log.agent_id,
+        item=item,
+        target=gate,
+        args={"round": str(done + 1)},
+        state=content_digest(f"{item}.{gate}:rounds={done}"),
+    )
+    d = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=reason, auto=False)
+    if d.ok:
+        say(
+            f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap} on the "
+            "operator approval."
+        )
+        return "", f"operator approval {d.stamp['ask']}"
+    return d.message, ""
