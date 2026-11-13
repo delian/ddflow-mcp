@@ -114,7 +114,13 @@ def enforce(
         if record is not None:
             record(
                 RECORD_UNENFORCED,
-                {"lane": lane, "cap": cap, "spent": 0.0, "source": source, "reason": "no usage capability"},
+                {
+                    "lane": lane,
+                    "cap": cap,
+                    "spent": 0.0,
+                    "source": source,
+                    "reason": "no usage capability",
+                },
             )
         return Verdict(CAP_UNENFORCED, 0.0, cap, reason="the lane reports no usage capability")
     spent = 0.0
@@ -131,19 +137,28 @@ def enforce(
             if record is not None:
                 record(
                     RECORD_UNENFORCED,
-                    {"lane": lane, "cap": cap, "spent": spent, "source": source,
-                     "reason": "a usage event carried no cost"},
+                    {
+                        "lane": lane,
+                        "cap": cap,
+                        "spent": spent,
+                        "source": source,
+                        "reason": "a usage event carried no cost",
+                    },
                 )
-            return Verdict(CAP_UNENFORCED, spent, cap,
-                           reason="a usage event carried no cost")
+            return Verdict(CAP_UNENFORCED, spent, cap, reason="a usage event carried no cost")
         spent += step
         if not warned and spent >= cap * float(warn_fraction):
             warned = True
             if record is not None:
                 record(
                     RECORD_WARNED,
-                    {"lane": lane, "cap": cap, "spent": spent,
-                     "fraction": float(warn_fraction), "source": source},
+                    {
+                        "lane": lane,
+                        "cap": cap,
+                        "spent": spent,
+                        "fraction": float(warn_fraction),
+                        "source": source,
+                    },
                 )
         if spent >= cap:
             interrupts = _interrupt(driver, handle, stop_grace_s)
@@ -157,8 +172,13 @@ def enforce(
         if record is not None:
             record(
                 RECORD_UNENFORCED,
-                {"lane": lane, "cap": cap, "spent": 0.0, "source": source,
-                 "reason": "no usage event was seen"},
+                {
+                    "lane": lane,
+                    "cap": cap,
+                    "spent": 0.0,
+                    "source": source,
+                    "reason": "no usage event was seen",
+                },
             )
         return Verdict(CAP_UNENFORCED, 0.0, cap, reason="no usage event was seen")
     return Verdict(UNDER, spent, cap, warned=warned)

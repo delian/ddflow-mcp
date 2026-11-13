@@ -11,7 +11,7 @@ The fake here is a scripted ``Lane`` (like ``ddflow.adapters.fakes.lanes.FakeLan
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pytest
 
@@ -44,9 +44,7 @@ class MeteredLane:
         script = tuple(
             L.LaneEvent(i, spec.name, "usage", {"cost": c}) for i, c in enumerate(self.costs, 1)
         )
-        self.handle = FakeHandle(
-            capabilities=self.capabilities, events=tuple(script)
-        )
+        self.handle = FakeHandle(capabilities=self.capabilities, events=tuple(script))
         return self.handle
 
     def events(self, h):
@@ -106,7 +104,7 @@ def test_the_soft_warn_fires_once_at_the_fraction():
     h = lane.start(L.LaunchSpec(name="lane-1", argv=("x",)))
     records: list[tuple[str, dict]] = []
 
-    verdict = B.enforce(lane, h, budget_usd=1.0, warn_fraction=0.5, record=records.append)
+    B.enforce(lane, h, budget_usd=1.0, warn_fraction=0.5, record=records.append)
 
     warns = [r for r in records if r[0] == B.RECORD_WARNED]
     assert len(warns) == 1
