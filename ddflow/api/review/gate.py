@@ -333,11 +333,10 @@ def _name_the_item(
     No item named: the working tree is reviewed and NOTHING is recorded, said as such. An
     item whose live lease another agent holds: a WARNING and a line in the gate's evidence
     (not a refusal: agents of one clone may review each other's items, D-mu-bugfix-answers).
-    Standing in the tree the lease made is being the holder, not another agent: the agent
-    working there under a DIFFERENT default identity (a derived name, a harness
-    declaration) reviews the holder's item from its own tree, so it is not warned
-    "another agent's changes" -- heartbeat renews on the holder's behalf from that same
-    tree (B090201fcef).
+    Standing in the tree the lease made under the DEFAULT (derived) identity is being the
+    holder, not another agent -- the agent whose `claim` made that tree is usually not the
+    default derived name it is called by, so it is not warned "another agent's item"
+    (B090201fcef); heartbeat renews on the holder's behalf from that same tree.
     """
     if not item:
         say(
@@ -357,9 +356,11 @@ def _name_the_item(
     me = ID.resolve(repo, cfg, agent).id
     if me == lease.holder:
         return extra
-    if called_from is not None and _in_its_own_tree(repo, lease.worktree, called_from):
-        # Standing in the tree the lease made IS being its holder: this is not "another
-        # agent's item", so no warning -- the review records against the holder all the same.
+    if called_from is not None and not agent and _in_its_own_tree(repo, lease.worktree, called_from):
+        # Standing in the tree the lease made IS being its holder under the DEFAULT
+        # (not-declared) identity: not "another agent's item", so no warning (B090201fcef).
+        # An EXPLICIT `--agent` is a declaration the caller is NOT that holder, so it
+        # still warns below.
         return extra
     say(
         f"→ WARNING: {item} is leased to {lease.holder}, and you are {me}: this review is "

@@ -91,10 +91,10 @@ def test_an_unleased_item_leaves_a_mark_in_the_evidence(repo: Path):
     assert ev == {"reviewed_unleased": True}
 
 
-def test_review_from_the_items_own_tree_under_another_identity_does_not_warn(repo: Path):
-    """B090201fcef: the agent working in the tree `claim` made is a DIFFERENT resolved
-    identity than the holder, but standing in that tree IS being that identity -- so the
-    review is not "another agent's item" and warns nothing (heartbeat already renews on the
+def test_review_from_the_items_own_tree_under_the_default_identity_does_not_warn(repo: Path):
+    """B090201fcef: the agent working in the tree `claim` made under the DEFAULT identity
+    (no `--agent`, derived from the tree) is NOT another agent -- standing in that tree IS
+    being its holder, so the review warns nothing (heartbeat already renews on the
     holder's behalf from that same tree)."""
     from ddflow.api import review as R
     from ddflow.api._base import _load
@@ -103,14 +103,14 @@ def test_review_from_the_items_own_tree_under_another_identity_does_not_warn(rep
     _log, cfg, st = _load(repo, "bob")
     said: list[str] = []
     ev = R._name_the_item(
-        repo, cfg, st, "T1", "rubber_duck", "bob", said.append, None, called_from=tree
+        repo, cfg, st, "T1", "rubber_duck", "", said.append, None, called_from=tree
     )
     assert ev is None, ev  # no "reviewed_for_holder": this IS the holder's own tree
     assert not said, said
-    # Somewhere else, the resolved identity genuinely is another agent: it still warns.
+    # An EXPLICIT non-holder still warns, even from that same tree: it declared itself.
     said2: list[str] = []
     ev2 = R._name_the_item(
-        repo, cfg, st, "T1", "rubber_duck", "bob", said2.append, None, called_from=repo
+        repo, cfg, st, "T1", "rubber_duck", "bob", said2.append, None, called_from=tree
     )
     assert ev2 == {"reviewed_for_holder": "bob reviewed alice's T1"}, ev2
     assert any("leased to alice" in s for s in said2), said2
