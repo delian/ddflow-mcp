@@ -846,6 +846,14 @@ self = "ask"
 [upstream_gh]
 error_max = 400
 
+[verify]
+stack = ""
+stacks_dir = ".ddflow/stacks"
+build_cmd = ""
+smoke_cmd = ""
+lock_check_cmd = ""
+test_cmd = ""
+
 [wait]
 max_call_seconds = 240
 

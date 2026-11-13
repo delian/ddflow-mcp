@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "verify.smoke_cmd"
+new = "\"\""
+why = "Overrides the stack's smoke command; empty uses the stack table's."
+impact = "additive"
