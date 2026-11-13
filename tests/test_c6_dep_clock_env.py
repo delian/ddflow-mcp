@@ -59,3 +59,17 @@ def test_append_line_appends_whole_lines_and_makes_parents(tmp_path):
     fsio.append_line(target, "one")
     fsio.append_line(target, "two")
     assert target.read_text() == "one\ntwo\n"
+
+
+def test_completion_dir_probe_treats_an_unstattable_entry_as_not_a_directory(monkeypatch, tmp_path):
+    from ddflow.services.completion import values
+
+    (tmp_path / "d").mkdir()
+    assert values._is_dir(str(tmp_path / "d")) is True
+    assert values._is_dir(str(tmp_path / "missing")) is False
+
+    def denied(self, **_k):
+        raise PermissionError(13, "denied")
+
+    monkeypatch.setattr(Path, "stat", denied)
+    assert values._is_dir(str(tmp_path / "d")) is False

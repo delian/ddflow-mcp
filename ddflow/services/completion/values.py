@@ -12,6 +12,7 @@ stays light for the id path and a heavy source is paid only on the TAB that need
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 
 from .. import completion_ids as CI
@@ -69,6 +70,14 @@ def _prefixed(names: list[str], prefix: str) -> list[str]:
     return [n for n in names if n.startswith(prefix)]
 
 
+def _is_dir(path: str) -> bool:
+    """`os.path.isdir` semantics: any OSError from the stat is "not a directory"."""
+    try:
+        return stat.S_ISDIR(Path(path).stat().st_mode)
+    except OSError:
+        return False
+
+
 def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
     """Paths under ``prefix`` from the filesystem (``glob``): a directory kind offers
     directories; a path kind offers files AND the directories you traverse to reach them."""
@@ -80,7 +89,7 @@ def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
     try:
         from itertools import islice as _islice
 
-        found = [f for f in _islice(_g.iglob(pat), _PATH_SCAN) if not dirs_only or Path(f).is_dir()]
+        found = [f for f in _islice(_g.iglob(pat), _PATH_SCAN) if not dirs_only or _is_dir(f)]
         found.sort()
         return found[:_PATH_MAX]
     except (OSError, ValueError):
