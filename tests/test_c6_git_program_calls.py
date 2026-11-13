@@ -39,3 +39,20 @@ def test_program_sites_in_c6_files_do_not_exceed_baseline() -> None:
         and n > base.get((kind, fam, path), 0)
     ]
     assert not grown, grown
+
+
+def test_c6_files_import_the_adapters_not_the_infra_shims() -> None:
+    shims = ("from ..infra import git", "from ...infra import git", "from ..infra import proc")
+    shims += ("from ...infra import proc", "ddflow.infra.git", "ddflow.infra.proc")
+    back = [
+        f"{rel}: {s}"
+        for rel in FILES
+        for s in shims
+        if s in (ROOT / rel).read_text() and rel != "ddflow/adapters/fs.py"
+    ]
+    assert not back, back
+
+
+def test_dynamic_program_home_is_only_the_runner_and_the_which_port() -> None:
+    _task, homes = I.home_of("program", "<dynamic>")
+    assert set(homes) == {"ddflow.infra.proc", "ddflow.infra.git", "ddflow.adapters.fs"}
