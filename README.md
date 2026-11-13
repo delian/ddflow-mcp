@@ -872,8 +872,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b15fff93a11c -->
-<details><summary>All 683 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=a7dcfd307da2 -->
+<details><summary>All 738 knobs across 69 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -912,6 +912,7 @@ long default is left to `ddflow config --explain`.
 | `approvals.accept_chat_for_t3` | `false` |  |
 | `approvals.forbid_chat_for_t3` | `false` |  |
 | `approvals.require_approval` | `[]` |  |
+| `baseline.keep` | `14` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
@@ -1003,6 +1004,9 @@ long default is left to `ddflow config --explain`.
 | `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.max_behind` | `50` |  |
 | `enforce.machine_local_keys` | `[]` |  |
+| `eta.window_days` | `30.0` |  |
+| `eta.min_samples` | `10` |  |
+| `eta.coverage_bar` | `0.8` |  |
 | `evaluation.max_miss_rate` | `0.0` |  |
 | `evaluation.min_fixtures` | `1` |  |
 | `export.documents` | `[]` |  |
@@ -1038,6 +1042,8 @@ long default is left to `ddflow config --explain`.
 | `flow.port_strategy` | `"forward-merge"` | `forward-merge` \| `cherry-pick` |
 | `flow.environments` | `[]` |  |
 | `flow.auto_promote` | `[]` |  |
+| `flow.pr_body_template` | `""` |  |
+| `flow.pr_body_cell_max` | `200` |  |
 | `flow.version_files` | `{}` |  |
 | `gates.max_run_timeout_s` | `21600` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
@@ -1154,6 +1160,8 @@ long default is left to `ddflow config --explain`.
 | `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
+| `lanes.idle_s` | `1800` |  |
+| `lanes.coordinator_max_rows` | `15` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
 | `lanes.stop_grace_s` | `10` |  |
@@ -1252,6 +1260,7 @@ long default is left to `ddflow config --explain`.
 | `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
 | `mcp.stale_check_every_s` | `60.0` |  |
 | `mcp.progress_s` | `20.0` |  |
+| `mcp.init_snapshot_max_age_s` | `300.0` |  |
 | `memory.max_chars` | `280` |  |
 | `memory.brief_items` | `12` |  |
 | `merge.require_gates` | `"warn"` | `warn` \| `refuse` |
@@ -1266,6 +1275,8 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.auto_run_max_parallel` | `1` |  |
 | `metrics.min_samples` | `10` |  |
 | `metrics.top` | `5` |  |
+| `metrics.runs_window_days` | `30` |  |
+| `metrics.outlier_runs` | `0` |  |
 | `metrics.forecast_runs` | `1000` |  |
 | `metrics.forecast_seed` | `0` |  |
 | `metrics.forecast_low_pct` | `50` |  |
@@ -1306,6 +1317,7 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
 | `perf_metrics.aggregate_min_samples` | `3` |  |
@@ -1349,6 +1361,20 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `premerge.enabled` | `true` |  |
+| `premerge.stages` | `["pre-commit"]` |  |
+| `premerge.budget_s` | `120` |  |
+| `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
+| `premerge.fix` | `true` |  |
+| `premerge.commit_fixes` | `true` |  |
+| `premerge.max_fix_rounds` | `1` |  |
+| `premerge.precommit_command` | `"pre-commit"` |  |
+| `premerge.skip_hooks` | `[]` |  |
+| `premerge.generic_hooks` | `true` |  |
+| `premerge.large_file_kb` | `500` |  |
+| `premerge.test_command` | `"python -m pytest -q -x"` |  |
+| `prices.limit` | `{}` |  |
+| `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |
@@ -1373,11 +1399,23 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `records.correct_digest_chars` | `12` |  |
+| `records.correct_min_digest_chars` | `8` |  |
+| `records.correct_digest_old` | `false` |  |
+| `records.correct_digest_new` | `false` |  |
+| `records.correct_reason_max_chars` | `500` |  |
+| `records.correct_max_fields` | `8` |  |
 | `reinstruct.enabled` | `true` |  |
 | `reinstruct.every_calls` | `12` |  |
 | `reinstruct.every_seconds` | `240` |  |
 | `reinstruct.max_items` | `3` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `resultcache.enabled` | `true` |  |
+| `resultcache.keep_days` | `14` |  |
+| `resultcache.max_mb` | `64` |  |
+| `resultcache.reuse_failed` | `false` |  |
+| `resultcache.probe_commands` | `["pytest --version", "uv --version"]` |  |
+| `resultcache.env_vars` | `[]` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
@@ -1394,6 +1432,11 @@ long default is left to `ddflow config --explain`.
 | `review.chunk_max_tokens` | `0` |  |
 | `review.split_rounds` | `2` |  |
 | `review.degraded_cooldown_s` | `3600` |  |
+| `roles.budget_tokens` | `600` |  |
+| `roles.phase_closer_rules` | `[]` |  |
+| `roles.fixer_rules` | `[]` |  |
+| `roles.researcher_rules` | `[]` |  |
+| `roles.reviewer_rules` | `[]` |  |
 | `rules.max_rules` | `200` |  |
 | `rules.max_size_bytes` | `50000` |  |
 | `rules.tags_allowed` | `[]` |  |
@@ -1445,6 +1488,9 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.inflight_note` | `true` |  |
+| `session.interrupted_close_max` | `20` |  |
+| `session.previous_session_chars` | `600` |  |
 | `session.agent_rotate_tokens` | `250000` |  |
 | `session.claude_autocompact_window` | `0` |  |
 | `session.claude_autocompact_pct_override` | `0` |  |
@@ -1475,6 +1521,15 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
 | `store.index_touch_s` | `86400.0` |  |
+| `suites.max_concurrent` | `0` |  |
+| `suites.cores_per_suite` | `96` |  |
+| `suites.load_ceiling_per_core` | `0.35` |  |
+| `suites.load_poll_s` | `2.0` |  |
+| `suites.max_wait_factor` | `3.0` |  |
+| `suites.agent_share` | `0.5` |  |
+| `suites.default_cost_s` | `600.0` |  |
+| `suites.cost_runs` | `20` |  |
+| `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |

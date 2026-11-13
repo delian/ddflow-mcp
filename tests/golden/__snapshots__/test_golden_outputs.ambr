@@ -4427,6 +4427,19 @@
           hook hands it back after compaction. The hook gets no summary from Claude
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
+      session.inflight_note = True   [default]
+          At the Stop and SessionEnd hooks, write what the session is doing (the items
+          it holds, the last gate and the next one) as a session note, once per
+          change. Off writes none; the hooks still close the session.
+      session.interrupted_close_max = 20   [default]
+          Most dead sessions one SessionStart closes as interrupted. A session is dead
+          when it is open, its agent holds no live lease, a lease of that agent lapsed
+          after the session began and the session wrote nothing since. 0 turns the
+          close off.
+      session.previous_session_chars = 600   [default]
+          Characters of the previous session's last prompt, note and summary the next
+          SessionStart shows (fenced as data), skipped after a compaction. 0 shows
+          none.
       session.agent_rotate_tokens = 250000   [default]
           Context tokens past which a lane agent should rotate instead of growing:
           `ddflow doctor`, `ddflow health` and the wake brief name it and the steep
