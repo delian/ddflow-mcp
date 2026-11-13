@@ -24,6 +24,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .recover_auto import adopted_flag
+
 #: Kill-unwind effects. Soft first: it loses nothing.
 SOFT = "soft_unwind"  # stop the subagent + release the lease; worktree preserved
 HARD = "hard_kill"  # stop the subagent + release the lease; worktree discarded
@@ -118,22 +120,18 @@ def decide(
 def decisions(rows, *, adopted_items: dict[str, bool] | None = None) -> list[Kill]:
     """``rows`` of ``{item, lane, hard, adopted, salvageable}`` -> their switch.
 
-    ``adopted_items`` lets a caller pass the adopted flag by item once; a row's own
-    ``adopted`` wins where both exist.
+    ``adopted_items`` lets a caller pass the adopted flag by item once; the row-dispatch's
+    ``adopted`` resolution is `recover_auto.adopted_flag`, shared so the two lane decisions
+    keep one copy of it.
     """
     out: list[Kill] = []
-    adopted_items = adopted_items or {}
     for r in rows:
-        if "adopted" in r:
-            adopted = bool(r["adopted"])
-        else:
-            adopted = bool(adopted_items.get(r["item"]))
         out.append(
             decide(
                 r["item"],
                 r.get("lane", ""),
                 hard=bool(r.get("hard")),
-                adopted=adopted,
+                adopted=adopted_flag(r, adopted_items),
                 salvageable=r.get("salvageable"),
             )
         )
