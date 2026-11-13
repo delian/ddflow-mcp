@@ -65,6 +65,7 @@ def test_an_empty_closure_runs_the_always_set_not_nothing(project, stubs):  # no
 def test_an_empty_closure_with_no_always_guards_still_runs_the_whole_suite(project, stubs):  # noqa: F811
     _branch(project, {"notes/memo.md": "hi\n"})
     res = _run(project)
+    assert res.ok, res.reason
     assert res.scope["scope"] == "full" and "no test reaches" in res.scope["why"]
 
 
