@@ -131,3 +131,4 @@
 {"agent":"recover-b","data":{"path":".ddflow/worktrees/fix-B0db4e156e8"},"id":"e26e2c4f7048b9cc6a2ae31d7","kind":"worktree.removed","lamport":193488,"schema":1,"subject":"fix-B0db4e156e8","ts":"2026-11-13T13:11:26.936917Z"}
 {"agent":"recover-b","data":{"path":".ddflow/worktrees/fix-Bec566a9399"},"id":"e523019df8f5baeb06df80bcc","kind":"worktree.removed","lamport":193489,"schema":1,"subject":"fix-Bec566a9399","ts":"2026-11-13T13:11:32.408176Z"}
 {"agent":"recover-b","data":{"path":".ddflow/worktrees/housekeep-dfml-md"},"id":"e00e5c1d6056beb62fb290dda","kind":"worktree.removed","lamport":193490,"schema":1,"subject":"housekeep-dfml-md","ts":"2026-11-13T13:11:37.997154Z"}
+{"agent":"recover-b","data":{"by":"recover-b","event":"e8b3c1631e9b12a5f96be6269","holder":"buglane1","note":"salvaged"},"id":"e3f346e70bb67bb7a341a4711","kind":"lease.released","lamport":193508,"schema":1,"subject":"fix-B-gate-run-dies-on-events-lock","ts":"2026-11-13T13:14:50.744379Z"}
