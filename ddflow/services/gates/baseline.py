@@ -267,7 +267,18 @@ def auto_decision(
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
-    reached = {t.path for t in (*sel.tests, *sel.cut)}
+    #: A failing test blocks auto-accept only when its failure could be caused by the change:
+    #: it is the item's own changed file (``f in changed`` below) or its file has a runtime
+    #: dependency on a changed file -- it imports one, uses a name a changed module re-exports,
+    #: sits under a changed conftest, or reads a changed data file. The selector's heuristic
+    #: picks alone ("named after", a spelled identifier, a listed package, a phrase, a declared
+    #: ``GOVERNS``) carry no such signal, so a test that merely reaches the change that way must
+    #: not block auto-accept (B2e41928996).
+    reached = {
+        t.path
+        for t in (*sel.tests, *sel.cut)
+        if t.reason.startswith(("imports ", "uses ", "under changed ", "names data file "))
+    }
     files = test_files_of(ids)
     # A guard that DECLARES it governs the changed path is reached via its declared scope, not
     # just by import: an architecture guard declares ``GOVERNS = ("ddflow/**", ...)`` AND
