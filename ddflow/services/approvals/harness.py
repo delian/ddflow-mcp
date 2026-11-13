@@ -35,6 +35,7 @@ from .. import configwrite as CW
 from .. import harnessreg
 from ..actors import resolve_actor
 from ..ask import engine as E
+from . import policy as PO
 
 TOOL = "AskUserQuestion"
 #: attest's message begins with this while the person has simply not answered yet (exit 2)
@@ -135,10 +136,29 @@ def window_label(ask_id: str) -> str:
     return f"Approve {ask_id} + standing window ({WINDOW_CHOICE_HOURS}h)"
 
 
-def _generic(cfg: Config, row: dict[str, Any]) -> bool:
+def _canon_of(row: dict[str, Any]) -> dict[str, Any]:
+    """The canonical command record a command ask is of, from its JSON ``canon`` field."""
+    canon = row.get("canon") or ""
+    if not canon:
+        return {}
+    try:
+        data = json.loads(canon)
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _generic(cfg: Config, row: dict[str, Any], it: Any = None) -> bool:
     """May a request of this verb be answered with the standing-window choice? The generic
-    T2 class the window pre-authorises (`[approvals].standing_verbs`), nothing else."""
-    return row["verb"] in cfg.approvals.standing_verbs and row["min_level"] <= LEVEL
+    T2 class the window pre-authorises (`[approvals].standing_verbs`), nothing else. A
+    measured baseline-red partial only a person accepts (`policy.person_only_target`) is
+    not coverable by the window, so the option is hidden there (Bdeb98fa2d1)."""
+    if row["verb"] not in cfg.approvals.standing_verbs or row["min_level"] > LEVEL:
+        return False
+    if it is not None:
+        if PO.person_only_target(it, row["verb"], str(_canon_of(row).get("target", ""))):
+            return False
+    return True
 
 
 def _outcome(answer: str, ask_id: str) -> str | None:
@@ -158,7 +178,7 @@ def _surfaced_question(row: dict[str, Any]) -> str:
     return row["text"]
 
 
-def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
+def payload(row: dict[str, Any], cfg: Config, *, state: Any = None) -> dict[str, Any]:
     """The AskUserQuestion input the agent must send, unaltered. An approval offers
     approve/deny (a generic request also the standing-window choice); a question offers its
     preset options (one is the answer) when it has them, else a free-text answer for exactly
@@ -181,7 +201,8 @@ def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
         {"label": yes, "description": "approve exactly this command, once"},
         {"label": no, "description": "deny it"},
     ]
-    if _generic(cfg, row):
+    it = state.items.get(str(_canon_of(row).get("item", ""))) if state is not None else None
+    if _generic(cfg, row, it):
         options.append(
             {
                 "label": window_label(row["id"]),

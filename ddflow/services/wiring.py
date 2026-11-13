@@ -31,14 +31,14 @@ FEATURE_CLASSES = ("knob", "event", "command")
 #: feature class -> the wiring globs a new one of that class must declare, in order.
 #
 #: knob ->    the config-section file its knobs are declared in (one dataclass per
-#:            ``ddflow/config_sections/*.py``, discovered by scan) plus the shipped default
-#:            table ``templates/default.toml`` every knob's default mirrors.
+#:            ``ddflow/config_sections/*.py``, discovered by scan). The shipped defaults it
+#:            mirrors are generated and listed in ``[lease].shared_globs``, not leased per task.
 #: event ->   the event-kind template ``templates/events/*.toml`` its kinds are declared in.
 #: command -> the declared/command/parser surfaces a command is wired through, the api layer
 #:            ``ddflow/api/__init__.py`` that re-exports it, and the MCP tool registry
 #:            ``surfaces/tools/*`` that places its tool (families, tiers, order, aliases).
 WIRING: dict[str, tuple[str, ...]] = {
-    "knob": ("ddflow/config_sections/*.py", "ddflow/templates/default.toml"),
+    "knob": ("ddflow/config_sections/*.py",),
     "event": ("ddflow/templates/events/*.toml",),
     "command": (
         "ddflow/surfaces/declared/*",
