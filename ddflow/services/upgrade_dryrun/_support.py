@@ -14,10 +14,11 @@ from ._model import HAND_EDIT
 from ._read import folded_state, state_digests, users_part
 
 
-def tools_problems(tools: list[dict[str, Any]], budget: int) -> tuple[int, list[str]]:
+def tools_problems(tools: list[dict[str, Any]]) -> tuple[int, list[str]]:
     """`(compact bytes of tools/list, what is wrong with it)`: empty or carrying output schemas
-    (`[mcp].output_schemas` ships off). ``budget`` is reported, never enforced: the whole list
-    over `TOOLS_LIST_BUDGET` is a number, and only the core tier keeps a ratchet (D-mcp-budget-report)."""
+    (`[mcp].output_schemas` ships off). The tools/list budget is reported, never enforced: the
+    whole list over `TOOLS_LIST_BUDGET` is just a number next to the size in the connect check,
+    and only the core tier keeps a ratchet (D-mcp-budget-report)."""
     size = len(json.dumps({"tools": tools}, separators=(",", ":")))
     out = []
     if not tools:
