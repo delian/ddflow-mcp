@@ -117,3 +117,12 @@ def test_review_from_the_items_own_tree_under_the_default_identity_does_not_warn
     )
     assert ev2 == {"reviewed_for_holder": "bob reviewed alice's T1"}, ev2
     assert any("leased to alice" in s for s in said2), said2
+    # A non-holder declared through the ENVIRONMENT also still warns: `DDFLOW_AGENT` is a
+    # declaration the caller is not the holder, so the item-own-tree read is not taken.
+    monkeypatch.setenv("DDFLOW_AGENT", "agent-b")
+    said3: list[str] = []
+    ev3 = R._name_the_item(
+        repo, cfg, st, "T1", "rubber_duck", "", said3.append, None, called_from=tree
+    )
+    assert ev3 == {"reviewed_for_holder": "agent-b reviewed alice's T1"}, ev3
+    assert any("leased to alice" in s for s in said3), said3
