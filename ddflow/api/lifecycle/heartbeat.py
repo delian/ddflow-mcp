@@ -63,7 +63,7 @@ def heartbeat(
         if broken:  # the lease was taken from this agent: say so wherever it stands
             hint = "; " + LB.notice_text(broken[0])
     if renewed:
-        withheld = _catch_up_globs(log, cfg, item, began, holder)
+        withheld = _catch_up_globs(log, cfg, item, began, holder, st)
         return O.ok(
             "lease.renewed",
             id=item,
@@ -235,7 +235,7 @@ def _recheck(log, st, cfg, item: str) -> str:
     )
 
 
-def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
+def _catch_up_globs(log, cfg, item: str, now: float, holder: str, loaded=None) -> str:
     """Point a just-renewed lease at the item's CURRENT globs and resources; "" or why
     it could not.
 
@@ -255,10 +255,18 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
     (B8eb33fe297); the catch-up is judged at the renewal instead -- and only for the lease
     ``holder`` renewed: one that changed hands in that window (a takeover, a break) is not
     pointed at the item's values, which were never the new holder's.
+
+    ``loaded`` is the state the caller already folded. A field it shows matching (the lease
+    of ``holder`` carries what the item names) is not looked at again: the lock is taken, and
+    the log re-read under it, only for a field that differs -- a no-op heartbeat holds the
+    append lock for nothing (TX-heartbeat-catchup-lockfree). A state that went stale since
+    is caught up by the next heartbeat, as any edit after the load always was.
     """
 
     why: list[str] = []
     for field in ("globs", "resources"):
+        if _matches(loaded, item, holder, field):
+            continue
         with log.transaction():
             it = localize(fold(log.read_all(), strict=False), log, now).items.get(item)
             lease = it.lease if it else None
@@ -276,6 +284,15 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
             elif live is not None:
                 L.retarget(log, item, live, *args)
     return "; ".join(why)
+
+
+def _matches(st, item: str, holder: str, field: str) -> bool:
+    """True when ``st`` shows ``holder``'s lease already carrying the item's own ``field``."""
+    it = st.items.get(item) if st is not None else None
+    lease = it.lease if it else None
+    if lease is None or lease.holder != holder:
+        return False
+    return sorted(getattr(lease, field)) == sorted(getattr(it, field))
 
 
 def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:

@@ -206,6 +206,12 @@ second lock system and no daemon (D-sched-no-daemon). New files stay small
 over MCP (r-no-shell). Definitions (suggestions, limits) are managed records
 (r-everything-managed).
 
+No `read_all` or fold under the append lock unless the mark moved: a caller
+decides from state it already loaded and takes the lock only to write, re-reading
+inside it when the state differs. The heartbeat's globs and resources catch-up
+follows this (TX-heartbeat-catchup-lockfree): a lease that already matches its item
+costs no lock at all, and only a mismatch re-reads under it.
+
 ## 8. Hype list (claims not adopted, or not yet verified)
 
 - "Release at review start is safe": refuted locally, 84 percent re-commit.
