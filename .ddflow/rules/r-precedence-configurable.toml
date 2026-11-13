@@ -1,0 +1,10 @@
+id = "r-precedence-configurable"
+title = "The order of authority between rules, decisions, goals, policies, agents and user prompts is configurable, tighten-only, and defaults to today's order"
+tags = ["config", "policy", "principle", "precedence"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**"]
+created = "2026-11-13T08:46:45.593085+00:00"
+updated = "2026-11-13T08:46:45.593101+00:00"
+
+Operator 2026-11-13: the default order of priority between rules, agents, goals, policies and user prompts must be configurable too, and the default configuration must stay the one we have today (D-rules-hierarchy-r2: org floor > project rule (block) > accepted decision > principle > preference, nearest scope wins; D-config-layer-order for config; the four enforced invariants always on top). (1) The order is a [precedence] knob set with a documented default equal to the current order, pinned by a test so a change of default is a deliberate recorded decision; (2) settable by config file, ddflow config, one MCP action on an existing family and a prompt, per r-feature-four-ways, at any layer; (3) tighten-only (r-tighten-only): a lower layer may move a class DOWN only for classes the company floor does not pin, never lower the org floor or the four enforced invariants (reviewer independence, every gate has an outcome, regression test for a bug, unavailable is never passed) and never promote a user prompt above an enforced rule; (4) one resolver function decides every conflict (rules, decisions, briefs, launcher, hooks), no second hard-coded order; (5) ddflow doctor and ddflow rule resolve show the effective order and where each position came from; (6) every change is logged (config.changed) and restorable. Extends r-company-workflows and r-tighten-only.
