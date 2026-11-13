@@ -153,9 +153,12 @@ def generate(
     (`on_collision = suffix`) up to `[naming].max_tries` times, or refused (`refuse`)."""
     n = cfg.naming
     host = host or (host_part(cfg, hostname) if hostname else "")
-    if current and not name_problem(current, max_length=63):
+    if current and agentname.is_valid(current):
         # Before the template is read: a restart changes nothing, whatever the template says
-        # now. A case twin among the taken names is noted, as for a declared name.
+        # now. `current` was valid when this agent first held it, and the wider explicit
+        # rule (`core.agentname`, [A-Za-z0-9._-]) admits every legacy name such as
+        # `Monster3-x-7267fe`, so the generated-only `name_problem` would drop it. A case
+        # twin among the taken names is noted, as for a declared name.
         return Resolved(current, RESUMED, _twin_note(current, taken))
     if problem := template_problem(n.template, n.scope):
         raise NameRefused(f"[naming].template {n.template!r} {problem}")

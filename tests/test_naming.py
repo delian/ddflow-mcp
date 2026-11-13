@@ -140,8 +140,15 @@ def test_the_same_agent_resuming_keeps_its_name() -> None:
     assert got == naming.Resolved(held, naming.RESUMED)
 
 
-def test_a_current_name_that_is_not_generated_shaped_is_not_kept() -> None:
+def test_a_current_name_that_is_a_valid_explicit_name_is_kept() -> None:
+    # `Bad_Name` is not generated-shaped, but it is a valid explicit name (core.agentname
+    # admits '_' and upper-case), so the same agent resuming keeps it, not a new name.
     got = naming.generate(Config(), role="lane3", family="kilo", host="box", current="Bad_Name")
+    assert got == naming.Resolved("Bad_Name", naming.RESUMED)
+
+
+def test_a_current_name_that_is_not_a_valid_agent_name_is_not_kept() -> None:
+    got = naming.generate(Config(), role="lane3", family="kilo", host="box", current="bad name")
     assert got.source == naming.GENERATED
 
 
