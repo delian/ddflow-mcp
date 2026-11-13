@@ -136,7 +136,7 @@ def _reopen_done_parent(st: State, child_id: str) -> None:
 def _h_updated(st: State, ev: Event, kind: str) -> None:
     it = _item(st, ev, kind)
     d = ev.data
-    for f in ("title", "parent", "body", "blocked_reason", "line"):
+    for f in ("title", "parent", "body", "blocked_reason", "line", "author_model"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
     for f in ("needs", "globs", "tags", "resources", "landed_paths"):
@@ -183,6 +183,9 @@ def _h_state(new_state: str):
             # existed only in the raw log. Third instance of this class in this series.
             it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
             it.changelog = changelog_of(ev.data.get("changelog")) or it.changelog
+            it.author_model = (
+                ev.data.get("author_model") or ev.data.get("author_family") or it.author_model
+            )
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 

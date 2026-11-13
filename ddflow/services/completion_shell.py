@@ -38,7 +38,8 @@ def for_shell(shell: str) -> str:
         argcomplete = import_module("argcomplete")
     except ImportError:
         return _message(shell)
-    code = argcomplete.shellcode([PROGRAM], shell="bash" if shell == "bash" else shell)
+    # `shell` names the target shell for the script text; nothing is spawned (bandit B604 false positive).
+    code = argcomplete.shellcode([PROGRAM], shell="bash" if shell == "bash" else shell)  # nosec B604
     lines = [ln.strip() for ln in code.splitlines()]
     lines = [ln for ln in lines if ln and not ln.startswith("#")]
     if shell == "fish":
