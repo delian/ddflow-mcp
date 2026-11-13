@@ -370,7 +370,7 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
     return True
 
 
-def _budget(cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval="") -> tuple[str, str]:
+def _budget(cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval="") -> tuple[str, str]:  # noqa: PLR0913, PLR0917 -- the approval route threads the operator-gate args `_budget` needs past the cap
     """(why this round is refused, "") or ("", the reason it was forced past the cap).
     ``done`` is every round used so far, full and delta (`_rounds_used`). ``grant`` is the
     operator grant (`services.grants.pick`) this round may cite: it stands in for the
