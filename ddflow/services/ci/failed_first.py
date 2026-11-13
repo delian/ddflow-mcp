@@ -100,7 +100,8 @@ def read_outcome(out: Path, ids: list[str]) -> dict[str, Any]:
     (collection included) to its first failed test, ``first_failure_id`` which test. A record
     with no failure, or an unreadable one, says nothing of the time."""
     got: dict[str, Any] = {"ran_failed_first": list(ids)}
-    started: float | None = None
+    starts: list[float] = []
+    fails: list[tuple[float, str]] = []
     try:
         lines = Path(out).read_text("utf-8").splitlines()
     except OSError:
@@ -111,12 +112,15 @@ def read_outcome(out: Path, ids: list[str]) -> dict[str, Any]:
             ev, at = row["ev"], float(row["at"])
         except (ValueError, KeyError, TypeError):
             continue
-        if ev == "start" and started is None:
-            started = at
-        elif ev == "fail" and started is not None:
-            got["first_failure_at_s"] = round(max(at - started, 0.0), 3)
-            got["first_failure_id"] = str(row.get("id", ""))
-            break
+        if ev == "start":
+            starts.append(at)
+        elif ev == "fail":
+            fails.append((at, str(row.get("id", ""))))
+    # By timestamp, not by line order: the earliest start, and the earliest failure after it.
+    after = sorted(f for f in fails if starts and f[0] >= min(starts))
+    if after:
+        got["first_failure_at_s"] = round(after[0][0] - min(starts), 3)
+        got["first_failure_id"] = after[0][1]
     return got
 
 

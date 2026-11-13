@@ -8,6 +8,7 @@ to the project's pytest as a plugin plus a file named by an environment variable
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -235,7 +236,7 @@ def test_a_rerun_of_an_item_is_handed_the_ids_its_last_ci_run_failed(repo, monke
         _ci_gate(repo)["evidence"].get("ci_scope") or {}
     )  # nothing before
     seen = tmp_path / "seen.json"
-    cfg.write_text(f'[ci]\ncommand = "cp \\"${FF.IDS_ENV}\\" {seen}"\n{pipeline}')
+    cfg.write_text(f'[ci]\ncommand = "cp \\"${FF.IDS_ENV}\\" {shlex.quote(str(seen))}"\n{pipeline}')
     second = AR.run(repo, ref="T1", agent="holder-ff2")
     assert second.exit == 0, second.data
     assert json.loads(seen.read_text())["ids"] == ["t.py::test_a", "t.py::test_b"]
@@ -256,6 +257,39 @@ def test_the_knob_turns_the_ordering_off(repo, monkeypatch, tmp_path):
     cfg.write_text(f'[ci]\ncommand = "echo FAILED t.py::test_a - boom; false"\n{pipeline}')
     AR.run(repo, ref="T1", agent="holder-ff3")
     seen = tmp_path / "seen.txt"
-    cfg.write_text(f'[ci]\ncommand = "echo \\"[${FF.IDS_ENV}]\\" > {seen}"\n{pipeline}')
+    cfg.write_text(
+        f'[ci]\ncommand = "echo \\"[${FF.IDS_ENV}]\\" > {shlex.quote(str(seen))}"\n{pipeline}'
+    )
     assert AR.run(repo, ref="T1", agent="holder-ff3").exit == 0
     assert seen.read_text().strip() == "[]"
+
+
+def test_the_outcome_is_read_by_timestamp_not_by_line_order(tmp_path):
+    out = tmp_path / "o.jsonl"
+    rows = [
+        {"ev": "fail", "at": 12.0, "id": "t.py::late"},
+        {"ev": "fail", "at": 10.5, "id": "t.py::early"},
+        {"ev": "start", "at": 10.0},
+    ]
+    out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    got = FF.read_outcome(out, ids=[])
+    assert got["first_failure_at_s"] == 0.5 and got["first_failure_id"] == "t.py::early"
+
+
+def test_a_second_session_in_one_interpreter_notes_its_own_failure(tmp_path):
+    (tmp_path / "test_a.py").write_text("def test_a():\n    assert False\n")
+    with FF.session(FF.Plan(ids=("test_a.py::test_a",)), parent_env=_env({})) as sess:
+        code = (
+            "import pytest; "
+            "pytest.main(['-q', '-p', 'no:cacheprovider']); "
+            "pytest.main(['-q', '-p', 'no:cacheprovider'])"
+        )
+        subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=tmp_path,
+            env=sess.env,
+            capture_output=True,
+            timeout=60,
+        )
+        rows = [json.loads(x) for x in Path(sess.env[FF.OUT_ENV]).read_text().splitlines()]
+    assert [r["ev"] for r in rows] == ["start", "fail", "start", "fail"]

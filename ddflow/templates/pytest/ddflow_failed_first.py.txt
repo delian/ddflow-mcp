@@ -72,6 +72,7 @@ def _note(**fields: Any) -> None:
 def pytest_configure(config):
     # Workers report nothing: the controller sees every worker's report and has one clock.
     _state["controller"] = not hasattr(config, "workerinput")
+    _state["failed"] = False  # a new session in the same interpreter starts afresh
     if _state["controller"]:
         _note(ev="start", at=time.time())
 
