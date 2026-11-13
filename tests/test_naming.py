@@ -245,6 +245,16 @@ def test_config_set_refuses_an_invalid_value(repo: Path, key: str, value: str, w
     assert code == REFUSED and why in out + err, (out, err)
 
 
+def test_a_file_holding_an_unknown_value_is_tolerated_with_a_warning(tmp_path: Path) -> None:
+    # Skeleton content in a config FILE is tolerated (a warning names the strictest fallback;
+    # D-enum-fallback-strict), where `config --set` refuses it (the test above).
+    (tmp_path / ".ddflow").mkdir(exist_ok=True)
+    (tmp_path / ".ddflow" / "config.toml").write_text('[naming]\nscope = "bogus"\n')
+    cfg = Config.load(tmp_path)
+    assert cfg.naming.scope == "global"
+    assert cfg.naming.template == "{role}-{family}-{host}-{rand}"
+
+
 def test_config_set_accepts_a_valid_template_and_host_label_goes_local(repo: Path) -> None:
     assert run_cli(repo, "init")[0] == OK
     assert run_cli(repo, "config", "--set", "naming.template", "x-{role}-{host}-{rand}")[0] == OK
