@@ -60,17 +60,19 @@ def glob_clashes(
 
 
 def held_for_text(lz: Lease, now: float | None, activity) -> str:
-    """``"held for N, last write M ago"`` for one clashing lease, or "" when it cannot be
-    said (no `now`, or no `activity` to read the worktree with). The ages are fact, never
-    policy: how long the lease has been held (`acquired_at`) and how old the newest change
-    in its worktree is. A holder whose files stopped changing is exactly the wait that
+    """``"held for N"`` or ``"held for N, last write M ago"`` for one clashing lease, or ""
+    when it cannot be said. ``held for`` needs only `now` (the hold time is the lease's own
+    `acquired_at`); ``last write`` also needs `activity` to read the worktree's newest
+    change, so it is omitted rather than guessed when no reader is given. The ages are
+    fact, never policy. A holder whose files stopped changing is exactly the wait that
     blocks three other agents while it only waits on CI (DX-lease-release-early)."""
-    if not now or activity is None:
+    if now is None:
         return ""
     note = f"held for {_age(now, lz)}"
-    wrote = activity(lz)
-    if wrote and wrote > 0:
-        note += f", last write {clock.fmt_age(max(0.0, now - wrote), 'min')} ago"
+    if activity is not None:
+        wrote = activity(lz)
+        if wrote > 0:
+            note += f", last write {clock.fmt_age(max(0.0, now - wrote), 'min')} ago"
     return note
 
 
