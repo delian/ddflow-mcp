@@ -18,6 +18,7 @@ from ...core.events import Event
 from ...core.records import Item, State
 from ...core.schedule import Plan
 from .. import waiting as WG
+from ..gates import pipeline_for, required_gates
 from .safe import safe
 
 #: The event kinds that make an agent a lane.
@@ -58,6 +59,10 @@ class Lane:
     #: The gate that was mid-run on its item when it stopped (a ``gate.started`` with no
     #: later outcome), else "" -- the step a corpse names. See ``_mid_gates``.
     mid_gate: str = ""
+    #: The current step the lane is on: the in-flight gate (``mid_gate``), else the next
+    #: unsatisfied gate of the held item, else the last event kind. The STEP column of
+    #: ``ddflow lanes`` state.
+    step: str = ""
     #: The per-cause remedy for a stopped lane: what to do, and which step killed it.
     remedy: str = ""
     worktree: str = ""
@@ -157,6 +162,31 @@ def _mid_gates(events: Iterable[Event]) -> dict[str, str]:
     }
 
 
+def _next_gate(it: Item, cfg: Config) -> str:
+    """The first gate of ``it`` in pipeline order that is not yet satisfied: the step a held
+    lane is on once its in-flight gate closes, and "" when the pipeline is done. Reuses the
+    same ``pipeline_for`` + ``gate_satisfied`` truth the brief's "next gate" states, so the
+    STEP column cannot disagree with what a fresh agent is told to do."""
+    required = set(required_gates(cfg))
+    for gate in pipeline_for(it, cfg):
+        if not it.gate_satisfied(gate, gate in required):
+            return gate
+    return ""
+
+
+def _step(held: Item | None, f: _Facts, cfg: Config, mid_gate: str) -> str:
+    """The lane's current step: the in-flight gate, else the next unsatisfied gate of the
+    item it HOLDS, else the last event kind (the anchor that still names a free lane's
+    last recorded work). A finished or released item is not held, so it names none."""
+    if held is not None:
+        if mid_gate:
+            return mid_gate
+        next_up = _next_gate(held, cfg)
+        if next_up:
+            return next_up
+    return f.last_kind
+
+
 def remedy_for(lane: Lane) -> str:
     """The per-cause remedy for a stopped lane: which step killed it and what to do.
 
@@ -240,6 +270,7 @@ def _lane(
     ended = bool(sess and sess.ended_at)
     last = epoch(f.last_ts)
     held = _held(st, name)
+    held_live = held if (held is not None and held.lease is not None) else None
     if held is None or held.lease is None:
         lane = _free(name, f, st, plan, ended, last)
     else:
@@ -268,10 +299,10 @@ def _lane(
             worktree=ls.worktree or held.worktree,
             detail=ls.note if state == S.WORKING else "",
         )
-    return _with_session(lane, f, st, mid_gates.get(lane.name, ""))
+    return _with_session(lane, f, st, cfg, held_live, mid_gates.get(lane.name, ""))
 
 
-def _with_session(lane: Lane, f: _Facts, st: State, mid_gate: str) -> Lane:
+def _with_session(lane: Lane, f: _Facts, st: State, cfg: Config, held: Item | None, mid_gate: str) -> Lane:
     worktree = lane.worktree or (st.items[f.item].worktree if f.item in st.items else "")
     lane = Lane(
         **{
@@ -282,6 +313,7 @@ def _with_session(lane: Lane, f: _Facts, st: State, mid_gate: str) -> Lane:
             "worktree": worktree,
             "last_event_kind": f.last_kind,
             "mid_gate": mid_gate,
+            "step": _step(held, f, cfg, mid_gate),
         }
     )
     return replace(lane, remedy=remedy_for(lane))
