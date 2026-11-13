@@ -21,6 +21,7 @@ from ...adapters.reviewer_clients import (
     CLIENTS,
     DID_NOT_CONVERGE,
     TRUNCATED,
+    GeminiClient,
     ReviewerChat,
     temperature_field,
     truncated_reason,
@@ -383,7 +384,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
 
 def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     """Google generateContent, through its `ReviewerClient`."""
-    return _chat_kind(CLIENTS["gemini"], rev, system, user, timeout_s)
+    return _chat_kind(CLIENTS[GeminiClient.name], rev, system, user, timeout_s)
 
 
 def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:

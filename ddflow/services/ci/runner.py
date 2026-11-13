@@ -321,7 +321,7 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
     budget however long it queued (B4f35548c0a)."""
     waited = None
     queued_at = CLOCK.monotonic()
-    with SL.hold(cfg, holder):
+    with SL.hold(cfg, holder, scope="ci"):
         waited = round(CLOCK.monotonic() - queued_at, 6)
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
@@ -355,7 +355,7 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
     alone (B4f35548c0a)."""
     waited: float | None = None
     queued_at = CLOCK.monotonic()
-    with SL.hold(cfg, holder) if full_suite else nullcontext():
+    with SL.hold(cfg, holder, scope="ci") if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(CLOCK.monotonic() - queued_at, 6)
         p, out_prefix, elapsed = _execute(

@@ -271,3 +271,22 @@ def test_the_view_scopes_by_phase_through_the_service():
     assert whole.metrics["runs"] == 2
     assert only_a.metrics["runs"] == 1  # phase Pa has A's run only
     assert only_a.metrics["classes"]["rerun_same_tree_other_item"]["runs"] == 1
+
+
+def test_a_dirty_tree_with_a_content_id_is_placed_by_that_id():
+    ev = _log(
+        ("A", "ci", "passed", {**CI, "tree_sha": "aaaaaaa1+st:abc123"}),
+        ("B", "ci", "passed", {**CI, "tree_sha": "bbbbbbb2+st:abc123"}),
+        ("C", "ci", "passed", {**CI, "tree_sha": "ccccccc3+st:dead01"}),
+    )
+    rep = _report(ev, {})
+    assert rep["classes"]["unplaced"]["runs"] == 0
+    assert rep["classes"]["rerun_same_tree_other_item"]["runs"] == 1
+
+
+def test_a_run_that_names_its_cache_key_is_placed_by_it():
+    ev = _log(
+        ("A", "ci", "passed", {**CI, "cache_key": "k1"}),
+        ("B", "ci", "passed", {**CI, "cache_key": "k1"}),
+    )
+    assert _report(ev, {})["avoidable"] == 1
