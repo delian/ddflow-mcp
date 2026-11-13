@@ -54,5 +54,9 @@ class SystemEnv:
         return os.environ.setdefault(name, value)
 
 
+#: The host's PATH-list separator (`os.pathsep`).
+PATH_SEP = os.pathsep
+
+
 #: The one stateless instance callers default to; a test passes `FakeEnv` instead.
 DEFAULT = SystemEnv()
