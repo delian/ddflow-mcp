@@ -21,6 +21,7 @@ for _up in (1, 2):  # tests/ (harness_conformance) and the repo root (ddflow)
 from ddflow.config_sections.hooks import HooksConfig  # noqa: E402
 from ddflow.services import harness_record as HRec  # noqa: E402
 from ddflow.services import harnessreg as HR  # noqa: E402
+from ddflow.services.parity import gate as G  # noqa: E402
 from harness_conformance import declared as D  # noqa: E402
 
 BASELINE = Path(__file__).with_name("gaps.json")
@@ -54,6 +55,21 @@ def gaps() -> list[str]:
 
 def baseline() -> list[str]:
     return sorted(json.loads(BASELINE.read_text())["gaps"]) if BASELINE.is_file() else []
+
+
+def parity_gaps() -> list[str]:
+    """The parity gate's answered-by ratchet: every (agent, required row) a shipped
+    descriptor still answers ``unverified`` (listed, not supported). Adding a catalog row
+    adds one for every agent until each answers it, so the set only shrinks."""
+    return sorted(f"{h.id}:{f}" for h in HR.load() for f in G.unanswered(h))
+
+
+def parity_baseline() -> list[str]:
+    """The committed parity gap set (``gaps.json``'s ``parity_gaps`` key)."""
+    if not BASELINE.is_file():
+        return []
+    data = json.loads(BASELINE.read_text())
+    return sorted(data["parity_gaps"]) if isinstance(data, dict) else []
 
 
 def zero_python() -> dict:
@@ -93,10 +109,17 @@ def render() -> str:
         f"{sorted({h.id for h in HR.load()} - {r['agent'] for r in rs})}"
     )
     lines.append(f"zero-Python agents: {z['zero_python']}/{z['agents']} ({z['rate']})")
+    pg = parity_gaps()
+    lines.append(
+        f"parity gaps (answered by): {len(pg)} (a shipped descriptor, still 'unverified', "
+        "listed not supported)"
+    )
     return "\n".join(lines)
 
 
 if __name__ == "__main__":
     if "--write" in sys.argv:
-        BASELINE.write_text(json.dumps({"gaps": gaps()}, indent=1) + "\n")
+        BASELINE.write_text(
+            json.dumps({"gaps": gaps(), "parity_gaps": parity_gaps()}, indent=1) + "\n"
+        )
     print(render())
