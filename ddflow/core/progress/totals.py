@@ -112,13 +112,13 @@ class Totals:
 
     def phase_line(self) -> str:
         p = self.phases
-        return (
-            f"Phases: {p['done']} done + {p['open']} open + {p['abandoned']} abandoned = {p['total']}"
-        )
+        return f"Phases: {p['done']} done + {p['open']} open + {p['abandoned']} abandoned = {p['total']}"
 
     def bug_line(self) -> str:
         b = self.bugs
-        return f"Bugs: {b['open']} open + {b['fixed']} fixed + {b['invalid']} invalid = {b['total']}"
+        return (
+            f"Bugs: {b['open']} open + {b['fixed']} fixed + {b['invalid']} invalid = {b['total']}"
+        )
 
     def lines(self) -> list[str]:
         """The block a report prints under its headline."""
@@ -176,7 +176,11 @@ def queue_totals(
             counts["abandoned"] += 1
         elif plan is None:
             counts[
-                "running" if t.state == RUNNING else "review" if t.state == REVIEW else "not_started"
+                "running"
+                if t.state == RUNNING
+                else "review"
+                if t.state == REVIEW
+                else "not_started"
             ] += 1
         else:
             bucket = next((name for name, ids in placed if t.id in ids), OTHER)

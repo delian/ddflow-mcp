@@ -32,17 +32,29 @@ def _fixture(repo) -> None:
     log.append("phase.added", "P2", {"title": "phase two"})
     for i in range(DONE):
         tid = f"D{i:02d}"
-        log.append("task.added", tid, {"title": f"done {i}", "parent": "P1", "globs": [f"{tid}.py"]})
+        log.append(
+            "task.added", tid, {"title": f"done {i}", "parent": "P1", "globs": [f"{tid}.py"]}
+        )
         log.append("item.started", tid, {})
         log.append("item.completed", tid, {"sha": f"sha{i:02d}" * 4})
     for i in range(ABANDONED):
         tid = f"A{i}"
-        log.append("task.added", tid, {"title": f"abandoned {i}", "parent": "P1", "globs": [f"{tid}.py"]})
+        log.append(
+            "task.added", tid, {"title": f"abandoned {i}", "parent": "P1", "globs": [f"{tid}.py"]}
+        )
         log.append("item.abandoned", tid, {"reason": "not needed"})
-    log.append("task.added", "F1", {"title": "fix done", "parent": "P1", "fixes": ["Bx"], "globs": ["F1.py"]})
+    log.append(
+        "task.added",
+        "F1",
+        {"title": "fix done", "parent": "P1", "fixes": ["Bx"], "globs": ["F1.py"]},
+    )
     log.append("item.started", "F1", {})
     log.append("item.completed", "F1", {"sha": "f" * 12})
-    log.append("task.added", "F2", {"title": "fix open", "parent": "P1", "fixes": ["Bx"], "globs": ["F2.py"]})
+    log.append(
+        "task.added",
+        "F2",
+        {"title": "fix open", "parent": "P1", "fixes": ["Bx"], "globs": ["F2.py"]},
+    )
     log.append("task.added", "R1", {"title": "ready", "parent": "P2", "globs": ["R1.py"]})
     log.append("task.added", "R2", {"title": "ready too", "parent": "P2", "globs": ["R2.py"]})
     for i in range(BLOCKED):

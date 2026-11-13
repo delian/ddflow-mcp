@@ -40,7 +40,7 @@ class OutputConfig:
     )
     status_fix_tasks_in_headline: bool = knob(
         False,
-        doc="Whether the fix tasks ddflow files for bugs count in the `status` headline pair and the `Progress:` block (\"N of M live tasks done\"). Off (default): the pair counts live work tasks, and the fix tasks and the abandoned tasks are listed separately on the same screen, so the headline is the progress of the planned work. On: fix tasks are in N and M. Every bucket of every task record is printed either way and sums to the total, and `--json status` carries `tasks.live`, `tasks.live_done`, `tasks.fix` and `tasks.fix_in_headline`.",
+        doc='Whether the fix tasks ddflow files for bugs count in the `status` headline pair and the `Progress:` block ("N of M live tasks done"). Off (default): the pair counts live work tasks, and the fix tasks and the abandoned tasks are listed separately on the same screen, so the headline is the progress of the planned work. On: fix tasks are in N and M. Every bucket of every task record is printed either way and sums to the total, and `--json status` carries `tasks.live`, `tasks.live_done`, `tasks.fix` and `tasks.fix_in_headline`.',
     )
     status_completed_shown: int = knob(
         12,
