@@ -34,7 +34,7 @@ from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
 from .types import CONFLICT, Check, Result
 
-_HOOK_LINE = re.compile(r"^(?P<name>\S.*?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(r"^(?P<name>\S.*?)\.{3,}.*?\b(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 CHECK_DETAIL_CHARS = 2000  #: one failing hook's own output kept as its check detail
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
