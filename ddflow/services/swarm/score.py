@@ -63,7 +63,9 @@ class Lane:
     kinds: tuple[str, ...] = ()  # empty: any kind
     level: int = 0  # measured conformance level; 0 = none (never passed a run)
     pools: tuple[CAPACITY.Headroom, ...] = ()  # endpoint pool headroom the lane needs
-    standing: HR.Standing = HR.Standing()  # limit headroom; unknown is neutral, never blocks
+    standing: HR.Standing = field(
+        default_factory=HR.Standing
+    )  # limit headroom; unknown is neutral, never blocks
 
 
 @dataclass(frozen=True)
@@ -142,9 +144,7 @@ def _lane_refusals(item: Item, lane: Lane, world: World, w: Weights) -> list[str
     if lane.level < w.conformance_min_level:
         out.append(f"conformance level {lane.level} below the required {w.conformance_min_level}")
     out += CAPACITY.refusals(lane.pools)  # an endpoint/GPU pool with no free slot refuses
-    out += HR.refusals(
-        lane.standing, floor_usd=w.headroom_floor_usd, need_usd=est_cost(item, lane)
-    )
+    out += HR.refusals(lane.standing, floor_usd=w.headroom_floor_usd, need_usd=est_cost(item, lane))
     return out
 
 

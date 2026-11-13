@@ -66,7 +66,9 @@ def refusals(s: Standing, *, floor_usd: float = 0.0, need_usd: float | None = No
         return []
     floor = max(0.0, float(floor_usd))
     if s.remaining <= floor:
-        return [f"headroom exhausted: {s.remaining:.4g} USD left of {s.limit:.4g}, floor {floor:.4g}"]
+        return [
+            f"headroom exhausted: {s.remaining:.4g} USD left of {s.limit:.4g}, floor {floor:.4g}"
+        ]
     if need_usd is not None and need_usd > s.remaining:
         return [f"headroom {s.remaining:.4g} USD below the estimated cost {need_usd:.4g}"]
     return []
