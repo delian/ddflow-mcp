@@ -356,6 +356,10 @@ def test_reset_hard_only_on_primary(tmp_path):
     # from a worktree, a command that names another checkout is still judged as the primary
     assert _check(f"git -C {tmp_path} reset --hard", cwd=wt) is not None
     assert _check(f"cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # a leading VAR=x assignment must not hide the `cd`/`pushd` from the @primary check
+    # (B212779e518): `FOO=bar cd /primary && git status` still runs in the primary.
+    assert _check(f"FOO=bar cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    assert _check(f"FOO=bar pushd {tmp_path} && git reset --hard", cwd=wt) is not None
     assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None
