@@ -69,7 +69,7 @@ def parity_baseline() -> list[str]:
     if not BASELINE.is_file():
         return []
     data = json.loads(BASELINE.read_text())
-    return sorted(data["parity_gaps"]) if isinstance(data, dict) else []
+    return sorted(data.get("parity_gaps", [])) if isinstance(data, dict) else []
 
 
 def zero_python() -> dict:

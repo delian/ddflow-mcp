@@ -49,12 +49,12 @@ def _unanswered(h: HR.Harness, tier: str) -> tuple[str, ...]:
 
 def answered(h: HR.Harness, tier: str | None = None) -> tuple[str, ...]:
     """The required features ``h`` has ANSWERED (every status but ``unverified``)."""
-    got = set(AN.answers(h))
+    got = AN.answers(h)
     if tier is None:
         tiers = TIERS
     else:
         tiers = (tier,)
-    return tuple(f for t in tiers for f in required_features(t) if got[f] in _ANSWERED)
+    return tuple(f for t in tiers for f in required_features(t) if got.get(f) in _ANSWERED)
 
 
 def supported(h: HR.Harness, tier: str | None = None) -> bool:
