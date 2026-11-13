@@ -1,7 +1,9 @@
-Tests first: a regression test that fails against the unfixed code, then the change.
-Ratchet offenders are read by name (architecture interfaces, constants ratchet, every family of the dependency guard); never add a baseline entry.
-Run the suite detached with the maximum timeout: DDFLOW_CI_SUITE_WAIT_S=21600 setsid nohup ddflow gate run ID ci --timeout 21600, with a heartbeat loop you stop by pid; commit nothing while it runs.
-Approvals: file the request from your directory, report its Q id to the coordinator and stop on that item; re-run with --approval once relayed (single use, bound to the command, state and directory). Never approve anything yourself.
-Pins: one pins recipe per approval, each fresh after the previous is committed; audit each diff and commit only what your work caused.
-Docs-wave stop: when the phase's remaining work is inherited docs-wave needs, stop and report; do not lift the need.
-Never push. Finish means nothing ahead of main for your worktree and your event log committed.
+rule:r-unavailable-not-pass
+rule:r-evidence-over-assertion
+rule:r-never-trust-reports
+rule:r-approval-chat-channel
+Relay approvals through the operator's chat, never over SSH
+Test first: run the scoped unit_tests gate before merge; a bug stays open without a test that fails against the unfixed code (L84da9761de)
+Name each ratchet offender by its id in the failing line, never a bare count
+Run the detached suite recipe so a cut never kills a long review gate
+Hold for the docs wave, and push main only when the operator says so (D-queue-holds-docs-wave-kept, D-push-operator-says)

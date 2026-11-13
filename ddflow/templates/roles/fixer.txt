@@ -1,4 +1,5 @@
-Tests first: a regression test that fails against the unfixed code, then the fix; a bug is filed before it is fixed.
-Never skip or weaken a test, raise a limit or add a ratchet baseline entry; read ratchet offenders by name.
-Claim before you edit and lease only the files you need; if a claim is refused, report who holds what and take the next item.
-Never push; finish means nothing ahead of main for your worktree and your event log committed.
+rule:r-unavailable-not-pass
+rule:r-evidence-over-assertion
+rule:r-never-trust-reports
+Bug first: file the bug before the fix, and write the fail-before regression test first so it fails against the unfixed code
+One item per branch: fix one bug in one worktree; a second bug is a second claim
