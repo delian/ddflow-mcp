@@ -54,3 +54,29 @@ def test_the_fake_keeps_the_callers_data():
     assert idx.docs == list(_DOCS)
     assert dict(idx.postings) == _POSTINGS
     assert idx.query(None, ["hello"]) == {"hello": _POSTINGS["hello"]}
+
+
+def test_index_appends_instead_of_replacing():
+    con = connect_memory()
+    idx = N.SqliteSearchIndex()
+    idx.create(con)
+    idx.index(con, _DOCS[:1], {"world": (array("q", [0]), array("d", [1.0]))})
+    idx.index(con, _DOCS[1:], {"hello": (array("q", [0]), array("d", [0.5]))})
+    got = idx.query(con, ["world", "hello"])
+    assert tuple(got["world"][0].tolist()) == (0,)
+    assert tuple(got["hello"][0].tolist()) == (1,)  # offset past the first row
+    con.close()
+
+
+def test_the_default_refuses_a_foreign_typecode():
+    con = connect_memory()
+    idx = N.SqliteSearchIndex()
+    idx.create(con)
+    try:
+        idx.index(con, [], {"t": (array("i", [0]), array("f", [1.0]))})
+    except ValueError as exc:
+        assert "array('q')" in str(exc)
+    else:
+        con.close()
+        raise AssertionError("a foreign typecode was accepted and stored")
+    con.close()

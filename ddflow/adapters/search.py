@@ -7,9 +7,9 @@ and weighting stay in ``core.textsim`` -- the one tokenizer both a stored vector
 fresh query use, which is what keeps them comparable -- so this port is the SQLite
 storage and retrieval seam and nothing else: a caller reaches the index through
 ``ddflow.adapters.indexdb`` (the ``sqlite-home`` contract, ``D-unify-r2``) instead of
-importing ``sqlite3`` here too. The three verbs are ``rebuild`` (wipe and rewrite the
-whole index), ``index`` (write into an empty one) and ``query`` (read the postings of the
-terms asked).
+importing ``sqlite3`` here too. ``index`` adds documents and their postings to the
+index; ``rebuild`` replaces the whole index; ``query`` reads the postings of the terms
+asked.
 """
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ from .ports import port
 
 __all__ = ["DEFAULT", "Postings", "SearchDoc", "SearchIndex", "SqliteSearchIndex"]
 
-#: One term's postings: the record ordinals holding it and its weight in each. Both pack as
-#: ``array`` blobs, the ordinals with typecode ``"q"`` and the weights with ``"d"`` -- the
-#: two typecodes ``core.textsim.invert`` produces (``Postings`` there), the ONLY valid ones,
-#: so a caller building `Postings` must use those two (a shared constant below keeps the
-#: write and read paths on them both).
+#: One term's postings: the record ordinals holding it and its weight in each. Both pack
+#: as ``array`` blobs, the ordinals with typecode ``"q"`` and the weights with ``"d"`` --
+#: the two typecodes ``core.textsim.invert`` produces, and the ONLY valid ones. A `Postings`
+#: built with another typecode is refused at write time (``_packed``), never stored as a blob
+#: ``query`` would read back with the wrong width.
 Postings = tuple[array, array]
 #: One indexed record's stored row: id, kind, item, digest (the ``similar_docs`` columns;
 #: the digest is ``core.textsim.digest`` of its title and body, computed by the caller).
@@ -54,21 +54,31 @@ class SearchIndex(Protocol):
     def rebuild(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
-        """Replace the WHOLE index: every previous row is removed, then ``docs`` and
-        ``postings`` write it. ``docs`` must be the COMPLETE current record set -- a partial
-        list would wipe the records it omits and leave their postings behind."""
+        """Replace the WHOLE index with ``docs`` and ``postings`` (the COMPLETE current
+        corpus). Any previous rows are removed first, so a repeated rebuild of a partial
+        list is safe, as it would not be for `index`."""
 
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
-        """Write ``docs`` and ``postings`` -- the COMPLETE current corpus, ordinals over it --
-        into an EMPTY index, as `infra.store._insert_similar` writes without clearing. (The
-        store has no incremental append; a partial list would leave absent records' postings
-        behind, and re-writing a non-empty index is a caller error, at the database's own
-        primary keys. `rebuild` clears first and is the idempotent write.)"""
+        """Add ``docs`` and ``postings`` to the index (their ordinals are over ``docs`` and
+        are offset past rows already indexed). `rebuild` replaces the whole index."""
 
     def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         """The postings of ``terms``, for the terms the index holds."""
+
+
+def _packed(ords: array, weights: array, start: int) -> tuple[bytes, bytes]:
+    """``(ords_bytes, weights_bytes)`` for the write, refusing a typecode other than
+    ``"q"``/``"d"`` and offsetting the ordinals past ``start`` already-indexed rows."""
+    if ords.typecode != _ORD_TYPECODE or weights.typecode != _W_TYPECODE:
+        raise ValueError(
+            f"postings pack ordinals as array({_ORD_TYPECODE!r}) and weights as "
+            f"array({_W_TYPECODE!r}) (core.textsim.invert's); got "
+            f"array({ords.typecode!r})/array({weights.typecode!r})"
+        )
+    off = ords if not start else array(_ORD_TYPECODE, (start + o for o in ords))
+    return off.tobytes(), weights.tobytes()
 
 
 class SqliteSearchIndex:
@@ -85,6 +95,7 @@ class SqliteSearchIndex:
     def rebuild(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
+        self.create(con)
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
         self.index(con, docs, postings)
@@ -92,13 +103,14 @@ class SqliteSearchIndex:
     def index(
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
+        start = con.execute("select count(*) from similar_docs").fetchone()[0]
         con.executemany(
             "insert into similar_docs values(?,?,?,?,?)",
-            [(i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
+            [(start + i, d[0], d[1], d[2], d[3]) for i, d in enumerate(docs)],
         )
         con.executemany(
             "insert into similar_terms values(?,?,?)",
-            [(t, ords.tobytes(), weights.tobytes()) for t, (ords, weights) in postings.items()],
+            [(t, *_packed(ords, weights, start),) for t, (ords, weights) in postings.items()],
         )
 
     def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
