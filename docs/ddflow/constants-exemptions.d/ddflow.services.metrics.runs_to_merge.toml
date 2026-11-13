@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/metrics/runs_to_merge.py:DAY_S" = 'a unit (seconds in a day), not a setting'

@@ -31,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ...core.model import State
-from ..gates.kinds import kind_pipeline
+from ..kindpipeline import kind_pipeline
 
 #: Bookkeeping gates recorded together, in canonical lane order (path_variants.LANES):
 #: research+rules+implement, bug_hunt+dedupe. A merged lane keeps ITS OWN outcome and note;
