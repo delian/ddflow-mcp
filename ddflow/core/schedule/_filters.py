@@ -15,10 +15,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ...config import Config
-from ...config_sections.schedule import DEFAULT_ORDER
 from ..admission import glob_conflict
 from ..clock import epoch
 from ..model import Item, Lease, State
+from ..schedule_keys import DEFAULT_ORDER
 from ._chain import critical_path
 from ._colocate import wave_of
 from ._readiness import Blocked, plan_blocker

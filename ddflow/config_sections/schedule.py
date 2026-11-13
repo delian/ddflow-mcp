@@ -143,8 +143,9 @@ ORDER_KEYS: tuple[str, ...] = (
     "phase_priority",
     "wave",
 )
-#: The default order: today's, pinned by tests/test_schedule_order_knob.py.
-DEFAULT_ORDER: tuple[str, ...] = ("recover_first", "bugs_first", "unphased_first", "priority", "id")
+#: The default order lives in `core.schedule_keys`, a leaf `ddflow.core` module, so importing
+#: it here (config_sections -> core) never has `core` importing `config_sections`.
+from ..core.schedule_keys import DEFAULT_ORDER
 #: The knobs' dotted names.
 ORDER = "schedule.order"
 ORDER_PIN = "schedule.order_pin"
