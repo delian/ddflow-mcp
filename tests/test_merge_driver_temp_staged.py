@@ -45,6 +45,8 @@ def test_a_staged_git_merge_temp_file_is_unstaged_instead_of_refused(repo, cfg, 
     # The filter alone must not leave the 'AD' entry staged: the commit would write the
     # transient blob into history. It is unstaged, so only nothing the agent made stays.
     assert ".merge_file_xYz123" not in _staged_names(tree)
+    # ... and the unstage is surgical: the owner's own staged work survives the reset.
+    assert "src/new.py" in _staged_names(tree)
 
 
 def test_a_merge_file_prefixed_non_temp_path_is_still_refused(repo, cfg, monkeypatch):

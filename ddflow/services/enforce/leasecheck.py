@@ -76,9 +76,14 @@ def _unstage_git_temp(repo: Path, staged: list[str]) -> None:
     entry staged and the commit writes the transient blob into history -- the thing the
     bug says must not happen. Git cleans the file up itself, so dropping the index entry
     speaks to nothing the agent made and stages nothing of the agent's.
+
+    ``git reset HEAD -- <path>``, not ``git rm --cached``: a tracked path that happens to
+    match (a real ``.merge_file_123456`` committed elsewhere) must be restored to its
+    ``HEAD`` version, not deleted from the index -- ``rm --cached`` would stage the file's
+    removal and let the commit delete a tracked file.
     """
     for name in (p for p in staged if _git_merge_temp(p)):
-        G.run(_index_tree(repo), "rm", "--cached", "--", name)
+        G.run(_index_tree(repo), "reset", "HEAD", "--", name)
 
 
 def _made_tree(repo: Path, lease: Lease) -> Path | None:
