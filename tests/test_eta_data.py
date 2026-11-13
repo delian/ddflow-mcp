@@ -108,6 +108,35 @@ def test_no_review_run_gives_no_round_sample_not_a_zero():
     assert table.rounds.samples == []
 
 
+def test_review_gate_tie_break_is_deterministic():
+    """With both review gates carrying the same RAN count, the dominant gate must be the
+    alphabetically-greatest review gate, deterministically -- the exact pair ``_review_gate``
+    ties over when a log made the two gates equally common (no set-iteration coin flip)."""
+    log = Log()
+    for tid in ("A", "B"):
+        log.task(tid, f"{tid.lower()}.py")
+        log.claim("a1", tid, T0, f"{tid.lower()}.py")
+        log.add("gate.passed", tid, "a1", T0 + 60, gate="rubber_duck", by="r1", evidence={})
+        log.add("gate.passed", tid, "a1", T0 + 60, gate="critic", by="r1", evidence={})
+        log.complete("a1", tid, T0 + H)
+    table = ED.build(facts_of(log)[0], Config().eta)
+    assert table.rounds.gate == "critic"  # ties broken leftmost-in-sorted order, deterministically
+    assert table.rounds.samples == [1.0, 1.0]
+
+
+def test_gate_durations_respect_the_rolling_window():
+    """An item completed before the window floor contributes no gate-duration sample."""
+    log = Log()
+    finished(log, "OLD", T0 - 100 * 86400.0, 1.0, globs="old.py")
+    finished(log, "NEW", T0, 1.0, globs="new.py")
+    cfg = Config()
+    cfg.eta.window_days = 1
+    table = ED.build(facts_of(log)[0], cfg.eta)
+    by_name = {t.name: t for t in table.gate_durations}
+    assert by_name["research"].samples == [300.0]  # the NEW item only
+    assert by_name["rubber_duck"].samples == [300.0, 200.0]
+
+
 def test_lease_wait_is_first_wait_signal_to_first_claim():
     log = Log()
     log.task("W", "w.py")
