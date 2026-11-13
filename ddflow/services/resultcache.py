@@ -18,11 +18,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..adapters import git as G
 from ..adapters.digest import hasher
 from ..core import bookkeeping
 from ..core.globs import inside
 from ..infra import fsio
-from ..infra import git as G
 from ..infra import worktree as W
 from .cmdrunner import CommandRunner, Declared
 
