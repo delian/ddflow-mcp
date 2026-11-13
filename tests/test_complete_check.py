@@ -21,17 +21,24 @@ def _add_task(repo: Path) -> None:
     run_cli(repo, "task", "add", "T1", "--title", "note", "--globs", "docs/**")
 
 
+def _events(repo: Path) -> list[bytes]:
+    return sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
+
+
 def _state(repo: Path, item: str) -> str:
     return fold(EventLog(repo).read_all(), strict=False).items[item].state
 
 
 def test_complete_check_reports_unmet_conditions_and_writes_nothing(repo: Path) -> None:
     _add_task(repo)
+    before = [p.read_bytes() for p in _events(repo)]
     code, out, err = run_cli(repo, "complete", "T1", "--check", agent="bot")
     assert code == 1, out + err
     # The read-only answer names the unmet conditions, not a completion.
     assert "unmet condition(s)" in out + err, out + err
     assert _state(repo, "T1") != "done"
+    # Read-only: no event shard is written, so a check can never record a policy grant.
+    assert [p.read_bytes() for p in _events(repo)] == before
 
 
 def test_complete_check_exits_zero_when_nothing_is_unmet_and_does_not_complete(repo: Path) -> None:

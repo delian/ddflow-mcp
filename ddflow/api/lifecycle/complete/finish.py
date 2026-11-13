@@ -52,34 +52,39 @@ def _check_report(item: str, v, hard: list[str], it, agent: str) -> O.Outcome:
 
     Exit 0 when nothing is unmet, 1 when conditions remain (and which policy would grant the
     override), never a completion. `check_only` switches the MCP reply to the full data
-    (the blockers must reach the caller), the same marker the `add` dry run carries."""
+    (the blockers must reach the caller), the same marker the `add` dry run carries. ``hard``
+    (a failed review, an unmerged own branch) is never force-liftable, so it makes the check
+    report met too -- otherwise an item whose only remaining blocker is its unmerged branch
+    reads as "may complete" (exit 0) when a real completion would refuse."""
     blockers = list(v.blockers)
+    not_in_blockers = [h for h in hard if h not in blockers]
     data = {
         "id": item,
         "check_only": True,
-        "may_complete": not blockers,
+        "may_complete": not blockers and not hard,
         "blockers": blockers,
+        "hard": list(hard),
         "unmet_gates": list(v.unmet_gates),
         "coverage_gaps": list(v.coverage_gaps),
         "coverage_note": v.coverage_note,
         "warnings": list(v.warnings),
         "independence": v.independence,
     }
-    if not blockers:
+    if not blockers and not hard:
         return O.ok("item.checked", **data)
-    reason = f"{len(blockers)} unmet condition(s) for {item}:\n" + "\n".join(
-        f"  - {b}" for b in blockers
-    )
+    lines = [f"{len(blockers) + len(not_in_blockers)} unmet condition(s) for {item}:"]
+    lines += [f"  - {b}" for b in blockers]
+    lines += [f"  - {h}" for h in not_in_blockers]
     if hard:
-        reason += "\nNone of these is lifted by --force or an approval: satisfy them on the record."
+        lines.append("None of these is lifted by --force or an approval: satisfy them on the record.")
     elif _only_unavailable(v, it):
-        reason += (
-            "\nWhat policy would grant it: the standing `complete_unavailable` rule answers a "
+        lines.append(
+            "What policy would grant it: the standing `complete_unavailable` rule answers a "
             "completion whose only unmet required gates are unavailable/partial/skipped."
         )
     else:
-        reason += "\n" + _closing_tail(False, agent, it, list(v.unmet_gates))
-    return O.failed("item.checked", reason, **data)
+        lines.append(_closing_tail(False, agent, it, list(v.unmet_gates)))
+    return O.failed("item.checked", "\n".join(lines), **data)
 
 
 def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
