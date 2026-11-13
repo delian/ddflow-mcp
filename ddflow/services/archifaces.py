@@ -85,6 +85,8 @@ PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
         "ddflow.adapters.fakes.mcp",
     ),
     "acp": ("ddflow.adapters.acp", "ddflow.adapters.fakes.acp"),
+    # the wire framing split out of `mcp` (r-small-files): the one home of hand-written JSON-RPC
+    "jsonrpc": ("ddflow.adapters.mcp_wire",),
 }
 
 
