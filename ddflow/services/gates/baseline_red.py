@@ -171,7 +171,29 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    return _norm(branch) != _norm(base)
+    return not _same_failure(_norm(branch), _norm(base))
+
+
+#: pytest cuts a long repr to a fixed length, ``head...tail`` (`_pytest._io.saferepr._ellipsize`).
+_ELLIPSIS = "..."
+
+
+def _same_failure(a: str, b: str) -> bool:
+    """Whether two failure texts (their tree paths already blanked) are one failure. pytest
+    ellipsizes a long repr by LENGTH, and the ci tree and the base's scratch tree have paths of
+    different lengths, so the same failure is cut at different places: the head of one is a
+    prefix of the other's and the tail of one a suffix of the other's. What the cut hides cannot
+    be compared, and the visible head and tail still must agree, so a different cause shown in
+    either still differs (B710b7cc84f)."""
+    if a == b:
+        return True
+    if _ELLIPSIS not in a or _ELLIPSIS not in b:
+        return False
+    head_a, head_b = a.partition(_ELLIPSIS)[0], b.partition(_ELLIPSIS)[0]
+    tail_a, tail_b = a.rpartition(_ELLIPSIS)[2], b.rpartition(_ELLIPSIS)[2]
+    heads = head_a.startswith(head_b) or head_b.startswith(head_a)
+    tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
+    return heads and tails
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
