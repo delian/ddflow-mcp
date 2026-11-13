@@ -55,6 +55,9 @@ class State:
     #: why and per field a digest of the old and the new value, never the old value
     #: (REC-correct-event). Kept apart from the records so their shown form does not change.
     corrections: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: batch id -> the batch of items verified by one gate run: members, trigger, base, gate
+    #: runs, culprits and its state (`batch.*`, BG-record). Never pruned (D-BG-Q10).
+    batches: dict[str, dict[str, Any]] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).
