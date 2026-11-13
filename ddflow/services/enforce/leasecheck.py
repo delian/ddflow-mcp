@@ -50,8 +50,15 @@ def _git_merge_temp(path: str) -> bool:
     here it is refused as outside the lease, with a remedy to widen the globs to the
     temp names -- widening nothing real. Git cleans these files up itself, so they
     are never a commit the agent made and never belong to a lease.
+
+    The name alone is not enough: git's ``mkstemp`` turns the ``XXXXXX`` tail into
+    exactly six random characters, so the match is ``.merge_file_`` followed by six
+    alphanumerics. A real ``.merge_file_payload`` at the tree root does not match and
+    is still refused outside its lease (a broad prefix would wave it straight through).
     """
-    return path.rsplit("/", 1)[-1].startswith(".merge_file_")
+    name = path.rsplit("/", 1)[-1]
+    tail = name[len(".merge_file_") :]
+    return name.startswith(".merge_file_") and len(tail) == 6 and tail.isalnum()
 
 
 def _not_work(path: str) -> bool:
@@ -60,6 +67,18 @@ def _not_work(path: str) -> bool:
     comprehension in `_check_lease`) holds `_check_lease` under the complexity
     budget `tests/test_architecture_guards.py` ratchets."""
     return any(path.startswith(prefix) for prefix in SELF_MANAGED) or _git_merge_temp(path)
+
+
+def _unstage_git_temp(repo: Path, staged: list[str]) -> None:
+    """Unstage git's transient ``.merge_file_XXXXXX`` files before the commit.
+
+    ``_not_work`` waves them past the lease check, but a filter alone leaves the 'AD'
+    entry staged and the commit writes the transient blob into history -- the thing the
+    bug says must not happen. Git cleans the file up itself, so dropping the index entry
+    speaks to nothing the agent made and stages nothing of the agent's.
+    """
+    for name in (p for p in staged if _git_merge_temp(p)):
+        G.run(_index_tree(repo), "rm", "--cached", "--", name)
 
 
 def _made_tree(repo: Path, lease: Lease) -> Path | None:
@@ -593,6 +612,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
         return (
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
+    _unstage_git_temp(repo, staged)
     paths = [p for p in staged if not _not_work(p)]
     paths = _commit_scope(_index_tree(repo), paths, cfg, lease=True)
     if not paths:
