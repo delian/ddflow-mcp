@@ -20,7 +20,6 @@ No writer is instrumented here.
 from __future__ import annotations
 
 import json
-import os
 import stat
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -64,7 +63,7 @@ def file_digest(path: Path) -> str | None:
     """SHA-256 of a file's bytes; None when it is absent. An unreadable file (or one behind an
     unreadable directory) raises OSError: `Path.is_file` would call it absent."""
     try:
-        if not stat.S_ISREG(os.stat(path).st_mode):
+        if not stat.S_ISREG(Path(path).stat().st_mode):
             return None  # a directory, pipe or device is not read: it could block or never end
         return hasher(Path(path).read_bytes()).hexdigest()
     except (FileNotFoundError, NotADirectoryError):

@@ -146,6 +146,18 @@ def _describe_pid(pid: int) -> str:
     return f"pid {pid} ({cmd})" if cmd else f"pid {pid}"
 
 
+class AppendLockTimeout(TimeoutError):
+    """Could not acquire the append lock within its bound: a clean, retryable refusal.
+
+    A bare `TimeoutError` maps to `None` in `core.outcome.exit_for`, which the CLI reads
+    as "a bug" and re-raises as a raw traceback. This subclass declares NOTHING ("could
+    not run right now") so a command that cannot get the events lock prints the one
+    informative line and exits 2 instead of a traceback (B-lock-timeout-raw-traceback).
+    """
+
+    exit_code = 2  # NOTHING (`core.outcome.exit_for`)
+
+
 @contextlib.contextmanager
 def _flock(path: Path, timeout_s: float) -> Iterator[None]:
     """Exclusive advisory lock, with a bounded wait and a real error on timeout.
@@ -163,7 +175,7 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
         try:  # only the acquisition: a timeout raised inside the block is not ours
             held.enter_context(fsio.file_lock(path, timeout_s, poll_s=0.02))
         except fsio.LockTimeout:
-            raise TimeoutError(
+            raise AppendLockTimeout(
                 f"could not acquire {path} within {timeout_s}s "
                 f"(waited {time.monotonic() - started:.1f}s, this is pid {os.getpid()})."
                 f"{_holder_note(path)} Another agent may be wedged, or the machine is "

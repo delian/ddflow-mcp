@@ -1,2 +1,5 @@
 [knob]
 "ddflow/services/ci/runner.py:TAIL_CHARS" = 'ci.tail_chars'
+
+[exempt]
+"ddflow/services/ci/runner.py:CHECK_DETAIL_CHARS" = 'internal limit of the ci.result record: how many characters of one failing check own output are kept as its detail (a module constant for this slice; the knob is for later)'
