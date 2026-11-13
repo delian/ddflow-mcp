@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from ddflow.core import outcome as O
@@ -103,18 +105,16 @@ def test_queued_guard_refusal_names_the_take_over_route(monkeypatch):
     Q = importlib.import_module("ddflow.api.lifecycle.claim_guard_queued")
 
     class It:
-        globs = ["hot.py"]
+        globs: ClassVar = ["hot.py"]
 
     class St:
-        items = {"T1": It()}
+        items: ClassVar = {"T1": It()}
 
     class Waiter:
         item = "OTHER"
 
     ahead = Waiter()
-    monkeypatch.setattr(
-        WG, "queued_ahead", lambda st, cfg, item, holder, globs, now: [ahead]
-    )
+    monkeypatch.setattr(WG, "queued_ahead", lambda st, cfg, item, holder, globs, now: [ahead])
     monkeypatch.setattr(
         WG, "queued_names", lambda mine, aheads, cfg: "queued behind OTHER (hot.py)"
     )
