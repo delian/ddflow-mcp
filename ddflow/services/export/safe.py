@@ -41,9 +41,9 @@ def redact_text(text: str, cfg: Config, *, exempt_contact: bool = False) -> Reda
     path only, never a search or a viewer) leaves ``[export].security_contact`` readable.
     """
     red = redactor("export", cfg)
-    # the contact as the security document writes it: whitespace collapsed
-    contact = getattr(getattr(cfg, "export", None), "security_contact", "")
-    keep = " ".join(str(contact).split()) if exempt_contact else ""
+    # the contact as the security document writes it (the one shared definition)
+    export = getattr(cfg, "export", None)
+    keep = export.security_contact_text() if exempt_contact and export is not None else ""
     if not keep or keep not in text:
         return red.text(text)
     # the operator's published reporting contact is the one text redaction leaves alone, where

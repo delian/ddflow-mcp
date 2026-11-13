@@ -176,7 +176,7 @@ def _issue(b: Bug, fix: _Fix | None, tags: list[KC._Tag], disclose: str) -> dict
 def _reporting(cfg: Config) -> dict[str, Any]:
     """The configured reporting contact as markdown, and the stated first-answer time (0: none).
     An address or a link is written as an autolink; anything else (a sentence) as it is."""
-    contact = " ".join(cfg.export.security_contact.split())  # whitespace only: never cut
+    contact = cfg.export.security_contact_text()  # whitespace only: never cut
     if contact and " " not in contact:
         if contact.startswith(("http://", "https://")) or "@" in contact:
             contact = f"<{contact}>"

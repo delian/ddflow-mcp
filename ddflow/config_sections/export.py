@@ -105,6 +105,11 @@ class ExportConfig:
         check=_export_tables_problem,
     )
 
+    def security_contact_text(self) -> str:
+        """The contact as the security document writes it and its redaction exemption matches
+        it: whitespace collapsed. The one definition both use."""
+        return " ".join(self.security_contact.split())
+
     def table(self, doc: str) -> dict[str, Any]:
         return self.tables.get(doc, {})
 
