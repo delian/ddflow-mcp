@@ -103,7 +103,8 @@ def _scrub(cfg: Config):
 
 def _harness(log, cfg: Config, repo: Path | None) -> N.HarnessChannel:
     def payload(a: Approval) -> dict[str, Any]:
-        return H.payload(E.get(fold(log.read_all(), strict=False), a.ask_id) or {}, cfg)
+        st = fold(log.read_all(), strict=False)
+        return H.payload(E.get(st, a.ask_id) or {}, cfg, state=st)
 
     def read(a: Approval) -> Answer | None:
         ok, message = H.attest(log, cfg, a.ask_id, repo=repo)
