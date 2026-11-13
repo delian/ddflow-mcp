@@ -2802,44 +2802,46 @@
 # ---
 # name: test_help[ddflow review]
   '''
-  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
+  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--approval APPROVAL] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
   
   positional arguments:
-    id                 the item; or `triage <item>`
+    id                   the item; or `triage <item>`
   
   options:
-    -h, --help         show this help message and exit
-    --gate GATE        gate to review (default critic); rubber_duck,critic reviews both -- one
-                       combined review under [review].combined_under_lines changed lines
-    --intent INTENT    what the change is meant to do (defaults to the item's title/body)
+    -h, --help           show this help message and exit
+    --gate GATE          gate to review (default critic); rubber_duck,critic reviews both -- one
+                         combined review under [review].combined_under_lines changed lines
+    --intent INTENT      what the change is meant to do (defaults to the item's title/body)
     --context CONTEXT
     --base BASE
-    --commit COMMIT    review this one landed commit (vs its first parent) instead of the item's
-                       branch
-    --branch BRANCH    review this branch against base -- for an item claimed without a worktree
-                       (default: the branch checked out in the worktree you are standing in)
-    --chunk CHUNK      re-review only chunk N (as the recorded review numbered it; repeatable, or
-                       '2,5') and merge it into that record -- same diff, chunk size and reviewer
-    --delta            recheck ONLY what changed since the head the gate's last review covered, for
-                       a diff too large to send twice: not a full round, but counted against
-                       [review].max_rounds. A plain re-review is a full round with the previous
-                       findings; [review].delta_default = true makes it a delta instead
-    --full             review the item's WHOLE diff even when [review].delta_default would make it a
-                       delta: a full round, counted against [review].max_rounds
-    --detach           review in its own session and stream to a durable log instead of this
-                       command: a harness that cuts the foreground command at its time limit kills
-                       only the launcher, and the review outlives it
-    --exclude EXCLUDE  globs left out of this review instead of [review].exclude_globs and the
-                       item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
-                       out)
-    --include-pinned   send the files pins.toml owns too, for this review
-    --force            run a round past [review].max_rounds (a delta with --delta); needs --reason,
-                       recorded in the evidence
-    --reason REASON    why --force
-    --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
-    --refuted          triage: --probe shows the finding is false
-    --confirmed        triage: --probe is the fix/test that answers it
-    --probe PROBE      triage: the evidence for the verdict
+    --commit COMMIT      review this one landed commit (vs its first parent) instead of the item's
+                         branch
+    --branch BRANCH      review this branch against base -- for an item claimed without a worktree
+                         (default: the branch checked out in the worktree you are standing in)
+    --chunk CHUNK        re-review only chunk N (as the recorded review numbered it; repeatable, or
+                         '2,5') and merge it into that record -- same diff, chunk size and reviewer
+    --delta              recheck ONLY what changed since the head the gate's last review covered,
+                         for a diff too large to send twice: not a full round, but counted against
+                         [review].max_rounds. A plain re-review is a full round with the previous
+                         findings; [review].delta_default = true makes it a delta instead
+    --full               review the item's WHOLE diff even when [review].delta_default would make it
+                         a delta: a full round, counted against [review].max_rounds
+    --detach             review in its own session and stream to a durable log instead of this
+                         command: a harness that cuts the foreground command at its time limit kills
+                         only the launcher, and the review outlives it
+    --exclude EXCLUDE    globs left out of this review instead of [review].exclude_globs and the
+                         item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave
+                         nothing out)
+    --include-pinned     send the files pins.toml owns too, for this review
+    --force              run a round past [review].max_rounds (a delta with --delta); needs
+                         --reason, recorded in the evidence
+    --reason REASON      why --force
+    --approval APPROVAL  an agent: 'request' files an operator approval for lifting the review-round
+                         budget (the operator answers in chat), then the approval id
+    --finding FINDING    triage: the finding's number (#N) or a unique digest prefix (6+ hex)
+    --refuted            triage: --probe shows the finding is false
+    --confirmed          triage: --probe is the fix/test that answers it
+    --probe PROBE        triage: the evidence for the verdict
   
   two commands share this parser:
     ddflow review <id> [G | --gate G] [--chunk N | --delta]   run the reviewer(s) (slow, shared);
