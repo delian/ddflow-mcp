@@ -219,12 +219,8 @@ def measure(
 
 
 def _ignore_globs(repo: Path, cfg: Config | None) -> tuple[str, ...]:
-    """`[worktree].behind_ignore_globs`; an unreadable config ignores nothing (every commit counts)."""
-    try:
-        cfg = cfg or Config.load(repo)
-    except Exception:
-        return ()
-    return tuple(cfg.worktree.behind_ignore_globs)
+    """`[worktree].behind_ignore_globs`: the paths whose commits do not make a tree behind."""
+    return tuple((cfg or Config.load(repo)).worktree.behind_ignore_globs)
 
 
 def moved_or_gone(
