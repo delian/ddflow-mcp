@@ -42,6 +42,9 @@ accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
 
+[baseline]
+keep = 14
+
 [bugs]
 file_task = true
 phase = "bugs"
