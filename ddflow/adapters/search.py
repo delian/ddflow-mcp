@@ -5,20 +5,20 @@ The search index the similarity engine reads (`infra.store`'s `similar_*` tables
 postings (record ordinals and TF-IDF weights, packed as two ``array`` blobs). Tokenizing
 and weighting stay in ``core.textsim`` -- the one tokenizer both a stored vector and a
 fresh query use, which is what keeps them comparable -- so this port is the SQLite
-storage and retrieval seam and nothing else: a caller reaches the index through it
-instead of importing ``sqlite3``. The three verbs are ``rebuild`` (wipe and rewrite the
+storage and retrieval seam and nothing else: a caller reaches the index through
+``ddflow.adapters.indexdb`` (the ``sqlite-home`` contract, ``D-unify-r2``) instead of
+importing ``sqlite3`` here too. The three verbs are ``rebuild`` (wipe and rewrite the
 whole index), ``index`` (write into an empty one) and ``query`` (read the postings of the
-terms asked). ``sqlite3`` is imported here and nowhere else once the call sites move in
-(the ``sqlite-home`` contract, ``D-adapters-answers``).
+terms asked).
 """
 
 from __future__ import annotations
 
-import sqlite3
 from array import array
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
+from .indexdb import Connection
 from .ports import port
 
 __all__ = ["DEFAULT", "Postings", "SearchDoc", "SearchIndex", "SqliteSearchIndex"]
@@ -41,44 +41,45 @@ class SearchIndex(Protocol):
     """The SQLite-backed search index. Home: `ddflow.adapters.search` (`SqliteSearchIndex`);
     fake `FakeSearchIndex`."""
 
-    def create(self, con: sqlite3.Connection) -> None:
+    def create(self, con: Connection) -> None:
         """Create the ``similar_docs`` / ``similar_terms`` tables if they are absent."""
 
     def rebuild(
-        self, con: sqlite3.Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
+        self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         """Replace the WHOLE index: every previous row is removed, then ``docs`` and
         ``postings`` write it. ``docs`` must be the COMPLETE current record set -- a partial
         list would wipe the records it omits and leave their postings behind."""
 
     def index(
-        self, con: sqlite3.Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
+        self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         """Append ``docs`` and ``postings`` to an empty index, as the caller's own insert."""
 
-    def query(self, con: sqlite3.Connection, terms: Sequence[str]) -> dict[str, Postings]:
+    def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         """The postings of ``terms``, for the terms the index holds."""
 
 
 class SqliteSearchIndex:
     """The default adapter: the ``similar_docs`` / ``similar_terms`` tables in a SQLite database.
 
-    ``sqlite3`` is imported here and nowhere else once the call sites move in; a caller
-    passes the connection (disk or ``:memory:``) and this class does only the read/write."""
+    ``sqlite3`` stays in ``ddflow.adapters.indexdb`` (the ``sqlite-home`` contract); a
+    caller passes the connection (disk or ``:memory:``) and this class does only the
+    read/write through it."""
 
-    def create(self, con: sqlite3.Connection) -> None:
+    def create(self, con: Connection) -> None:
         con.execute(_DOCS)
         con.execute(_TERMS)
 
     def rebuild(
-        self, con: sqlite3.Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
+        self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
         self.index(con, docs, postings)
 
     def index(
-        self, con: sqlite3.Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
+        self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         con.executemany(
             "insert into similar_docs values(?,?,?,?,?)",
@@ -89,7 +90,7 @@ class SqliteSearchIndex:
             [(t, ords.tobytes(), weights.tobytes()) for t, (ords, weights) in postings.items()],
         )
 
-    def query(self, con: sqlite3.Connection, terms: Sequence[str]) -> dict[str, Postings]:
+    def query(self, con: Connection, terms: Sequence[str]) -> dict[str, Postings]:
         out: dict[str, Postings] = {}
         # In chunks: SQLite caps bound parameters (999 on older builds), and a long body
         # has more distinct terms than that.
