@@ -56,6 +56,10 @@ _SUBMODULE_OF = {
     # totals
     "Totals": "totals",
     "queue_totals": "totals",
+    "PLANNED": "totals",
+    "UNPLANNED": "totals",
+    "OTHER": "totals",
+    "LABELS": "totals",
     # board
     "BoardSection": "board",
     "board_rows": "board",
