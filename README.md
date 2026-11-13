@@ -200,7 +200,7 @@ the same implementation, so neither drifts from the other.
 | **get a plan into the queue** | see [From plan mode to the queue](docs/guide/workflow.md#from-plan-mode-to-the-queue) | same |
 | **know what to work on** | `ddflow next` | `ddflow_next` |
 | **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
-| **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
+| **see everything about one item or bug** (a done task's author model; each field `ddflow correct` replaced is marked with who, when and why, never with its old text, and `--secret` corrections carry no digest) | `ddflow show <id>` (phase, task, bug or research id); `--history` lists every correction in order; `--json` and the MCP show carry the same `corrections` field | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` · `ddflow lanes lead` (read-only; see [Lanes](docs/guide/parallelism.md#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
@@ -871,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=4198bbc84a32 -->
-<details><summary>All 721 knobs across 66 sections</summary>
+<!-- ddflow:begin README/knobs sha=64602d15bf82 -->
+<details><summary>All 722 knobs across 67 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -911,6 +911,7 @@ long default is left to `ddflow config --explain`.
 | `approvals.accept_chat_for_t3` | `false` |  |
 | `approvals.forbid_chat_for_t3` | `false` |  |
 | `approvals.require_approval` | `[]` |  |
+| `baseline.keep` | `14` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |

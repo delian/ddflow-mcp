@@ -15,9 +15,10 @@ already sets); the line budget is the `MAX_LINES` default below.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
+
+from ddflow.adapters.env import DEFAULT as ENV
 
 from ..core.budget import CHARS_PER_TOKEN as _CHARS_PER_TOKEN
 
@@ -31,7 +32,7 @@ DEFAULT_CHARS = 30000
 def is_agent() -> bool:
     """An agent context: the harness marker `DDFLOW_AGENT` is set. (`--agent NAME` tags a
     log shard and is deliberately NOT `is_agent()` -- a person can pass it too.)"""
-    return bool(os.environ.get("DDFLOW_AGENT"))
+    return bool(ENV.get("DDFLOW_AGENT"))
 
 
 def wants_bounded(a: Any) -> bool:

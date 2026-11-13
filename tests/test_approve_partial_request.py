@@ -96,3 +96,34 @@ def test_no_rule_or_window_grants_the_requested_partial(repo):
                   state=GA.digest(it, "unit_tests"))  # fmt: skip
     assert PO.apply(log, cfg, st, canon) is None
     assert not [r for r in asks_of(_state(repo)).values() if r["answered_by"]]
+
+
+def _window_offered(repo, ask_id: str) -> bool:
+    """Does the `approvals ask` payload offer the standing-window choice for this ask?"""
+    from ddflow.api import approvals_harness as AH
+
+    res = AH.approvals_ask(repo, ask_id, agent="bot")
+    body = res.data["input"]
+    return any("standing window" in o["label"] for o in body["questions"][0]["options"])
+
+
+def test_the_standing_window_option_is_hidden_for_a_person_only_partial(repo):
+    """Bdeb98fa2d1: 'approve + standing window (24h)' is not offered when the target is a
+    measured baseline-red partial only a person accepts -- the window never covers it."""
+    _partial(repo)  # red=True, auto=False: person-only
+    out = API.approvals_request(
+        repo, "approve.partial", item="T1", target="unit_tests", reason="base is red", agent="bot"
+    )
+    assert out.exit == 0, out
+    assert not _window_offered(repo, out.data["id"])
+
+
+def test_the_standing_window_option_is_kept_for_an_auto_accepted_partial(repo):
+    """The option is only hidden for the PERSON-ONLY partial: an auto-accepted baseline-red
+    partial (not `GA.person_only`) stays a generic T2 request the window may pre-authorise."""
+    _partial(repo, auto=True)
+    out = API.approvals_request(
+        repo, "approve.partial", item="T1", target="unit_tests", reason="base is red", agent="bot"
+    )
+    assert out.exit == 0, out
+    assert _window_offered(repo, out.data["id"])
