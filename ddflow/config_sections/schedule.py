@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..adapters.optimizer import OPTIMIZERS
-from ..core.schedule_keys import DEFAULT_ORDER
+from ..adapters.schedule_keys import DEFAULT_ORDER
 from ._docs import declare, int_at_least, knob
 
 #: Every signal the adaptive flow controller can read: the host ones

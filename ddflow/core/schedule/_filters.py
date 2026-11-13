@@ -14,11 +14,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ...adapters.schedule_keys import DEFAULT_ORDER
 from ...config import Config
 from ..admission import glob_conflict
 from ..clock import epoch
 from ..model import Item, Lease, State
-from ..schedule_keys import DEFAULT_ORDER
 from ._chain import critical_path
 from ._colocate import wave_of
 from ._readiness import Blocked, plan_blocker
