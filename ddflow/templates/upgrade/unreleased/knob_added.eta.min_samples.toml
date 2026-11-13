@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "eta.min_samples"
+new = "10"
+why = "fewest samples a derived ETA figure may rest on; under it the answer is 'insufficient data'."
+effect = "a thin log reads as no answer instead of a number fabricated from noise."
+impact = "additive"

@@ -154,6 +154,11 @@ behind = "warn"
 max_behind = 50
 machine_local_keys = []
 
+[eta]
+window_days = 30.0
+min_samples = 10
+coverage_bar = 0.8
+
 [evaluation]
 max_miss_rate = 0.0
 min_fixtures = 1

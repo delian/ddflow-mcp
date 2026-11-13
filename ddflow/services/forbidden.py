@@ -718,10 +718,10 @@ def _elsewhere(cmds: list[list[str]]) -> bool:
     `--git-dir=...`, `GIT_DIR=... git`, `cd dir && ...`): then the cwd cannot say which one,
     so it is judged as the primary. Only git's own options count, not `make -C`."""
     for c in cmds:
-        if c[0] in ("cd", "pushd"):
-            return True
         head = _head(c)
         lead = c[: len(c) - len(head)]  # the assignments in front of the command word
+        if head and head[0] in ("cd", "pushd"):
+            return True
         if any(w.startswith(("GIT_DIR=", "GIT_WORK_TREE=")) for w in lead):
             return True
         if head and head[0].rsplit("/", 1)[-1] == "git":
