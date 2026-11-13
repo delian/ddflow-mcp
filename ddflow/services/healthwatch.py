@@ -301,7 +301,7 @@ def _readies(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> lis
         lease = it.lease
         if lease is not None and lease.live(now, cfg.lease.grace_s):
             continue  # still working it: not "finished, forgotten"
-        if check(lease.holder)[0] is True:
+        if lease is not None and check(lease.holder)[0] is True:
             continue  # holder alive (lapsed_alive): resume_own, not ready-to-land
         if it.gate_outcome("merge") == "passed":
             continue  # already merged: the landed case, not the ready-to-land one
@@ -339,7 +339,7 @@ def _merges(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> list
             continue
         if it.lease is not None and it.lease.live(now, cfg.lease.grace_s):
             continue  # a live holder is resolving it: not interrupted, the merge is in flight
-        if check(it.lease.holder)[0] is True:
+        if it.lease is not None and check(it.lease.holder)[0] is True:
             continue  # holder alive (lapsed_alive): it is resolving the merge, not interrupted
         wt = W.load_path(repo, it.worktree) if it.worktree else None
         if wt is not None and wt.exists() and W.merging(wt) is True:

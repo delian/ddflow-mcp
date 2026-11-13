@@ -102,14 +102,14 @@ class TestMergeInterrupted:
 
 
 class TestBootId:
-    def test_first_sighting_is_a_change(self, tmp_path: Path):
-        """The first time ddflow sees this machine it records the boot id, which counts as a
-        change from nothing (row e: the stored value is what the next pass compares)."""
+    def test_first_sighting_is_a_baseline_not_a_reboot(self, tmp_path: Path):
+        """The first time ddflow sees this machine it records the boot id as a BASELINE --
+        not a reboot (there is no previous readable id to differ from, row e)."""
         boot = W.boot_id()
         if not boot:
             return  # no /proc: nothing is provable here
         out = W.observe_boot(tmp_path)
-        assert out["changed"] is True
+        assert out["changed"] is False
         assert W.stored_boot(tmp_path) == boot
 
     def test_unchanged_boot_is_not_a_change(self, tmp_path: Path):
@@ -118,7 +118,7 @@ class TestBootId:
             return
         first = W.observe_boot(tmp_path)
         second = W.observe_boot(tmp_path)
-        assert first["changed"] is True
+        assert first["changed"] is False  # baseline
         assert second["changed"] is False
         assert second["previous"] == boot
         assert second["boot_id"] == boot

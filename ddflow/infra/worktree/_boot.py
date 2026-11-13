@@ -66,7 +66,10 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
     try:
         prev = m.read_text("utf-8").strip()
     except FileNotFoundError:
-        prev = ""  # never seen this machine: a baseline, recorded once below, not a reboot
+        # never seen this machine: a first sighting establishes the BASELINE, it is not a
+        # reboot (there is no previous readable id to differ from).
+        _record(m, cur)
+        return {"boot_id": cur, "previous": "", "changed": False}
     except (OSError, UnicodeError):
         _record(m, cur)  # unreadable: unknown previous, never a reboot from it
         return {"boot_id": cur, "previous": "", "changed": False}
