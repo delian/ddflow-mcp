@@ -200,12 +200,13 @@ the same implementation, so neither drifts from the other.
 | **get a plan into the queue** | see [From plan mode to the queue](docs/guide/workflow.md#from-plan-mode-to-the-queue) | same |
 | **know what to work on** | `ddflow next` | `ddflow_next` |
 | **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
-| **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
+| **see everything about one item or bug** (a done task's author model; each field `ddflow correct` replaced is marked with who, when and why, never with its old text, and `--secret` corrections carry no digest) | `ddflow show <id>` (phase, task, bug or research id); `--history` lists every correction in order; `--json` and the MCP show carry the same `corrections` field | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` · `ddflow lanes lead` (read-only; see [Lanes](docs/guide/parallelism.md#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
 | **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` · `ddflow metrics suitewaste` (why whole-suite runs happen and the avoidable share) (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
+| **correct a value recorded wrongly** (a typo, a wrong fact, a wrong author model; history kept: the old text stays in the log until a scrub, so rotate a leaked secret) | `ddflow correct <id> --field F (--text T \| --from-file P) --reason WHY [--secret]` -- an agent corrects its own records and records on an item it holds; anything else needs `--approval request` (see `ddflow help update`) | `ddflow_task action=correct` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs, schedules, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--source S] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](docs/guide/knowledge.md#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`, `source`) |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
@@ -508,8 +509,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=421d57bf90d5 -->
-<details><summary>All 106 commands</summary>
+<!-- ddflow:begin README/commands sha=bc6aba03b64a -->
+<details><summary>All 107 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -525,7 +526,7 @@ needs a line written by hand here.
 | `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow approvals` | approval requests for operator-gated commands (a person answers) |
 | `ddflow plan` | check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue |
-| `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
+| `ddflow next` | what may start now (exit 2 = nothing ready or held, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |
 | `ddflow release` | give up a lease |
@@ -560,6 +561,7 @@ needs a line written by hand here.
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |
 | `ddflow session` | see `ddflow session --help` |
+| `ddflow correct` | correct a wrongly recorded value, history kept |
 | `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
 | `ddflow recover` | find crashed agents' work; --all --plan triages it (exit 2 = nothing) |
@@ -681,7 +683,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=b83532db778e -->
+<!-- ddflow:begin README/tools sha=13d372257129 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -696,7 +698,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
-- `ddflow_task` (12 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`), `phase_complete` (was `ddflow_phase_complete`)
+- `ddflow_task` (13 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`), `phase_complete` (was `ddflow_phase_complete`), `correct` (was `ddflow_correct`)
 - `ddflow_memory` (11 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`), `lesson_show` (was `ddflow_lesson_show`)
 - `ddflow_bug` (8 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`), `dedupe` (was `ddflow_bug_dedupe`), `duplicate` (was `ddflow_bug_duplicate`), `reopen`, `tag`
 - `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
@@ -707,7 +709,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 144 MCP tools by their own name (the flat list): 34 in the `core` tier, 53 more in `standard`, 57 more in `all`</summary>
+<details><summary>All 145 MCP tools by their own name (the flat list): 34 in the `core` tier, 53 more in `standard`, 58 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -735,6 +737,7 @@ drift. The groups are the ones `ddflow help` prints.
 | The rules this project runs by | `ddflow_workflow_gate` | all | Define or change one gate, optionally in a pipeline. |
 | The rules this project runs by | `ddflow_workflow_pipeline` | all | Set the ordered list of gates a task or a phase must pass. |
 | The rules this project runs by | `ddflow_workflow_state` | standard | One-call project overview: workflow, rules, decisions, active work, queue and bugs with names and… |
+| Shaping the work | `ddflow_correct` | all | Correct a value recorded wrongly in a bug, lesson, research note, decision, memory, session, task or phase… |
 | Shaping the work | `ddflow_external_sync` | all | Observe the items in SIBLING repositories that this queue depends on (`needs = ['run_nemo_run:132.D']`… |
 | Shaping the work | `ddflow_import` | all | For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons… |
 | Shaping the work | `ddflow_import_verify` | all | Was this project's history imported, is that still true, and did anyone FINISH it? |
@@ -868,8 +871,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2a4ef277e98e -->
-<details><summary>All 687 knobs across 62 sections</summary>
+<!-- ddflow:begin README/knobs sha=64602d15bf82 -->
+<details><summary>All 722 knobs across 67 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -908,6 +911,7 @@ long default is left to `ddflow config --explain`.
 | `approvals.accept_chat_for_t3` | `false` |  |
 | `approvals.forbid_chat_for_t3` | `false` |  |
 | `approvals.require_approval` | `[]` |  |
+| `baseline.keep` | `14` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
@@ -1299,6 +1303,7 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
 | `perf_metrics.aggregate_min_samples` | `3` |  |
@@ -1342,6 +1347,18 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `premerge.enabled` | `true` |  |
+| `premerge.stages` | `["pre-commit"]` |  |
+| `premerge.budget_s` | `120` |  |
+| `premerge.on_unavailable` | `"unavailable"` | `unavailable` \| `refuse` |
+| `premerge.fix` | `true` |  |
+| `premerge.commit_fixes` | `true` |  |
+| `premerge.max_fix_rounds` | `1` |  |
+| `premerge.precommit_command` | `"pre-commit"` |  |
+| `premerge.skip_hooks` | `[]` |  |
+| `premerge.generic_hooks` | `true` |  |
+| `premerge.large_file_kb` | `500` |  |
+| `premerge.test_command` | `"python -m pytest -q -x"` |  |
 | `prices.limit` | `{}` |  |
 | `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
@@ -1368,11 +1385,23 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `records.correct_digest_chars` | `12` |  |
+| `records.correct_min_digest_chars` | `8` |  |
+| `records.correct_digest_old` | `false` |  |
+| `records.correct_digest_new` | `false` |  |
+| `records.correct_reason_max_chars` | `500` |  |
+| `records.correct_max_fields` | `8` |  |
 | `reinstruct.enabled` | `true` |  |
 | `reinstruct.every_calls` | `12` |  |
 | `reinstruct.every_seconds` | `240` |  |
 | `reinstruct.max_items` | `3` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `resultcache.enabled` | `true` |  |
+| `resultcache.keep_days` | `14` |  |
+| `resultcache.max_mb` | `64` |  |
+| `resultcache.reuse_failed` | `false` |  |
+| `resultcache.probe_commands` | `["pytest --version", "uv --version"]` |  |
+| `resultcache.env_vars` | `[]` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
@@ -1475,6 +1504,15 @@ long default is left to `ddflow config --explain`.
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `store.stale_index_days` | `7.0` |  |
 | `store.index_touch_s` | `86400.0` |  |
+| `suites.max_concurrent` | `0` |  |
+| `suites.cores_per_suite` | `96` |  |
+| `suites.load_ceiling_per_core` | `0.35` |  |
+| `suites.load_poll_s` | `2.0` |  |
+| `suites.max_wait_factor` | `3.0` |  |
+| `suites.agent_share` | `0.5` |  |
+| `suites.default_cost_s` | `600.0` |  |
+| `suites.cost_runs` | `20` |  |
+| `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |

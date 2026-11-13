@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "suites.max_concurrent"
+new = '0'
+why = "SL-suite-load-budget: the suite lock admits by a core-derived cap and a load budget."
+impact = "additive"

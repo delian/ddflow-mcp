@@ -11,9 +11,9 @@ missing reason all refuse and change nothing."""
 from __future__ import annotations
 
 import importlib
-import time
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import outcome as O
 from ..services import leases as L
 from ._base import _load
@@ -42,7 +42,7 @@ def adopt(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
         return _refuse(f"{item} holds no lease to adopt", item)
     if lease.holder == log.agent_id:
         return _refuse(f"{item}'s lease is already yours: `ddflow claim {item}`", item)
-    if lease.live(time.time(), cfg.lease.grace_s):
+    if lease.live(CLOCK.wall(), cfg.lease.grace_s):
         return _refuse(
             f"{item}'s lease is live (held by {lease.holder}): wait for it to expire or "
             "ask the holder to release it",

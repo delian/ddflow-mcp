@@ -38,3 +38,7 @@ class OutputConfig:
         True,
         doc="Whether `--full` / `full=true` may lift the caps, and whether 0 in `max_rows` or `max_chars` does. Set it to false in the committed config to keep every answer bounded (a shared MCP host, a context-limited fleet): a `full` request then gets the capped answer, and every cut answer says the lift is off, so nothing is silently different. This is a setting, not an enforced lock: ddflow has no organisation layer yet, so the local layer or `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at a terminal asking for everything gets everything.",
     )
+    json_envelope: bool = knob(
+        False,
+        doc='Answer a `--json` command whose body is a bare array (`progress`, `loops`, ...) as `{"schema": "<command>@<n>", "rows": [...]}` instead, so every `--json` body carries a schema id and version (MP-schema-all). Off by default: the bare array is the shape callers index today and stays so (D-compat); no schema version is bumped for it. An object body, a refusal body and the MCP bodies are the same either way.',
+    )

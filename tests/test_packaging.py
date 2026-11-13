@@ -87,7 +87,7 @@ def test_the_wheel_declares_both_entry_points(wheel):
 #: Kept as a ratchet rather than deleted, because the original point stands: a
 #: dependency must be a decision somebody made, not something that crept in with an
 #: import. Adding a name here should feel like this comment.
-ALLOWED_RUNTIME_DEPS = {"jinja2", "tomlkit"}
+ALLOWED_RUNTIME_DEPS = {"jinja2", "tomlkit", "argcomplete"}  # argcomplete: the CLI completion engine
 
 
 def test_the_package_declares_only_the_dependencies_we_chose(wheel):

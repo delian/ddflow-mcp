@@ -39,7 +39,9 @@ def test_the_fake_returns_its_canned_sample_and_degrade_uses_it():
 
 def test_degrade_falls_through_to_the_next_adapter_when_one_is_unavailable():
     # the first returns None (the whole ladder-up adapter said unavailable), the second wins
-    got = degrade([FakeResourceProbe(rss_kb=None), FakeResourceProbe(rss_kb=4096, source="ps")], pid=1)
+    got = degrade(
+        [FakeResourceProbe(rss_kb=None), FakeResourceProbe(rss_kb=4096, source="ps")], pid=1
+    )
     assert got.rss_kb == 4096 and got.source == "ps"
 
 

@@ -547,3 +547,29 @@ def test_a_glob_git_cannot_read_is_a_problem_through_core_globs():
     from ddflow.core import globs
 
     assert SF.regex is globs.regex
+
+
+def test_two_knob_tasks_in_different_sections_claim_at_once_over_the_packaged_defaults(repo):
+    """Bdc0f026b28: the project's own shared_globs cover the generated defaults, so two
+    knob tasks (each carrying only its section file, plus the defaults it regenerates)
+    are not refused on that path."""
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    shared = Config.load(root).lease.shared_globs
+    _project(repo, shared=json.dumps(list(shared)))
+    for tid, sec in (("T1", "lease"), ("T2", "swarm")):
+        run_cli(
+            repo,
+            "task",
+            "add",
+            tid,
+            "--title",
+            f"{tid} fixture",
+            "--globs",
+            f"ddflow/config_sections/{sec}.py,ddflow/templates/default.d/{sec}.toml,"
+            "ddflow/templates/default.toml",
+        )
+    assert A.claim(repo, "T1", no_worktree=True, agent=ALICE).ok
+    out = A.claim(repo, "T2", no_worktree=True, agent=BOB)
+    assert out.ok, out.reason

@@ -280,45 +280,72 @@ def next_text(out, a, ctx) -> str | None:
     flat = bool(a.get("flat", False))
     clusters = out.data.get("co_location_hints") or []
     excluded = out.data.get("excluded_leased") or []
-    if not p.ready and not bdeps:
-        return _blocked_text(out, p, excluded)
-    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
-    if clusters:
-        lines += _co_locate_lines(clusters)
+    lines = _lead_lines(out, p, bdeps, flat, clusters)
     lines += _excluded_lines(excluded)
     if bdeps:
         lines += _blocking_dep_lines(bdeps)
-    lines += [
-        f"  (blocked) {b.item}: {b.reason} — {b.detail}"
-        for b in p.blocked[:_BLOCKED_SHOWN_WITH_READY]
-    ]
-    if len(p.blocked) > _BLOCKED_SHOWN_WITH_READY:
-        lines.append(
-            f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_WITH_READY} more (--json holds them all)"
-        )
-    if p.finished:
+    own = out.data["_render"].get("own_sections") or {}
+    lines += _held_lines(out.data.get("held_by_cap") or [], p.cap_note, own.get("held", 0))
+    lines += _needs_complete_lines(out.data.get("needs_complete") or [], own.get("complete", 0))
+    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked")))
+    if p.finished and (p.ready or bdeps):
         lines.append(p.close_note())
     if note := out.data.get("_footer"):
         lines.append(note)
     return "\n".join(lines)
 
 
-def _blocked_text(out, p, excluded) -> str:
-    """The "nothing to do" answer: the reason, the cut blocked list and any excluded items."""
-    more = (
-        [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
-        if len(p.blocked) > _BLOCKED_SHOWN_NO_READY
-        else []
-    )
-    return "\n".join(
-        [
-            out.reason,
-            *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]),
-            *more,
-            *_excluded_lines(excluded),
-            *([note] if (note := out.data.get("_footer")) else []),
-        ]
-    )
+def _lead_lines(out, p, bdeps, flat, clusters) -> list[str]:
+    """The top of `next`'s text: the ready list with its co-location advice, or, with
+    nothing to start, the headline (`No free slot under the cap`, or the refusal reason)."""
+    if not (p.ready or bdeps):
+        return [out.data.get("headline") or out.reason]
+    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
+    return lines + (_co_locate_lines(clusters) if clusters else [])
+
+
+def _held_lines(held, cap_note, total) -> list[str]:
+    """Ready items only the cap holds back: id, title, wave, globs (what a lane needs to
+    pick a parallel set), under the cap's own words."""
+    if not held:
+        return []
+    lines = [
+        f"\nReady but held by {cap_note or 'the parallelism cap'} "
+        f"({total or len(held)}; a named `ddflow claim` is not capped and grants one now):"
+    ]
+    for r in held:
+        wave = f"  [wave:{r['wave']}]" if r.get("wave") is not None else ""
+        lines.append(f"  {r['id']}  {r['title']}{wave}")
+        if r.get("globs"):
+            lines.append(f"      writes: {', '.join(r['globs'])}")
+    return lines
+
+
+def _needs_complete_lines(ids, total) -> list[str]:
+    if not ids:
+        return []
+    return [
+        f"\nMerged, not completed ({total or len(ids)}): `ddflow complete <id>` records each: "
+        f"{', '.join(ids)}"
+    ]
+
+
+def _blocked_lines(out, p, beside_ready: bool, every: bool) -> list[str]:
+    """The blocked rows that are neither cap-held nor merged-uncompleted (those have their
+    own sections): conflicts and the rest listed, dependency waits as a count unless
+    ``every`` (`--blocked`). The count of what is not shown is always said."""
+    skip = out.data["_render"].get("own_sections", {}).get("ids", frozenset())
+    rows = [b for b in p.blocked if b.item not in skip]
+    deps = [b for b in rows if b.reason == "deps"]
+    listed = rows if every else [b for b in rows if b.reason != "deps"]
+    limit = _BLOCKED_SHOWN_WITH_READY if beside_ready else _BLOCKED_SHOWN_NO_READY
+    prefix = "  (blocked) " if beside_ready else "  "
+    lines = [f"{prefix}{b.item}: {b.reason} — {b.detail}" for b in listed[:limit]]
+    if len(listed) > limit:
+        lines.append(f"  ... and {len(listed) - limit} more (--json holds them all)")
+    if deps and not every:
+        lines.append(f"  {len(deps)} blocked on dependencies (`ddflow next --blocked` lists them)")
+    return lines
 
 
 def _ready_line(it) -> str:
@@ -587,11 +614,20 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
 
 
 def complete_body(out, a) -> Any:
+    if out.data.get("check_only"):
+        return out.body()
     return out.body(COMPLETE_BODY + tuple(k for k in COMPLETE_OPTIONAL if k in out.data))
 
 
 def complete_text(out, a, ctx) -> str:
     data = out.data
+    if data.get("check_only"):
+        blockers = data.get("blockers", [])
+        if not blockers:
+            return f"{a['id']} may complete (0 unmet conditions)."
+        return f"{len(blockers)} unmet condition(s) for {a['id']}:" + "".join(
+            f"\n  - {b}" for b in blockers
+        )
     blockers = data["blockers"]
     return (
         (f"NOTE: {data['note']}\n" if data["note"] else "")
