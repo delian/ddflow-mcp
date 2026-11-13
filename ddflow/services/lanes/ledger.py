@@ -178,9 +178,9 @@ def _step(held: Item | None, f: _Facts, cfg: Config, mid_gate: str) -> str:
     """The lane's current step: the in-flight gate, else the next unsatisfied gate of the
     item it HOLDS, else the last event kind (the anchor that still names a free lane's
     last recorded work). A finished or released item is not held, so it names none."""
+    if mid_gate:
+        return mid_gate
     if held is not None:
-        if mid_gate:
-            return mid_gate
         next_up = _next_gate(held, cfg)
         if next_up:
             return next_up

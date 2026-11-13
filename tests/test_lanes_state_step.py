@@ -61,6 +61,18 @@ def test_step_falls_back_to_last_event_kind_when_it_holds_nothing():
     assert _ledger(g)[0].step == "lease.released"
 
 
+def test_step_names_the_gate_a_released_lane_was_on_when_it_left():
+    """A lane that started a gate then released its lease still names the gate it was on
+    (the in-flight `mid_gate`), not its last event kind: the step is the arrested step,
+    whatever it now holds."""
+    g = Log()
+    g.task("X", "f.py")
+    g.claim("a", "X", T0, "f.py")
+    g.add("gate.started", "X", "a", T0 + 10, gate="research")
+    g.release("a", "X", T0 + 30)
+    assert _ledger(g)[0].step == "research"
+
+
 def test_render_ledger_names_a_step_column():
     g = Log()
     g.task("X", "f.py")
