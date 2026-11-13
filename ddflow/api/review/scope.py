@@ -379,7 +379,7 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
     return True
 
 
-def _budget(
+def _budget(  # noqa: PLR0913, PLR0917 -- the approval route threads the operator-gate args it needs past the cap
     cfg, item, gate, done, force, reason, say, grant=None, log=None, agent="", approval=""
 ) -> tuple[str, str]:
     """(why this round is refused, "") or ("", the reason it was forced past the cap).
