@@ -318,10 +318,12 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
 
 
 def _merges(repo: Path, st, cfg) -> list[H.MergeHang]:
-    """A merge mid-flight in an item's worktree, or a merge that landed in git without a
-    logged ``merge``/``complete`` (research row h)."""
+    """A merge mid-flight in an item's worktree: MERGE_HEAD set, or a path left unmerged
+    (research row h). Only the UNAMBIGUOUS signal is detected here -- a real merge caught
+    in the middle -- because "landed but not logged" is what `_landed_anyway` sees at merge
+    time and a branch topology probe cannot tell a merged branch from one merely synced to
+    the base."""
     out: list[H.MergeHang] = []
-    base = _base(cfg, repo)
     for i, it in st.items.items():
         if it.removed or it.terminal:
             continue
@@ -329,22 +331,6 @@ def _merges(repo: Path, st, cfg) -> list[H.MergeHang]:
         wt = W.load_path(repo, it.worktree) if it.worktree else None
         if wt is not None and wt.exists() and W.merging(wt) is True:
             out.append(H.MergeHang(i, holder, str(wt), merging=True))
-        if it.branch and it.gate_outcome("merge") != "passed":
-            # Landed but not logged: the branch's commits are on the base yet no merge event
-            # was recorded. The fork point (`it.base_sha`) is what separates this from an
-            # EMPTY branch -- one created from an older base, or reset to it, whose tip is an
-            # ancestor of a base that has since advanced. Only a branch that really held work
-            # (its tip is a strict descendant of its fork) whose tip then landed on the base
-            # is "landed unlogged".
-            fork = it.base_sha
-            if fork:
-                head = W.git(repo, "rev-parse", "refs/heads/" + it.branch).out.strip()
-                had_work = fork != head and W.git(
-                    repo, "merge-base", "--is-ancestor", fork, head
-                ).ok
-                on_base = W.git(repo, "merge-base", "--is-ancestor", head, base).ok
-                if head and had_work and on_base:
-                    out.append(H.MergeHang(i, holder, landed_unlogged=True, head=head, base=base))
     return out
 
 

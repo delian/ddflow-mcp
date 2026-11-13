@@ -56,8 +56,15 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
     except FileNotFoundError:
         prev = ""  # never seen this machine: the one change from nothing
     except (OSError, UnicodeError):
-        # The marker exists but cannot be read: its previous value is unknown, never a
-        # reboot from it, and never a licensed sweep.
+        # The marker is present but cannot be read: its previous value is unknown -- never
+        # a reboot from it. Still RECORD the current id when the write works, so a corrupt
+        # or unreadable marker is replaced rather than stuck forever; report no change
+        # (unknown is not no).
+        try:
+            m.parent.mkdir(parents=True, exist_ok=True)
+            m.write_text(cur + "\n")
+        except OSError:
+            pass
         return {"boot_id": cur, "previous": "", "changed": False}
     if cur != prev:
         try:
