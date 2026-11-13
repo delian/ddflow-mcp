@@ -32,17 +32,21 @@ def _append_outcome(
     The outcome is finished work. Losing it to a transient timeout on the events lock -- a
     lane heartbeat holding it under load, in `record_measured` after a command ran to
     completion (B0b0b67d5e7) -- wastes the whole run, so the append retries instead of
-    raising once. Each attempt waits the log's own lock timeout (`[lease].acquire_timeout_s`);
-    ``wait_s`` bounds the TOTAL wait across attempts, so a record that still cannot get the
-    lock gives up and reports "could not run" rather than wedging forever. 0 appends once,
-    as before.
+    raising once. ``wait_s`` is the TOTAL wall-clock the write may spend trying to acquire
+    the lock: each attempt waits the time left in the budget (not the log's own timeout),
+    so the bound is hard -- a record that still cannot get the lock gives up once the
+    budget is spent and reports "could not run" rather than wedging, or overshooting, the
+    bound. 0 appends once with the log's own timeout, as before.
     """
     deadline = time.monotonic() + wait_s
     while True:
         try:
-            return log.append(kind, item_id, payload)
+            if wait_s <= 0:
+                return log.append(kind, item_id, payload)
+            remaining = deadline - time.monotonic()
+            return log.append(kind, item_id, payload, lock_timeout_s=max(0.0, remaining))
         except AppendLockTimeout:
-            if time.monotonic() >= deadline:
+            if wait_s <= 0 or deadline - time.monotonic() <= 0:
                 raise
 
 
