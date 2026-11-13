@@ -219,8 +219,14 @@ def measure(
 
 
 def _ignore_globs(repo: Path, cfg: Config | None) -> tuple[str, ...]:
-    """`[worktree].behind_ignore_globs`: the paths whose commits do not make a tree behind."""
-    return tuple((cfg or Config.load(repo)).worktree.behind_ignore_globs)
+    """`[worktree].behind_ignore_globs`: the paths whose commits do not make a tree behind.
+
+    A config that cannot be read or parsed ignores nothing: every commit counts, as before
+    the knob existed, rather than the drift check failing on a damaged file."""
+    try:
+        return tuple((cfg or Config.load(repo)).worktree.behind_ignore_globs)
+    except (OSError, ValueError):
+        return ()
 
 
 def moved_or_gone(

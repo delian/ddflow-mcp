@@ -235,3 +235,11 @@ def test_the_commit_gate_still_blocks_on_a_rulebook_under_the_ignored_directory(
     assert verdict[0] != 0 and RULES in verdict[1], verdict
     assert sync(repo, item="T1", agent=ME).data["status"] == "merged"
     assert DC.check_drift(repo, _cfg(repo), here=wt).message == ""
+
+
+def test_an_unparsable_config_counts_every_commit_instead_of_failing(repo):
+    wt = _claimed(repo)
+    _land(repo, EVENTS)
+    (repo / ".ddflow" / "config.toml").write_text("[worktree\nx=")
+    r = D.measure(repo, wt)
+    assert (r.behind, r.code_behind) == (1, 1)
