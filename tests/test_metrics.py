@@ -90,6 +90,29 @@ def test_unknown_group_by_is_a_failure_naming_the_choices():
     assert ans.failed and "gate" in ans.reason and "reviewer" in ans.reason
 
 
+def test_a_censored_gate_reads_as_the_stable_placeholder_not_a_phantom_gate():
+    """B829400ae7e: a gate id the log censored (a redaction failure left
+    `[REDACTED:redaction-failed]` where the gate belonged) must not surface as a phantom
+    gate in the outcomes table: it collapses to the stable `[REDACTED]` marker."""
+    log = Log()
+    log.task("T1", globs="a.py")
+    log.claim("a1", "T1", NOW - 2 * H, globs="a.py")
+    log.add("gate.passed", "T1", "a1", NOW - H, gate="research", by="a1", evidence={})
+    log.add(
+        "gate.skipped",
+        "T1",
+        "a1",
+        NOW - 30,
+        gate="[REDACTED:redaction-failed]",
+        by="a1",
+        reason="trivial",
+    )
+    by_gate = {r["group"]: r for r in run(log).metrics["outcomes"]}
+    assert "[REDACTED:redaction-failed]" not in by_gate
+    assert by_gate["[REDACTED]"]["skipped"] == 1
+    assert "research" in by_gate
+
+
 def test_rework_is_a_bug_filed_after_the_completion():
     log = twelve()
     log.add("bug.found", "T03", "a2", T0 + 200 * H, item="T03", summary="late")
