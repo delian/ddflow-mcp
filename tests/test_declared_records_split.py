@@ -52,5 +52,6 @@ def test_the_commands_keep_their_order_and_the_tool_table_is_built_from_them():
 def test_the_old_module_file_is_gone_and_every_part_is_under_the_limit():
     root = Path(R.__file__).parent
     assert Path(R.__file__).name == "__init__.py"
+    assert not (root.parent / "records.py").exists(), "the old module file is still there"
     for part in root.glob("*.py"):
         assert part.stat().st_size < 30000, part.name
