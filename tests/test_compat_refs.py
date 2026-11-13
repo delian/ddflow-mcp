@@ -543,7 +543,7 @@ def test_the_tool_table_registers_itself_without_the_api():
 
     code = (
         "import sys, ddflow.surfaces.tools as t; from ddflow.surfaces.vocabulary import sources;"
-        "print(set(t.TOOLS) <= set(sources()[1]), sources()[0] is None, 'ddflow.api' in sys.modules)"
+        "print(sources()[1] is t.TOOLS, sources()[0] is None, 'ddflow.api' in sys.modules)"
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.stdout.split() == ["True", "True", "False"], out.stderr
