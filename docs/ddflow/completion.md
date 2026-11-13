@@ -18,3 +18,14 @@ dump your own. The registration code is argcomplete's, so no command or option n
 written in the activation text.
 
 `ddflow doctor` reports a registration whose engine does not answer.
+
+## How a TAB is answered
+
+The registration runs `ddflow` with `_ARGCOMPLETE` set (argcomplete's protocol: the
+candidates are written to fd 8). `ddflow/surfaces/__init__.py` answers that request before
+the CLI is imported or run, using the real argparse parser: commands, options and closed
+`choices` come from it, and record ids, gate names, states, agent names and paths come from
+`services/completion/values.py` through completers attached from each argument's declared or
+inferred value kind (`services/completion/kinds.py`). Without argcomplete installed nothing
+answers and `ddflow` runs normally. A TAB costs one process start plus the parser build
+(about a second); the tests hold a ceiling.

@@ -36,7 +36,7 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
                 f"{ask_id}`. An AskUserQuestion answer is not accepted for this act."
             ),
         )
-    body = H.payload(row, cfg)
+    body = H.payload(row, cfg, state=st)
     text = (
         f"Put this to the person with AskUserQuestion, unaltered (the question text carries the "
         f"request id and digest), then run `ddflow approvals attest {ask_id}`. The person may instead "

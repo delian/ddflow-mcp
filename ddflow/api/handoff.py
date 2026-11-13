@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 
 from ..adapters import git
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import outcome as O
 from ..services.handoff import send
 from ._base import _load
@@ -15,7 +15,7 @@ from ._base import _load
 def _holder_agent(st: Any, item: str, cfg: Any) -> str:
     it = getattr(st, "items", {}).get(item)
     lease = getattr(it, "lease", None) if it is not None else None
-    if lease is None or not lease.live(time.time(), cfg.lease.grace_s):
+    if lease is None or not lease.live(CLOCK.wall(), cfg.lease.grace_s):
         return ""
     return getattr(lease, "holder", "")
 
