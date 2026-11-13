@@ -92,19 +92,21 @@ def test_an_unleased_item_leaves_a_mark_in_the_evidence(repo: Path):
 
 
 def test_review_from_the_items_own_tree_under_the_default_identity_does_not_warn(repo: Path):
-    """B090201fcef: the agent working in the tree `claim` made under the DEFAULT identity
-    (no `--agent`, derived from the tree) is NOT another agent -- standing in that tree IS
-    being its holder, so the review warns nothing (heartbeat already renews on the
-    holder's behalf from that same tree)."""
+    """B090201fcef: the agent working in the tree `claim` made under the DEFAULT (derived,
+    not declared) identity is NOT another agent -- standing in that tree IS being its
+    holder, so the review warns nothing (heartbeat already renews on the holder's behalf
+    from that same tree). The config is loaded UNBOUND so the default identity resolves as
+    `derived`, not `config`."""
     from ddflow.api import review as R
     from ddflow.api._base import _load
 
+    from ddflow.config import Config
+
     tree = _setup_with_tree(repo)
-    _log, cfg, st = _load(repo, "bob")
+    cfg = Config.load(repo)  # unbound: agent.id is its default, so "" resolves as "derived"
+    _log, _cfg, st = _load(repo, "bob")
     said: list[str] = []
-    ev = R._name_the_item(
-        repo, cfg, st, "T1", "rubber_duck", "", said.append, None, called_from=tree
-    )
+    ev = R._name_the_item(repo, cfg, st, "T1", "rubber_duck", "", said.append, None, called_from=tree)
     assert ev is None, ev  # no "reviewed_for_holder": this IS the holder's own tree
     assert not said, said
     # An EXPLICIT non-holder still warns, even from that same tree: it declared itself.
