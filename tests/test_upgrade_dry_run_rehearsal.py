@@ -40,7 +40,8 @@ def test_the_connect_flow_proposes_then_waits_for_consent(clean) -> None:
     _root, report, _before = clean
     detail = rows(report)[6].detail
     assert "proposed on connect, nothing applied until consent, then applied" in detail
-    assert str(BUDGET)[:2] in detail or "tools/list" in detail  # the size is reported
+    assert "tools/list" in detail  # the size is reported
+    assert f"budget {BUDGET}" in detail  # the budget number is reported too (DX-dead-knob-tools-budget)
 
 
 def test_the_old_ddflow_is_refused_its_write_with_the_remedy(clean) -> None:
