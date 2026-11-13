@@ -36,6 +36,7 @@ from ..core import health as H
 from ..core import leasewait as LW
 from ..core.progress import loops as LPS
 from ..infra import harness_identity as HI
+from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import autoorder as AOS
 from . import jobs as JOBS
@@ -110,7 +111,13 @@ def modes(cfg, override: str = "") -> dict[str, str]:
         H.RUNAWAY: h.mode_runaway,
         H.ORPHAN_WAIT: h.mode_orphan_wait,
     }
-    out = {k: override or (h.mode if own[k] == "inherit" else own[k]) for k in H.KINDS}
+    # The recovery detectors (LAPSED_ALIVE, READY_TO_LAND, MERGE_INTERRUPTED) have no
+    # apply correction of their own: they are DETECTED here and consumed by `recover`, so
+    # they inherit `[health].mode` (propose by default) and never apply anything.
+    out = {}
+    for k in H.KINDS:
+        m = own.get(k, "inherit")
+        out[k] = override or (h.mode if m == "inherit" else m)
     return out
 
 
@@ -174,8 +181,21 @@ def _lane(it, st, cfg, repo, now, hint, rec, act, alive, clone) -> H.Lane:
     recorded = not lz.live(lz.renewed_at)  # an expiry is recorded, whatever the clock says
     if not lz.live(now, cfg.lease.grace_s):
         work = None if rec is None else rec.salvageable
+        # A lapsed lease whose holder is provably ALIVE is the opposite of a crash
+        # (research row f): the holder resumes with resume_own, never an expiry. Only a
+        # lane that declared identity can be seen to live; others fall back to TTL alone.
+        ok, found = alive(lz.holder) if not L.foreign(lz, clone) else (None, [])
         return H.Lane(
-            i, lz.holder, False, lz.renewed_at, work, recorded, lz.worktree, lz.renewed_at
+            i,
+            lz.holder,
+            False,
+            lz.renewed_at,
+            work,
+            recorded,
+            lz.worktree,
+            lz.renewed_at,
+            lapsed_alive=ok is True,
+            live_pids=tuple(found) if ok else (),
         )
     # a job in flight is progress (until it outlives its budget: that is a RUNAWAY)
     at = hint if hint >= now else max(lz.acquired_at, act(lz), hint)
@@ -244,6 +264,76 @@ def _live_run_items(repo: Path, held: dict[str, Any], now: float) -> set[str]:
             for m in running.live_runs(repo, i)
         ):
             out.add(i)
+    return out
+
+
+def _base(cfg, repo: Path) -> str:
+    return cfg.worktree.base_ref or W.default_branch(repo)
+
+
+def _ahead(repo: Path, base: str, branch: str) -> int:
+    """Commits ``branch`` holds beyond ``base``: N>0, 0 merged/gone, -1 cannot be told."""
+    r = W.git(repo, "rev-list", "--count", f"{base}..{branch}")
+    if not r.ok:
+        return -1
+    try:
+        return int(r.out.strip())
+    except ValueError:
+        return -1
+
+
+def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
+    """Items that finished their gates but never merged (research row b): their lane is
+    dropped (lapsed or released), work sits ahead of the base, and only ``merge`` (or
+    nothing) is owed. PROPOSE only — never landed here."""
+    out: list[H.Ready] = []
+    for i, it in st.items.items():
+        if it.removed or it.terminal or not it.branch:
+            continue
+        lease = it.lease
+        if lease is not None and lease.live(now, cfg.lease.grace_s):
+            continue  # still working it: not "finished, forgotten"
+        if it.gate_outcome("merge") == "passed":
+            continue  # already merged: the landed case, not the ready-to-land one
+        ahead = _ahead(repo, _base(cfg, repo), it.branch)
+        if ahead <= 0:
+            continue
+        from . import gates as G
+
+        required = G.required_gates(cfg)
+        owed = tuple(
+            g
+            for g in G.pipeline_for(it, cfg)
+            if g in required and g != "merge" and not it.gate_satisfied(g, True)
+        )
+        out.append(H.Ready(i, lease.holder if lease else "(none)", ahead, owed, it.branch))
+    return out
+
+
+def _merges(repo: Path, st, cfg) -> list[H.MergeHang]:
+    """A merge mid-flight in an item's worktree, or a merge that landed in git without a
+    logged ``merge``/``complete`` (research row h)."""
+    out: list[H.MergeHang] = []
+    base = _base(cfg, repo)
+    for i, it in st.items.items():
+        if it.removed or it.terminal:
+            continue
+        holder = it.lease.holder if it.lease else "(none)"
+        wt = W.load_path(repo, it.worktree) if it.worktree else None
+        if wt is not None and wt.exists() and W.merging(wt) is True:
+            out.append(H.MergeHang(i, holder, str(wt), merging=True))
+        if it.branch and it.gate_outcome("merge") != "passed":
+            # Landed but not logged: a REAL merge commit put the branch head onto the base
+            # (base advanced PAST the branch head), yet no merge event was recorded. NOT an
+            # empty branch (base..branch == 0) and NOT a fast-forward tip (branch..base == 0):
+            # both are the ordinary pre-merge state, and `_landed_anyway` already records a
+            # fast-forward it can see. What nothing else sees is base moved past the branch.
+            head = W.git(repo, "rev-parse", "refs/heads/" + it.branch).out.strip()
+            if head:
+                behind = W.git(repo, "merge-base", "--is-ancestor", head, base)
+                past = W.git(repo, "rev-list", "--count", f"refs/heads/{it.branch}..{base}")
+                if behind.ok and past.ok and past.out.strip() != "0":
+                    out.append(H.MergeHang(i, holder, landed_unlogged=True, head=head, base=base))
     return out
 
 
@@ -324,7 +414,15 @@ def inspect(
         log, st, cfg, repo, now, events, activity, alive, recoveries=recoveries
     )
     found = H.inspect(
-        lanes, procs, waits, [c.as_dict() for c in cycles], now, limits(cfg), _runs(repo, st)
+        lanes,
+        procs,
+        waits,
+        [c.as_dict() for c in cycles],
+        now,
+        limits(cfg),
+        _runs(repo, st),
+        _readies(repo, st, cfg, now),
+        _merges(repo, st, cfg),
     )
     found += _loop_runaways(events, st, cfg)
     return list({f.key: f for f in found}.values())

@@ -100,6 +100,11 @@ _SUBMODULE_OF = {
     "merge_into": "_merge",
     "merging": "_merge",
     "remove": "_merge",
+    # _boot
+    "boot_id": "_boot",
+    "boot_marker": "_boot",
+    "observe_boot": "_boot",
+    "stored_boot": "_boot",
     # _create
     "create": "_create",
     "isolate_venv": "_create",

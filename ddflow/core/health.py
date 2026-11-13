@@ -21,9 +21,18 @@ Six conditions, each with evidence and the command that corrects it:
                lane's fault.
 * RUNAWAY      a job still running after ``runaway_s``.
 * ORPHAN_WAIT  a lane showing no progress for ``orphan_s`` whose newest registered run (a
-               gate, review, ci or pins run in the live-run registry) is already finished
-               -- its outcome recorded -- or whose process is gone with no outcome: the
-               lane is 'waiting on nothing' and the run must be rerun.
+                gate, review, ci or pins run in the live-run registry) is already finished
+                -- its outcome recorded -- or whose process is gone with no outcome: the
+                lane is 'waiting on nothing' and the run must be rerun.
+* LAPSED_ALIVE a lease that lapsed while its holder's process still lives (a long gate or
+                review outlived the TTL, or its heartbeat thread died): NEVER a crash, the
+                holder resumes with ``resume_own``, and nothing is recorded expired.
+* READY_TO_LAND a finished item that never merged: its gates are done (only ``merge``
+                owed) and commits sit ahead of the base. Proposed, never landed.
+* MERGE_INTERRUPTED a merge left mid-flight (MERGE_HEAD / unmerged paths) or one that
+                landed in git without a logged merge/complete. Only the landed-unlogged
+                half is SAFE_AUTO (record it); a conflicced merge waits for its owner.
+
 
 Nothing here decides to act; `services.healthwatch` turns findings into corrections.
 """
@@ -38,7 +47,21 @@ from . import clock
 STALLED, LOCKED, CRASHED, RUNAWAY = "stalled", "locked", "crashed", "runaway"
 IDLE, UNRESPONSIVE = "idle", "unresponsive"
 ORPHAN_WAIT = "orphan_wait"
-KINDS = (CRASHED, LOCKED, UNRESPONSIVE, STALLED, IDLE, ORPHAN_WAIT, RUNAWAY)
+LAPSED_ALIVE = "lapsed_alive"
+READY_TO_LAND = "ready_to_land"
+MERGE_INTERRUPTED = "merge_interrupted"
+KINDS = (
+    CRASHED,
+    LOCKED,
+    UNRESPONSIVE,
+    STALLED,
+    IDLE,
+    ORPHAN_WAIT,
+    RUNAWAY,
+    LAPSED_ALIVE,
+    READY_TO_LAND,
+    MERGE_INTERRUPTED,
+)
 
 
 @dataclass(frozen=True)
@@ -61,6 +84,12 @@ class Lane:
     pids: tuple[int, ...] = ()
     #: when the newest nudge or stop request for this lease was made; 0.0 for none
     asked_at: float = 0.0
+    #: the lease lapsed but the holder's declared process is still alive (research row f):
+    #: NEVER treated as crashed, NEVER recorded expired while its process lives
+    lapsed_alive: bool = False
+    #: the live pids proving ``lapsed_alive`` (a long gate/review outlived its TTL, or the
+    #: heartbeat thread died while the foreground command lives on)
+    live_pids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,6 +141,41 @@ class Limits:
     reply_s: float = 0
     crash_s: float = 0
     orphan_s: float = 0
+
+
+@dataclass(frozen=True)
+class Ready:
+    """An item that finished its gates but never ran merge/complete: only landing is owed.
+
+    Gathered (with git) by `services.healthwatch`; here it is the plain facts a judge reads.
+    ``owed`` is the still-unsettled required gates — for a ready-to-land item exactly
+    ``("merge",)`` — and ``commits_ahead`` the commits its branch holds beyond the base."""
+
+    item: str
+    holder: str
+    commits_ahead: int = 0
+    owed: tuple[str, ...] = ()
+    branch: str = ""
+
+
+@dataclass(frozen=True)
+class MergeHang:
+    """A merge that did not conclude cleanly (research row h).
+
+    ``merging``       MERGE_HEAD is set or a path is left unmerged in ``tree``: a merge
+                      genuinely mid-flight, whose owner alone may conclude or abort it.
+    ``landed_unlogged`` the branch head is on the base but no ``merge``/``complete`` was
+                      logged: SAFE_AUTO may record it, idempotently (verify the head is an
+                      ancestor of the base).
+    """
+
+    item: str
+    holder: str
+    tree: str = ""
+    merging: bool = False
+    landed_unlogged: bool = False
+    head: str = ""
+    base: str = ""
 
 
 @dataclass(frozen=True)
@@ -231,6 +295,82 @@ def _crashed(ln: Lane, now: float) -> Finding:
         f"`ddflow recover` shows the work; `ddflow claim {ln.item}` resumes it",
         {"worktree": ln.worktree, "recorded": ln.recorded, "work": ln.work},
     )
+
+
+def _lapsed_alive(ln: Lane, now: float) -> Finding:
+    """A lease that lapsed while its holder's process lives on (research row f): the opposite
+    of a crash. Never recorded expired, never offered to another agent unsolicited."""
+    pids = ", ".join(map(str, ln.live_pids))
+    return Finding(
+        LAPSED_ALIVE,
+        ln.item,
+        ln.holder,
+        now - ln.renewed_at,
+        f"lease lapsed but the holder's process is alive (pid {pids}); a long gate or "
+        "review outlived the TTL, or the heartbeat thread died",
+        f"the holder re-claims its own work with `ddflow claim {ln.item}` (resume_own); "
+        "its lease is never recorded expired while its process lives",
+        {"pids": list(ln.live_pids), "worktree": ln.worktree, "renewed_at": ln.renewed_at},
+    )
+
+
+def _readies(ready: list[Ready]) -> list[Finding]:
+    """Items that finished their gates but never merged: propose landing them, land nothing."""
+    out: list[Finding] = []
+    for r in ready:
+        owed = ", ".join(r.owed) if r.owed else "nothing"
+        out.append(
+            Finding(
+                READY_TO_LAND,
+                r.item,
+                r.holder,
+                0.0,
+                f"{r.commits_ahead} commit(s) ahead on {r.branch or r.item}; owed: {owed}",
+                f"propose `ddflow merge {r.item}` (never landed automatically)",
+                {
+                    "commits_ahead": r.commits_ahead,
+                    "owed": list(r.owed),
+                    "branch": r.branch,
+                },
+            )
+        )
+    return out
+
+
+def _merge_hangs(merges: list[MergeHang]) -> list[Finding]:
+    """A merge mid-flight, or one that landed without being logged (research row h)."""
+    out: list[Finding] = []
+    for m in merges:
+        if m.landed_unlogged:
+            detail = (
+                f"branch head {m.head[:8] or '?'} is in {m.base[:8] or 'its base'} but no "
+                "merge/complete was logged"
+            )
+            fix = "record merge and complete (idempotent: verify `git merge-base --is-ancestor` first)"
+        else:
+            detail = f"a merge is mid-flight in {m.tree or 'its tree'}"
+            fix = (
+                "its owner concludes or aborts it; only a dead integrator's entries are "
+                "requeued (SAFE_AUTO) — never `merge --abort` without the owner"
+            )
+        out.append(
+            Finding(
+                MERGE_INTERRUPTED,
+                m.item,
+                m.holder,
+                0.0,
+                detail,
+                fix,
+                {
+                    "merging": m.merging,
+                    "landed_unlogged": m.landed_unlogged,
+                    "tree": m.tree,
+                    "head": m.head,
+                    "base": m.base,
+                },
+            )
+        )
+    return out
 
 
 def _link_locks(k: dict[str, Any]) -> list[tuple[str, str]]:
@@ -379,7 +519,9 @@ def _judge(
     unanswered = ln.asked_at and ln.progress_at < ln.asked_at
     if ln.live and limits.reply_s > 0 and unanswered and now - ln.asked_at >= limits.reply_s:
         out.append(_unresponsive(ln, waiters, now))
-    if not ln.live and ln.work is not False:
+    if not ln.live and ln.lapsed_alive:
+        out.append(_lapsed_alive(ln, now))
+    elif not ln.live and ln.work is not False:
         out.append(_crashed(ln, now))
 
 
@@ -391,13 +533,16 @@ def inspect(
     now: float,
     limits: Limits,
     runs: list[Run] = (),
+    ready: list[Ready] = (),
+    merges: list[MergeHang] = (),
 ) -> list[Finding]:
     """Every finding for these facts, ordered by `KINDS`, then by item.
 
     ``cycles`` are `leasewait.Cycle.as_dict()` rows. A lane is judged on its own facts: a
     lane in a cycle is LOCKED even when it is also stalled (both are reported). ``runs``
     are the live-run registry rows (`Run`): a lane waiting on one that is already over is
-    ORPHAN_WAIT."""
+    ORPHAN_WAIT. ``ready`` names items whose gates are done except merge (READY_TO_LAND);
+    ``merges`` names a merge left mid-flight or landed-but-unlogged (MERGE_INTERRUPTED)."""
     out: list[Finding] = []
     by_item = {ln.item: ln for ln in lanes}
     waiting_for: dict[str, list[str]] = {}
@@ -414,4 +559,6 @@ def inspect(
     out += _stalled_locks(waits, by_item, stalled, seen, now)
     out += _runaways(procs, now, limits.runaway_s)
     out += _orphans(lanes, runs, now, limits)
+    out += _readies(list(ready))
+    out += _merge_hangs(list(merges))
     return sorted(out, key=lambda f: (KINDS.index(f.kind), f.item, f.holder))
