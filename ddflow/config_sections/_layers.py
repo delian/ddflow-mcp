@@ -108,33 +108,35 @@ def _defines(table: dict[str, Any]) -> bool:
 def _merge_into(
     into: dict[str, Any],
     new: dict[str, Any],
-    owner: dict[str, str],
+    owner: dict[tuple[str, ...], str],
     file: str,
-    path: str,
+    path: tuple[str, ...],
     same_table: str,
 ) -> None:
     for key, val in new.items():
-        here = f"{path}.{key}" if path else key
+        here = (*path, key)
         if key not in into:
             into[key] = val
             _own(owner, here, val, file)
         elif isinstance(val, dict) and isinstance(into[key], dict):
             if same_table == "error" and _defines(val) and _defines(into[key]):
                 raise DropinError(
-                    f"table [{here}] is defined in both {owner.get(here, '?')} and {file}"
+                    f"table [{'.'.join(here)}] is defined in both {owner.get(here, '?')} and {file}"
                 )
             _merge_into(into[key], val, owner, file, here, same_table)
         elif same_table == "merge":
             into[key] = val
         else:
-            raise DropinError(f"key {here} is set in both {owner.get(here, '?')} and {file}")
+            raise DropinError(
+                f"key {'.'.join(here)} is set in both {owner.get(here, '?')} and {file}"
+            )
 
 
-def _own(owner: dict[str, str], path: str, val: Any, file: str) -> None:
+def _own(owner: dict[tuple[str, ...], str], path: tuple[str, ...], val: Any, file: str) -> None:
     owner[path] = file
     if isinstance(val, dict):
         for k, v in val.items():
-            _own(owner, f"{path}.{k}", v, file)
+            _own(owner, (*path, k), v, file)
 
 
 def dropin_files(directory: Path) -> list[Path]:
@@ -161,11 +163,11 @@ def read_dropin_dir(directory: Path, *, same_table: str = "error") -> dict[str, 
     if same_table not in ("error", "merge"):
         raise ValueError(f"same_table is 'error' or 'merge', not {same_table!r}")
     merged: dict[str, Any] = {}
-    owner: dict[str, str] = {}
+    owner: dict[tuple[str, ...], str] = {}
     for path in dropin_files(directory):
         try:
             table = read_toml(path)
         except ValueError as exc:  # TOMLDecodeError says "(at line N, column M)"
             raise DropinError(f"{path}: {exc}") from exc
-        _merge_into(merged, table, owner, path.name, "", same_table)
+        _merge_into(merged, table, owner, path.name, (), same_table)
     return merged

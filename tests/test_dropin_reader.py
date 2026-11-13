@@ -78,6 +78,15 @@ def test_a_table_and_its_subtable_may_live_in_different_files(tmp_path):
     assert L.read_dropin_dir(tmp_path) == {"gate": {"mode": "strict", "a": {"x": 1}}}
 
 
+def test_a_dotted_quoted_key_does_not_confuse_which_file_owns_a_table(tmp_path):
+    _put(tmp_path, "01.toml", "[a.b]\nx = 1\n")
+    _put(tmp_path, "02.toml", '["a.b"]\ny = 1\n')
+    _put(tmp_path, "03.toml", "[a.b]\nz = 1\n")
+    with pytest.raises(L.DropinError) as e:
+        L.read_dropin_dir(tmp_path)
+    assert "01.toml" in str(e.value) and "03.toml" in str(e.value)
+
+
 def test_merge_mode_lets_the_later_file_win(tmp_path):
     _put(tmp_path, "10.toml", "[lease]\nttl_s = 1\nother = 2\n")
     _put(tmp_path, "20.toml", "[lease]\nttl_s = 9\n")
