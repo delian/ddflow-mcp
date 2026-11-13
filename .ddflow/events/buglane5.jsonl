@@ -1,0 +1,2 @@
+{"agent":"buglane5","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e20c6731d3aeb5284e7f3d6ea","kind":"ddflow.seen","lamport":190453,"schema":1,"subject":"ddflow","ts":"2026-11-13T05:33:26.034349Z"}
+{"agent":"buglane5","data":{"gate":"ci"},"id":"e8516a753474921111e54972f","kind":"gate.started","lamport":190454,"schema":1,"subject":"fix-Bdeb98fa2d1","ts":"2026-11-13T05:33:26.122992Z"}
