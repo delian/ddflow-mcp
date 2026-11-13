@@ -141,7 +141,12 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
 
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
-    names keep the lane, and its answer (one item and a note) pages no list."""
+    names keep the lane, and its answer (one item and a note) pages no list. ``next --state S``
+    is `next` listing one state: the calls it names keep the state, and its `items` list pages."""
+    base, _, rest = command.partition(" --state ")
+    if rest:
+        cli, tool, narrow, _paged = COMMANDS[base]
+        return f"{cli} --state {rest}", f"{tool} state={rest}", None, "items"
     base, _, rest = command.partition(" --lane ")
     cli, tool, narrow, paged = COMMANDS[base]
     if not rest:
