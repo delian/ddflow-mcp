@@ -23,13 +23,20 @@ from .ports import port
 
 __all__ = ["DEFAULT", "Postings", "SearchDoc", "SearchIndex", "SqliteSearchIndex"]
 
-#: One term's postings: the record ordinals holding it and its weight in each (both packed
-#: as ``array`` blobs; the same shape ``core.textsim`` produces, so a stored and a fresh
-#: weight never disagree).
+#: One term's postings: the record ordinals holding it and its weight in each. Both pack as
+#: ``array`` blobs, the ordinals with typecode ``"q"`` and the weights with ``"d"`` -- the
+#: two typecodes ``core.textsim.invert`` produces (``Postings`` there), the ONLY valid ones,
+#: so a caller building `Postings` must use those two (a shared constant below keeps the
+#: write and read paths on them both).
 Postings = tuple[array, array]
 #: One indexed record's stored row: id, kind, item, digest (the ``similar_docs`` columns;
 #: the digest is ``core.textsim.digest`` of its title and body, computed by the caller).
 SearchDoc = tuple[str, str, str, str]
+
+#: The fixed typecodes of `Postings` (``array("q")`` ordinals, ``array("d")`` weights),
+#: shared by the write and read paths so they cannot drift apart.
+_ORD_TYPECODE = "q"
+_W_TYPECODE = "d"
 
 _DOCS = "create table if not exists similar_docs(ord integer primary key, id text, kind text, item text, digest text)"
 _TERMS = "create table if not exists similar_terms(term text primary key, docs blob, weights blob) without rowid"
@@ -100,7 +107,7 @@ class SqliteSearchIndex:
             # bandit B608: only `?` placeholders are interpolated.
             sql = f"select term, docs, weights from similar_terms where term in ({ph})"  # nosec B608
             for term, docs, weights in con.execute(sql, chunk):
-                ords, wts = array("q"), array("d")
+                ords, wts = array(_ORD_TYPECODE), array(_W_TYPECODE)
                 ords.frombytes(docs)
                 wts.frombytes(weights)
                 out[term] = (ords, wts)
