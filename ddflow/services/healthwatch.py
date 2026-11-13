@@ -337,6 +337,8 @@ def _merges(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> list
     for i, it in st.items.items():
         if it.removed or it.terminal:
             continue
+        if it.gate_outcome("merge") == "passed":
+            continue  # it merged cleanly: no MERGE_HEAD to leave mid-flight, no probe needed
         if it.lease is not None and it.lease.live(now, cfg.lease.grace_s):
             continue  # a live holder is resolving it: not interrupted, the merge is in flight
         if it.lease is not None and check(it.lease.holder)[0] is True:
