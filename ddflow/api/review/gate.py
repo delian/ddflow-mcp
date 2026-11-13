@@ -323,7 +323,14 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
 
 
 def _name_the_item(
-    repo: Path, cfg, st, item: str, gate: str, agent: str, say, extra: dict[str, Any] | None,
+    repo: Path,
+    cfg,
+    st,
+    item: str,
+    gate: str,
+    agent: str,
+    say,
+    extra: dict[str, Any] | None,
     called_from: Path | None = None,
 ) -> dict[str, Any] | None:
     """Say, loudly, WHICH item this review is recorded against and whose it is
