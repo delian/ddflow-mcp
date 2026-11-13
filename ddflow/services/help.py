@@ -88,6 +88,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "task",
             "split",
             "update",
+            "correct",
             "resolve",
             "remove",
             "import",

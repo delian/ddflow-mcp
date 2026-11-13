@@ -10,11 +10,11 @@ import importlib
 from dataclasses import replace
 from pathlib import Path
 
+from ...adapters import git as G
 from ...config import Config
 from ...config_sections._layers import read_toml
 from ...core import schedule
 from ...core.model import REVIEW, Item, State
-from ...infra import git as G
 from ...infra import worktree as W
 from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
