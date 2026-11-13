@@ -146,7 +146,7 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     base, _, rest = command.partition(" --state ")
     if rest:
         cli, tool, narrow, _paged = COMMANDS[base]
-        state, kind, phase, only = _split_state(rest)
+        state, kind, phase, only, tags = _split_state(rest)
         c_args, t_args = [f"--state {shlex.quote(state)}"], [f"state={shlex.quote(state)}"]
         for flag, val in (("kind", kind), ("phase", phase)):
             if val:
@@ -155,6 +155,10 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
         if only:
             c_args.append("--phase-only")
             t_args.append("phase_only=true")
+        if tags:
+            for t in tags:
+                c_args.append(f"--tag {shlex.quote(t)}")
+            t_args.append("tag=" + ",".join(tags))
         return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
     base, _, rest = command.partition(" --lane ")
     cli, tool, narrow, paged = COMMANDS[base]
@@ -173,13 +177,16 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
 
 
-def _split_state(rest: str) -> tuple[str, str, str, bool]:
-    """``'running --kind K --phase P --phase-only'`` -> (running, K, P, True); all but the
-    state value optional."""
+def _split_state(rest: str) -> tuple[str, str, str, bool, tuple[str, ...]]:
+    """``'running --kind K --phase P --phase-only --tag T'`` -> (running, K, P, True, (T,));
+    all but the state value optional."""
+
+    tags = tuple(rest.split(" --tag ")[1:])
+    rest = rest.split(" --tag ", maxsplit=1)[0]
     rest, only, _ = rest.partition(" --phase-only")
     rest, _, phase = rest.partition(" --phase ")
     state, _, kind = rest.partition(" --kind ")
-    return state, kind, phase, bool(only)
+    return state, kind, phase, bool(only), tags
 
 
 def _split_lane(rest: str) -> tuple[str, str, str, bool]:

@@ -56,15 +56,22 @@ STATES = (
 )
 
 
-def _state_token(state: str, kind: str = "", phase: str = "", phase_only: bool = False) -> str:
+def _state_token(
+    state: str,
+    kind: str = "",
+    phase: str = "",
+    phase_only: bool = False,
+    tags: tuple[str, ...] = (),
+) -> str:
     """The `command` token `output_caps` reads for `next --state`: it pages the state list.
-    Carries kind and phase (as `lane_token` does for the lane call), so a cut list's next-page
-    call keeps the whole selection."""
+    Carries kind, phase and the tag filters (as `lane_token` does for the lane call), so a
+    cut list's next-page call keeps the whole selection."""
     return (
         f"next --state {state}"
         + (f" --kind {kind}" if kind else "")
         + (f" --phase {phase}" if phase else "")
         + (" --phase-only" if phase_only else "")
+        + "".join(f" --tag {t}" for t in tags)
     )
 
 
@@ -198,7 +205,11 @@ def _next(repo, a, agent):
     )
     if state:
         token = _state_token(
-            state, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
+            state,
+            "" if kind == _api().DEFAULT_NEXT_KIND else kind,
+            phase,
+            phase_only,
+            tags,
         )
         return _cap(repo, _state_answer(out, state, phase, tags), token, a)
     return _cap(repo, out, "next", a)
