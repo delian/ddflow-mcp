@@ -71,8 +71,8 @@ def held_for_text(lz: Lease, now: float | None, activity) -> str:
     note = f"held for {_age(now, lz)}"
     if activity is not None:
         wrote = activity(lz)
-        if wrote > 0:
-            note += f", last write {clock.fmt_age(max(0.0, now - wrote), 'min')} ago"
+        if 0 < wrote <= now:
+            note += f", last write {clock.fmt_age(now - wrote, 'min')} ago"
     return note
 
 

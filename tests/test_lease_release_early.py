@@ -66,6 +66,20 @@ def test_clash_report_backwards_compatible_without_the_extra_args():
     assert ids == ["T2"]
 
 
+def test_unreadable_worktree_omits_last_write_not_claims_up_to_date():
+    """An activity reader that returns infinity (git could not read the tree) omits
+    ``last write``, never reports ``last write 0 min ago`` -- the could-not-tell sentinel
+    must not collapse into a positive "wrote just now" claim (roborev: the unknown tree
+    read as active)."""
+    now = 2 * 3600.0
+    lz = _lease(now, acquired_at=0.0)
+    text, _ids = L.clash_report(
+        [("T2", lz, ("src/a.py", "src/**"))], now=now, activity=lambda _lz: float("inf")
+    )
+    assert "held for 2.0h" in text, text
+    assert "last write" not in text, text
+
+
 def test_a_claim_refused_on_a_live_lease_names_how_long_it_is_held(repo):
     run_cli(repo, "init", agent=HOLDER)
     code, out, err = run_cli(
