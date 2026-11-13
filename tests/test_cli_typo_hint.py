@@ -7,11 +7,11 @@ mean 'claim'?` — the one actionable word came after the whole command list. An
 person had to read 80 command names to find it.
 """
 
-from conftest import run_cli, repo  # noqa: F401
+from conftest import run_cli
 
 
 def test_a_command_typo_puts_the_hint_first_and_drops_the_command_dump(repo):
-    code, out, err = run_cli(repo, "clam")
+    code, _out, err = run_cli(repo, "clam")
     assert code == 2, err
     lines = err.splitlines()
     assert "Did you mean 'claim'?" in lines[0], err
@@ -23,7 +23,7 @@ def test_a_command_typo_puts_the_hint_first_and_drops_the_command_dump(repo):
 
 
 def test_a_typo_with_no_near_command_still_points_at_help_without_a_hint(repo):
-    code, out, err = run_cli(repo, "zzzzddflow")
+    code, _out, err = run_cli(repo, "zzzzddflow")
     assert code == 2, err
     assert "Did you mean" not in err, err
     assert "--help" in err, err
