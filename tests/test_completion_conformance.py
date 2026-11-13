@@ -26,7 +26,8 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.services.completion import kinds, scripts
+from ddflow.services import completion_shell as scripts
+from ddflow.services.completion import kinds
 from ddflow.services.completion import tree as T
 from ddflow.services.completion import values as V
 from ddflow.surfaces.cli import build_parser
@@ -166,12 +167,19 @@ def _widget_index(d: Path) -> str:
     return str(d / "index.db-wwwwwwww")
 
 
-def _activation_defined(shell: str, text: str) -> bool:
-    """The template really DEFINES the activation function, anchored at the start of a
-    line, so an echo or comment that merely mentions the name does not pass."""
-    name = f"_ddflow_activate_{shell}"
-    header = rf"^function\s+{name}\b" if shell == "fish" else rf"^(?:function\s+)?{name}\s*\(\s*\)"
-    return re.search(header, text, re.MULTILINE) is not None
+def _registers_a_completer(shell: str, text: str) -> bool:
+    """The text defines the engine's completer function AND registers it with its own
+    shell's command (``complete`` for bash and fish, ``compdef`` for zsh)."""
+    if shell == "fish":
+        return bool(
+            re.search(r"function\s+__fish_ddflow_complete\b", text)
+            and re.search(r"complete\s+--command\s+ddflow\b.*\(__fish_ddflow_complete\)", text)
+        )
+    defined = re.search(r"(?:^|[;\n{}\s']|\\n)_python_argcomplete\s*\(\)\s*\{", text)
+    register = (
+        "compdef _python_argcomplete ddflow" if shell == "zsh" else "-F _python_argcomplete ddflow"
+    )
+    return bool(defined and register in text)
 
 
 @pytest.mark.parametrize("shell", scripts.SHELLS)
@@ -186,9 +194,8 @@ def test_every_shell_script_parses(shell, tmp_path):
     env = {**os.environ, "BASH_ENV": "", "ENV": ""}  # bash reads these at startup
     text = scripts.for_shell(shell)
     # a degenerate or placeholder script would still parse clean, so also require the
-    # real activation function DEFINITION, anchored at line start -- an echo, comment
-    # or mention of the name alone does not pass
-    assert _activation_defined(shell, text)
+    # registration of the real completer
+    assert _registers_a_completer(shell, text)
     path = tmp_path / f"ddflow-completion.{shell}"
     path.write_text(text, encoding="utf-8")
     result = subprocess.run(

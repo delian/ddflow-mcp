@@ -41,6 +41,8 @@ shared_globs = [
   "tests/guard_baselines/**",
   "tests/golden/json/result_schemas.json",
   "tests/test_uc_surf_setup_ops_transcript.json",
+  "ddflow/templates/default.toml",
+  "ddflow/templates/default.d/**",
 ]
 reconcile_tests = "off"
 [worktree]
