@@ -179,8 +179,14 @@ useDefault = true
   # never a key, and every value is a bare 16-hex string. Scoped to ONE rule, ONLY the
   # committed event logs, ONLY a bare 16-hex value: a real key pasted into an event shard, or
   # a value of any other shape in one, still fires.
-  description = "the 16-hex resultcache digest in ddflow's committed gate records is not an API key"
+  description = "the cache_key resultcache digest in ddflow's committed gate records is not an API key"
   targetRules = ["generic-api-key"]
   condition = "AND"
+  # regexTarget "match" is the anchor that keeps this from over-broadening: it pins the hit
+  # to the full `cache_key":"…"` fragment (the field name AND the 16-hex value it wraps),
+  # because the generic-api-key rule's keyword prefilter is what reads a digest as a key. A
+  # real 16-hex token recorded under any other key (api_key, token, secret, …) is not the
+  # `cache_key` fragment, so it still fires.
+  regexTarget = "match"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
-  regexes = ['''^[0-9a-f]{16}$''']
+  regexes = ['''^cache_key":"[0-9a-f]{16}"$''']
