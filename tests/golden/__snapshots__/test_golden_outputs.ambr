@@ -270,8 +270,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -326,8 +324,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -383,8 +379,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -440,6 +434,44 @@
   tuple(
     0,
     '''
+      adapters.platform = 'auto'   [default]
+          Which `Platform` adapter serves the OS-dependent verbs (file locks, process
+          groups, 0600 permissions): 'auto' (default) asks this host; 'posix' forces
+          the Posix adapter. Windows is documented unsupported and its adapter reports
+          unavailable; it is not a choice here (D-adapters-answers-3). An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'posix', the strictest (only the POSIX code path, never a guessed
+          platform); `config --set`, `ddflow_configure` and the environment refuse it,
+          and so does loading ddflow's own source tree, where the file and the code
+          are one commit.
+      adapters.lane_transport = 'local'   [default]
+          Which `Transport` adapter runs a lane's process and brings its files back:
+          'local' spawns the process on this host. A remote executor registers into
+          the same `TRANSPORTS` registry; until one does, 'local' is the only choice.
+          An unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'local', the strictest (stays on this host, never a remote
+          executor); `config --set`, `ddflow_configure` and the environment refuse it,
+          and so does loading ddflow's own source tree, where the file and the code
+          are one commit.
+      adapters.network_consent = {}   [default]
+          Consent for an adapter to reach the network, once per kind (D-adapters-
+          answers-3): a table `[adapters.network_consent]` whose keys are kinds
+          (`forge`, `chat`, `webhook`, `email`) and whose true value records that this
+          clone may make that reach. A kind with no recorded consent is declined,
+          never granted (r-consent-outward); an org bundle layer can pre-approve or
+          forbid a kind and lock it.
+      adapters.managed_files_consent = {}   [default]
+          Consent for the `ManagedFile` adapter to merge one shared file kind
+          (`settings.json`, `.mcp.json`, `opencode.json`, `hooks.toml`, the
+          AGENTS.md/README regions), once per kind (D-adapters-answers-2): a table
+          `[adapters.managed_files]`-style map keyed by file kind whose true value
+          records consent. A kind with no recorded consent is refused, never silently
+          written.
+      adapters.managed_files_backup = True   [default]
+          Whether the `ManagedFile` adapter writes a one-time `.ddflow-bak` beside a
+          shared file before its first write (D-adapters-answers-2). True by default;
+          it is an operator decision to turn off, so an org layer locking it cannot be
+          loosened by a project layer (a value set higher is never loosened lower).
       agent.id = 'golden'   [explicit]
           Stable identity for this agent process, used to shard the event log so
           concurrent agents never write the same file. Empty auto-derives host-pid.
@@ -2502,6 +2534,17 @@
       lease.acquire_timeout_s = 30   [default]
           How long to block on the flock arbitrating lease acquisition before giving
           up. On NFS a contended acquire measured ~135 ms, so 30 s is ~200x headroom.
+      lease.record_lock_wait_s = 180   [default]
+          How long the record step of a FINISHED gate outcome (a measured run, a
+          review, a merge, a person clearing a human gate) keeps trying to acquire the
+          events append lock when it is contended. The outcome is work already done:
+          losing it to a transient timeout -- a lane heartbeat holding the lock under
+          load, in `record_measured` after a command ran to completion (B0b0b67d5e7)
+          -- wastes the whole run. Each attempt waits the time left in this budget
+          (not `acquire_timeout_s`), so the TOTAL wait across attempts never exceeds
+          it; a record that still cannot get the lock gives up once the budget is
+          spent and reports 'could not run' rather than wedging forever. 0 appends
+          once with `acquire_timeout_s`, as before.
       lease.waiter_reservation_s = 300   [default]
           Claims on a contended file are served first come, first served. A live
           `ddflow wait` (or a claim refused for an overlap and retried) is a place in
@@ -4367,6 +4410,19 @@
           hook hands it back after compaction. The hook gets no summary from Claude
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
+      session.inflight_note = True   [default]
+          At the Stop and SessionEnd hooks, write what the session is doing (the items
+          it holds, the last gate and the next one) as a session note, once per
+          change. Off writes none; the hooks still close the session.
+      session.interrupted_close_max = 20   [default]
+          Most dead sessions one SessionStart closes as interrupted. A session is dead
+          when it is open, its agent holds no live lease, a lease of that agent lapsed
+          after the session began and the session wrote nothing since. 0 turns the
+          close off.
+      session.previous_session_chars = 600   [default]
+          Characters of the previous session's last prompt, note and summary the next
+          SessionStart shows (fenced as data), skipped after a compaction. 0 shows
+          none.
       session.agent_rotate_tokens = 250000   [default]
           Context tokens past which a lane agent should rotate instead of growing:
           `ddflow doctor`, `ddflow health` and the wake brief name it and the steep
@@ -4670,6 +4726,19 @@
       swarm.launch_max_budget_usd = 5.0   [default]
           Ceiling on any template's `budget_usd`: a launch from a template that asks
           for more is refused, whatever its approval. Zero removes the ceiling.
+      swarm.budget_stop_enabled = True   [default]
+          Whether the runtime budget stop is on: the lane supervisor sums a running
+          lane's usage events and interrupts it once its spend reaches the template's
+          `budget_usd` (soft warn at `budget_warn_fraction`). When off, a lane only
+          ever stops at its own end. The admission estimate (launch) still refuses an
+          over-budget launch.
+      swarm.budget_warn_fraction = 0.5   [default]
+          Share of a template's `budget_usd` at which a running lane gets a soft warn
+          before the hard stop at the cap. A fraction of one warns only at the cap
+          itself.
+      swarm.budget_stop_grace_s = 10.0   [default]
+          Seconds a lane is given to stop after its budget interrupt before the hard
+          kill. Zero interrupts with no grace (the transport's own kill follows).
       swarm.remote_exclude = ['.ddflow', '.env', '**/.env']   [default]
           Relative path globs a remote lane's working tree never carries in its
           bundle: ddflow's own event log, secrets and env files stay on the host. What
@@ -4903,6 +4972,36 @@
           Characters of a `gh` error message kept when an `Unavailable`/`GhError` is
           raised (`str(exc)[:error_max]`), so a failure report never outgrows a log
           line before the caller redacts it.
+      verify.stack = ''   [default]
+          The stack of this project, by its name in the stack table (python, node,
+          rust, go, java, or one a project adds under `stacks_dir`). Empty (default):
+          detected from the project's own files (pyproject.toml, package.json,
+          Cargo.toml, go.mod, pom.xml ...). A name the table does not know resolves to
+          an explicit `none` with the command that fixes it, never to another stack's
+          commands. `ddflow stacks` shows what this repository resolves to.
+      verify.stacks_dir = '.ddflow/stacks'   [default]
+          A project's own stack table: a directory (relative to the repository root)
+          of `<stack>.toml` files in the shipped shape (see
+          ddflow/templates/stacks/README.md). A file whose stack name matches a
+          shipped one replaces it; a new name adds a stack. A file that does not parse
+          is reported and skipped. Empty: no project table.
+      verify.build_cmd = ''   [default]
+          Overrides the stack's build command (run in a clean clone by the periodic
+          clean-clone pass, and shown by `ddflow stacks`). Empty (default): the stack
+          table's command. Also the way to give a project no table describes a build
+          at all.
+      verify.smoke_cmd = ''   [default]
+          Overrides the stack's smoke command: the cheapest run that fails when the
+          build is broken (never the whole test suite). Empty (default): the stack
+          table's command.
+      verify.lock_check_cmd = ''   [default]
+          Overrides the stack's lock-check command (does the lockfile still match the
+          manifest). Empty (default): the stack table's command; a stack with none has
+          no lock check.
+      verify.test_cmd = ''   [default]
+          Overrides the stack's test command as the stack table reports it. This does
+          NOT change the `unit_tests` gate (`.ddflow/gates.toml` does). Empty
+          (default): the stack table's command.
       wait.max_call_seconds = 240   [default]
           Longest ONE `ddflow wait` (or `watch`) call blocks before it returns a
           still-waiting result the caller re-invokes, so a single call never outlives

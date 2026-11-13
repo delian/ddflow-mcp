@@ -200,6 +200,7 @@ the same implementation, so neither drifts from the other.
 | **get a plan into the queue** | see [From plan mode to the queue](docs/guide/workflow.md#from-plan-mode-to-the-queue) | same |
 | **know what to work on** | `ddflow next` | `ddflow_next` |
 | **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
+| **turn on shell completion** (bash · zsh · fish: commands, options, values and ids) | `ddflow completion install [<shell>]` · `uninstall [<shell>]` · `bash`/`zsh`/`fish` — one guarded startup-file line, applied only with `--yes` consent; see `ddflow help completion` | none: a person's act |
 | **see everything about one item or bug** (a done task's author model; each field `ddflow correct` replaced is marked with who, when and why, never with its old text, and `--secret` corrections carry no digest) | `ddflow show <id>` (phase, task, bug or research id); `--history` lists every correction in order; `--json` and the MCP show carry the same `corrections` field | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
@@ -875,11 +876,16 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=428934f42962 -->
-<details><summary>All 737 knobs across 69 sections</summary>
+<!-- ddflow:begin README/knobs sha=93c8e7d2112f -->
+<details><summary>All 745 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
+| `adapters.platform` | `"auto"` | `auto` \| `posix` |
+| `adapters.lane_transport` | `"local"` | `local` |
+| `adapters.network_consent` | `{}` |  |
+| `adapters.managed_files_consent` | `{}` |  |
+| `adapters.managed_files_backup` | `true` |  |
 | `agent.id` | `""` |  |
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.reviewer_independence` | `"model"` | `family` \| `model` \| `off` |
@@ -1561,6 +1567,9 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.budget_stop_enabled` | `true` |  |
+| `swarm.budget_warn_fraction` | `0.5` |  |
+| `swarm.budget_stop_grace_s` | `10.0` |  |
 | `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
 | `swarm.remote_bundle_max_bytes` | `104857600` |  |
 | `swarm.remote_return_max_bytes` | `52428800` |  |

@@ -12,7 +12,9 @@ ends at init or a user `systemd`)."""
 from __future__ import annotations
 
 import os
+import shlex
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -182,6 +184,109 @@ def _kill(o: Orphan) -> str:
     return f"kill -- -{o.pgid}" if o.pgid > 1 else f"kill {o.pid}"
 
 
-def notes() -> list[str]:
+#: Valued global options: their value is the next argv token, never the item. Reading
+#: ``argv`` as tokens (not a space-joined string) keeps a value with a space one token
+#: (`ddflow --repo "/my repo" heartbeat T1` -> T1) so it is seen as the value, not part
+#: of the option scan.
+_VALUED = frozenset({"--agent", "--repo", "--reason"})
+_DD_EXE = ("ddflow", "ddflow-mcp")
+
+
+def _item_after(argv: list[str], i: int) -> str:
+    """The first item token after ``argv[i]``'s `heartbeat` subcommand, or ""."""
+    n = len(argv)
+    i += 1
+    while i < n:
+        w = argv[i]
+        if w in _VALUED and i + 1 < n:
+            i += 2
+        elif w.startswith("-"):
+            i += 1
+        else:
+            return w  # an option that swallows one value keeps it; a flag swallows nothing
+    return ""
+
+
+def _heartbeat_items(argv: list[str]) -> list[str]:
+    """The item ids a `heartbeat` subcommand in ``argv`` targets, in order. `heartbeat` is
+    the subcommand (`ddflow task comment --body heartbeat T1` is not one). Handles a direct
+    fetch (`ddflow [options] heartbeat <item>`) and the body of a `sh -c '<loop>'`."""
+    words = list(argv)
+    if len(words) >= 3 and _base(words[0]) in ("sh", "bash", "zsh", "ksh") and words[1] == "-c":
+        words = _shell_words(" ".join(words[2:]))
+    out: list[str] = []
+    i = 0
+    while i < len(words):
+        if _base(words[i]) in _DD_EXE:
+            j = i + 1
+            while j < len(words) and words[j].startswith("-"):
+                j += 2 if words[j] in _VALUED and j + 1 < len(words) else 1
+            if j < len(words) and words[j] == "heartbeat":
+                item = _item_after(words, j)
+                if item:
+                    out.append(item)
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def _shell_words(body: str) -> list[str]:
+    """``body`` split with `;` `&` `|` as separators, so a loop's `ddflow heartbeat T1;`
+    yields `T1` (never `T1;`); a value with a space stays one token."""
+    try:
+        lex = shlex.shlex(body, posix=True, punctuation_chars=";&|")
+        lex.commenters = ""
+        return [w for w in lex if w not in ";&|"]
+    except ValueError:
+        return []
+
+
+def stale_heartbeats(
+    finished: Iterable[str], proc: Path | str = "/proc", *, uid: int | None = None
+) -> list[tuple[int, str, str]]:
+    """(pid, item, command line) of the caller's processes that heartbeat an item already
+    finished: a shell loop outliving its item (LK-auto-heartbeat). A heartbeat for a finished
+    item renews nothing now, so the loop is only noise; ending it stays the operator's call."""
+    done = set(finished)
+    if not done:
+        return []
+    proc = Path(proc)
+    uid = os.getuid() if uid is None else uid
+    try:
+        entries = sorted(int(d.name) for d in proc.iterdir() if d.name.isdigit())
+    except OSError:
+        return []
+    found = []
+    for pid in entries:
+        if pid == os.getpid():
+            continue
+        argv = _argv(proc, pid)
+        hit = next((i for i in _heartbeat_items(argv) if i in done), "")
+        if not hit:
+            continue
+        try:
+            if (proc / str(pid)).stat().st_uid != uid:
+                continue
+        except OSError:
+            continue
+        found.append((pid, hit, " ".join(argv)))
+    return found
+
+
+def heartbeat_notes(stale: list[tuple[int, str, str]]) -> list[str]:
+    """One NOTE per heartbeat process whose item is finished, with how to end it."""
+    return [
+        f"heartbeat process for a finished item: pid {pid} heartbeats {item}, which is done or "
+        f"abandoned (`{cmd[:120]}`); it renews nothing, `ddflow gate run` and `merge` renew the "
+        f"lease themselves -- end it with `kill {pid}` (by pid, never pkill)"
+        for pid, item, cmd in stale
+    ]
+
+
+def notes(finished: Iterable[str] = ()) -> list[str]:
     """The `doctor` NOTEs for this host right now: advice only, never a kill."""
-    return doctor_notes(orphaned_ci_suites())
+    return [
+        *doctor_notes(orphaned_ci_suites()),
+        *heartbeat_notes(stale_heartbeats(finished)),
+    ]
