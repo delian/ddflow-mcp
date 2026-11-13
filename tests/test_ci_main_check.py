@@ -133,6 +133,26 @@ def test_ci_record_writes_the_outcome_a_hook_saw_with_its_failing_checks(repo, t
     json.dumps(last)
 
 
+def test_a_failed_check_keeps_the_hooks_output_tail(repo, tmp_path):
+    """A red merge must say WHAT failed: each failing hook's own output is its detail, so a
+    later read of the ci.result can tell why (B-post-merge-ci-failure-carries-no-detail)."""
+    run_cli(repo, "init")
+    report = tmp_path / "out.txt"
+    report.write_text(
+        "gitleaks.......Failed\n"
+        "- exit code: 1\n"
+        "finding: secret in file.txt\n"
+        "bandit.......Passed\n"
+    )
+    code, out, _ = run_cli(
+        repo, "ci", "record", "--stage", "merge", "--result", "failed", "--report", str(report)
+    )
+    assert code == 0, out
+    checks = _state(repo).ci_results[-1]["checks"]
+    gitleaks = next(c for c in checks if c["id"] == "gitleaks")
+    assert not gitleaks["ok"] and "secret in file.txt" in gitleaks["detail"]
+
+
 def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
     _project(repo, bad=True)
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "w.txt")

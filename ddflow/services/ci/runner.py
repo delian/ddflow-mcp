@@ -36,6 +36,7 @@ from .types import CONFLICT, Check, Result
 
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
+CHECK_DETAIL_CHARS = 2000  #: one failing hook's own output kept as its check detail
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
@@ -46,13 +47,35 @@ def _killed(p) -> bool:
 
 
 def parse_checks(output: str) -> list[Check]:
-    """Per-hook results from pre-commit's report ("ruff check ......... Failed")."""
+    """Per-hook results from pre-commit's report ("ruff check ......... Failed").
+
+    A failing hook's ``detail`` is the output pre-commit printed for it -- the lines after
+    its "Failed" line and before the next hook's line -- kept so a red merge's cause can be
+    read back (B-post-merge-ci-failure-carries-no-detail)."""
     checks = []
+    failed: Check | None = None
+    lines: list[str] = []
     for line in output.splitlines():
         m = _HOOK_LINE.match(line.strip())
         if m and m["status"] != "Skipped":
-            checks.append(Check(m["name"].strip(), m["status"] == "Passed"))
+            if failed is not None:
+                failed.detail = _check_detail(lines)
+            failed = None
+            lines = []
+            check = Check(m["name"].strip(), m["status"] == "Passed")
+            checks.append(check)
+            failed = check if m["status"] == "Failed" else None
+        elif failed is not None:
+            lines.append(line)
+    if failed is not None:
+        failed.detail = _check_detail(lines)
     return checks
+
+
+def _check_detail(lines: list[str]) -> str:
+    """The tail of a failed hook's own output, capped, for its check's ``detail``."""
+    kept = [ln.strip() for ln in lines if ln.strip()]
+    return "\n".join(kept)[-CHECK_DETAIL_CHARS:]
 
 
 def _merge_base(
