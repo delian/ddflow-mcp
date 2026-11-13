@@ -59,12 +59,39 @@ def glob_clashes(
     ]
 
 
-def clash_report(clashes: list[tuple[str, Lease, tuple[str, str]]]) -> tuple[str, list[str]]:
+def held_for_text(lz: Lease, now: float | None, activity) -> str:
+    """``"held for N, last write M ago"`` for one clashing lease, or "" when it cannot be
+    said (no `now`, or no `activity` to read the worktree with). The ages are fact, never
+    policy: how long the lease has been held (`acquired_at`) and how old the newest change
+    in its worktree is. A holder whose files stopped changing is exactly the wait that
+    blocks three other agents while it only waits on CI (DX-lease-release-early)."""
+    if not now or activity is None:
+        return ""
+    note = f"held for {_age(now, lz)}"
+    wrote = activity(lz)
+    if wrote and wrote > 0:
+        note += f", last write {clock.fmt_age(max(0.0, now - wrote), 'min')} ago"
+    return note
+
+
+def clash_report(
+    clashes: list[tuple[str, Lease, tuple[str, str]]],
+    *,
+    now: float | None = None,
+    activity=None,
+) -> tuple[str, list[str]]:
     """The clash list as (text, item ids): one `'mine' overlaps 'theirs' held by H on I`
     clause per clash, and every conflicting item id (a waiter must wait on each), so one
-    refusal names them all instead of the first (B-glob-refusal-names-one-conflict)."""
+    refusal names them all instead of the first (B-glob-refusal-names-one-conflict).
+
+    With `now` and `activity` (a ``lease -> epoch`` reader), the refusal also says how
+    long the holder has held the lease and when it last wrote its files, so a blocked
+    agent can see whether the holder is going to finish or only waits on CI
+    (DX-lease-release-early)."""
     text = "; ".join(
-        f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}" for oid, lz, (p0, p1) in clashes
+        f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}"
+        + ((note := held_for_text(lz, now, activity)) and f" ({note})")
+        for oid, lz, (p0, p1) in clashes
     )
     # One other item that overlaps on two globs yields two clashes; a waiter must wait on
     # that item once, not twice.
