@@ -273,3 +273,43 @@ def set_last_seen(repo: Path, tree: Path, sha: str) -> None:
     data[str(tree.resolve())] = sha
     p.parent.mkdir(parents=True, exist_ok=True)
     replace_text(p, json.dumps(data, sort_keys=True))
+
+
+@dataclass(frozen=True)
+class Move:
+    """One path that moved: an old path to its new path, and how (MV-path-moves)."""
+
+    old: str
+    new: str
+    how: str  # "rename" | "split"
+
+
+def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
+    """Every rename, move and package split in what ``after`` did since ``before``, or None
+    when git could not say (never "nothing moved"). A rename is git's own ``-M`` content
+    detection, so it is one edge each of a plain move, a move plus edit, and a many-into-one
+    file merge. A package split is ``X`` deleted while ``X/__init__.py`` is added: git keeps
+    the module body's rename into ``__init__.py`` only when enough content survives, so the
+    shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
+    split-* tasks)."""
+    r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", before, after)
+    if not r.ok:
+        return None
+    added: set[str] = set()
+    deleted: set[str] = set()
+    out: list[Move] = []
+    for line in r.out.splitlines():
+        kind, *names = line.split("\t")
+        if not kind:
+            continue
+        if kind.startswith("R") and len(names) >= 2:
+            out.append(Move(names[0], names[-1], "rename"))
+        elif kind == "A" and names:
+            added.add(names[0])
+        elif kind == "D" and names:
+            deleted.add(names[0])
+    for old in sorted(deleted):
+        stem = old.rsplit(".", 1)[0]  # foo/bar.py -> foo/bar (with an extension dropped)
+        if f"{stem}/__init__.py" in added:
+            out.append(Move(old, f"{stem}/__init__.py", "split"))
+    return out

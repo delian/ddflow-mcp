@@ -229,6 +229,14 @@ def _h_branch_synced(st: State, ev: Event) -> None:
     can read them."""
 
 
+def _h_path_moved(st: State, ev: Event) -> None:
+    """`path.moved`: a rename, move or package split a merge landed, one event per move. The
+    list is derived from these alone (MV-path-moves), so replay rebuilds it. A reconstituted
+    move is kept; no field is rewritten from another."""
+    if {"old", "new", "sha", "how"}.issubset(ev.data):
+        st.moves.append(ev.data)
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
@@ -263,6 +271,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "merge.forced": _h_merge_forced,
     "merge.reconciled": _h_merge_reconciled,
     "branch.synced": _h_branch_synced,
+    "path.moved": _h_path_moved,
     "worktree.removed": _h_worktree_removed,
     "pr.opened": _h_pr_opened,
     "pr.synced": _h_pr_synced,
