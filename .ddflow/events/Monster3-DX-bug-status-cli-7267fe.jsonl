@@ -1,0 +1,2 @@
+{"agent":"Monster3-DX-bug-status-cli-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"ecbea7b20068306bc3aea1664","kind":"ddflow.seen","lamport":192604,"schema":1,"subject":"ddflow","ts":"2026-11-13T10:12:05.640099Z"}
+{"agent":"Monster3-DX-bug-status-cli-7267fe","data":{"gate":"rubber_duck"},"id":"e9e5581663913ffa4f8f70e69","kind":"gate.started","lamport":192605,"schema":1,"subject":"DX-bug-status-cli","ts":"2026-11-13T10:12:05.713628Z"}
