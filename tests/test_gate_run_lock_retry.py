@@ -46,10 +46,8 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(repo, tmp_path, m
     run_cli(repo, "config", "--set", "gate.ci.command", f"touch {shlex.quote(str(ran))}")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    tree = repo.parent / "agent-tree"
-    _git(repo, "worktree", "add", "-q", str(tree), "-b", "agent-work")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
-    assert run_cli(tree, "claim", "T1", "--no-worktree")[0] == 0
+    assert run_cli(repo, "claim", "T1")[0] == 0
     # A short acquire window plus a short retry bound keep the test fast; the holder keeps
     # the lock for the whole of it, so the run must give up cleanly, never raise.
     run_cli(repo, "config", "--set", "lease.acquire_timeout_s", "1")
@@ -91,10 +89,8 @@ def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    tree = repo.parent / "agent-tree"
-    _git(repo, "worktree", "add", "-q", str(tree), "-b", "agent-work")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
-    assert run_cli(tree, "claim", "T1", "--no-worktree")[0] == 0
+    assert run_cli(repo, "claim", "T1")[0] == 0
 
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     p = subprocess.Popen(
