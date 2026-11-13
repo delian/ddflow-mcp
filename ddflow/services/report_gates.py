@@ -56,6 +56,36 @@ def _row(gate: str, rec, cfg) -> dict[str, Any]:
     return row
 
 
+def _review_rounds(it, gate: str, cfg) -> dict[str, Any]:
+    """The round budget line of a review gate (DX-agent-final-report-rounds): rounds used of
+    the cap, the full/delta split, every forced round's reason, whether it passed on
+    refutation (the flag, not a verdict string), and the head the last reviewer covered so
+    the report can note when that was not the commit that landed. ``it`` is the Item (never
+    None here) so the count reads the gate's HISTORY, the same fold the review budget does."""
+    used = G.rounds_used(it, gate)
+    if not used and G.on_refutation(it, gate) is None:
+        return {}
+    last_head = ""
+    for run in reversed(it.runs_of(gate)):
+        head = (run.evidence or {}).get("reviewed_head")
+        if head:
+            last_head = str(head)
+            break
+    return {
+        "used": used,
+        "full": G.full_rounds(it, gate),
+        "delta": G.delta_rounds(it, gate),
+        "max": cfg.review.max_rounds,
+        "forced": [
+            str((run.evidence or {}).get("budget_forced"))
+            for run in it.runs_of(gate)
+            if (run.evidence or {}).get("budget_forced")
+        ],
+        "refutation": G.on_refutation(it, gate),
+        "reviewed_head": last_head,
+    }
+
+
 def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, Any]]:
     """One row per recorded gate, in pipeline order (then any gate outside it), with the
     triage counts of a review gate."""
@@ -67,6 +97,9 @@ def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, 
         counts = G.triage_counts(it, g)
         if counts:
             row["triage"] = counts
+        rounds_ = _review_rounds(it, g, cfg)
+        if rounds_:
+            row["review_rounds"] = rounds_
         out.append(row)
     return out
 
