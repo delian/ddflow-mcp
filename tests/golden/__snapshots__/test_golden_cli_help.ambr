@@ -1474,9 +1474,9 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, onboard, parallel, recovery, update, upgrade, verify, viewers, workflow.
-                Omit for the overview.
+    topic       one of: cli, completion, config, customise, export, gates, import, lanes, manual,
+                mcp, memory, metrics, onboard, parallel, recovery, update, upgrade, verify, viewers,
+                workflow. Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
