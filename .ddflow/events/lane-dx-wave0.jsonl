@@ -31,3 +31,4 @@
 {"agent":"lane-dx-wave0","data":{"at":1794527855.2739737,"holder":"lane-dx-wave0"},"id":"e5d723bbc4a03c8ce955676a3","kind":"lease.renewed","lamport":188012,"schema":1,"subject":"DX-reviewer-failover","ts":"2026-11-12T23:57:35.396817Z"}
 {"agent":"lane-dx-wave0","data":{"at":1794529247.3192575,"holder":"lane-dx-wave0"},"id":"e7ac3be15ca1d2287c986d300","kind":"lease.renewed","lamport":188095,"schema":1,"subject":"DX-reviewer-failover","ts":"2026-11-13T00:20:47.479143Z"}
 {"agent":"lane-dx-wave0","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ec88aeed59e1818d6050b1c2f","kind":"cadence.ran","lamport":188096,"schema":1,"subject":"recall_recheck:DX-reviewer-failover","ts":"2026-11-13T00:20:57.797460Z"}
+{"agent":"lane-dx-wave0","data":{"at":1794530757.8519876,"holder":"lane-dx-wave0"},"id":"e11b760ea6874a6f8e87ec27d","kind":"lease.renewed","lamport":188172,"schema":1,"subject":"DX-reviewer-failover","ts":"2026-11-13T00:45:58.007933Z"}
