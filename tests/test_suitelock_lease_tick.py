@@ -63,7 +63,7 @@ def test_a_zero_interval_never_ticks(tmp_path: Path):
 
 
 def test_a_raising_tick_never_ends_the_wait(tmp_path: Path):
-    ticks: list[int] = []
+    started = time.monotonic()
     with SL.hold(_cfg(30), "holder", tmp_path, say=lambda _t: None):
         with pytest.raises(SL.SuiteBusy):
             with SL.hold(
@@ -76,4 +76,6 @@ def test_a_raising_tick_never_ends_the_wait(tmp_path: Path):
                 tick_s=0.1,
             ):
                 pass
-    assert ticks == []
+    # The raising tick must not abort the wait: the waiter still runs the whole 0.6s
+    # (a broken loop that stops on the error would raise SuiteBusy at the first ~0.1s tick).
+    assert time.monotonic() - started >= 0.5
