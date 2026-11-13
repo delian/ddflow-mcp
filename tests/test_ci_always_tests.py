@@ -48,13 +48,24 @@ def test_a_change_in_a_constants_bearing_file_also_runs_the_ratchet_test(project
     assert len(json.dumps(res.scope)) < 800
 
 
-def test_an_empty_closure_still_runs_the_whole_suite_which_holds_the_always_set(project, stubs):  # noqa: F811
+def test_an_empty_closure_runs_the_always_set_not_nothing(project, stubs):  # noqa: F811
+    """B-ci-unavailable-config-only-change: a change no test reaches (a config file) used to run
+    the whole-suite hook, which pre-commit skips for a diff that matches no test file, so the
+    gate was unavailable. The always-run guards run instead: a real, non-vacuous verdict."""
     _write(project, {"tests/test_readme_table.py": PASSING})
     _branch(project, {"notes/memo.md": "hi\n"})
     res = _run(project)
     assert res.ok, res.reason
+    assert res.scope["scope"] == "selected" and "no test reaches" in res.scope["why"]
+    assert res.scope["always_tests"] == ["tests/test_readme_table.py"]
+    (call,) = _calls(stubs, "pytest")
+    assert "tests/test_readme_table.py" in call
+
+
+def test_an_empty_closure_with_no_always_guards_still_runs_the_whole_suite(project, stubs):  # noqa: F811
+    _branch(project, {"notes/memo.md": "hi\n"})
+    res = _run(project)
     assert res.scope["scope"] == "full" and "no test reaches" in res.scope["why"]
-    assert not _calls(stubs, "pytest")  # the unmodified hook ran every test, guards included
 
 
 def test_the_rest_of_the_set_follows_a_selected_guard_file(
