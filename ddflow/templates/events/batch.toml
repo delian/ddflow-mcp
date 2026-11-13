@@ -4,14 +4,14 @@
 name = "batch.formed"
 doc = "Items were grouped into one batch to be verified by one gate run: the members with their tip shas and path manifests, what closed the batch and the base it sits on."
 fields = { "members" = ["list"], "trigger" = ["str"], "base" = ["str"] }
-lookup = { "trigger" = "a trigger word", "base" = "a commit sha" }
+lookup = { "members" = "item ids, tip shas and path globs compared with other records", "trigger" = "a trigger word", "base" = "a commit sha" }
 exempt = "a machine record of a grouping: item ids, shas and paths, no authored text"
 
 [[kind]]
 name = "batch.gate_started"
 doc = "A batch's gate run began: the gate, a digest of the command and the tree it runs on."
 fields = { "gate" = ["str"], "tree_sha" = ["str"], "command_digest" = ["str"], "run" = ["str"] }
-lookup = { "gate" = "a gate name", "tree_sha" = "a tree sha" }
+lookup = { "gate" = "a gate name", "tree_sha" = "a tree sha", "command_digest" = "a hex digest compared for equality", "run" = "a run id compared with its finish" }
 exempt = "a machine record of a run: names, digests and shas"
 
 [[kind]]
@@ -19,7 +19,7 @@ name = "batch.gate_finished"
 doc = "A batch's gate run ended with one outcome, fanned out to every member's own gate event in the same write."
 fields = { "gate" = ["str"], "outcome" = ["str"], "tree_sha" = ["str"], "run" = ["str"], "elapsed_s" = ["float", "int"], "queue_wait_s" = ["float", "int"], "reason" = ["str"], "members" = ["list"] }
 text = ["reason"]
-lookup = { "gate" = "a gate name", "outcome" = "an outcome word", "tree_sha" = "a tree sha" }
+lookup = { "gate" = "a gate name", "outcome" = "an outcome word", "tree_sha" = "a tree sha", "run" = "a run id compared with its start", "members" = "item ids" }
 exempt = "a machine record of a gate run's outcome; the reason repeats the member gate events that carry it"
 
 [[kind]]
