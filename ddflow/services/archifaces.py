@@ -59,7 +59,8 @@ PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
         "ADP-forge",
         ("ddflow.infra.forge", "ddflow.adapters.forge", "ddflow.adapters.forge_gitlab"),
     ),
-    DYNAMIC: ("ADP-tools", _RUNNER),
+    # `adapters.fs.which` is the port of `shutil.which`: its argument is the caller's
+    DYNAMIC: ("ADP-tools", (*_RUNNER, "ddflow.adapters.fs")),
     **dict.fromkeys(TOOLS, ("ADP-tools", ())),
     **dict.fromkeys(PLATFORM, ("ADP-platform", ())),
     "sh": ("ADP-platform", _RUNNER),  # a shell entry point of the process runner itself
