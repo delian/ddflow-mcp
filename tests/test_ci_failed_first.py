@@ -22,6 +22,11 @@ from ddflow.services.ci import failed_first as FF
 SLOW = 0.1  # seconds each fixture test takes: 36 tests before the failing one cost 3.6 s
 
 
+def _toml(text: str) -> str:
+    """``text`` as a TOML basic string (JSON's escapes are TOML's): shell quoting is not TOML quoting."""
+    return json.dumps(text)
+
+
 def _suite(root: Path, n: int = 40, failing: int = 37) -> Path:
     """A fixture suite of ``n`` tests where test ``failing`` fails."""
     body = ["import time", ""]
@@ -248,7 +253,8 @@ def test_a_rerun_of_an_item_is_handed_the_ids_its_last_ci_run_failed(repo, monke
         _ci_gate(repo)["evidence"].get("ci_scope") or {}
     )  # nothing before
     seen = tmp_path / "seen.json"
-    cfg.write_text(f'[ci]\ncommand = "cp \\"${FF.IDS_ENV}\\" {shlex.quote(str(seen))}"\n{pipeline}')
+    cp = f'cp "${FF.IDS_ENV}" {shlex.quote(str(seen))}'
+    cfg.write_text(f"[ci]\ncommand = {_toml(cp)}\n{pipeline}")
     second = AR.run(repo, ref="T1", agent="holder-ff2")
     assert second.exit == 0, second.data
     assert json.loads(seen.read_text())["ids"] == ["t.py::test_a", "t.py::test_b"]
@@ -269,9 +275,8 @@ def test_the_knob_turns_the_ordering_off(repo, monkeypatch, tmp_path):
     cfg.write_text(f'[ci]\ncommand = "echo FAILED t.py::test_a - boom; false"\n{pipeline}')
     AR.run(repo, ref="T1", agent="holder-ff3")
     seen = tmp_path / "seen.txt"
-    cfg.write_text(
-        f'[ci]\ncommand = "echo \\"[${FF.IDS_ENV}]\\" > {shlex.quote(str(seen))}"\n{pipeline}'
-    )
+    echo = f'echo "[${FF.IDS_ENV}]" > {shlex.quote(str(seen))}'
+    cfg.write_text(f"[ci]\ncommand = {_toml(echo)}\n{pipeline}")
     assert AR.run(repo, ref="T1", agent="holder-ff3").exit == 0
     assert seen.read_text().strip() == "[]"
 
