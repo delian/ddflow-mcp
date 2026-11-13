@@ -90,7 +90,9 @@ def test_a_secret_correction_shows_the_marker_and_no_values(proj):
         assert not any(new_text in ln or "first body" in ln for ln in marks)
         assert SECRET not in out and "first body" not in out
     data = json.loads(_show(proj, "T1", "--json"))
-    assert new_text not in json.dumps(data["corrections"])
+    dumped = json.dumps(data["corrections"])
+    assert new_text not in dumped and "first body" not in dumped and SECRET not in dumped
+    assert set(data["corrections"][0]) == {"at", "by", "reason", "fields"}
     rows = data["corrections"][0]["fields"]
     assert rows and rows[0]["field"] == "body"
     assert all(r["old"] == "" and r["new"] == "" for r in rows)
