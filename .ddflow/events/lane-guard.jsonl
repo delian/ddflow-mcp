@@ -449,3 +449,4 @@
 {"agent":"lane-guard","data":{"at":1794538260.5674143,"holder":"lane-guard"},"id":"e5d2f7a99cdb9c74b6568fa15","kind":"lease.renewed","lamport":188411,"schema":1,"subject":"GR-claim-base","ts":"2026-11-13T02:51:00.725569Z"}
 {"agent":"lane-guard","data":{"at":1794538441.8032036,"holder":"lane-guard"},"id":"eaa3eaf1edf9134b631aa9b72","kind":"lease.renewed","lamport":188413,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-13T02:54:01.964387Z"}
 {"agent":"lane-guard","data":{"at":1794538885.4453878,"holder":"lane-guard"},"id":"e71bca7b8d0d876cf4a37bf3b","kind":"lease.renewed","lamport":188436,"schema":1,"subject":"GR-claim-base","ts":"2026-11-13T03:01:25.596220Z"}
+{"agent":"lane-guard","data":{"at":1794539061.0278509,"holder":"lane-guard"},"id":"eaf70adcd7a8d960e0276b789","kind":"lease.renewed","lamport":188471,"schema":1,"subject":"GR-approval-evidence","ts":"2026-11-13T03:04:21.176395Z"}
