@@ -245,6 +245,12 @@ def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
         _write_in_place(target, text, fsync=fsync)
 
 
+def write_in_place(path: Path | str, text: str, *, fsync: bool = False) -> None:
+    """Overwrite `path` keeping its inode: the writer for a file somebody holds a lock on
+    (a rename over it would leave the holder locking an inode nobody else opens)."""
+    _write_in_place(Path(path), text, fsync=fsync)
+
+
 def _write_in_place(path: Path, text: str, *, fsync: bool) -> None:
     """What `path.write_text(text, "utf-8")` does (truncate, write: same inode, owner,
     links), plus the flush to disk `fsync` asks for."""
