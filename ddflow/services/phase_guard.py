@@ -49,7 +49,12 @@ def settled_tasks(it, st: State, kind: str, phase_id: str, *, hint: str):
     if it.terminal:
         return O.refused(kind, f"{phase_id} is already {it.state}", id=phase_id), None, None
     tasks = st.tasks(phase_id)
-    open_tasks = [t for t in tasks if not t.terminal]
+    # A gate-skip follow-up (`followup_of` set) is never the phase's remaining work: it
+    # is settled with its item (on complete, abandon, or the gate re-recorded), so it must
+    # not hold the phase open (bug B-gskip-task-lands-in-phase-and-blocks). It stays in
+    # `tasks` below so the "work to retire" count still sees the phase, but it never
+    # blocks the close.
+    open_tasks = [t for t in tasks if not t.terminal and not t.followup_of]
     if open_tasks:
         shown = ", ".join(t.id for t in open_tasks[:_SHOWN])
         more = " ..." if len(open_tasks) > _SHOWN else ""

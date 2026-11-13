@@ -43,7 +43,7 @@ from ._core import (
     _progress_token,
     _surf,
 )
-from ._instructions import _instructions, _obligation_footer
+from ._instructions import _obligation_footer
 from ._reply import (
     _bounds,
     _finish_list_read,
@@ -89,9 +89,7 @@ class _Handlers:
             )
         return _ok(
             msg.get("id"),
-            protocol.initialize_result(
-                self.protocol, _instructions(self.repo, self.agent, self.tier)
-            ),
+            protocol.initialize_result(self.protocol, self._handshake_text()),
         )
 
     def _m_silent(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
@@ -359,6 +357,7 @@ class _Handlers:
             out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
         for note in (
             self._first_call_note(name, agent),
+            self._deferred_notice(),
             _obligation_footer(self),
             _upgrade.footer(self, _STALE_CHECK_EVERY_S),
         ):

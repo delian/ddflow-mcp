@@ -132,6 +132,19 @@ def test_a_corrupt_store_verifies_nothing(proj, monkeypatch):
         AU.verify(proj, Config(), token)
 
 
+def test_a_wrong_typed_store_field_is_refused_not_a_crash(proj, monkeypatch):
+    """`_read` checks only `format`: a store whose tables are the wrong type used to pass it
+    and crash later (on `.items()`); it refuses with a clear message instead."""
+    _token(proj, monkeypatch)
+    store = AU.store_path(proj)
+    store.write_text(json.dumps({"format": 1, "tokens": [], "pairings": []}), "utf-8")
+    store.chmod(0o600)
+    with pytest.raises(AU.AuthRefused, match="not a table"):
+        AU._read(store)
+    with pytest.raises(AU.AuthRefused, match="not a table"):
+        AU.verify(proj, Config(), "ddft_" + "a1b2c3d4e5f6" + "_" + "f" * 64)
+
+
 def test_a_symlinked_store_is_refused(proj, monkeypatch, tmp_path):
     token = _token(proj, monkeypatch)
     store = AU.store_path(proj)
@@ -501,6 +514,26 @@ def test_a_rotation_that_cannot_be_recorded_still_ends_the_old_token(proj, monke
         AU.verify(proj, Config(), old)
 
 
+def test_tokens_list_names_a_store_and_log_disagreement(proj, monkeypatch):
+    """`redeem` writes the store before the log: a crash between them leaves a live token the
+    list (log) never sees, and a list entry the store has already ended. `tokens list` says so
+    instead of staying silent."""
+    _token(proj, monkeypatch, "gw", "bot")
+    _code, out, _err = run_cli(proj, "--json", "tokens", "rotate", "gw")
+    log = _log(proj)
+
+    def down(*_a, **_k):
+        raise OSError("log unavailable")
+
+    monkeypatch.setattr(log, "append", down)
+    with pytest.raises(OSError):
+        AU.redeem(log, Config(), json.loads(out)["code"])
+    code, out, err = run_cli(proj, "--json", "tokens", "list")
+    assert code == 0, out + err
+    assert "unrecorded" in out
+    assert "will not verify" in out
+
+
 def test_required_mode_bootstrap_still_refuses_an_agent(proj, monkeypatch):
     _require(proj)
     monkeypatch.setenv("CLAUDECODE", "1")
@@ -605,6 +638,15 @@ def test_a_pasted_token_is_redacted_from_any_text():
     token = "ddft_" + "ab12" * 3 + "_" + "cd34" * 16
     text, hits = mask_secrets(f"the gateway uses {token} now", Config().session.redact_patterns)
     assert hits == 1 and token[-16:] not in text
+
+
+def test_the_token_shape_and_the_redact_default_stay_pinned():
+    """The token shape lives in two files (`_TOKEN` and [session].redact_patterns' default); the
+    sample is built in `_TOKEN`'s own shape, so changing one side and not the other fails."""
+    sample = AU._TOKEN.fullmatch("ddft_" + "a1b2c3d4e5f6" + "_" + "f" * 64)
+    assert sample is not None
+    text, hits = mask_secrets(f"gateway {sample.group(0)} now", Config().session.redact_patterns)
+    assert hits == 1 and sample.group(0)[-16:] not in text
 
 
 def test_the_commands_have_no_mcp_tool():

@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/output_budget.py:MAX_LINES" = 'output.max_lines'
+
+[exempt]
+"ddflow/services/output_budget.py:DEFAULT_CHARS" = 'the shipped [output].max_chars default, mirrored for a caller that passes no config; the knob already exists'

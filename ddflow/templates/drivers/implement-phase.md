@@ -278,6 +278,12 @@ different record), `--extends ID` / `--duplicate-of ID` (the same thing) or `--r
 to it and no new id is made; a record somebody has claimed, or that is closed, gets a new
 record linked to it instead. `--check` shows the candidates without writing anything.
 
+A duplicate **bug** is closed only once its original is fixed, and never automatically:
+`ddflow bug fixed <ORIGINAL>` lists the open bugs linked to it as duplicates
+(`open_duplicates`); close each explicitly -- `ddflow bug duplicate <DUP> --of <ORIGINAL>`
+(refused while the original is open or was fixed without a test; it cites the original's
+test), its own `bug fixed` with its own test, or `bug invalid` when it was never a bug.
+
 Any bug, any operator correction, any surprise:
 
 ```sh

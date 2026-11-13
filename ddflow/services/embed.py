@@ -18,7 +18,8 @@ timeout, a non-zero exit, output that breaks the contract -- is `unavailable` wi
 reason, never a partial answer and never a silent downgrade. `rerank` is the fallback in
 one place: when the embedder is unavailable the BM25 order is kept and the answer SAYS so.
 
-`model2vec` is imported here and nowhere else (the `extras-one-adapter` contract).
+`model2vec` is imported in `ddflow.adapters.embed` and nowhere else (the `extras-one-adapter`
+contract); this module caches that answer in `_static_model`.
 """
 
 from __future__ import annotations
@@ -31,11 +32,14 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
+from ..adapters.embed import static_model as _adapter_static_model
 from ..config import Config
 from .cmdrunner import CommandRunner, Declared, executable_missing
 
 #: The model2vec class, imported at first use (it drags in numpy, joblib and tokenizers, seconds
-#: of CPU no other verb needs). `_UNSET` = not tried yet; None = the [rag] extra is absent.
+#: of CPU no other verb needs). `_UNSET` = not tried yet; None = the [rag] extra is absent. The
+#: import itself lives in `ddflow.adapters.embed` (the `extras-one-adapter` home); this module
+#: caches its answer here so a caller (and its tests) keep one cache under one name.
 _UNSET: Any = object()
 _StaticModel: Any = _UNSET
 
@@ -43,11 +47,7 @@ _StaticModel: Any = _UNSET
 def _static_model() -> Any:
     """The model2vec ``StaticModel`` class, or None without the ``[rag]`` extra."""
     if _StaticModel is _UNSET:
-        try:  # the [rag] extra; every caller works without it
-            from model2vec import StaticModel
-        except Exception:  # absent or broken install (ImportError or not): no embedder
-            StaticModel = None
-        globals()["_StaticModel"] = StaticModel
+        globals()["_StaticModel"] = _adapter_static_model()
     return _StaticModel
 
 

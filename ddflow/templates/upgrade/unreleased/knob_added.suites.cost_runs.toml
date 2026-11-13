@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "suites.cost_runs"
+new = '20'
+why = "SQ-priority-fair-queue: priority classes, aging, fair share and an estimated wait for the suite queue."
+impact = "additive"

@@ -50,6 +50,7 @@ from ._support import (
     _key,
     _pipeline,
     _tool_body,
+    connect_text,
     state_part_digest,
     tools_problems,
 )
@@ -368,10 +369,10 @@ class _RehearsalSteps:
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
         forced = self._serve(repo, _HELLO, start_timeout=FORCED_TIMEOUT_S)
         self._forget_start(repo)  # each session runs the start check itself, not a kept answer
-        default = self._serve(repo, _HELLO, start_timeout=None)  # as shipped
+        default = self._serve(repo, [*_HELLO, _call(9, "ddflow_brief", {})], start_timeout=None)
         self._forget_start(repo)
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
-        if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
+        if START_TIMED_OUT in connect_text(first):
             self.unrunnable("MCP connect: propose, wait for consent, apply")
             return self.add(
                 6,
@@ -401,7 +402,7 @@ class _RehearsalSteps:
             not problems,
             "; ".join(problems)
             or f"proposed on connect, nothing applied until consent, then applied; "
-            f"tools/list {size} bytes; {told}",
+            f"tools/list {size} bytes (budget {self.opt.tools_budget}); {told}",
         )
 
     @staticmethod
@@ -414,7 +415,7 @@ class _RehearsalSteps:
         pending, the operator is asked and told where the plan is (B-start-timeout-drops-
         proposal). A log so small that the plan fit in the time gets the proposal instead,
         which is as good: what fails is silence."""
-        text = (forced.get(1) or {}).get("instructions", "")
+        text = connect_text(forced)
         note = all(w in text for w in ("PENDING", "Ask the operator", "ddflow upgrade --plan"))
         if note or ("newer than this project" in text and "Ask the operator" in text):
             return []
@@ -423,8 +424,9 @@ class _RehearsalSteps:
     def _default_path(self, shipped: dict[int, dict[str, Any]]) -> list[str]:
         """The server with the shipped time bound (a smoke test of the real default, which on an
         idle machine proposes and on a loaded one notes; the forced timeout above is the
-        deterministic half): its handshake is never silent about the upgrade."""
-        text = (shipped.get(1) or {}).get("instructions", "")
+        deterministic half): its connect is never silent about the upgrade, said on the first
+        tool result when the handshake was snapshot-served (SU-init-fast-hook)."""
+        text = connect_text(shipped)
         if "newer than this project" in text and "Ask the operator" in text:
             return []
         return [
@@ -432,12 +434,13 @@ class _RehearsalSteps:
         ]
 
     def _proposed(self, first: dict[int, dict[str, Any]]) -> tuple[int, list[str]]:
-        """What the first session shows: the handshake asks the operator, the tools fit."""
+        """What the first session shows: the connect asks the operator, the tools fit. The
+        upgrade line rides the first tool result when the handshake was snapshot-served."""
         problems: list[str] = []
-        text = (first.get(1) or {}).get("instructions", "")
+        text = connect_text(first)
         if "newer than this project" not in text or "Ask the operator" not in text:
             problems.append("the handshake did not propose the upgrade and ask the operator")
-        size, bad = tools_problems((first.get(2) or {}).get("tools") or [], self.opt.tools_budget)
+        size, bad = tools_problems((first.get(2) or {}).get("tools") or [])
         return size, problems + bad
 
     def _consented(self, repo: Path) -> list[str]:
@@ -564,8 +567,11 @@ class _RehearsalSteps:
             )
         if done.returncode not in (O.OK, O.REFUSED):
             problems.append(f"complete exited {done.returncode}")
-        # a refusal (no independent reviewer ran) is the design: release, never force. The merge
-        # already released the lease (nothing to release is fine, LK-release-at-merge)
+        # a refusal (no independent reviewer ran) is the design: release, never force. With
+        # [lease].release_at_merge the merge already released the lease, so `release` finds
+        # nothing to release (LK-release-at-merge) and a DIFFERENT agent's claim is refused as
+        # `item.claimed` (merged, not fresh work -- the merge -> complete gap), never a stuck
+        # claim (B-merged-uncompleted-claimable).
         left = (
             self.ddflow(self.new, repo, "release", "DRY-1", agent=a)
             if done.returncode == O.REFUSED
@@ -573,10 +579,11 @@ class _RehearsalSteps:
         )
         took = self.ddflow(self.new, repo, "claim", "DRY-1", agent=b)
         if done.returncode == O.REFUSED and (
-            left.returncode not in (O.OK, O.NOTHING) or took.returncode != 0
+            left.returncode not in (O.OK, O.NOTHING) or took.returncode != O.REFUSED
         ):
             problems.append(
-                f"after the honest release {b} could not take the task ({left.returncode}, {took.returncode})"
+                f"after {a} honestly released the merged task, {b} was not refused the merged "
+                f"task (release {left.returncode}, claim {took.returncode})"
             )
         wrong = self.doctor_verdict(repo, a)
         if wrong:

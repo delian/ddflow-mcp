@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "lanes.idle_s"
+new = '1800'
+why = "CO-lanes-coordinator: seconds a lane holding a lease may be quiet before `ddflow lanes --coordinator` flags it idle."
+impact = "additive"

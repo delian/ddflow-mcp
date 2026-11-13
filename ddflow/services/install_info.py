@@ -23,6 +23,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from ..adapters.env import DEFAULT as ENV
+from ..adapters.env import Env
 from ..config_sections import _compat as CV
 from ..core import version as V
 from ..infra import fsio
@@ -229,15 +231,20 @@ def upgrade_advice(highest: str = "", install: InstallInfo | None = None) -> str
 
 __all__ = [
     "DIST_NAME",
+    "FOREIGN_LAUNCH_REFUSAL",
     "KINDS",
     "METHODS",
+    "SCRATCH_PREFIXES",
+    "SYSTEM_TEMP_DIRS",
     "ForeignLaunch",
     "InstallInfo",
     "foreign_launch_root",
+    "in_checkout_family",
     "install_info",
     "install_method",
     "installed_from_index",
     "is_own_dev_tree",
+    "named_on_pythonpath",
     "normalise_path",
     "own_distribution",
     "repoint_shared_editable",
@@ -328,6 +335,80 @@ class ForeignLaunch:
     primary: Path
 
 
+#: What the foreign-launch refusal says first, and what `pins` looks for so that a refusal is never
+#: recorded as a pin's expected output (Bc28808f9c3): one string, so the two cannot drift apart.
+FOREIGN_LAUNCH_REFUSAL = "imported from the linked worktree"
+
+#: The temp directories ddflow's scratch trees are made in when TMPDIR is not redirected:
+#: the two canonical system temp roots, listed as the whitelist `_scratch_parents` checks a
+#: scratch tree's parent against — not temp files ddflow itself creates (nosec B108).
+SYSTEM_TEMP_DIRS: tuple[Path, ...] = (Path("/tmp"), Path("/var/tmp"))  # nosec B108
+
+#: The directory-name prefixes ddflow's `scratch_tree` makes ITS throwaway trees under (its
+#: default and its callers: ddflow/services/ci/scratch.py ``ddflow-ci.``, services/gates/
+#: baseline_red.py ``ddflow-base.``, services/gates/mutation.py ``ddflow-mut.``, api/gates/
+#: _run.py ``ddflow-merged.``, services/onboard_tests.py ``ddflow-baseline-``). A tree carrying
+#: one of these is ddflow's own scratch; any other ``ddflow-*`` name made by hand (a detached
+#: worktree such as ``git worktree add --detach /tmp/ddflow-x <sha>``) is a lane's unmerged
+#: code and stays foreign — DETACHED alone is not unique to scratch trees.
+SCRATCH_PREFIXES: tuple[str, ...] = (
+    "ddflow-scratch-",
+    "ddflow-ci.",
+    "ddflow-base.",
+    "ddflow-mut.",
+    "ddflow-merged.",
+    "ddflow-baseline-",
+)
+
+
+def _scratch_parents() -> set[Path]:
+    """Where a ``ddflow-*`` scratch tree can sit: this process's temp root or a system one."""
+    return {fsio.temp_root().resolve(), *(d.resolve() for d in SYSTEM_TEMP_DIRS)}
+
+
+def _is_scratch_tree(root: Path) -> bool:
+    """ddflow's own throwaway tree: a directory carrying one of `SCRATCH_PREFIXES` names,
+    directly in a temp dir, checked out DETACHED (`scratch_tree` always detaches; a lane's
+    tree sits on its branch). Name and parent are read from the RESOLVED path, so a symlink
+    named like a scratch tree is not one."""
+    real = root.resolve()
+    if not real.name.startswith(SCRATCH_PREFIXES) or real.parent not in _scratch_parents():
+        return False
+    return _paths.detached_worktree(real)
+
+
+def named_on_pythonpath(root: Path, env: Env = ENV) -> bool:
+    """Whether ``root`` is an entry of ``PYTHONPATH``: the launcher put this tree's code on the
+    import path ON PURPOSE, which a shared editable install redirected behind its back is not."""
+    want = root.resolve()
+    for entry in filter(None, (env.get("PYTHONPATH") or "").split(os.pathsep)):
+        try:
+            if Path(entry).resolve() == want:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def in_checkout_family(start: Path, primary: Path) -> bool:
+    """Whether ``start`` lies in the ``primary`` checkout or one of its linked worktrees.
+
+    EVERY enclosing directory is asked, not just the nearest git tree: a directory (even a
+    forged empty ``.git``) made inside a lane does not take the caller out of that lane. A
+    start with no enclosing tree of the family answers False; a path that cannot be read
+    answers True (refuse, never excuse, on a doubt).
+    """
+    try:
+        want = primary.resolve()
+        here = Path(start).resolve()
+        for d in (here, *here.parents):
+            if d == want or ((d / ".git").exists() and _paths.primary_checkout(d) == want):
+                return True
+        return False
+    except (OSError, ValueError):
+        return True
+
+
 def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     """The linked worktree the running `ddflow` package was imported from, or None.
 
@@ -345,9 +426,11 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     # hold ddflow's own code under test, not another lane's unmerged branch — a ci/pre-push run
     # lives in one, so importing from it is legitimate and must not read as foreign (B267ff88849).
     # A lane's worktree is under `.ddflow/worktrees/`, never a sibling of the temp root.
-    if root.resolve().parent == fsio.temp_root().resolve() and root.name.startswith(
-        "ddflow-"
-    ):
+    # The parent is compared to the process's temp root AND to the system defaults: a process
+    # that runs under its own TMPDIR (the swarm pilot's sandbox) is not looking at the temp dir
+    # the scratch tree was made in, and that must not turn ci's own tree into a foreign one
+    # (Bbaaaba1364).
+    if _is_scratch_tree(root):
         return None
     primary = _paths.primary_checkout(root)
     if primary is None:

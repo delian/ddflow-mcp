@@ -151,3 +151,8 @@ looks like an existing record is refused as a possible duplicate, with `candidat
 record), `extends:ID` or `duplicate_of:ID` (the same thing) or `related:ID` (linked both
 ways). `extends` always files a new task, phase or research note linked to the target;
 `merge_into:ID` appends to an open, unclaimed one instead. `check_only` shows the candidates and writes nothing.
+
+A duplicate bug closes only once its original is fixed: `ddflow_bug_fixed` returns
+`open_duplicates` (the open bugs linked to it as duplicates) and closes none of them;
+`ddflow_bug action=duplicate id=<dup> of=<original>` closes one, citing the original's
+regression test, and is refused while the original is open or has no test.

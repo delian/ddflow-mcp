@@ -106,8 +106,7 @@ def fill(
             if decision is None:
                 continue
             pool = [
-                replace(ln, live=ln.live + 1) if ln.name == decision.lane else ln
-                for ln in pool
+                replace(ln, live=ln.live + 1) if ln.name == decision.lane else ln for ln in pool
             ]
             live.append(score.Live(item.id, item.globs, decision.family))
             starts.append(

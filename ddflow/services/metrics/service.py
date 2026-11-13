@@ -10,9 +10,11 @@ from typing import Any
 from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
+from ...core import progress as PR
 from ...core.events import Event
 from ...core.metrics import VIEWS
 from ...core.model import State
+from ..perf import suitewaste as SW
 from .batch import build as batch_build
 from .batch import has_figures as batch_ok
 from .batch import text as batch_text
@@ -37,6 +39,7 @@ from .render import retro as text_retro
 from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
+from .runs_to_merge import provider as runs_provider
 from .skips import audit
 from .slo import assess as slo_assess
 from .slo import ok as slo_ok
@@ -60,6 +63,7 @@ def _swarm_rows(ctx: Context) -> Any:
 
 
 register("swarm", _swarm_rows)
+register("runs", runs_provider)
 
 
 @dataclass
@@ -104,6 +108,29 @@ def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
     ok = ok_of(data)
     why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any {subject}"
     return Answer(ok, "" if ok else why, metrics=data, text=text_of(data))
+
+
+#: The views that are one figure, with their (build, has-figures, text, subject).
+_VIEW_OF_FIGURE: dict[str, tuple] = {
+    "slo": (slo_assess, slo_ok, slo_text, "service-level indicator"),
+    "batch": (batch_build, batch_ok, batch_text, "size bucket"),
+}
+
+
+def _own_fold(
+    view: str, events, state, cfg: Config, now: float, phase: str, floor, probes
+) -> Answer:
+    """The views that fold the log themselves: ``swarm`` (the baseline a fleet must beat) and
+    ``suitewaste`` (whole-suite runs by reason; it reads trees through ``probes``)."""
+    if view == "swarm":
+        return SWARM["view"](events, state, cfg, now, phase, floor)
+    if probes is None:
+        return Answer(False, "suitewaste needs a git probe to compare trees", failed=True)
+    scope = (lambda item: PR.phase_of(state, item) == phase) if phase else None
+    data = SW.build(events, cfg, now, probes, since=floor, in_scope=scope)
+    ok = SW.has_figures(data)
+    why = "" if ok else data["unavailable"].get("avoidable_share", "no whole-suite run in the log")
+    return Answer(ok, why, metrics=data, text=SW.text(data))
 
 
 def _locks(ctx: Context, probes: Probes | None) -> Answer:
@@ -163,8 +190,8 @@ def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
-    if view == "swarm":  # the baseline folds the log itself
-        return SWARM["view"](events, state, cfg, now, phase, floor)
+    if view in ("swarm", "suitewaste"):  # these fold the log themselves
+        return _own_fold(view, events, state, cfg, now, phase, floor, probes)
     facts = collect(events, state, now, cfg)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":
@@ -182,15 +209,13 @@ def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like
         return _paths(ctx)
     if view == "variants":
         return _variants(ctx)
-    if view == "slo":
-        return _figure(ctx, slo_assess, slo_ok, slo_text, "service-level indicator")
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
         return _lanes(events, cfg, now, floor)
-    if view == "batch":
-        return _figure(ctx, batch_build, batch_ok, batch_text, "size bucket")
+    if view in _VIEW_OF_FIGURE:
+        return _figure(ctx, *_VIEW_OF_FIGURE[view])
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

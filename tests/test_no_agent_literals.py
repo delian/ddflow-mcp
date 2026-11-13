@@ -42,7 +42,10 @@ BASELINE: dict[str, tuple[int, str]] = {
         6,
         "the hook-style vocabulary, the legacy session variables and the title doc",
     ),
-    "ddflow/services/review/engine.py": (1, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/adapters/reviewer_clients.py": (
+        1,
+        "the reviewer wire kind `gemini` (a route `kind`) is not a harness",
+    ),
     "ddflow/services/leanagents.py": (
         1,
         "HARNESS = 'claude': the lean agent definitions are a claude-only template set",

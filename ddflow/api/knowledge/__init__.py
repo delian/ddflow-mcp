@@ -43,6 +43,7 @@ from .bugs import (  # noqa: F401
     severity_rank,
     upstream_offer,
 )
+from .dup_closure import bug_duplicate, open_duplicates  # noqa: F401
 from .lessons import (  # noqa: F401
     LessonDraft,
     lesson_add,

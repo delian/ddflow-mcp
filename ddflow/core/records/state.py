@@ -51,6 +51,13 @@ class State:
     #: `memory.recorded` event ids whose superseded text was redacted from the log
     #: (`memory.redacted`): the auditable record that the text no longer stands.
     redacted_memory_events: set[str] = field(default_factory=set)
+    #: `kind:id` -> the `record.corrected` audit entries of that record, oldest first: who, when,
+    #: why and per field a digest of the old and the new value, never the old value
+    #: (REC-correct-event). Kept apart from the records so their shown form does not change.
+    corrections: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: batch id -> the batch of items verified by one gate run: members, trigger, base, gate
+    #: runs, culprits and its state (`batch.*`, BG-record). Never pruned (D-BG-Q10).
+    batches: dict[str, dict[str, Any]] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).
@@ -134,6 +141,11 @@ class State:
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.
     waiting: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: agent -> "path\0key" -> the newest `agent.onboarded` record of that artifact ({"path",
+    #: "kind", "key", "digest", "descriptor", "version"}); read it through `onboarded_of`.
+    onboarded: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
+    #: agent -> its newest `agent.smoke` record ({"verdict", "reason", "attempts"}); read it through `smoke_of`.
+    smoke: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: document kind -> who last enabled or disabled its export and when, and whether the
     #: operator vetoed it: {"enabled", "by", "human", "at", "path", "mode", "local",
     #: "locked", "acked"}. The SELECTION itself lives in the config; this is the record

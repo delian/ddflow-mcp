@@ -668,6 +668,10 @@ def _git_subcommand_matches(want: list[str], args: list[str]) -> bool:
 
 def _matches_head(want: list[str], head: list[str], ordered: bool) -> bool:
     if want[0].startswith("-"):
+        # A flag entry matches the whole argv word, quoted or not: bash strips a quote before
+        # the command runs, so `git push '--force'` is still the force flag; only a flag text
+        # that is a SUBSTRING of a larger argument (`_word` requires the whole word) is data,
+        # not a flag (B-hook-flag-match-matches-quoted-text).
         return any(_word(want[0], w) for w in head) and (
             _inorder(want[1:], head)
             if ordered

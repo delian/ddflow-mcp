@@ -112,6 +112,22 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
+    """B-hook-flag-match-matches-quoted-text: matching a FLAG entry is by whole words, not by
+    substrings, and a quote delimiter does not neutralize the flag. `git push '--force'` is a
+    real force push (bash strips the quotes before the command runs), while `--force` inside a
+    LARGER quoted argument is data the command prints, not a flag it runs with."""
+    assert _check("git push '--force'") is not None, "a quoted flag is still the flag"
+    assert _check('git push "--force"') is not None
+    assert _check("echo '--force'") is not None, "the whole --force token is still the flag"
+    assert _check("echo --force") is not None
+    assert (
+        _check("printf '%s\\n' 'task: the --force --force-with-lease text is only described'")
+        is None
+    ), "the flag text inside a larger quoted argument is data"
+    assert _check('echo "task: the --force text"') is None
+
+
 @pytest.mark.parametrize(
     "cmd",
     [

@@ -226,6 +226,8 @@ def import_project(
         data["written"] = IM.apply_import(repo, log, plan)
         return O.ok("import", **data)
     if not plan.found:
+        if any(n.startswith("REFUSING") for n in plan.notes):
+            return O.nothing("import", "Import refused: over the task cap.", **data)
         return O.nothing("import", "Nothing to import.", **data)
     return O.ok("import", **data)
 

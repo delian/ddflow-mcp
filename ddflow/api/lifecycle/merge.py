@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...adapters.proc import current_pid
 from ...core import flow as F
 from ...core import outcome as O
 from ...core.admission import new_file_globs
@@ -20,6 +21,7 @@ from ...services import gates as G
 from ...services import identity as ID
 from ...services import leases as LS
 from ...services import merge_force as MF
+from ...services import mergequeue as MQ
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
@@ -82,6 +84,19 @@ def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, a
 def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str:
     """ "" for a clean merge; else the note `_landed_anyway` has for a failure that landed."""
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+
+
+def _queued_by_holder(repo: Path, item: str, held) -> bool:
+    """The merge queue's integrator lands an entry its own holder put in line: that request is
+    the holder's consent to end their lease at the landing. Read off the queue itself, never
+    off an argument a caller names: the entry must be the one the integrator is running now,
+    queued by the lease's holder, and THIS process must be that integrator (the one that holds
+    the integrator lock), so a peer landing in the same window is still refused."""
+    entry = MQ.get(repo, item)
+    if entry is None or entry.state != MQ.RUNNING or entry.agent != held.holder:
+        return False
+    running = MQ.holder(repo)
+    return running is not None and running["pid"] == current_pid()
 
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
@@ -147,6 +162,13 @@ def _record_reconciled(
         )
         return
     files = sorted(set(mine) & set(moved))
+    if files:
+        # A file the branch already carries exactly as `main` had it (main merged into the
+        # branch, then this landing fast-forwarded) was reconciled before landing, not by it.
+        # Only a file whose branch tip still differs from `main` before the landing counts.
+        diverging = W.git(repo, "diff", "--name-only", landed_before, branch_head, "--", *files)
+        if diverging.ok:
+            files = sorted(set(files) & set(diverging.out.splitlines()))
     if files:
         log.append(
             "merge.reconciled",
@@ -233,7 +255,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     if ID.is_agent(agent):
         held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
-        if held is not None:
+        if held is not None and not _queued_by_holder(repo, item, held):
             # A same-clone peer agent's live lease: refuse like a foreign one (the
             # operator recovering a crashed agent's item is exempt -- not is_agent).
             who = held.holder

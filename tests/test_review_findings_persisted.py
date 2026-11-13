@@ -59,7 +59,8 @@ def test_the_recorded_evidence_carries_the_finding_body_and_a_digest(repo, tmp_p
     )  # a second run does not overwrite the first
     assert hashlib.sha256(path.read_bytes()).hexdigest()[:16] == ev["output_digest"]
     assert repo / _gate(repo).evidence["output_file"] != path
-    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    # the first line is the run's `plan` checkpoint (the cut's identity); the rest are chunks
+    rows = [r for r in map(json.loads, path.read_text().splitlines()) if "chunk" in r]
     assert BODY in rows[0]["reply"] and rows[0]["chunk"] == 1
     assert "fake" in path.name
     assert BODY in ev["chunk_findings"][0]["detail"]

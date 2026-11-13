@@ -29,7 +29,9 @@ def _lesson(repo, lid, title, *, rule="", why="", how="", supersedes=""):
 
 def test_lesson_show_reads_one_lesson_in_full_by_id(repo):
     run_cli(repo, "init")
-    _lesson(repo, "L1", "one id, one meaning", rule="resolve an id once", why="drift", how="grep first")
+    _lesson(
+        repo, "L1", "one id, one meaning", rule="resolve an id once", why="drift", how="grep first"
+    )
     code, out, err = run_cli(repo, "lesson", "show", "L1")
     assert code == 0, err
     assert "L1" in out and "one id, one meaning" in out

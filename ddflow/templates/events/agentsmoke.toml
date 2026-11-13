@@ -1,0 +1,9 @@
+# Event kinds owned by the live smoke harness (core/handlers/agentsmoke.py). One [[kind]] per kind.
+
+[[kind]]
+name = "agent.smoke"
+doc = "A live smoke run of one agent in a throwaway project: the majority verdict (pass, fail or unavailable), its reason and each attempt's verdict."
+fields = { "agent" = ["str"], "verdict" = ["str"], "reason" = ["str"], "attempts" = ["list"] }
+text = ["reason", "attempts"]
+lookup = { "agent" = "the agent that was smoked", "verdict" = "pass, fail or unavailable" }
+exempt = "a machine record of a smoke run: the reason and attempts carry agent output, redacted as text"

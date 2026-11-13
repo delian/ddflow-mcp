@@ -8,6 +8,9 @@ commands (`declared/setup.py`); `identify` has no command line and stays a hand-
 
 from __future__ import annotations
 
+import importlib
+
+from ...core import outcome as O
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ...views.output_caps import cut_text as _cut_text
 from ...views.output_caps import footer_of as _footer_of
@@ -49,6 +52,32 @@ def _status_handler(a, c):
     lines = _status_body(d, r, by_tag_lines=tuple(r.get("by_tag_lines") or ()))
     print(_cut_text(c.repo, "\n".join(lines), "status", a, footer=_footer_of(out)))
     return out.exit
+
+
+def _recover_call(repo, a, agent):
+    """`recover`: the sweep or plan, or with `--adopt` one expired lease taken over."""
+    if a.get("adopt"):
+        if a.get("plan") or a.get("apply") or a.get("all"):
+            return O.refused(
+                "recover.adopt",
+                "--adopt takes over one lease and does nothing else: drop --plan, --apply and --all",
+            )
+        return importlib.import_module("ddflow.api.recover_adopt").adopt(
+            repo, a.get("item", "") or "", reason=a.get("reason", "") or "", agent=agent
+        )
+    return _cap(
+        repo,
+        _api().recover(
+            repo,
+            item=a.get("item", "") or "",
+            apply=bool(a.get("apply")),
+            all=bool(a.get("all")),
+            plan=bool(a.get("plan")),
+            agent=agent,
+        ),
+        "recover",
+        a,
+    )
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -116,21 +145,21 @@ COMMANDS: tuple[Command, ...] = (
                 help="The triage, dry run: per item the class (SAFE_AUTO/PROPOSE/OPERATOR), the evidence, the exact command and the recovery attempt count. --json emits it as rows.",
                 cli_help="",
             ),
+            Param(
+                "adopt",
+                type="boolean",
+                help="Take over the EXPIRED lease of --item without a force flag or an approval, when its tree is measured to hold no uncommitted file (committed work stays on its branch). Needs --reason; records who took over, from whom and why. A live lease, an unmeasurable tree or uncommitted work refuses.",
+                cli_help="",
+            ),
+            Param(
+                "reason",
+                help="With --adopt: why the lease is taken over (recorded in the lease note).",
+                default="",
+                cli_help="",
+            ),
             *capped(True),
         ),
-        call=lambda repo, a, agent: _cap(
-            repo,
-            _api().recover(
-                repo,
-                item=a.get("item", "") or "",
-                apply=bool(a.get("apply")),
-                all=bool(a.get("all")),
-                plan=bool(a.get("plan")),
-                agent=agent,
-            ),
-            "recover",
-            a,
-        ),
+        call=_recover_call,
         payload="found",
     ),
     Command(
@@ -273,6 +302,14 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
+                "history",
+                type="boolean",
+                help="List every correction of the record, in order.",
+                default=False,
+                cli_only=True,
+                cli_help="list every correction of the record, in order (default: the latest per field)",
+            ),
+            Param(
                 "report",
                 type="boolean",
                 help="Its completion report.",
@@ -290,9 +327,15 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: (
             _api().show_report(repo, a["id"], agent=agent, brief=bool(a.get("brief")))
             if a.get("report")
-            else _api().show(repo, a["id"], agent=agent)
+            else _api().show(repo, a["id"], agent=agent, history=bool(a.get("history")))
         ),
         payload="item",
+        flag_exempt={
+            "--history": (
+                "CLI text view only: the MCP show body always carries every correction in "
+                "`corrections`, so nothing is withheld"
+            )
+        },
     ),
     Command(
         path=("status",),

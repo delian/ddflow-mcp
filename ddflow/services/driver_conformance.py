@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from ddflow.services import facts, harnessfacts, hookio
 from ddflow.services import harnessreg as HR
+from ddflow.services.parity import orchestration
 
 
 def run(h) -> dict:
@@ -65,6 +66,18 @@ def run(h) -> dict:
                 "status": "ok",
                 "detail": plan.emitter,
             }
+
+    cap = getattr(h, "capabilities", None)
+    if cap is None or cap.none:
+        checks["capabilities"] = {"status": "ok", "detail": "not declared (unknown)"}
+    else:
+        # The values and their sources are validated at parse; the grade reuses the report's
+        # verified() so the check and the report never disagree about what is a sourced fact.
+        declared = sorted(orchestration.verified(cap))
+        checks["capabilities"] = {
+            "status": "ok",
+            "detail": ", ".join(declared) or "declared, none verified",
+        }
 
     ok = all(c["status"] == "ok" for c in checks.values())
     return {"agent": hid, "status": "ok" if ok else "failed", "checks": checks}

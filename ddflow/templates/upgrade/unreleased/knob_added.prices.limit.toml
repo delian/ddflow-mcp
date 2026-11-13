@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "prices.limit"
+new = "{}"
+why = "USD a model may spend per reset window, by model id (or subscription id); layered company floor -> project -> user and read by services.limit_routing (TE-limit-aware-routing)."
+impact = "additive"

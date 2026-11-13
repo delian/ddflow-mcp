@@ -32,7 +32,7 @@ AXES = (IN_AGENT, ORCHESTRATOR)
 HISTORY_ACTIONS = ("add", "edit", "retire")
 
 #: Check ids that resolve to ``driver_conformance.run``'s emitted keys.
-FIXED_CHECKS = ("facts", "hooks")
+FIXED_CHECKS = ("facts", "hooks", "capabilities")
 #: Declared fixture kinds that are not per-event (``hook`` is, so it is spelled ``hook:<e>``).
 DECLARED_CHECKS = ("argv", "stream")
 #: The lane conformance levels 1-7, a single cited check.

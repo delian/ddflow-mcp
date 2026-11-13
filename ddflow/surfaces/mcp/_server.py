@@ -19,6 +19,7 @@ from ...config import Config
 from ...core import outcome as O
 from ...infra import harness_identity
 from ...infra.log import EventLog
+from .. import mcp_lifecycle as _lifecycle
 from .. import mcp_next as _NEXT
 from .. import mcp_protocol as protocol
 from .. import projectkinds as PK
@@ -40,7 +41,8 @@ from ._core import (
     _waves_auto,
 )
 from ._handlers import _Handlers
-from ._instructions import _instructions
+from ._instructions import _instructions_parts, _upgrade_note
+from ._snapfast import served as _snapshot_served
 
 
 class Server(_Handlers):
@@ -79,6 +81,9 @@ class Server(_Handlers):
         #: The stale-server note (`mcp_upgrade.footer`): said once, looked for once a minute;
         #: `reexec_pending` asks `serve` to replace the process once it is quiet.
         self.reexec_pending = False
+        #: `kill_pending` asks `serve` to end the process once it is quiet (a hard `kill`,
+        #: or a `restart`/`kill` on a remote server, which resolves to a reboot).
+        self.kill_pending = False
         self._stale_said = False
         self._stale_checked_at = float("-inf")
         #: Declared identity for this connection; empty means "use the process
@@ -105,6 +110,11 @@ class Server(_Handlers):
         self.client_info: dict[str, Any] = {}
         #: The session-start preamble rides on the first call only (`_first_call_note`).
         self._first_call_done = False
+        #: Set when a handshake was answered from the interface snapshot (`_snapfast`): the
+        #: upgrade notice it left out rides the first tool result (`_deferred_notice`).
+        self._notice_deferred = False
+        #: The stable text of a handshake rendered live, for `serve` to write as the snapshot.
+        self.snapshot_due: str | None = None
         self._first_call_tries = 0
         #: Re-instruction cadence, per CONNECTION. `initialize` delivers the rules once and
         #: nothing re-states them afterwards; after a context compaction the model may
@@ -203,7 +213,10 @@ class Server(_Handlers):
 
     def _invoke(self, spec, args, agent, per_call, params):
         with _identity().via_mcp(), self._stamped(agent):
-            return self._invoke_marked(spec, args, agent, per_call, params)
+            result = self._invoke_marked(spec, args, agent, per_call, params)
+        if spec.get("lifecycle"):
+            _lifecycle.arm(self, spec["lifecycle"])
+        return result
 
     def _stamped(self, agent):
         """Stamping `wave:N` by default (`[waves].auto_stamp`) after a call that wrote."""
@@ -290,12 +303,35 @@ class Server(_Handlers):
             reply = self._dispatch(msg, modern=True)
         return _modernize(method, reply)
 
+    def _handshake_text(self) -> str:
+        """The instructions of `initialize` / `server/discover`: the fresh interface snapshot's
+        text, else the live rendering (stable text plus the upgrade line), which is then queued
+        as the next snapshot (`snapshot_due`)."""
+        if (snap := _snapshot_served(self)) is not None:
+            self._notice_deferred = True
+            return snap["instructions"]
+        stable, volatile = _instructions_parts(self.repo, self.agent, self.tier)
+        self._notice_deferred = False  # this handshake says the upgrade line itself
+        self.snapshot_due = stable
+        return stable + volatile
+
+    def _deferred_notice(self) -> str:
+        """The upgrade line a snapshot-served handshake left out, once, on the first tool result.
+        Never fails the call."""
+        if not self._notice_deferred:
+            return ""
+        self._notice_deferred = False
+        try:
+            return _upgrade_note(self.repo, self.agent)
+        except Exception:
+            return ""
+
     def _discover(self) -> dict[str, Any]:
         """`server/discover`: the versions, capabilities, identity and instructions a
         modern client would otherwise have learned from `initialize`. `resultType`, the
         identity in `_meta` and the cache hints are added by `_modernize`, like every
         modern result's."""
-        return protocol.discover(_instructions(self.repo, self.agent, self.tier))
+        return protocol.discover(self._handshake_text())
 
     def _dispatch(self, msg: dict[str, Any], *, modern: bool = False) -> dict[str, Any] | None:
         """Answer one JSON-RPC message: the method's own handler, else `method not found`.

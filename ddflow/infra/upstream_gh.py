@@ -32,7 +32,9 @@ class GhError(RuntimeError):
     """`gh` was asked and said no."""
 
 
-def _ask(runner: Runner, cwd: Path, argv: list[str], what: str, *, cfg: Config | None = None) -> str:
+def _ask(
+    runner: Runner, cwd: Path, argv: list[str], what: str, *, cfg: Config | None = None
+) -> str:
     error_max = (cfg or Config.load(cwd)).upstream_gh.error_max
     try:
         return _check(runner(cwd, argv), what)

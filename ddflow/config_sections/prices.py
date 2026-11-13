@@ -27,10 +27,16 @@ class PricesConfig:
     #: USD a model may spend per reset window, by model id (or by subscription id). A model
     #: with no value here, and no inherited value, has no limit on record: routing treats
     #: that UNKNOWN, never as headroom.
-    limit: dict[str, Any] = knob(doc="USD a model may spend per reset window, by model id (or subscription id). A model with no value here (and no inherited value) has no limit on record: routing treats that UNKNOWN, never headroom.", factory=dict)
+    limit: dict[str, Any] = knob(
+        doc="USD a model may spend per reset window, by model id (or subscription id). A model with no value here (and no inherited value) has no limit on record: routing treats that UNKNOWN, never headroom.",
+        factory=dict,
+    )
     #: The reset cadence per model id, e.g. "1d", "1mo"; empty value means the section's
     #: default "1mo".
-    reset: dict[str, Any] = knob(doc='The reset cadence per model id, e.g. "1d", "1mo"; empty value means the section default "1mo".', factory=dict)
+    reset: dict[str, Any] = knob(
+        doc='The reset cadence per model id, e.g. "1d", "1mo"; empty value means the section default "1mo".',
+        factory=dict,
+    )
 
     def limit_of(self, model: str) -> float | None:
         """The layered limit for ``model``, or None when nothing is on record for it.

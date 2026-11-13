@@ -133,6 +133,30 @@ def test_ci_record_writes_the_outcome_a_hook_saw_with_its_failing_checks(repo, t
     json.dumps(last)
 
 
+def test_a_failed_check_keeps_the_hooks_output_tail(repo, tmp_path):
+    """A red merge must say WHAT failed: each failing hook's own output is its detail, so a
+    later read of the ci.result can tell why (B-post-merge-ci-failure-carries-no-detail)."""
+    run_cli(repo, "init")
+    report = tmp_path / "out.txt"
+    report.write_text(
+        "gitleaks.......Failed\n"
+        "- exit code: 1\n"
+        "finding: secret in file.txt\n"
+        "bandit.......Skipped\n"
+        "doc8.......Passed\n"
+    )
+    code, out, _ = run_cli(
+        repo, "ci", "record", "--stage", "merge", "--result", "failed", "--report", str(report)
+    )
+    assert code == 0, out
+    checks = _state(repo).ci_results[-1]["checks"]
+    gitleaks = next(c for c in checks if c["id"] == "gitleaks")
+    assert not gitleaks["ok"] and "secret in file.txt" in gitleaks["detail"]
+    # a Skipped hook ends the failed hook's output; its own lines are not the failure's detail
+    assert "bandit" not in gitleaks["detail"]
+    assert [c["id"] for c in checks if not c["ok"]] == ["gitleaks"]
+
+
 def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
     _project(repo, bad=True)
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "w.txt")
@@ -143,7 +167,11 @@ def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
     _git(wt, "add", "-A")
     _git(wt, "commit", "-qm", "work")
     code, out, err = run_cli(repo, "--json", "merge", "T1")
-    assert '"ci"' in out and CI.bug_id("ruff check") in out, (code, out[-600:], err[-300:])
+    assert '"post_merge_check"' in out and CI.bug_id("ruff check") in out, (
+        code,
+        out[-600:],
+        err[-300:],
+    )
 
 
 def test_the_pre_push_hook_reports_its_outcome_to_ddflow(repo, fake_precommit, tmp_path):
