@@ -625,9 +625,8 @@ def complete_text(out, a, ctx) -> str:
         blockers = data.get("blockers", [])
         if not blockers:
             return f"{a['id']} may complete (0 unmet conditions)."
-        return (
-            f"{len(blockers)} unmet condition(s) for {a['id']}:"
-            + "".join(f"\n  - {b}" for b in blockers)
+        return f"{len(blockers)} unmet condition(s) for {a['id']}:" + "".join(
+            f"\n  - {b}" for b in blockers
         )
     blockers = data["blockers"]
     return (

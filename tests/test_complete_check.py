@@ -44,7 +44,9 @@ def test_complete_check_reports_unmet_conditions_and_writes_nothing(repo: Path) 
 def test_complete_check_exits_zero_when_nothing_is_unmet_and_does_not_complete(repo: Path) -> None:
     _add_task(repo)
     pass_pipeline(repo, "T1")
-    code, out, err = run_cli(repo, "complete", "T1", "--check", "--model", "claude-opus-5", agent="bot")
+    code, out, err = run_cli(
+        repo, "complete", "T1", "--check", "--model", "claude-opus-5", agent="bot"
+    )
     assert code == 0, out + err
     assert "may complete" in out + err, out + err
     # A check never completes: the item is still open afterwards.

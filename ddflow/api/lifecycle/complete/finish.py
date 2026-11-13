@@ -29,7 +29,13 @@ from ..author import (
 )
 from ..heartbeat import _commit_events, _inbox, _waiters
 from ..planning import plan_for
-from .approval import _ask_hint, _auto_complete_unavailable, _only_unavailable, _override_by_approval, _person_force
+from .approval import (
+    _ask_hint,
+    _auto_complete_unavailable,
+    _only_unavailable,
+    _override_by_approval,
+    _person_force,
+)
 from .checks import _failed_review, _na_map, _phase_suite, _refuted_extra, _umbrella_children
 from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
@@ -76,7 +82,9 @@ def _check_report(item: str, v, hard: list[str], it, agent: str) -> O.Outcome:
     lines += [f"  - {b}" for b in blockers]
     lines += [f"  - {h}" for h in not_in_blockers]
     if hard:
-        lines.append("None of these is lifted by --force or an approval: satisfy them on the record.")
+        lines.append(
+            "None of these is lifted by --force or an approval: satisfy them on the record."
+        )
     elif _only_unavailable(v, it):
         lines.append(
             "What policy would grant it: the standing `complete_unavailable` rule answers a "
