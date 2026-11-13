@@ -23,10 +23,16 @@ REQUEST_ENV = "_ARGCOMPLETE"
 def _module_run(orig_argv: list[str]) -> bool:
     """Was this process started as ``python -m ddflow`` (or a submodule of it)? ``sys.argv[0]`` is only ``-m`` (or the path of ``__main__.py``), so the module name
     comes from the interpreter's original arguments."""
-    if "-m" not in orig_argv[:-1]:
-        return False
-    module = orig_argv[orig_argv.index("-m") + 1]
-    return module == "ddflow" or module.startswith("ddflow.")
+    args = iter(orig_argv[1:])
+    for arg in args:
+        if arg == "-m":  # the interpreter's own module switch, before any script word
+            module = next(args, "")
+            return module == "ddflow" or module.startswith("ddflow.")
+        if arg in ("-W", "-X"):
+            next(args, None)  # an interpreter option that takes a value
+        elif not arg.startswith("-"):
+            return False  # a script path: later words are the script's, not the interpreter's
+    return False
 
 
 def asked(argv0: str | None = None, orig_argv: list[str] | None = None) -> bool:
