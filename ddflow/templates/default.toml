@@ -403,6 +403,8 @@ verify_load_ratio = 1.0
 
 [locks]
 mode = "enforce"
+acquire = "declared"
+hot_files = []
 undeclared_write = "warn"
 suggest_globs = true
 suggest_history = 30

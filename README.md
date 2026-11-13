@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=e6f81cc7d8f5 -->
-<details><summary>All 742 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=fa02034fdb0d -->
+<details><summary>All 744 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1222,6 +1222,8 @@ long default is left to `ddflow config --explain`.
 | `lessons.verify_output_lines` | `12` |  |
 | `lessons.verify_load_ratio` | `1.0` |  |
 | `locks.mode` | `"enforce"` | `enforce` \| `log` \| `off` |
+| `locks.acquire` | `"declared"` | `declared` \| `lazy` |
+| `locks.hot_files` | `[]` |  |
 | `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
 | `locks.suggest_globs` | `true` |  |
 | `locks.suggest_history` | `30` |  |
