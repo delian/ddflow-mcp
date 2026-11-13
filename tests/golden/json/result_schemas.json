@@ -3408,6 +3408,45 @@
   },
   "array_schema": null
  },
+ "ddflow_stacks": {
+  "command": "stacks",
+  "schema": "stacks@1",
+  "shape": "object",
+  "payload": [
+   "stack",
+   "status",
+   "detail",
+   "next_call",
+   "also",
+   "warnings",
+   "evidence",
+   "steps"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "stacks@1"
+    },
+    "stack": {},
+    "status": {},
+    "detail": {},
+    "next_call": {},
+    "also": {},
+    "warnings": {},
+    "evidence": {},
+    "steps": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_sync": {
   "command": "sync",
   "schema": "sync@1",
