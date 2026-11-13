@@ -14,7 +14,7 @@ from ...adapters import git as G
 from ...config import Config
 from ...config_sections._layers import read_toml
 from ...core import schedule
-from ...core.model import REVIEW, Item, State
+from ...core.model import REVIEW, Item, Lease, State
 from ...infra import worktree as W
 from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
@@ -23,6 +23,17 @@ from ..leaseclock import foreign
 from .common import _fold
 from .lifecycle import expire
 from .model import Recovery
+
+
+def _expired_lease(it: Item, lease: Lease | None, now: float, grace_s: int) -> bool:
+    """Is ``it`` owed an ``expired_lease`` finding for a lease that is no longer live?
+
+    A DONE item whose lease lapsed but was never cleared is owed nothing: ``complete``
+    keeps the expired lease record (nothing clears it) and `release --note salvaged` on
+    it is a no-op ('no lease'), so an expired-lease finding would read stale relative to
+    the item's actual state and overstate crash-orphans (Ba73b94a6ad).
+    """
+    return bool(lease) and not lease.live(now, grace_s) and not it.terminal
 
 
 def scan(
@@ -78,14 +89,7 @@ def scan(
         if it.removed:
             continue
         lease = it.lease
-        if lease and not lease.live(now, cfg.lease.grace_s):
-            if it.terminal:
-                # A DONE item whose lease lapsed but was never cleared reads DONE, not
-                # [expired_lease]. `complete` keeps the expired lease record (nothing
-                # clears it), and `release --note salvaged` on it is a no-op ('no
-                # lease'), so an expired-lease finding here is stale relative to the
-                # item's actual state and overstates crash-orphans (Ba73b94a6ad).
-                continue
+        if _expired_lease(it, lease, now, cfg.lease.grace_s):
             # Prefer whichever source actually names a tree. These should agree, and
             # after the renew fix they do -- but if they ever diverge, trusting the
             # empty one produces "nothing to salvage" over real work, which is the one
