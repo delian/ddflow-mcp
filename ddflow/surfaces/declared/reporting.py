@@ -450,6 +450,7 @@ COMMANDS: tuple[Command, ...] = (
         tier="all",
         family="ddflow_view",
         action="digest",
+        wire_shape=(["digest"], {}),
         help_group="Reading the queue",
         summary="the operator queue: what waits on a person, as askable entries",
         description=(

@@ -34,6 +34,7 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_dispatch",
         family="ddflow_view",
         action="dispatch",
+        wire_shape=(["dispatch"], {}),
         tier="all",
         help_group="Doing the work",
         description=(
