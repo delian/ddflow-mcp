@@ -3,6 +3,13 @@
 # set it in .ddflow/config.toml. Rewrite this file with `ddflow config defaults --write`.
 # What each knob means: `ddflow config --explain`.
 
+[adapters]
+platform = "auto"
+lane_transport = "local"
+network_consent = {}
+managed_files_consent = {}
+managed_files_backup = true
+
 [agent]
 id = ""
 reviewer_family_must_differ = true
