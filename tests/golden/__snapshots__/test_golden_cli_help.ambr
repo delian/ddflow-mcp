@@ -1474,9 +1474,9 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, onboard, parallel, recovery, update, upgrade, verify, viewers, workflow.
-                Omit for the overview.
+    topic       one of: cli, completion, config, customise, export, gates, import, lanes, manual,
+                mcp, memory, metrics, onboard, parallel, recovery, update, upgrade, verify, viewers,
+                workflow. Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -2075,23 +2075,26 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--ignore-cap] [--blocked] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--ignore-cap] [--blocked] [--state {interrupted,running,blocked,ready,merged,held,review,blocking_deps}] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
-    -h, --help           show this help message and exit
-    --phase PHASE        limit to this phase; exit 1 if it names no phase or item
-    --phase-only         with --phase: the phase's own ready items only (skip its ready blocking-
-                         dependencies)
-    --tag TAG            only items carrying this tag (repeatable: all must match); exit 1 if no
-                         item carries it
-    --wave WAVE          shorthand for --tag wave:N
-    --ignore-cap         treat items held only by the parallelism cap as ready for this call
-    --blocked            list every blocked item, dependency-blocked ones too (text view)
+    -h, --help            show this help message and exit
+    --phase PHASE         limit to this phase; exit 1 if it names no phase or item
+    --phase-only          with --phase: the phase's own ready items only (skip its ready blocking-
+                          dependencies)
+    --tag TAG             only items carrying this tag (repeatable: all must match); exit 1 if no
+                          item carries it
+    --wave WAVE           shorthand for --tag wave:N
+    --ignore-cap          treat items held only by the parallelism cap as ready for this call
+    --blocked             list every blocked item, dependency-blocked ones too (text view)
+    --state {interrupted,running,blocked,ready,merged,held,review,blocking_deps}
+                          list the items in one report state: interrupted, running, blocked, ready,
+                          merged, held, review or blocking_deps
     --kind {task,phase}
-    --lane LANE          answer this idle lane: its best item and a note for claim
-    --full               print everything: lift the default output caps ([output] max_rows,
-                         max_chars) for this call
-    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
+    --lane LANE           answer this idle lane: its best item and a note for claim
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
+    --cursor CURSOR       resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -2993,6 +2996,15 @@
   
   '''
 # ---
+# name: test_help[ddflow rule inventory]
+  '''
+  usage: ddflow rule inventory [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule list]
   '''
   usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
@@ -3056,10 +3068,12 @@
 # ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,inventory,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove,sync}
+    {add,edit,list,search,show,remove,inventory,sync}
+      inventory           every agent's rule and command files: who loads what, always-loaded cost,
+                          restated workflow
       sync                record hand-edited rule files in the log; write the files the log has and
                           the disk lacks
   
@@ -4196,6 +4210,7 @@
     'ddflow rule',
     'ddflow rule add',
     'ddflow rule edit',
+    'ddflow rule inventory',
     'ddflow rule list',
     'ddflow rule remove',
     'ddflow rule search',

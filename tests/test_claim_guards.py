@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from ddflow.core import outcome as O
@@ -88,3 +90,34 @@ def test_a_note_before_a_refusal_rides_on_the_refusal():
     refused = O.refused("item.claimed", "no", id="T1")
     out = C._refused_early(None, None, "T1", None, False, refused, [G.Note("g", "heads up")])
     assert out.data["claim_notes"] == [{"guard": "g", "text": "heads up"}]
+
+
+def test_queued_guard_refusal_names_the_take_over_route(monkeypatch):
+    """B577d271d24: the queued claim guard's refusal named neither `--force` nor an
+    agent's `--approval request`, so `claim()`'s `_names_claim_override` returned the raw
+    refusal instead of routing to `_claim_by_approval` -- the operator's take-over route --
+    and `--approval request` filed nothing (exit 3, no pending approval). The queued guard
+    must name the caller's route, exactly like the expired-lease refusal (Be62e44611e)."""
+    import importlib
+
+    from ddflow.services import waiting as WG
+
+    Q = importlib.import_module("ddflow.api.lifecycle.claim_guard_queued")
+
+    class It:
+        globs: ClassVar = ["hot.py"]
+
+    class St:
+        items: ClassVar = {"T1": It()}
+
+    class Waiter:
+        item = "OTHER"
+
+    ahead = Waiter()
+    monkeypatch.setattr(WG, "queued_ahead", lambda st, cfg, item, holder, globs, now: [ahead])
+    monkeypatch.setattr(
+        WG, "queued_names", lambda mine, aheads, cfg: "queued behind OTHER (hot.py)"
+    )
+    out = Q._refuse_if_queued(_ctx(st=St()))
+    assert out is not None and not out, out
+    assert "--approval request" in out.reason, out.reason

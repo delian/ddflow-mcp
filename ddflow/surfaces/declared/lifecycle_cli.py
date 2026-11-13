@@ -71,7 +71,7 @@ def heartbeat_text(out, a) -> str:
     item = out.data.get("id") or a["id"]
     waiters = out.data.get("waiters", [])
     return (
-        (f"renewed {item}" if out.data["renewed"] else out.reason)
+        (f"renewed {item}" if out.data["renewed"] else out.data.get("note") or out.reason)
         + waiting(
             waiters,
             f"{len(waiters)} agent(s) are waiting on {item}. Finishing, narrowing its "

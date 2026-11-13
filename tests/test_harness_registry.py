@@ -40,6 +40,7 @@ _TARGETS = [
     ("cody", "cody.md", "", "none"),
     ("dsh", "dsh.md", ".ddflow/harness/dsh.cordis.yml", "cordis-patch-yaml"),
     ("grok", "grok-build.md", ".grok/config.toml", "toml.mcp_servers"),
+    ("vibe", "vibe.md", ".vibe/config.toml", "toml.mcp_servers"),
 ]
 
 #: (agent, path, form, why) exactly as NATIVE_RULES held them, in order.

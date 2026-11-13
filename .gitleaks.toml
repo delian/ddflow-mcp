@@ -169,3 +169,24 @@ useDefault = true
   condition = "AND"
   paths = ['''^tests/test_critic_findings\.py$''']
   regexes = ['''^-----BEGIN RSA PRIVATE KEY-----\\n"\s*"MIIEowIBAAKCAQEAsecretbodyhere\\n"\s*"-----END RSA PRIVATE KEY-----$''']
+
+[[allowlists]]
+  # ddflow stamps its own resultcache digest into every gate record as `cache_key`
+  # (ddflow/services/gates/runner.py: `ev["cache_key"] = rc_key[:16]` — the 16-hex prefix of
+  # the resultcache key over code+command+environment; ddflow/services/resultcache.py builds
+  # the same value). The `key` keyword makes the generic-api-key rule read that digest as a
+  # credential, but it is a truncated hash digest of ddflow's own code/command/environment,
+  # never a key, and every value is a bare 16-hex string. Scoped to ONE rule, ONLY the
+  # committed event logs, ONLY a bare 16-hex value: a real key pasted into an event shard, or
+  # a value of any other shape in one, still fires.
+  description = "the cache_key resultcache digest in ddflow's committed gate records is not an API key"
+  targetRules = ["generic-api-key"]
+  condition = "AND"
+  # regexTarget "match" is the anchor that keeps this from over-broadening: it pins the hit
+  # to the full `cache_key":"…"` fragment (the field name AND the 16-hex value it wraps),
+  # because the generic-api-key rule's keyword prefilter is what reads a digest as a key. A
+  # real 16-hex token recorded under any other key (api_key, token, secret, …) is not the
+  # `cache_key` fragment, so it still fires.
+  regexTarget = "match"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^cache_key":"[0-9a-f]{16}"$''']

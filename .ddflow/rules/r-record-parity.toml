@@ -1,0 +1,10 @@
+id = "r-record-parity"
+title = "Every record kind has the same capabilities through one core engine: create, edit, append, filter, modify, delete, search, expose, context"
+tags = ["records", "principle", "parity"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**"]
+created = "2026-11-12T22:25:43.390747+00:00"
+updated = "2026-11-12T22:25:43.390757+00:00"
+
+Operator 2026-11-12: every record kind (task, phase, bug, decision, lesson, rule, memory, research, session note, gate, template, lens, role, pack, job, and any new one) can be created, edited, appended to, filtered, modified (revise/correct/merge/split), deleted (tombstone, restorable) and searched by the user, by an agent (with the user's permission where the permission model asks: D-correction-permissions-2, the approvals tiers), by a CLI command and by one MCP action group; each is exposed to search, recall and RAG and delivered as context to the different agent session contexts (brief, recall, change feed). All kinds use the SAME core engine (the RecordKind descriptor, RC1-RC12, one declaration drives CLI, MCP, help, events, fold, search, export) so a capability added once exists everywhere and cannot drift between kinds. A record kind that lacks a capability, or implements one outside the shared engine, is not done: list an exemption with a reason, and file a parity task. A parity test enumerates every kind against every capability so a new kind or a code change that drops one fails the suite. Extends r-everything-managed (D-universal-principles).
