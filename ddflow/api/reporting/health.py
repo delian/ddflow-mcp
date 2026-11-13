@@ -318,6 +318,11 @@ def _over_budget_notes(
     ]
 
 
+def _finished_ids(st) -> list[str]:
+    """Ids of items that are done or abandoned: their heartbeat loops are noise."""
+    return [i for i, it in st.items.items() if it.terminal]
+
+
 def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per findings source
     repo: Path,
     *,
@@ -410,7 +415,9 @@ def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per find
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
     notes.extend(FSZ.doctor_notes(repo, cfg.quality.max_file_bytes))  # r-small-files
-    notes.extend([*RH.doctor_notes(repo), *RH.host_notes()])  # identity, core.bare, orphan suites
+    notes.extend(
+        [*RH.doctor_notes(repo), *RH.host_notes(_finished_ids(st))]
+    )  # identity, core.bare, orphan suites
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
