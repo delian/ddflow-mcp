@@ -868,8 +868,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=0c1278824421 -->
-<details><summary>All 715 knobs across 65 sections</summary>
+<!-- ddflow:begin README/knobs sha=380c929362ef -->
+<details><summary>All 717 knobs across 65 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1299,6 +1299,8 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.status_fix_tasks_in_headline` | `false` |  |
+| `output.status_completed_shown` | `12` |  |
 | `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
