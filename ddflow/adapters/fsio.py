@@ -297,6 +297,24 @@ def _link_exclusive(
         raise
 
 
+def append_line(path: Path | str, line: str) -> None:
+    """One whole line appended to an O_APPEND descriptor (parents created); a short write is
+    retried so a torn tail cannot glue onto the next line."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        data = (line + "\n").encode("utf-8")
+        written = 0
+        while written < len(data):
+            n = os.write(fd, data[written:])
+            if n <= 0:
+                break
+            written += n
+    finally:
+        os.close(fd)
+
+
 def lock_path_for(path: Path | str) -> Path:
     """The lock file that guards `path`: `.<name>.lock` beside it."""
     path = Path(path)

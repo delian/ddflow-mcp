@@ -13,7 +13,6 @@ Home: `ddflow.adapters.platform` (the seam; the code each verb wraps stays in it
 from __future__ import annotations
 
 import contextlib
-import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -71,7 +70,7 @@ class Posix:
         return Path.home()
 
     def chmod_private(self, path: Path | str) -> None:
-        os.chmod(path, 0o600)
+        Path(path).chmod(0o600)
 
     def is_terminal(self, stream: Any) -> bool:
         return bool(stream is not None and hasattr(stream, "isatty") and stream.isatty())

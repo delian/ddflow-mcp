@@ -4,10 +4,10 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
+from ...adapters.proc import current_pid
 from ...core import flow as F
 from ...core import outcome as O
 from ...core.admission import new_file_globs
@@ -96,7 +96,7 @@ def _queued_by_holder(repo: Path, item: str, held) -> bool:
     if entry is None or entry.state != MQ.RUNNING or entry.agent != held.holder:
         return False
     running = MQ.holder(repo)
-    return running is not None and running["pid"] == os.getpid()
+    return running is not None and running["pid"] == current_pid()
 
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:

@@ -49,6 +49,30 @@ def test_timeout_reports_the_wait_and_this_process(tmp_path):
         p.wait()
 
 
+def test_a_lock_timeout_maps_to_a_clean_exit_not_a_traceback(tmp_path, monkeypatch):
+    """B-lock-timeout-raw-traceback: when the append lock cannot be acquired, `_flock`
+    raises a timeout that `exit_for` maps to a CLEAN exit code (NOTHING), not None. The CLI
+    re-raises whatever maps to None (a bug), and a bare `TimeoutError` does exactly that --
+    so `ddflow rename` / `update` / `review triage` printed a raw Python traceback instead
+    of one line and an exit 1/2. The timeout message stays the informative one.
+
+    The timeout is forced by monkeypatching the port's lock, so the assertion is
+    platform-independent: no `/proc/locks`, no cross-process flock, no holder to name."""
+    from ddflow.core import outcome as O
+    from ddflow.infra import fsio as fsio_mod
+
+    def already_held(*_a, **_k):
+        raise fsio_mod.LockTimeout(Path("events.lock"), 0.0)
+
+    monkeypatch.setattr(fsio_mod, "file_lock", already_held)
+    with pytest.raises(TimeoutError) as e, _flock(tmp_path / "events.lock", 0.3):
+        pass
+    assert O.exit_for(e.value) == O.NOTHING, (
+        f"mapped to {O.exit_for(e.value)!r}, not {O.NOTHING}: the CLI re-raises it as a traceback"
+    )
+    assert "overloaded" in str(e.value), str(e.value)
+
+
 @needs_proc_locks
 def test_timeout_names_the_holder_and_its_command(tmp_path):
     lock = tmp_path / "events.lock"

@@ -10,12 +10,11 @@ counted as gate evidence of a pass (D-perf-metrics-answers).
 from __future__ import annotations
 
 import json
-import os
 import shlex
 import sys
-import time
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import outcome as O
 from ..infra import proc as P
 from ..services.perf import env as E
@@ -65,14 +64,10 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
             missing["argv0"] = argv[0] if argv else "?"
             raise
         try:
-            _, status, ru = os.wait4(proc.pid, 0)
+            ran["returncode"], ru = P.wait_rusage(proc.pid)
         except OSError:
             missing["argv0"] = argv[0] if argv else "?"
             raise
-        if os.WIFSIGNALED(status):
-            ran["returncode"] = -os.WTERMSIG(status)
-        else:
-            ran["returncode"] = os.WEXITSTATUS(status)
         proc.returncode = ran["returncode"]
         child.update(
             {
@@ -121,6 +116,6 @@ def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome
     ):
         if value is not None:
             store.append(
-                repo, f"{series}.{metric}", store.Sample(t=time.time(), env=env_key, value=value)
+                repo, f"{series}.{metric}", store.Sample(t=CLOCK.wall(), env=env_key, value=value)
             )
     return O.ok("perf_ingest", text=sample.one_line())
