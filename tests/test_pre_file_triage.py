@@ -47,10 +47,14 @@ def test_the_workflow_help_ships_the_full_triage_checklist_as_a_numbered_list():
         "3. Identify reusable, extensible core modules",
         "4. Reuse prior research and recorded best practice",
         "5. Ask the operator only for person-decisions",
-        "6. File it with a `wave` tag",
-        "no-deps",
+        "6. File it with a `wave` tag (`no-deps` when it has no prerequisite), "
+        "its `--needs`,",
     ):
         assert must in WORKFLOW, f"the workflow help lost {must!r}"
+    # Item 6 must keep all three slots the shipped rule requires (r-task-phase-needs-wave):
+    # the wave/no-deps tag, --needs, and the phase (created when none fits).
+    for phrase in ("the right phase", "create one if none fits"):
+        assert phrase in WORKFLOW, f"item 6 lost {phrase!r}"
 
 
 def test_the_managed_block_stays_shorter_than_its_budget_after_triage():
