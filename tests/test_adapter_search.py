@@ -28,7 +28,9 @@ def search_conformance(idx: SearchIndex) -> None:
     con.close()
 
 
-CONFORMANCE = {"SearchIndex": {"real": lambda monkeypatch: N.SqliteSearchIndex(), "cases": search_conformance}}
+CONFORMANCE = {
+    "SearchIndex": {"real": lambda monkeypatch: N.SqliteSearchIndex(), "cases": search_conformance}
+}
 
 
 def test_the_adapter_and_the_fake_satisfy_the_port():

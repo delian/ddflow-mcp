@@ -96,7 +96,13 @@ class SqliteSearchIndex:
     ) -> None:
         self.create(con)
         # Validate first: a bad `postings` must not remove the index it will not replace.
-        rows = [(t, *_packed(ords, weights),) for t, (ords, weights) in postings.items()]
+        rows = [
+            (
+                t,
+                *_packed(ords, weights),
+            )
+            for t, (ords, weights) in postings.items()
+        ]
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
         self._write(con, docs, rows)
@@ -105,7 +111,13 @@ class SqliteSearchIndex:
         self, con: Connection, docs: Sequence[SearchDoc], postings: Mapping[str, Postings]
     ) -> None:
         # Validate first: a bad `postings` must not leave docs with no postings written.
-        rows = [(t, *_packed(ords, weights),) for t, (ords, weights) in postings.items()]
+        rows = [
+            (
+                t,
+                *_packed(ords, weights),
+            )
+            for t, (ords, weights) in postings.items()
+        ]
         self._write(con, docs, rows)
 
     def _write(self, con: Connection, docs: Sequence[SearchDoc], rows) -> None:

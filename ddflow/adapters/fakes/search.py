@@ -39,7 +39,10 @@ class FakeSearchIndex:
         # A COPY: a caller captured before a later `index` must keep the snapshot it saw
         # (the SQLite default reads fresh arrays each call; the fake does the same here).
         return {
-            t: (array(self.postings[t][0].typecode, self.postings[t][0]), array(self.postings[t][1].typecode, self.postings[t][1]))
+            t: (
+                array(self.postings[t][0].typecode, self.postings[t][0]),
+                array(self.postings[t][1].typecode, self.postings[t][1]),
+            )
             for t in terms
             if t in self.postings
         }
