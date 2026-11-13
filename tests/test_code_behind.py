@@ -243,3 +243,12 @@ def test_an_unparsable_config_counts_every_commit_instead_of_failing(repo):
     (repo / ".ddflow" / "config.toml").write_text("[worktree\nx=")
     r = D.measure(repo, wt)
     assert (r.behind, r.code_behind) == (1, 1)
+
+
+def test_an_empty_commit_counts_only_when_nothing_is_ignored(repo):
+    wt = _claimed(repo)
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    cfg = _cfg(repo)
+    assert (D.measure(repo, wt, cfg=cfg).behind, D.measure(repo, wt, cfg=cfg).code_behind) == (1, 0)
+    cfg.worktree.behind_ignore_globs = []
+    assert D.measure(repo, wt, cfg=cfg).code_behind == 1

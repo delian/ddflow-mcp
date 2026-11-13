@@ -139,6 +139,8 @@ def _commits(tree: Path, *rng: str) -> tuple[Commit, ...] | None:
 def _touches_code(c: Commit, ignore: Iterable[str]) -> bool:
     """Does the commit change any path the ignore list does not cover?"""
     gl = tuple(ignore)
+    if not gl:
+        return True  # nothing is ignored: every commit counts, an empty one too
     return any(not any(inside(p, g) for g in gl) for p in c.paths)
 
 
