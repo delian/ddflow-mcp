@@ -54,6 +54,21 @@ def test_the_gate_line_carries_refutation_forced_and_a_missed_final_commit():
     assert "reviewer did not see the final commit (reviewed abc1111, final def2222)" in line, line
 
 
+def test_a_reviewer_that_saw_the_final_commit_is_not_called_missed_when_one_sha_is_abbreviated():
+    from ddflow.services import report_gates as RG
+
+    rows = [
+        {
+            "gate": "critic",
+            "review_rounds": {"used": 1, "max": 4, "reviewed_head": "abc1234567890" * 2},
+        },
+    ]
+    RG.mark_missed_final(rows, "abc1234")  # the abbreviated spelling of the SAME commit
+    assert "missed_final" not in rows[0]["review_rounds"], rows[0]["review_rounds"]
+    RG.mark_missed_final(rows, "def9999")
+    assert rows[0]["review_rounds"]["missed_final"] == "def9999"
+
+
 def test_the_brief_review_line_is_rounds_of_the_cap_and_refutation():
     line = RB._review_line(
         {

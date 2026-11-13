@@ -88,12 +88,16 @@ def _review_rounds(it, gate: str, cfg) -> dict[str, Any]:
 
 def mark_missed_final(rows_: list[dict[str, Any]], final_head: str) -> None:
     """Set ``missed_final`` on every review row whose last reviewer covered a commit that is
-    not the one that landed, so the report can note it (DX-agent-final-report-rounds)."""
+    not the one that landed, so the report can note it (DX-agent-final-report-rounds).
+
+    Compared by the 7-char prefix the note renders: ``reviewed_head`` is a full sha (the head
+    captured before the diff) while ``final_head`` may be an abbreviated one, and a raw
+    compare would call the same commit "missed" over the difference."""
     if not final_head:
         return
     for r in rows_:
         rr = r.get("review_rounds")
-        if rr and rr.get("reviewed_head") and rr["reviewed_head"] != final_head:
+        if rr and rr.get("reviewed_head") and rr["reviewed_head"][:7] != final_head[:7]:
             rr["missed_final"] = final_head
 
 
