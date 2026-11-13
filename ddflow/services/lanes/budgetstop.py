@@ -79,7 +79,7 @@ def _usage_cost(ev: Any) -> float | None:
         return None
     try:
         cost = float(cost)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return None if not math.isfinite(cost) else cost
 
