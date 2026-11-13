@@ -293,7 +293,7 @@ class ScheduleConfig:
     )
     order_pin: list[str] = knob(
         factory=list,
-        doc="Ordering keys pinned to the HEAD of the order (default none), in this order, ahead of whatever `order` says: the company floor's way to keep e.g. bugs_first first. Tighten-only across layers: a layer's keys lead and what a lower layer pinned stays; no layer can remove a pin. Same names as `order`, minus `id` (the tie-break is always last and cannot be pinned).",
+        doc="Ordering keys pinned to the HEAD of the order (default none), in this order, ahead of whatever `order` says. Tighten-only across layers: a layer's keys lead and what a lower layer pinned stays, so no layer can REMOVE a lower layer's pin -- but a more-senior layer that pins a different key leads it, so a company floor keeps `bugs_first` pinned, not necessarily first. Same names as `order`, minus `id` (the tie-break is always last and cannot be pinned).",
         check=_pin_problem,
     )
     bugs_first: bool = knob(

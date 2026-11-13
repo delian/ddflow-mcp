@@ -85,7 +85,7 @@ def test_the_pin_heads_the_effective_order():
     [
         (["nope", "id"], "nope"),
         (["priority", "priority", "id"], "duplicate"),
-        (["id", "priority"], "id"),
+        (["id", "priority"], "must come last"),
     ],
 )
 def test_a_bad_order_is_refused_naming_the_known_keys(value, words):
