@@ -68,3 +68,33 @@ def test_record_lock_wait_s_zero_keeps_one_attempt_and_loses_the_outcome(repo, m
 
     assert timed_out["done"]
     assert "research" not in _item(repo, "T1").gates
+
+
+def test_a_positive_budget_caps_each_append_to_the_time_left(monkeypatch):
+    """The bound is hard: a positive `record_lock_wait_s` caps each attempt to the time
+    LEFT, not the log's whole acquire timeout, so the total wait never overshoots the
+    bound and the loop terminates instead of spinning (the cross-family review finding)."""
+    import time as _time
+
+    from ddflow.services.gates import hand_approve as HA
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(_time, "monotonic", lambda: clock["t"])
+    caps: list = []
+
+    class Log:
+        lock_timeout_s = 30.0
+
+        def append(self, kind, subject, data=None, *, lock_timeout_s=None):
+            caps.append(lock_timeout_s)
+            if lock_timeout_s:
+                clock["t"] += lock_timeout_s  # the attempt blocked its whole timeout
+            raise HA.AppendLockTimeout("contended")
+
+    log = Log()
+    with pytest.raises(HA.AppendLockTimeout):
+        HA._append_outcome(log, "gate.passed", "T1", {}, wait_s=45)
+
+    # One attempt, capped to the 45 s budget -- not the log's 30, and no second attempt:
+    # the total wait is exactly the bound, so it never overshoots and never spins.
+    assert caps == [45.0], caps
