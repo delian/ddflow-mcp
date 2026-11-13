@@ -282,7 +282,7 @@ class ScheduleConfig:
     )
     optimizer: str = knob(
         "greedy-v1",
-        doc="Which optimizer orders the ready set and cuts it to the free slots (default `greedy-v1`: the order keys bugs first, priority, id, and a greedy cut that never offers two overlapping items). An unknown name is refused with the names known. An optimizer only reorders and cuts: hard constraints stay `needs` and `globs`.",
+        doc="Which optimizer orders the ready set and cuts it to the free slots (default `greedy-v1`: ranks by the `order` keys, then a greedy cut that never offers two overlapping items). An unknown name is refused with the names known. An optimizer only reorders and cuts: hard constraints stay `needs` and `globs`.",
         check=_optimizer_problem,
     )
     order: list[str] = knob(

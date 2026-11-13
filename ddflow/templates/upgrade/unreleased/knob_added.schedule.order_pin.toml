@@ -4,5 +4,5 @@
 kind = "knob_added"
 key = "schedule.order_pin"
 new = '[]'
-why = "Ordering keys pinned to the head of the order; tighten-only across layers, so a company floor can keep bugs_first first."
+why = "Ordering keys pinned to the head of the order; tighten-only across layers, so a company floor keeps bugs_first pinned (not necessarily first if a more-senior layer pins another key)."
 impact = "additive"
