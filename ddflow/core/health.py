@@ -318,6 +318,8 @@ def _readies(ready: list[Ready]) -> list[Finding]:
     """Items that finished their gates but never merged: propose landing them, land nothing."""
     out: list[Finding] = []
     for r in ready:
+        if any(g != "merge" for g in r.owed):
+            continue  # owes work beyond merge: not ready to land
         owed = ", ".join(r.owed) if r.owed else "nothing"
         out.append(
             Finding(

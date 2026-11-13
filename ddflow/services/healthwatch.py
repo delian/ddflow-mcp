@@ -113,11 +113,16 @@ def modes(cfg, override: str = "") -> dict[str, str]:
     }
     # The recovery detectors (LAPSED_ALIVE, READY_TO_LAND, MERGE_INTERRUPTED) have no
     # apply correction of their own: they are DETECTED here and consumed by `recover`, so
-    # they inherit `[health].mode` (propose by default) and never apply anything.
+    # they inherit `[health].mode` (propose by default) and never apply anything. Capped at
+    # `propose`: a global `--mode apply` still only REPORTS them; `recover` performs the
+    # SAFE_AUTO half, never the health pass.
     out = {}
     for k in H.KINDS:
         m = own.get(k, "inherit")
-        out[k] = override or (h.mode if m == "inherit" else m)
+        mode = override or (h.mode if m == "inherit" else m)
+        if mode == "apply" and k not in own:
+            mode = "propose"
+        out[k] = mode
     return out
 
 
@@ -301,12 +306,14 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
         from . import gates as G
 
         required = G.required_gates(cfg)
-        owed = tuple(
-            g
-            for g in G.pipeline_for(it, cfg)
-            if g in required and g != "merge" and not it.gate_satisfied(g, True)
+        missing = tuple(
+            g for g in G.pipeline_for(it, cfg) if g in required and not it.gate_satisfied(g, True)
         )
-        out.append(H.Ready(i, lease.holder if lease else "(none)", ahead, owed, it.branch))
+        # Ready to land only when nothing but `merge` is owed: work beyond merge means the
+        # lane is not finished, so proposing it to land is wrong (research row b).
+        if any(g != "merge" for g in missing):
+            continue
+        out.append(H.Ready(i, lease.holder if lease else "(none)", ahead, missing, it.branch))
     return out
 
 
@@ -323,16 +330,20 @@ def _merges(repo: Path, st, cfg) -> list[H.MergeHang]:
         if wt is not None and wt.exists() and W.merging(wt) is True:
             out.append(H.MergeHang(i, holder, str(wt), merging=True))
         if it.branch and it.gate_outcome("merge") != "passed":
-            # Landed but not logged: a REAL merge commit put the branch head onto the base
-            # (base advanced PAST the branch head), yet no merge event was recorded. NOT an
-            # empty branch (base..branch == 0) and NOT a fast-forward tip (branch..base == 0):
-            # both are the ordinary pre-merge state, and `_landed_anyway` already records a
-            # fast-forward it can see. What nothing else sees is base moved past the branch.
-            head = W.git(repo, "rev-parse", "refs/heads/" + it.branch).out.strip()
-            if head:
-                behind = W.git(repo, "merge-base", "--is-ancestor", head, base)
-                past = W.git(repo, "rev-list", "--count", f"refs/heads/{it.branch}..{base}")
-                if behind.ok and past.ok and past.out.strip() != "0":
+            # Landed but not logged: the branch's commits are on the base yet no merge event
+            # was recorded. The fork point (`it.base_sha`) is what separates this from an
+            # EMPTY branch -- one created from an older base, or reset to it, whose tip is an
+            # ancestor of a base that has since advanced. Only a branch that really held work
+            # (its tip is a strict descendant of its fork) whose tip then landed on the base
+            # is "landed unlogged".
+            fork = it.base_sha
+            if fork:
+                head = W.git(repo, "rev-parse", "refs/heads/" + it.branch).out.strip()
+                had_work = fork != head and W.git(
+                    repo, "merge-base", "--is-ancestor", fork, head
+                ).ok
+                on_base = W.git(repo, "merge-base", "--is-ancestor", head, base).ok
+                if head and had_work and on_base:
                     out.append(H.MergeHang(i, holder, landed_unlogged=True, head=head, base=base))
     return out
 

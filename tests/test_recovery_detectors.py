@@ -59,8 +59,11 @@ class TestReadyToLand:
         assert "merge" in f.fix
 
     def test_more_than_merge_owed_is_not_ready_to_land(self):
-        """A lane with work left beyond `merge` is not proposed to land (owes unit_tests)."""
-        assert H.Ready("T1", "a", commits_ahead=1, owed=("unit_tests", "merge")).owed
+        """A lane that still owes `unit_tests` beyond `merge` is not proposed to land: the
+        judge filters any Ready whose owed gates are not exactly merge-shaped."""
+        r = H.Ready("T1", "a", commits_ahead=1, owed=("unit_tests", "merge"))
+        found = H.inspect([], [], [], [], 0.0, _limits(), [], ready=[r])
+        assert [f.kind for f in found if f.kind == "ready_to_land"] == []
 
 
 class TestMergeInterrupted:
