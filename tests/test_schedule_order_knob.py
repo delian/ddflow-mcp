@@ -13,6 +13,7 @@ import time
 import pytest
 
 from ddflow.config import Config
+from ddflow.config_sections.schedule import ORDER_KEYS
 from ddflow.core import schedule as S
 from ddflow.core.model import fold
 from ddflow.core.schedule import plan
@@ -52,6 +53,13 @@ def test_opt_in_keys_are_registered_but_not_default():
     assert set(OPT_IN) <= set(S.KEYS)
     assert not set(OPT_IN) & set(DEFAULT_ORDER)
     assert not set(OPT_IN) & set(S.ORDER)
+
+
+def test_order_keys_validation_matches_registered_keys():
+    # The validation allow-list and the runtime registration are two lists that must not
+    # drift: a name in one but not the other crashes at plan time or is refused as unknown.
+    assert set(ORDER_KEYS) == set(S.KEYS)
+    assert "id" in ORDER_KEYS
 
 
 def test_default_config_orders_a_queue_as_the_explicit_default_does(log):
