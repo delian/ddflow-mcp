@@ -49,7 +49,7 @@ def _progress(st: State, items: list, tot: PR.Totals) -> str:
         + (f", {len(closable)} ready to close" if closable else "")
         + " · live tasks"
         + (
-            ", fix tasks included"
+            f", fix tasks included, {tot.abandoned} abandoned listed apart (`ddflow status`)"
             if tot.fix_in_headline
             else f", {tot.fix} fix tasks and {tot.abandoned} abandoned listed apart (`ddflow status`)"
         )

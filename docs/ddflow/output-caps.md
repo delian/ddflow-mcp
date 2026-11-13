@@ -22,7 +22,7 @@ line and over MCP alike. A cut answer ends in a footer that names the exact next
 | `max_chars` | 30000 | characters of text or serialised body (about 7500 tokens); 0 lifts it |
 | `non_ascii_weight` | 4 | characters of `max_chars` one non-ASCII character of prose costs; 1 counts plain characters |
 | `status_fix_tasks_in_headline` | false | whether fix tasks count in the `status` headline pair and the `Progress:` block |
-| `status_completed_shown` | 12 | how many recent completions the prose `status` lists (`Completed (last N of TOTAL)`); 0 lists all |
+| `status_completed_shown` | 12 | how many recent completions the prose `status` lists (`Completed (last N of TOTAL)`); 0 lists all (a cap `allow_full = false` does not govern: the list stays the whole completed set the row cap leaves) |
 | `allow_full` | true | false makes `--full` still return the capped answer, saying so, and stops 0 lifting a cap |
 
 Each is set in `.ddflow/config.toml`, the git-ignored local layer, with

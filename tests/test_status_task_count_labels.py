@@ -62,7 +62,7 @@ def test_status_headline_says_what_it_counts(repo):
     # The headline pair must carry its definition: the abandoned T3 and the auto-filed
     # fix task stay in this count, and the contracts they name either definition with.
     assert "1 of 2 live tasks done (1 abandoned and 1 fix tasks listed separately)" in out
-    assert "= 4" in out
+    assert re.search(r"= 4$", out, re.M)
 
 
 def test_progress_block_and_status_headline_count_different_sets_reconcilably(repo):
@@ -74,13 +74,15 @@ def test_progress_block_and_status_headline_count_different_sets_reconcilably(re
     # Live work tasks: T1 done and T2; the abandoned T3 and the auto-filed fix task are
     # listed apart, and all four records are in the printed buckets.
     assert (int(m[1]), int(m[2])) == (1, 2)
-    assert "= 4" in status_out
+    assert re.search(r"= 4$", status_out, re.M)
     code, complete_out, err = run_cli(repo, "complete", "T2", "--force")
     assert code == 0, err
     # Live work items only: the abandoned T3 and the fix task are out of this pair.
     assert "tasks 2/2 (100%)" in complete_out
     assert "live tasks" in complete_out  # the block says it is the live pair
-    assert "2 of 2 live tasks done" in run_cli(repo, "status")[1]  # the same pair
+    after = run_cli(repo, "status")[1]
+    assert "2 of 2 live tasks done" in after  # the same pair
+    assert re.search(r"= 4$", after, re.M)  # the four records are still all shown
 
 
 def test_with_no_abandoned_or_fix_records_headline_and_progress_agree(repo):
