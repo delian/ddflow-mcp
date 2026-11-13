@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "eta.coverage_bar"
+new = "0.8"
+why = "the fraction of completions the prediction interval must cover to be trusted (R-eta-prediction)."
+effect = "a stale model is shown labelled low confidence rather than trusted silently."
+impact = "additive"
