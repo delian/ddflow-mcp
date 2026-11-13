@@ -420,3 +420,5 @@
 {"agent":"lane-gm-core","data":{"at":1794550443.3117254,"holder":"lane-gm-core"},"id":"e0caf387af0655b16534c47cf","kind":"lease.renewed","lamport":190916,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T06:14:03.470796Z"}
 {"agent":"lane-gm-core","data":{"at":1794550630.680584,"holder":"lane-gm-core"},"id":"e765cc39df661470349898d79","kind":"lease.renewed","lamport":190986,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T06:17:10.838058Z"}
 {"agent":"lane-gm-core","data":{"at":1794550765.2971954,"holder":"lane-gm-core"},"id":"e29b839d717c6e8c365b969d7","kind":"lease.renewed","lamport":191005,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T06:19:25.450803Z"}
+{"agent":"lane-gm-core","data":{"at":1794550927.1703224,"holder":"lane-gm-core"},"id":"e48a61ee9f689d31b246f63c7","kind":"lease.renewed","lamport":191036,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T06:22:07.335418Z"}
+{"agent":"lane-gm-core","data":{"at":1794551104.093795,"holder":"lane-gm-core"},"id":"eef5d016d4e074213a079abae","kind":"lease.renewed","lamport":191062,"schema":1,"subject":"GM-baseline-store","ts":"2026-11-13T06:25:04.366155Z"}
