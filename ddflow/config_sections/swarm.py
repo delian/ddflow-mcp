@@ -250,6 +250,21 @@ class SwarmConfig:
         doc="Ceiling on any template's `budget_usd`: a launch from a template that asks for more is refused, whatever its approval. Zero removes the ceiling.",
         check=_nonneg,
     )
+    budget_stop_enabled: bool = knob(
+        True,
+        doc="Whether the runtime budget stop is on: the lane supervisor sums a running lane's usage events and interrupts it once its spend reaches the template's `budget_usd` (soft warn at `budget_warn_fraction`). When off, a lane only ever stops at its own end. The admission estimate (launch) still refuses an over-budget launch.",
+        check=lambda v: "" if isinstance(v, bool) else "must be true or false",
+    )
+    budget_warn_fraction: float = knob(
+        0.5,
+        doc="Share of a template's `budget_usd` at which a running lane gets a soft warn before the hard stop at the cap. A fraction of one warns only at the cap itself.",
+        check=_share,
+    )
+    budget_stop_grace_s: float = knob(
+        10.0,
+        doc="Seconds a lane is given to stop after its budget interrupt before the hard kill. Zero interrupts with no grace (the transport's own kill follows).",
+        check=_nonneg,
+    )
     remote_exclude: list[str] = knob(
         factory=lambda: [".ddflow", ".env", "**/.env"],
         doc="Relative path globs a remote lane's working tree never carries in its bundle: ddflow's own event log, secrets and env files stay on the host. What the outbound commit leaves out is `ddflow.services.swarm.remote.Knobs.exclude`.",

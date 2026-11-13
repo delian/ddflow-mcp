@@ -300,6 +300,7 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_lesson_show",
         family="ddflow_memory",
         action="lesson_show",
+        wire_shape=(["lesson", "show", "L1"], {"id": "L1"}),
         tier="standard",
         description="Read ONE lesson in full by its id — its rule, why and how. `ddflow lesson list` "
         "gives you the titles; this is a lesson a recall hit or a link cited by id. "

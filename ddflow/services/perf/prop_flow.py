@@ -73,7 +73,7 @@ class Proposal:
 #: PROPOSE only: the next call reads or (for globs) applies the proposal; it never keys a knob.
 _NEXT_CALLS = {
     "parallel_cap": "the flow controller reads this advice next (it never overrides the knob):"
-    " `ddflow plan` (MCP: ddflow_plan)",
+    " `ddflow plan check` (MCP: ddflow_plan)",
     "narrow_globs": "narrow the item's globs to the advised file: `ddflow update <item> --globs <glob>`"
     " (MCP: ddflow_task action=update id=<item> globs=<glob>)",
     "batch_gates": "proposals only: record the batch decision `ddflow decision add`"
