@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_hook_lapsed_lease import _setup
 
 from ddflow.services import enforce as E
+from ddflow.services.enforce import leasecheck as LC
 
 
 def _staged_names(tree: Path) -> list[str]:
@@ -60,3 +61,20 @@ def test_a_merge_file_prefixed_non_temp_path_is_still_refused(repo, cfg, monkeyp
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1
     assert ".merge_file_payload" in msg
+
+
+def test_a_temp_file_whose_reset_fails_is_reported_not_silently_waived(repo, cfg, monkeypatch):
+    # The unstage is a git call that can fail (git gone, killed at its timeout). Waiving
+    # the path anyway would let the commit write the transient blob into history -- the
+    # exact harm the fix exists to stop. `_unstage_git_temp` reports the path it could
+    # not drop, so `_check_lease` refuses on it instead (fail closed).
+    from ddflow.adapters import git as G
+
+    tree = _setup(repo, cfg)
+    (tree / ".merge_file_xYz123").write_text("temp\n")
+    subprocess.run(["git", "-C", str(tree), "add", ".merge_file_xYz123"], check=True)
+    (tree / ".merge_file_xYz123").unlink()
+    monkeypatch.chdir(tree)
+    staged = LC.staged_paths(repo)  # read first: the patch below reprograms only the reset
+    monkeypatch.setattr(LC.G, "run", lambda *a, **k: G.GitResult(code=1, out="", err="", unavailable=True))
+    assert ".merge_file_xYz123" in LC._unstage_git_temp(repo, staged)
