@@ -6,8 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...adapters import git as GIT
 from ...config import Config
-from ...infra import git as GIT
 from ..review_exclude import _hit, patterns
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
 

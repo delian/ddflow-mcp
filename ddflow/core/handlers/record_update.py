@@ -61,6 +61,9 @@ def _handler(kind: str) -> Callable[[State, Event], None]:
 #: revision path (`def.*`); a correction of one is refused, never silently dropped.
 CORRECTABLE = (*RF.EVENT_KINDS, "task", "phase")
 KIND = "record.corrected"
+#: Fields a correction may replace beyond what `update` edits: what an event recorded that no
+#: update verb reaches (a completion's author identity), per kind.
+CORRECT_ONLY: dict[str, tuple[str, ...]] = {"task": ("author_model",), "phase": ("author_model",)}
 
 
 def _int_at_least_one(data: dict[str, Any], name: str, top: int | None = None) -> int:
@@ -118,7 +121,7 @@ def _correct(st: State, ev: Event) -> None:
         if not isinstance(want[flag], bool):
             raise ValueError(f"{KIND}: {flag} must be true or false; got {want[flag]!r}")
     kd = RF.KINDS[kind]
-    ok = {*kd.attrs.values(), *(o.name for o in kd.own)}
+    ok = {*kd.attrs.values(), *(o.name for o in kd.own), *CORRECT_ONLY.get(kind, ())}
     bad = sorted(set(fields) - ok)
     if bad:
         raise ValueError(f"{KIND}: unknown field(s) for a {kind}: {', '.join(bad)}")
