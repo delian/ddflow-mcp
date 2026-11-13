@@ -102,40 +102,50 @@ class Refusal:
 _HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
 
 
+def _dquote_end(line: str, i: int, n: int) -> tuple[str, int]:
+    """The ``(quote open, index)`` after the double quote that opens at `i`: fast-forward to
+    its close (``("", close+1)``) or to the line's end (``('"', n)``, still open); a backslash
+    escapes the quote (and ``$`` / `` ` ``), so the next ``"`` is not the close."""
+    j = i + 1
+    while j < n:
+        if line[j] == '"':
+            return "", j + 1
+        j += 2 if line[j] == "\\" and j + 1 < n and line[j + 1] in ('"', "\\", "$", "`") else 1
+    return '"', n
+
+
+def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
+    """The ``#`` at `i` begins a comment: at the line's start, or after a `_COMMENT_BOUNDARY`
+    char that is not a backslash-escaped data char (an escaped boundary is literal text)."""
+    return i == 0 or (line[i - 1] in _COMMENT_BOUNDARY and i - 1 not in escaped)
+
+
 def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
     """The `<<` heredoc markers on `line` that sit OUTSIDE a quote, and the quote (if any)
     still open at the line's end. A `<<` inside `'...'`/`"..."` is literal text, not a heredoc
-    (Bdd23c77383); an escaped ``\\<`` is too. ``quote`` is the quote open from earlier lines
-    (``''``, ``'`` or ``"``) -- a single/double quote may span lines, and a `<<` it swallows is
-    still literal."""
+    (Bdd23c77383); an escaped ``\\<`` is not a marker, and a `'`/`"` inside a comment is data,
+    not a quote opener. ``quote`` is the quote open from earlier lines: a quote may span lines,
+    and a `<<` it swallows is still literal."""
     ms: list[re.Match] = []
     i, n = 0, len(line)
+    escaped: set[int] = set()
     while i < n:
         c = line[i]
         if quote == "'":
             j = line.find("'", i)
             if j < 0:
                 return ms, "'"  # the single quote stays open to the next line
-            quote = ""
-            i = j + 1
-        elif quote == '"':
-            if c == "\\" and i + 1 < n and line[i + 1] in ('"', "\\", "$", "`"):
-                i += 2
-            elif c == '"':
-                quote = ""
-                i += 1
-            else:
-                i += 1
+            quote, i = "", j + 1
         elif c == "\\":
-            i += 2 if i + 1 < n else 1  # an escaped `<` is not a marker
-        elif c == "#" and (i == 0 or line[i - 1] in _COMMENT_BOUNDARY):
+            if i + 1 < n:
+                escaped.add(i + 1)
+            i += 2 if i + 1 < n else 1
+        elif c == "#" and _comment_here(line, i, escaped):
             i = n  # a comment runs to end of line: its `'`/`"` are data, not quote openers
         elif c == "'":
-            quote = "'"
-            i += 1
+            quote, i = "'", i + 1
         elif c == '"':
-            quote = '"'
-            i += 1
+            quote, i = _dquote_end(line, i, n)
         elif c == "<" and i + 1 < n and line[i + 1] == "<":
             m = _HEREDOC.match(line, i)
             if m is not None:
