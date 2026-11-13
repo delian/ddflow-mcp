@@ -43,9 +43,8 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     repo, tmp_path, monkeypatch, capsys
 ):
     ran = tmp_path / "ran"
-    cmd = f"{shlex.quote(sys.executable)} -c \"import pathlib; pathlib.Path({str(ran)!r}).write_text('x')\""
     run_cli(repo, "init")
-    run_cli(repo, "config", "--set", "gate.ci.command", cmd)
+    run_cli(repo, "config", "--set", "gate.ci.command", f"touch {shlex.quote(str(ran))}")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = repo.parent / "agent-tree"
@@ -78,12 +77,14 @@ def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
     # lane's heartbeat blocks behind this run's commit. While the command sleeps, another
     # writer must acquire the lock at once.
     began = tmp_path / "began"
-    cmd = (
-        f"{shlex.quote(sys.executable)} -c \"import pathlib,time; "
-        f"pathlib.Path({str(began)!r}).write_text('x'); time.sleep(30)\""
-    )
     run_cli(repo, "init")
-    run_cli(repo, "config", "--set", "gate.ci.command", cmd)
+    run_cli(
+        repo,
+        "config",
+        "--set",
+        "gate.ci.command",
+        f"touch {shlex.quote(str(began))}; sleep 30",
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = repo.parent / "agent-tree"
@@ -105,6 +106,7 @@ def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
         while not began.exists() and time.monotonic() < deadline:
             time.sleep(0.1)
         assert began.exists(), "the gate command never started"
+        assert p.poll() is None  # the gate is still running while we take the lock
         # Taken while the command runs: a held lock would wait past 5s and raise TimeoutError.
         with _flock(repo / ".ddflow" / "events.lock", 5):
             pass
