@@ -8,10 +8,12 @@ left out rather than dated 1970. Nothing here is a statistic: ``summary``, ``for
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from ...config import Config
 from ...core import progress as PR
+from ...core.digest import REDACTED
 from ...core.events import Event
 from ...core.facts import Facts, Finding, Landing, Lease, Outcome, Span
 from ...core.model import State
@@ -23,6 +25,11 @@ OUTCOMES = ("passed", "failed", "skipped", "unavailable", "partial")
 LEASE_KINDS = frozenset(
     {"lease.acquired", "lease.released", "lease.expired", "item.abandoned", "item.completed"}
 )
+#: A redaction marker left where a gate id belongs: the current `[REDACTED]` / `[REDACTED:key-N]`
+#: forms and the legacy `[REDACTED:redaction-failed]` a redaction failure once wrote in place
+#: of the gate (bug Befd5e5baa3). Its hyphen puts the legacy kind outside `core.digest.MARKER`'s
+#: `[a-z0-9_]*` grammar, so the gate-name grammar is the union.
+_CENSORED_GATE = re.compile(r"\[REDACTED(?::[a-z0-9_-]*)?\]")
 
 
 def _ordered(events: Sequence[Event]) -> list[tuple[float, Event]]:
@@ -51,6 +58,8 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
     gate = d.get("gate")
     if verdict not in OUTCOMES or not isinstance(gate, str) or not gate:
         return None
+    if _CENSORED_GATE.fullmatch(gate):  # a censored gate id is not a phantom gate (B829400ae7e)
+        gate = REDACTED
     evidence = d.get("evidence") if isinstance(d.get("evidence"), dict) else {}
     model = evidence.get("model")
     return Outcome(
