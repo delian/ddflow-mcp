@@ -64,6 +64,22 @@ directory install reinstalls from its source. `ddflow doctor` also lists the fie
 ddflow skipped in `[gate.*]`, `[[reviewer]]`, `[[companion]]` and `[[macro]]`, not only on
 stderr.
 
+**Secrets in a gate's environment (SEC-gate-env-secrets).** A gate or CI command is project code
+run through a shell, and a reviewer key exported into your shell (the kimi and gemini key practice)
+is in its environment; the command's output is kept in the committed log. `[gates].scrub_secret_names`
+is `off | warn | on`, default `warn`: `warn` leaves the environment alone and records the NAMES (never
+a value) of the secret-shaped variables in the gate's evidence (`env_secret_mode`, `env_secret_names`)
+and `ddflow doctor` notes them; `on` removes them from every gate and CI child; `off` does neither.
+`[gates].secret_name_patterns` says which names match (default `_API_KEY`, `_TOKEN`, `_SECRET`,
+`_PASSWORD`, `_PASSWD`; a variable whose name contains one, compared case-blind), and
+`[gates].keep_env` (`[ci].keep_env` for CI) preserves one a gate needs. Four ways to set it:
+
+- the file: `[gates]` `scrub_secret_names = "on"` in `.ddflow/config.toml` (or `.ddflow/local/config.toml` for this machine);
+- the CLI: `ddflow config --set gates.scrub_secret_names on`; per run, `DDFLOW_GATES_SCRUB_SECRET_NAMES=on`;
+- MCP: `ddflow_configure` with `toml: '[gates]\nscrub_secret_names = "on"'` (an existing tool, no new one);
+- a prompt: "stop gates seeing API keys" -- ask the agent to set `gates.scrub_secret_names` to `on`, and
+  to list in `gates.keep_env` the one variable a gate really needs.
+
 ### The README and these guides are managed documents
 
 `README.md` and `docs/guide/*.md` are registered as evergreen document types (the contract the docs check validates, not a lock
