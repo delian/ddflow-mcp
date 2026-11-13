@@ -38,17 +38,22 @@ LEGACY_END = "<!-- DDFLOW:END -->"
 # the full driver, which is where the long form lives.
 _SECTION = """## Work queue — ddflow
 
-Work in this project is a queue of **phases** containing **tasks**, with declared
-dependencies and declared file globs. It is managed by ddflow. The event log in
-`.ddflow/events/` is the source of truth and is committed; everything else is derived.
+Work here is a queue of **phases** containing **tasks**, with declared dependencies
+and globs, managed by ddflow. The event log in `.ddflow/events/` is the committed
+source of truth; everything else is derived.
 
 **Start every session with `ddflow_brief`** (MCP) or `ddflow brief` (shell). It
-returns any work left over from a crash, what is ready now, why everything else is
-blocked, and the past lessons relevant to the task — and it replaces reading this
-project's lesson and rule files.
+returns work left from a crash, what is ready, why the rest is blocked, and
+past lessons — it replaces reading this project's lesson and rule files.
 
 **Claim before you edit.** `ddflow_claim` leases the item and gives you an isolated
 git worktree. An unclaimed edit can be destroyed by a parallel agent.
+
+**Pre-file triage.** Before adding a task or bug: check for a duplicate or
+closable overlap, check what is planned, reuse core modules and prior research,
+ask the operator only for person-decisions; then file in the right phase (create
+one if none fits) with `--needs` and `no-deps` when it has no prerequisite. A
+bug's phase and `--needs` go on its fix task.
 
 Then: `ddflow_next` → `ddflow_claim` → work in the worktree → `ddflow_gate_status`
 and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
@@ -62,17 +67,14 @@ and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
 - A bug is not closed without a regression test that fails against the unfixed code.
 
 **Record as you go:** the operator's words verbatim (`ddflow session prompt`), a
-decision when it is settled (`ddflow decision add --globs ...`), a bug when you find it
-and before you fix it, a lesson after any surprise. `ddflow replay` rebuilds this
-project from those; a summary rebuilds the summary.
+decision when it is settled (`ddflow decision add --globs ...`), a bug before you fix
+it, a lesson after any surprise. `ddflow replay` rebuilds the project from those.
 
 **Before anything non-trivial:** `ddflow recall "<what you are about to do>"`.
 
-**Companion tools the gates expect** — `ddflow companions` says which are present and
-what installing each would run: `roborev`, `codeguide-mcp`, `context7`, and a memory
-server. When one is missing, **propose it to the operator early** — what it buys, what
-it would run — and install it yourself if they agree. Never install without asking, and
-when they decline, record that gate `unavailable` rather than passing it unaided.
+**Companion tools the gates expect** — `ddflow companions` lists them (`roborev`,
+`codeguide-mcp`, `context7`, a memory server) and what installing each runs. Propose
+a missing one; install only if agreed, else record that gate `unavailable`.
 
 **Exit codes:** `0` fine · `1` failure · `2` could not run / nothing to do · `3`
 refused. Never treat `2` as `0`.

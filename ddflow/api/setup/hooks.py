@@ -13,6 +13,7 @@ from typing import Any
 
 from ...config import Config
 from ...core import outcome as O
+from ...core.model import fold
 from ...services import claudehooks as CH
 from ...services import enforce as E
 from ...services import forbidden as FB
@@ -307,10 +308,46 @@ def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _
     return _HookResult(result="denied", deny=msg, note=msg)
 
 
+def _on_lifecycle(
+    repo: Path, agent: str, p, plan, *, dry_run: bool = False, ending: bool
+) -> _HookResult:
+    """Stop (after a turn) and SessionEnd: the in-flight note, and for SessionEnd the end.
+    A hook problem is a stderr note, never a failure of the turn."""
+    if p.malformed:
+        return _HookResult(result="skipped", note="ddflow hooks: the hook's stdin is not JSON")
+    sid = S.harness_sid(p.session_id)
+    if not sid:
+        return _HookResult(result="skipped")  # nothing to attribute it to; quiet, as ever
+    if dry_run:
+        return _HookResult(result="dry-run", note="ddflow hooks: dry-run")
+    cfg = Config.load(repo)
+    if not ending and not cfg.session.inflight_note:
+        return _HookResult(result="off")  # before anything is written, a phantom session included
+    log, who = ID.open_log(repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0))
+    events = log.read_all()
+    st = fold(events, strict=False)
+    if sid not in st.sessions:
+        log.append("session.started", sid, {"tool": "hook", "cwd": str(Path.cwd())})
+        events = log.read_all()
+        st = fold(events, strict=False)
+    if ending:
+        return _HookResult(
+            result=S.close_ended(log, cfg, sid, events, st, str(p.raw.get("reason") or ""))
+        )
+    return _HookResult(result=S.record_inflight(log, cfg, sid, events, st, who.id))
+
+
+def _on_stop(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
+    return _on_lifecycle(repo, agent, p, plan, dry_run=dry_run, ending=False)
+
+
+def _on_session_end(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
+    return _on_lifecycle(repo, agent, p, plan, dry_run=dry_run, ending=True)
+
+
 def _on_nothing(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
-    """pre_tool, post_tool, stop and session_end: the entry point accepts them so an agent's
-    hook can be wired to every event today; the handlers (heartbeat, stop protocol, session
-    end) arrive with the tasks that need them."""
+    """post_tool: the entry point accepts it so an agent's hook can be wired to every event
+    today; the handler (heartbeat) arrives with the task that needs it."""
     return _HookResult(result="no handler")
 
 
@@ -321,8 +358,8 @@ _HOOK_HANDLERS = {
     "pre_compact": _on_pre_compact,
     "pre_tool": _on_pre_tool,
     "post_tool": _on_nothing,
-    "stop": _on_nothing,
-    "session_end": _on_nothing,
+    "stop": _on_stop,
+    "session_end": _on_session_end,
 }
 
 

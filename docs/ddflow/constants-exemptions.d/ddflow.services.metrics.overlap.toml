@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/services/metrics/overlap.py:ELIGIBLE_MAX_LINES" = 'default max_lines for "small enough to batch" (the [batch] config section replaces it): a figure of the measurement, not a workload knob'
+"ddflow/services/metrics/overlap.py:MAX_PAIRS" = 'resource-safety cap on time-overlapping pairs examined so a huge log cannot stall the view (a visible stop), not a workload knob'

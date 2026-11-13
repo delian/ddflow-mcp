@@ -39,6 +39,11 @@ class LeaseConfig:
         30,
         doc="How long to block on the flock arbitrating lease acquisition before giving up. On NFS a contended acquire measured ~135 ms, so 30 s is ~200x headroom.",
     )
+    record_lock_wait_s: int = knob(
+        180,
+        doc="How long the record step of a FINISHED gate outcome (a measured run, a review, a merge, a person clearing a human gate) keeps trying to acquire the events append lock when it is contended. The outcome is work already done: losing it to a transient timeout -- a lane heartbeat holding the lock under load, in `record_measured` after a command ran to completion (B0b0b67d5e7) -- wastes the whole run. Each attempt waits the time left in this budget (not `acquire_timeout_s`), so the TOTAL wait across attempts never exceeds it; a record that still cannot get the lock gives up once the budget is spent and reports 'could not run' rather than wedging forever. 0 appends once with `acquire_timeout_s`, as before.",
+        check=int_at_least(0),
+    )
     #: How long a waiter keeps its place in line once it could claim (see the knob doc).
     waiter_reservation_s: int = knob(
         300,

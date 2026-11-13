@@ -278,11 +278,16 @@ class EventLog(_GuardMixin, _ReadMixin):
         data: dict[str, Any] | None = None,
         *,
         observed: Iterable[Event] = (),
+        lock_timeout_s: float | None = None,
     ) -> Event:
         """Append one event. Returns it with id and lamport filled in.
 
         ``observed`` lets a caller declare events it has seen but not folded, so the
         Lamport clock advances past them even when the caller read a filtered view.
+
+        ``lock_timeout_s`` overrides the log's own append-lock wait for this write (a
+        retrying caller passes the time it has left for the whole retry); absent, the
+        log's ``lock_timeout_s`` applies.
         """
         if kind not in known_kinds():
             raise ValueError(
@@ -291,7 +296,9 @@ class EventLog(_GuardMixin, _ReadMixin):
         ctx = (
             contextlib.nullcontext()
             if _HELD.get(_held_key(self.lock_path), 0)
-            else _flock(self.lock_path, self.lock_timeout_s)
+            else _flock(
+                self.lock_path, self.lock_timeout_s if lock_timeout_s is None else lock_timeout_s
+            )
         )
         with ctx:
             payload = dict(data or {})
