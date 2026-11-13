@@ -1,0 +1,12 @@
+{"agent":"fixups-a","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"e569a3fa4630f340b8f888c0c","kind":"ddflow.seen","lamport":195414,"schema":1,"subject":"ddflow","ts":"2026-11-13T18:39:28.489384Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e082b3b871c6a4870490a6c83","kind":"task.updated","lamport":195415,"schema":1,"subject":"FOC-intake-freeze","ts":"2026-11-13T18:39:28.589981Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"ea61d77c092b4ac63fff31190","kind":"task.updated","lamport":195416,"schema":1,"subject":"FOC-unproven-tag","ts":"2026-11-13T18:39:42.462018Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"ecf4c621e68743cdc7b5b2542","kind":"task.updated","lamport":195423,"schema":1,"subject":"FOC-release-1.0","ts":"2026-11-13T18:39:57.925524Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e76e78bcdc06f1f3a895c7f25","kind":"task.updated","lamport":195424,"schema":1,"subject":"FOC-phase-order","ts":"2026-11-13T18:40:10.208441Z"}
+{"agent":"fixups-a","data":{"needs":[]},"id":"e709912ffba543d13effc579f","kind":"task.updated","lamport":195431,"schema":1,"subject":"FOC-hub-first","ts":"2026-11-13T18:40:54.153787Z"}
+{"agent":"fixups-a","data":{"tags":["focus","schedule","wave:0"]},"id":"ecb3a7dfba84853b7ed626c7a","kind":"task.updated","lamport":195432,"schema":1,"subject":"FOC-hub-first","ts":"2026-11-13T18:41:00.254870Z"}
+{"agent":"fixups-a","data":{"tags":["focus","schedule","wave:0","no-deps"]},"id":"e0e0f1514f9e2d169d0e6d036","kind":"task.updated","lamport":195437,"schema":1,"subject":"FOC-hub-first","ts":"2026-11-13T18:41:21.210347Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e65fe408f94e0acbe8581209f","kind":"task.updated","lamport":195441,"schema":1,"subject":"FOC-hub-first","ts":"2026-11-13T18:41:47.666009Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e2115f926c42d89138ad31ac2","kind":"task.updated","lamport":195444,"schema":1,"subject":"SE-mcp-budget","ts":"2026-11-13T18:42:30.292805Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e0313fd65034b3b90bf4e10f2","kind":"task.updated","lamport":195447,"schema":1,"subject":"CE-layer-stack","ts":"2026-11-13T18:42:42.987766Z"}
+{"agent":"fixups-a","data":{"priority":5},"id":"e366cbd17a3fe08cf95d50ad1","kind":"task.updated","lamport":195454,"schema":1,"subject":"B-rc-lifecycle-guard","ts":"2026-11-13T18:43:05.855716Z"}
