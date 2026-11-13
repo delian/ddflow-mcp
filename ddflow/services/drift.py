@@ -18,7 +18,7 @@ from typing import NamedTuple
 
 from ..config import Config
 from ..core.globs import inside
-from ..core.model import ABANDONED, DONE, fold
+from ..core.model import fold
 from ..infra import worktree as W
 from ..infra.fsio import replace_text
 from ..infra.log import EventLog
@@ -78,7 +78,7 @@ def _tree_item(repo: Path, here: Path, cfg: Config | None = None):
         if it.worktree and it.base and not it.removed
         if W.load_path(repo, it.worktree).resolve() == here
     ]
-    found.sort(key=lambda it: it.state in (DONE, ABANDONED))
+    found.sort(key=lambda it: it.terminal)
     return found[0] if found else None
 
 

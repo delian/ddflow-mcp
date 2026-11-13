@@ -68,6 +68,8 @@ _PLAIN_FLAGS = (
 _VALUE_FLAGS = ("-n", "-p", "--timeout", "--tb", "--durations", "--dist")
 _ROOT = re.compile(r"^(\./)?tests/?$")
 _SHA = re.compile(r"^([0-9a-f]{7,40})\+clean$")
+#: A dirty tree is recorded as ``<head>+st:<content id>``: the id names the exact content.
+_DIRTY = re.compile(r"^[0-9a-f]{7,40}\+(st:[0-9a-f]+)$")
 
 
 class TreeProbe(Protocol):
@@ -153,6 +155,12 @@ def runs(events: Sequence[Event], floor: float | None, now: float) -> list[dict]
                 "at": at,
                 "lamport": e.lamport,
                 "sha": m.group(1) if m else "",
+                #: a key the evidence itself names: the cache key of a run since the result
+                #: cache, else a dirty tree's content id -- both say which code ran
+                "key": str(
+                    ev.get("cache_key")
+                    or (d2.group(1) if (d2 := _DIRTY.match(str(ev.get("tree_sha") or ""))) else "")
+                ),
                 "suite_s": _num(ev.get("elapsed_s")),
                 "queue_s": _num(ev.get("waited_s")),
                 "baseline_red": verdict == "partial" and bool(ev.get("baseline")),
@@ -168,8 +176,8 @@ def classify(rows: list[dict], probe: TreeProbe) -> list[dict]:
     keys: dict[str, str | None] = {}
     out = []
     for r in rows:
-        key = None
-        if r["sha"]:
+        key = r.get("key") or None
+        if key is None and r["sha"]:
             if r["sha"] not in keys:
                 keys[r["sha"]] = probe.code_tree(r["sha"])
             key = keys[r["sha"]]

@@ -111,6 +111,55 @@
    },
    "v": 1
   },
+  "batch.culprit": {
+   "fields": {
+    "member": ["str"],
+    "runs": ["int"]
+   },
+   "v": 1
+  },
+  "batch.dissolved": {
+   "fields": {
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "batch.formed": {
+   "fields": {
+    "base": ["str"],
+    "members": ["list"],
+    "trigger": ["str"]
+   },
+   "v": 1
+  },
+  "batch.gate_finished": {
+   "fields": {
+    "elapsed_s": ["float", "int"],
+    "gate": ["str"],
+    "members": ["list"],
+    "outcome": ["str"],
+    "queue_wait_s": ["float", "int"],
+    "reason": ["str"],
+    "run": ["str"],
+    "tree_sha": ["str"]
+   },
+   "v": 1
+  },
+  "batch.gate_started": {
+   "fields": {
+    "command_digest": ["str"],
+    "gate": ["str"],
+    "run": ["str"],
+    "tree_sha": ["str"]
+   },
+   "v": 1
+  },
+  "batch.landed": {
+   "fields": {
+    "sha": ["str"]
+   },
+   "v": 1
+  },
   "branch.synced": {
    "fields": {
     "base_sha": ["str"],

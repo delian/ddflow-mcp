@@ -26,6 +26,7 @@ from ..services import lanerelease as LR
 from ..services import mergequeue as MQ
 from ..services import pins as PN
 from ..services import pins_text as PT
+from ..services import suitelock as SL
 from ..services.pipeline_diff import effective_pipeline
 from ._base import _load
 from .cirun import run as ci_run
@@ -170,9 +171,11 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
     if e.released:  # our own merge commits are not an edit by someone else
         e.tree = LR.tree_of(wt.path)
         MQ.save(repo, e)
-    if why := _run_checks(
-        repo, cfg, it, e, detail, unit_tests=unit_tests, timeout_s=timeout_s, agent=agent
-    ):
+    with SL.suite_class("integrator"):  # its suite runs queue ahead of items' (SQ order)
+        why = _run_checks(
+            repo, cfg, it, e, detail, unit_tests=unit_tests, timeout_s=timeout_s, agent=agent
+        )
+    if why:
         return MQ.PARKED, why, ""
     out = land(
         repo, it.id, message=f"merge {it.id}: {it.title}", agent=agent,
