@@ -65,6 +65,20 @@ def test_a_merge_file_prefixed_non_temp_path_is_still_refused(repo, cfg, monkeyp
     assert ".merge_file_payload" in _staged_names(tree)
 
 
+def test_a_unicode_merge_file_name_is_not_gits_ascii_temp(repo, cfg, monkeypatch):
+    # git's mkstemp alphabet is ASCII only, so a non-ASCII six-char tail is a real name
+    # and still refused outside the owner's src/* lease, not mistaken for git's temp.
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    name = ".merge_file_\u03a9\u00e9\u00e9\u00e9\u00e9"
+    (tree / name).write_text("payload\n")
+    subprocess.run(["git", "-C", str(tree), "add", name], check=True)
+    monkeypatch.chdir(tree)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1
+    assert name in msg
+
+
 def test_a_temp_file_whose_reset_fails_is_reported_not_silently_waived(repo, cfg, monkeypatch):
     # The unstage is a git call that can fail (git gone, killed at its timeout). Waiving
     # the path anyway would let the commit write the transient blob into history -- the

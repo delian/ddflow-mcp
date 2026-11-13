@@ -52,13 +52,15 @@ def _git_merge_temp(path: str) -> bool:
     are never a commit the agent made and never belong to a lease.
 
     The name alone is not enough: git's ``mkstemp`` turns the ``XXXXXX`` tail into
-    exactly six random characters, so the match is ``.merge_file_`` followed by six
-    alphanumerics. A real ``.merge_file_payload`` at the tree root does not match and
-    is still refused outside its lease (a broad prefix would wave it straight through).
+    exactly six ASCII random characters, so the match is ``.merge_file_`` followed by six
+    alphanumerics, ASCII-only (``isascii``: ``isalnum`` alone would also match a real
+    Unicode name like ``.merge_file_\u03a9\u00e9\u00e9\u00e9\u00e9\u00e9``). A real
+    ``.merge_file_payload`` at the tree root does not match and is still refused outside
+    its lease (a broad prefix would wave it straight through).
     """
     name = path.rsplit("/", 1)[-1]
     tail = name[len(".merge_file_") :]
-    return name.startswith(".merge_file_") and len(tail) == 6 and tail.isalnum()
+    return name.startswith(".merge_file_") and len(tail) == 6 and tail.isascii() and tail.isalnum()
 
 
 def _not_work(path: str) -> bool:
