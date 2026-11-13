@@ -94,6 +94,7 @@ def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator
         env = {
             IDS_ENV: str(ids_file),
             OUT_ENV: str(out),
+            ACTIVE_ENV: "",  # a run of its own: not nested in the one that started this process
             "PYTHONPATH": f"{root}{os.pathsep}{old_path}" if old_path else str(root),
         }
         yield Session(env=env, out=out)

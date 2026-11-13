@@ -93,7 +93,7 @@ def pytest_configure(config):
     if worker:
         config._ddff_off = False
         return
-    if os.environ.get(ACTIVE_ENV, str(os.getpid())) != str(os.getpid()):
+    if (os.environ.get(ACTIVE_ENV) or str(os.getpid())) != str(os.getpid()):
         # A pytest started by a test of the outer run: it is not this run's tests. Stand down,
         # and hide the plan from any worker it starts.
         _state["controller"] = False

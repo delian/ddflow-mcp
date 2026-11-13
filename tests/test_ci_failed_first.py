@@ -435,3 +435,13 @@ def test_with_plugin_autoload_disabled_nothing_is_ordered_and_nothing_claimed(tm
         ran = _pytest(tmp_path, {**parent, **sess.env})
         assert sess.outcome().get("ran_failed_first", []) == []
     assert ran == ["test_a.py::test_a1", "test_a.py::test_a2"]
+
+
+def test_a_session_started_inside_a_failed_first_run_is_a_run_of_its_own(tmp_path):
+    """`ddflow ci run` from a test of an outer failed-first run (the suite tests it) must order
+    its own pytest: the outer run's marker is not inherited."""
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\ndef test_a2(): pass\n")
+    parent = _env({FF.ACTIVE_ENV: "1"})  # another process's marker, as the outer run leaves it
+    with FF.session(FF.Plan(ids=("test_a.py::test_a2",)), parent_env=parent) as sess:
+        ran = _pytest(tmp_path, {**parent, **sess.env})
+    assert ran[0] == "test_a.py::test_a2"
