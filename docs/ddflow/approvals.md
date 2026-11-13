@@ -70,6 +70,20 @@ hold exactly one live work item, `--approval request` and a second use all ask y
 consent (an agent's `--yes --reason "the operator said so"`) still works for a few operations until
 you list them in `require_approval`; each use is warned about.
 
+**A list in a lower layer REPLACES the list above it; it does not add to it.** A machine-local
+`policy = ["pins_regenerate"]` over a project file that lists four rules turns those four OFF.
+Name every rule you want, in the layer you set it, for example:
+
+```toml
+[approvals]
+policy = ["complete_unavailable", "claim_unavailable", "skip_after_unavailable", "accept_baseline_red", "pins_regenerate"]
+standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "approve.partial", "pins.regenerate"]
+```
+
+`standing_verbs` replaces its list the same way. An id no rule is registered for (`pins_regenerate`
+on a ddflow older than this one) is accepted by the config load and does nothing: no rule runs for it
+and nothing is refused or warned.
+
 Switch it on, once (a prompt to your agent, which runs these; as an agent it files a `config.set`
 approval for you): "let agents regenerate the generated pin files without asking me". That is
 `ddflow config --local --set approvals.policy '["pins_regenerate"]'` and
