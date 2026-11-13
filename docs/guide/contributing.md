@@ -2,6 +2,10 @@
 
 Publishing, cutting a release, what CI checks, reviewers, companion tools and the test suite. Part of the ddflow [README](../../README.md); the reference moved out of it by D-readme-split. Every heading here keeps the anchor it had in the README.
 
+## Shipping and reviewing
+
+Publishing, releases, what CI checks, reviewers and companion tools.
+
 ### Publishing and registry
 
 **Nobody should have to paste JSON into an IDE to use this.** `server.json` is the

@@ -1,0 +1,7 @@
+# Ratchet `deferred_imports` for ddflow.adapters.embed (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+# Justification: `model2vec.StaticModel` is imported at first use, not at module level --
+# it drags in numpy, joblib and tokenizers (seconds of CPU no other import needs), and a
+# stripped deployment without the [rag] extra reads it as None instead of failing the import.
+baseline = 1

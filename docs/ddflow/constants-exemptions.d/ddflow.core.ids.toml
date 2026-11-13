@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/core/ids.py:AGENT_ID_MAX" = "structural: an agent id names a log shard; this bounds the id it will print and refuse, and a longer name is cut to a readable prefix plus a digest so the file name stays under the file system's 255 bytes; the MCP surface caps a declared name at 64 (core/agentname.py)"
+"ddflow/core/ids.py:_DIGEST_CHARS" = "structural: the width of the digest that makes a sanitised shard name injective; changing it would rename every sanitised shard"
+"ddflow/core/ids.py:_NAME_BYTES" = "structural: the longest shard file name a file system allows (255 bytes) less the `.jsonl` suffix; an id within it keeps the name an older log was written under"

@@ -8,12 +8,12 @@ stage (D-unify kind-pipeline). No network or process I/O live here.
 from __future__ import annotations
 
 import re
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config, _is_code_tree, family_for
 from ...core.digest import content_digest
 from ...infra import tomlcfg
@@ -255,7 +255,7 @@ def active_degraded_marks(
     """
     if cooldown_s <= 0:
         return {}
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     return {
         name: row
         for name, row in degraded_marks(state).items()

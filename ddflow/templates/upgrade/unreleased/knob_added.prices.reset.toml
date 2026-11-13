@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "prices.reset"
+new = "{}"
+why = "The reset cadence per model id (e.g. \"1d\", \"1mo\"); layered the same way [prices] is, so a routing read treats an empty value as the section default (TE-limit-aware-routing)."
+impact = "additive"

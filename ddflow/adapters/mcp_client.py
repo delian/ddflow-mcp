@@ -14,12 +14,12 @@ to a server through an INJECTED `Starter`, so nothing here starts a process itse
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from .mcp import (  # the wire an SDK swap touches: one home
+from .clock import DEFAULT as CLOCK
+from .mcp_wire import (  # the wire an SDK swap touches: one home (no mcp import: keeps the graph a DAG)
     CLOSED_BEFORE_READ,
     ECHOED,
     EOF,
@@ -137,7 +137,7 @@ class StdioClient(_ChannelClient):
         env: dict[str, str] | None = None,
         *,
         poll_s: float = POLL_S,
-        clock: Callable[[], float] = time.monotonic,
+        clock: Callable[[], float] = CLOCK.monotonic,
     ) -> None:
         self._starter, self._argv, self._env = starter, argv, env
         self._poll, self._clock = poll_s, clock

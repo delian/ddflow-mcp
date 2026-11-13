@@ -239,7 +239,9 @@ def plan_for(harness: str) -> Plan | None:
         return None
     if not h.hooks.emitter:
         return None
-    return Plan(harness, fieldmap(h.hooks.fields), h.hooks.emitter, h.hooks.inject, dict(h.hooks.events))
+    return Plan(
+        harness, fieldmap(h.hooks.fields), h.hooks.emitter, h.hooks.inject, dict(h.hooks.events)
+    )
 
 
 def emit(plan: Plan, event: str, text: str) -> str:

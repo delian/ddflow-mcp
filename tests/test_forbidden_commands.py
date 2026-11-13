@@ -112,6 +112,22 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
+    """B-hook-flag-match-matches-quoted-text: matching a FLAG entry is by whole words, not by
+    substrings, and a quote delimiter does not neutralize the flag. `git push '--force'` is a
+    real force push (bash strips the quotes before the command runs), while `--force` inside a
+    LARGER quoted argument is data the command prints, not a flag it runs with."""
+    assert _check("git push '--force'") is not None, "a quoted flag is still the flag"
+    assert _check('git push "--force"') is not None
+    assert _check("echo '--force'") is not None, "the whole --force token is still the flag"
+    assert _check("echo --force") is not None
+    assert (
+        _check("printf '%s\\n' 'task: the --force --force-with-lease text is only described'")
+        is None
+    ), "the flag text inside a larger quoted argument is data"
+    assert _check('echo "task: the --force text"') is None
+
+
 @pytest.mark.parametrize(
     "cmd",
     [
@@ -340,6 +356,13 @@ def test_reset_hard_only_on_primary(tmp_path):
     # from a worktree, a command that names another checkout is still judged as the primary
     assert _check(f"git -C {tmp_path} reset --hard", cwd=wt) is not None
     assert _check(f"cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # a leading VAR=x assignment must not hide the `cd`/`pushd` from the @primary check
+    # (B212779e518): `FOO=bar cd /primary && git status` still runs in the primary.
+    assert _check(f"FOO=bar cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    assert _check(f"FOO=bar pushd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # `cd`/`pushd` are builtin words, not paths: an executable named `cd` cannot change
+    # the shell's cwd, so a path to it must NOT be judged as acting elsewhere.
+    assert _check(f"FOO=bar /bin/cd {tmp_path} && git reset --hard", cwd=wt) is None
     assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None

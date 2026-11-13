@@ -10,11 +10,11 @@ from __future__ import annotations
 import os
 import signal
 import sys
-import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...infra import fsio
 from ...infra import git as G
@@ -167,13 +167,13 @@ def merge_tree(
     # (LK-probe-scratch-deadline critic/rubber_duck #1). The cutoff starts here, before the
     # tree is made: the add spends its `deadline_s`, and the merge calls that follow take
     # `left()` from this same cutoff, so the total is bounded by the caller's deadline.
-    cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
+    cutoff = CLOCK.monotonic() + deadline_s if deadline_s is not None else None
 
     def left() -> float:
         # No deadline: the git runner's own default (GIT_TIMEOUT) still bounds each call --
         # an explicit `None` would mean "no timeout", so the caller that set no deadline keeps
         # the 300s cap the plain ci gate merge had before the deadline existed.
-        return G.GIT_TIMEOUT if cutoff is None else max(0.0, cutoff - time.monotonic())
+        return G.GIT_TIMEOUT if cutoff is None else max(0.0, cutoff - CLOCK.monotonic())
 
     with W.scratch_tree(
         repo,

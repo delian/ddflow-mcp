@@ -15,6 +15,7 @@ from pathlib import Path
 from ...core import digest as D
 from ...core import textsim
 from ...core.model import State, fold
+from ..fsio import replace_path
 from ..log import EventLog, _flock
 from ._fingerprint import (
     _INDEX_FILE,
@@ -202,7 +203,7 @@ class _ProjectionMixin:
         for suf in ("-wal", "-shm"):
             tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
             self.path.with_name(self.path.name + suf).unlink(missing_ok=True)
-        tmp.replace(self.path)
+        replace_path(tmp, self.path)
         self._collect_stale_indexes()
 
     def _incremental_enabled(self) -> bool:

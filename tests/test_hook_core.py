@@ -93,7 +93,6 @@ def test_an_absent_or_empty_fields_table_is_the_claude_fallback():
     assert hookio.fieldmap({}) is hookio._DEFAULT
 
 
-
 # --- normalizers: each dialect into one payload -------------------------------------------
 
 
@@ -346,7 +345,7 @@ def test_pre_compact_stays_silent_on_stdout_and_notes_a_skip_on_stderr(repo):
 
 def test_events_without_a_handler_yet_are_accepted_and_silent(repo):
     run_cli(repo, "init")
-    for event in ("pre_tool", "post_tool", "stop", "session_end"):
+    for event in ("pre_tool", "post_tool", "stop", "session_end"):  # no session id: quiet
         assert _run(repo, "hooks", "run", event, stdin="{}") == (0, "", "")
 
 

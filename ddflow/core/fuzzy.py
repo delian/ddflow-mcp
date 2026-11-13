@@ -1,18 +1,18 @@
-"""The one adapter for the optional ``[search]`` extra (rapidfuzz), with its stdlib fallback.
+"""Re-export: the ONE fuzzy adapter lives in `ddflow.adapters.fuzzy` (the rapidfuzz home).
 
-Nothing else imports rapidfuzz (the `extras-one-adapter` contract). ``ratio`` is rapidfuzz's
-token-set ratio when the extra is installed and ``difflib``'s sequence ratio otherwise; both
-are 0..1. ``available`` says which one a caller is getting.
+`core` stays pure: it imports no third-party package directly. The rapidfuzz/difflib
+``DefaultFuzzy`` adapter (the ONE implementation of `ratio`, in `ddflow.adapters.fuzzy`)
+lives at the bottom; this module re-binds its `_fuzz` (the imported rapidfuzz module, or
+``None``) and exposes ``ratio``/``available`` reading THIS ``_fuzz``, so `from
+ddflow.core import fuzzy`, then ``fuzzy.ratio(...)``, keeps working and a test can re-point
+``fuzzy._fuzz`` at a stand-in.
 """
 
 from __future__ import annotations
 
-import difflib
+from ..adapters.fuzzy import _fuzz, _likeness
 
-try:  # the [search] extra; every caller works without it
-    from rapidfuzz import fuzz as _fuzz
-except ImportError:  # pragma: no cover - depends on the environment
-    _fuzz = None
+__all__ = ["available", "ratio"]
 
 
 def available() -> bool:
@@ -21,8 +21,5 @@ def available() -> bool:
 
 
 def ratio(a: str, b: str) -> float:
-    """0..1 fuzzy likeness of two strings."""
-    a, b = a.lower(), b.lower()  # both backends compare without case
-    if _fuzz is not None:
-        return _fuzz.token_set_ratio(a, b) / 100.0
-    return difflib.SequenceMatcher(None, a, b).ratio()
+    """0..1 fuzzy likeness of two strings (case-insensitive)."""
+    return _likeness(a, b, _fuzz)

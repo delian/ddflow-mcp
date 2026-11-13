@@ -25,6 +25,8 @@ from ..services.enforce import NEWER_HINT
 from ._base import _load
 from .harness import best_level
 
+#: The stages that probe the project through `ddflow` itself and so need a git repository.
+_NEEDS_GIT = ("status", "preflight", "verify")
 #: The stages in the prompt's own order; the CLI choices and MCP enum come from here.
 STAGES = ("status", "preflight", "legacy", "memory", "test-gate", "verify", "harness")
 
@@ -241,6 +243,22 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
     return O.ok("onboard.harness", **data)
 
 
+def _not_a_repository(repo: Path) -> bool:
+    """True when neither a ``.git`` nor a bare repository (``HEAD``, ``objects`` and ``refs``,
+    which is what git itself requires of a git directory) exists at or above ``repo``.
+
+    The filesystem, not a `git` call: a call would be one more program invocation to
+    guard, git's message changes with the locale, and a repository git merely refuses to
+    open (dubious ownership, a permissions error) HAS a ``.git``, so it is not told to
+    `git init`: the stage runs and reports what its probes find."""
+    here = repo.resolve()
+    return not any(
+        (d / ".git").exists()
+        or ((d / "HEAD").is_file() and (d / "objects").is_dir() and (d / "refs").is_dir())
+        for d in (here, *here.parents)
+    )
+
+
 def onboard(
     repo: Path,
     *,
@@ -250,6 +268,11 @@ def onboard(
     agent: str = "",
 ) -> O.Outcome:
     """`stage` -> its report; unknown stages are refused with the list, never guessed."""
+    if stage in _NEEDS_GIT and _not_a_repository(repo):
+        # Before any probe: the probes run `ddflow brief` underneath, which writes
+        # .ddflow/local state and then fails with a raw GitError.
+        msg = f"{repo} is not a git repository: run `git init` there first, then onboard"
+        return O.failed(f"onboard.{stage}", msg, text=msg)
     if stage == "status":
         return status(repo)
     if stage == "preflight":

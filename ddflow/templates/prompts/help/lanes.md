@@ -12,6 +12,11 @@ resumes an agent and runs no daemon. Acting on a lane (starting or resuming it) 
     ddflow lanes fleet           every agent the log has seen, past the lane window: role, harness,
                                  model, items, lease, stop reason; lost and live work first
     ddflow lanes resume <lane>   how to resume a stopped lane, or who took its item over; read-only
+    ddflow lanes --coordinator   the coordinator's screen: running suites, lease holders (idle ones
+                                 flagged after lanes.idle_s), pending approvals with their commands,
+                                 ready work per phase and, with `--item ID`, that item's blocked-by
+                                 chain; each section is cut at lanes.coordinator_max_rows
+    ddflow lease                 the lease holders table alone (the same holders)
 
 States:
 
@@ -29,3 +34,14 @@ blocked by a named lane's globs, lanes idle beside ready work, and more working 
 the parallelism limit. Over MCP it is `ddflow_lanes` with `view` = `state`, `brief` or
 `advise`. Exit 2 means nothing to show. The `[lanes]` knobs tune the window, the stale
 threshold, the watch interval and the size of advice and briefs.
+
+## Role packs
+
+`ddflow brief --role phase-closer|fixer|researcher|reviewer [--phase ID | --item ID]` prints the
+project's standing rules for that role (tests first, ratchet offenders by name, the detached
+suite recipe with the maximum timeout, the approvals relay protocol, one pins recipe per
+approval, the docs-wave stop, no push), so a coordinator sends one line instead of retyping
+them. The packs are `[roles]` config (`phase_closer_rules` and the like, one line each; a line
+`rule:<id>` is rendered from that rule record), overridable in any config layer and cut at
+`[roles].budget_tokens`. An unknown role refuses and lists the roles. `brief --for-agent NAME
+ITEM --role R` appends the pack to the launch brief; over MCP it is `ddflow_brief` with `role`.

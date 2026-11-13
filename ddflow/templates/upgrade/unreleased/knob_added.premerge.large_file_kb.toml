@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "premerge.large_file_kb"
+new = '500'
+why = "The pre-merge check (D-premerge-precommit-gate-2026-11-12) runs the project's pre-commit hooks on the item's changed files before a merge."
+impact = "additive"

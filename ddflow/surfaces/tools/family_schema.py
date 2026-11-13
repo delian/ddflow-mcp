@@ -16,8 +16,9 @@ import re
 from typing import Any, NamedTuple
 
 from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
+from ..vocabulary import provide
 from . import DECLARED, TOOLS
-from .families import FAMILIES, Family
+from .families import FAMILIES, Family, named_tools
 
 __all__ = (
     "family_entry",
@@ -251,3 +252,6 @@ def _problem(routed: Routed, family: Family) -> str:
             f"Known: {', '.join(sorted(OP if k == ACTION else k for k in known))}"
         )
     return ""
+
+
+provide(tools=named_tools(TOOLS))  # what `doctor` checks tool names against

@@ -28,13 +28,29 @@ from ._shared import (
 )
 
 
+def _tags(a) -> tuple[str, ...]:
+    """The `--tag` values plus `--wave N` as the ``wave:N`` tag (NV-next-tag-filter)."""
+    tags = [str(t) for t in (a.get("tag") or ())]
+    wave = a.get("wave")
+    if wave is not None and wave != "":
+        tags.append(f"wave:{int(wave)}")
+    return tuple(tags)
+
+
 def _next(repo, a, agent):
     """`next`, or with `--lane` the pull answer for that lane."""
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     phase_only = bool(a.get("phase_only", False))
+    tags = _tags(a)
     if lane := a.get("lane", ""):
         out = _api().next_lane(
-            repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
+            repo,
+            lane=lane,
+            kind=kind,
+            phase=phase,
+            phase_only=phase_only,
+            agent=agent,
+            tags=tags,
         )
         token = _lane_token(
             lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
@@ -42,7 +58,15 @@ def _next(repo, a, agent):
         return _cap(repo, out, token, a)  # its footer names the lane call
     return _cap(
         repo,
-        _api().next_item(repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only),
+        _api().next_item(
+            repo,
+            kind=kind,
+            phase=phase,
+            agent=agent,
+            phase_only=phase_only,
+            tags=tags,
+            ignore_cap=bool(a.get("ignore_cap", False)),
+        ),
         "next",
         a,
     )
@@ -65,7 +89,7 @@ def _next_text(out, a, ctx):
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
-        summary="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
+        summary="what may start now (exit 2 = nothing ready or held, exit 1 = unknown --phase)",
         tool="ddflow_next",
         description="What may be started RIGHT NOW, and why the rest may not. Independent "
         "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
@@ -91,6 +115,35 @@ COMMANDS: tuple[Command, ...] = (
                 "ready upstream blocking-dependencies shown by default.",
                 cli_help="with --phase: the phase's own ready items only (skip its ready "
                 "blocking-dependencies)",
+                default=False,
+            ),
+            Param(
+                "tag",
+                repeat=True,
+                help="Only items with this tag, e.g. wave:3; repeat: all must match.",
+                cli_help="only items carrying this tag (repeatable: all must match); "
+                "exit 1 if no item carries it",
+                default=None,
+            ),
+            Param(
+                "wave",
+                type="integer",
+                help="Shorthand for tag wave:N.",
+                cli_help="shorthand for --tag wave:N",
+                default=None,
+            ),
+            Param(
+                "ignore_cap",
+                type="boolean",
+                help="Offer items only the parallelism cap holds back as ready.",
+                cli_help="treat items held only by the parallelism cap as ready for this call",
+                default=False,
+            ),
+            Param(
+                "blocked",
+                type="boolean",
+                help="List every blocked item.",
+                cli_help="list every blocked item, dependency-blocked ones too (text view)",
                 default=False,
             ),
             Param(
@@ -157,6 +210,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="Render this subagent's launch brief for item.",
                 cli_help="render the standard launch brief of subagent NAME for the item "
                 "(`--item` or the positional id)",
+                default="",
+            ),
+            Param(
+                "role",
+                help="Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief.",
+                cli_help="the project's rules for a role: phase-closer, fixer, researcher or reviewer (with --for-agent: appended to the launch brief)",
                 default="",
             ),
             Param(

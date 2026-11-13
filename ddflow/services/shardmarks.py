@@ -22,8 +22,9 @@ every read and write, never lowering a mark. What a shard holds is what the work
 
 Known limit: the mark is a count and the last event's id, not the set of ids. A rewrite that
 removes an interior event AND brings in enough new ones to reach the old count with the old
-last event still present, all before any ddflow command looks at the shard, cannot be told
-from growth. Closing that needs a per-event record (the P-MULTIUSER sync-check, not this fix).
+last event still present is not told from those same events restored plus new ones: the flag
+clears (B0c3157d23a). Closing that needs a per-event record (the P-MULTIUSER sync-check, not
+this fix).
 
 Everything here fails SAFE: a missing mark file has nothing to compare, an unreadable one is
 replaced, a newer-schema one is left alone; none of them raises into the caller. ddflow itself
@@ -225,18 +226,17 @@ def _raised(
 ) -> None:
     """Record ``scanned`` as this branch's mark of ``shard``, unless that would lower it or
     would forget a loss. A shard that holds fewer events than the mark, or no longer holds the
-    event the mark saw, is flagged ``shrunk`` and the mark is kept as it was: growth by new
-    appends cannot clear it (an interior event may be gone while the tail and the count are
-    back). It clears when the shard is exactly what the mark saw (the events were restored) or
-    is `accept`ed."""
+    event the mark saw, is flagged ``shrunk`` and the mark is kept as it was. It clears when
+    the shard holds the mark's last event id and at least its count (the events were restored),
+    regardless of size growth, or is `accept`ed."""
     key = _key(ref, shard)
     old = _row(out, key)
     seen = str(old.get("last_event_id", "")) if old else ""
     if old is None:
         out[key] = _mk(shard, scanned, ref)
     elif old.get("shrunk"):
-        if scanned[2] == old.get("size") and scanned[0] >= old["count"] and _holds(path, seen):
-            out[key] = _mk(shard, scanned, ref)  # restored to exactly what was seen
+        if scanned[0] >= old["count"] and _holds(path, seen):
+            out[key] = _mk(shard, scanned, ref)  # holds the last event and its count: restored
     elif scanned[0] < old["count"] or not _holds(path, seen):
         out[key] = {**old, "shrunk": True}
     else:

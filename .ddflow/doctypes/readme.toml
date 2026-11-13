@@ -1,0 +1,38 @@
+[doctype]
+name = "readme"
+title = "README (the front door)"
+path = "README.md"
+genre = "reference"
+contract = "evergreen"
+
+[doctype.guidance]
+audience = "a person or an agent meeting ddflow for the first time"
+tone = "plain and current; it is true today or it is wrong"
+style = "The front door only: what ddflow is, why, the default workflow, a pointer per moved section. The reference lives in docs/guide/*.md. The tables between ddflow:begin README/... markers are generated: never edit them by hand."
+
+[[doctype.section]]
+id = "agent"
+heading = "Instruction for an agent reader"
+required = true
+order = 1
+
+[[doctype.section]]
+id = "intro"
+heading = "Introduction"
+required = true
+order = 2
+
+[[doctype.section]]
+id = "toc"
+heading = "Table of contents"
+required = true
+order = 3
+
+[[doctype.section]]
+id = "rest"
+heading = "Where the rest lives"
+required = true
+order = 4
+
+[doctype.validate]
+rules = [{ kind = "required_sections" }, { kind = "heading_order" }]

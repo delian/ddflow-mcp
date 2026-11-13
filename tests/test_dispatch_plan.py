@@ -41,7 +41,9 @@ def test_three_free_slots_return_the_right_three_in_order():
         score.Item(id="d", globs=("pkg/d.py",)),
         score.Item(id="e", globs=("pkg/e.py",)),
     ]
-    result = plan(items, _lanes(3), score.World(), 3, Weights(), priorities=dict.fromkeys("abcde", 9))
+    result = plan(
+        items, _lanes(3), score.World(), 3, Weights(), priorities=dict.fromkeys("abcde", 9)
+    )
     assert [s.item for s in result.starts] == ["a", "b", "c"]
     assert result.free == 3
 
@@ -74,7 +76,9 @@ def test_fill_is_bounded_by_free_slots():
 
 
 def test_a_stalled_lane_is_a_resume_move():
-    stalled = AdviseMove("resume", "lane x stopped with it unfinished", ("x",), "ddflow lanes brief x")
+    stalled = AdviseMove(
+        "resume", "lane x stopped with it unfinished", ("x",), "ddflow lanes brief x"
+    )
     moves = steer([stalled, AdviseMove("idle", "spare capacity", ("y",), "ddflow next")])
     verbs = [(m.verb, m.lane) for m in moves]
     assert (RESUME, "x") in verbs

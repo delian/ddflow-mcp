@@ -109,7 +109,9 @@ def classify(
     # overlap -- it is stale, not a delta of the covered files.
     added = sorted(p for p in set(changed) - seen if not ignorable(p, recorded, ignore, docs, gone))
     if added:
-        return Verdict(STALE, f"the item now changes file(s) the review never saw: {shown_names(added)}")
+        return Verdict(
+            STALE, f"the item now changes file(s) the review never saw: {shown_names(added)}"
+        )
     overlap = sorted(
         p
         for p in seen

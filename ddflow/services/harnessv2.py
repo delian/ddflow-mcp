@@ -60,6 +60,21 @@ ORCHESTRATION_KEEPALIVES = frozenset(
 )
 
 
+#: How much of the model and its use the agent exposes. ``unknown`` is the fallback for a
+#: field nobody has verified -- a descriptor must not guess a value it has not sourced.
+MODEL_VISIBILITIES = frozenset({"visible", "hidden", "unknown"})
+
+#: Where the agent exposes per-use/per-run cost. ``none`` is a documented absence.
+COST_EXPOSURES = frozenset({"per_run", "per_turn", "none", "unknown"})
+
+#: How the model is chosen for a spawned subagent. ``env`` is a shared environment knob;
+#: ``none`` is a documented absence.
+SUBMODEL_CONTROLS = frozenset({"per_spawn", "per_file", "env", "none", "unknown"})
+
+#: The orchestration patterns the agent offers an orchestrator.
+PATTERNS = frozenset({"router", "planner_executor", "subagents", "best_of_n", "council"})
+
+
 @dataclass(frozen=True)
 class Detect:
     """How a running agent is recognised."""
@@ -150,6 +165,23 @@ class Telemetry:
 
 
 @dataclass(frozen=True)
+class Capabilities:
+    """What the agent exposes and offers an orchestrator, as data. Each ``*_source`` is the
+    file and key that set the field; a field nobody verified stays ``unknown`` (``patterns``
+    empty) and is never guessed. Verified values must cite their ``*_source``."""
+
+    none: bool = False
+    model_visibility: str = "unknown"  #: one of MODEL_VISIBILITIES
+    model_visibility_source: str = ""  #: file and key that set it (e.g. settings.json@model)
+    cost_exposed: str = "unknown"  #: one of COST_EXPOSURES
+    cost_exposed_source: str = ""
+    subagent_model_control: str = "unknown"  #: one of SUBMODEL_CONTROLS
+    subagent_model_control_source: str = ""
+    patterns: tuple[str, ...] = ()  #: subset of PATTERNS
+    patterns_source: str = ""
+
+
+@dataclass(frozen=True)
 class Reserved:
     """A section whose name is reserved; its owner task defines the keys. Until then it
     holds ``none`` or free string values."""
@@ -168,6 +200,7 @@ V2_SECTIONS: dict[str, type] = {
     "caps": Caps,
     "autonomy": Autonomy,
     "telemetry": Telemetry,
+    "capabilities": Capabilities,
 }
 
 #: Reserved names, one definition each; the owner fills them (see the task's note).
@@ -216,12 +249,54 @@ def check_table(table: Any, name: str, where: str) -> None:
     _membership(
         name, table.get("keepalive"), "orchestration.keepalive", ORCHESTRATION_KEEPALIVES, where
     )
-    if name == "orchestration" and keys and table.get("loop") is None:
+    _membership(
+        name,
+        table.get("model_visibility"),
+        "capabilities.model_visibility",
+        MODEL_VISIBILITIES,
+        where,
+    )
+    _membership(name, table.get("cost_exposed"), "capabilities.cost_exposed", COST_EXPOSURES, where)
+    _membership(
+        name,
+        table.get("subagent_model_control"),
+        "capabilities.subagent_model_control",
+        SUBMODEL_CONTROLS,
+        where,
+    )
+    _check_capabilities_table(name, table, where)
+    _check_orchestration_table(name, table, keys, where)
+    _check_headless_table(name, table, where)
+    _check_none_and_continuation_table(name, table, keys, where)
+
+
+def _check_capabilities_table(name: str, table: dict, where: str) -> None:
+    if name != "capabilities":
+        return
+    patterns = table.get("patterns")
+    if patterns is not None and (
+        not isinstance(patterns, list)
+        or not all(isinstance(p, str) and p in PATTERNS for p in patterns)
+    ):
+        raise DescriptorError(
+            f"{where}: capabilities.patterns must be a list of {sorted(PATTERNS)}"
+        )
+
+
+def _check_orchestration_table(name: str, table: dict, keys: set, where: str) -> None:
+    if name != "orchestration":
+        return
+    if keys and table.get("loop") is None:
         raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
-    if name == "orchestration":
-        _require_orchestration_keepalive(table, where)
+    _require_orchestration_keepalive(table, where)
+
+
+def _check_headless_table(name: str, table: dict, where: str) -> None:
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
+
+
+def _check_none_and_continuation_table(name: str, table: dict, keys: set, where: str) -> None:
     if "none" in table and table["none"] is True and keys:
         raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
     if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
@@ -259,10 +334,24 @@ def _membership(name: str, value: Any, field: str, vocab: frozenset, where: str)
         raise DescriptorError(f"{where}: {field} must be one of {sorted(vocab)}")
 
 
+#: The keys of `[test]` (B-ac-smoke): how the live smoke harness detects and drives the agent.
+TEST_KEYS = frozenset({"detect", "argv", "env_keys", "turn_flag", "exit_codes"})
+
+
+def _validate_test(sec: Reserved, where: str) -> None:
+    for k in sorted(set(sec.values) - TEST_KEYS):
+        raise DescriptorError(f"{where}: unknown key test.{k} (one of {sorted(TEST_KEYS)})")
+    codes = sec.values.get("exit_codes", "")
+    if any(not c.strip().isdigit() for c in codes.split(",") if codes):
+        raise DescriptorError(f"{where}: test.exit_codes is a comma list of integers")
+
+
 def validate_reserved(reserved: dict[str, Reserved], where: str) -> None:
     for name, sec in reserved.items():
         if sec.none == bool(sec.values):  # both set, or neither
             raise DescriptorError(f"{where}: [{name}] needs exactly one of none = true or values")
+    if "test" in reserved:
+        _validate_test(reserved["test"], where)
 
 
 def validate(sections: dict[str, Any], where: str) -> None:
@@ -271,7 +360,13 @@ def validate(sections: dict[str, Any], where: str) -> None:
         for k, v in vars(sec).items():
             if type(v) is int and v < 0:
                 raise DescriptorError(f"{where}: [{name}].{k} must not be negative")
-    cont = sections.get("continuation")
+    _validate_continuation(sections.get("continuation"), where)
+    _validate_headless(sections, where)
+    _validate_orchestration(sections.get("orchestration"), where)
+    _validate_capabilities(sections.get("capabilities"), where)
+
+
+def _validate_continuation(cont: Any, where: str) -> None:
     if cont and (cont.cap or cont.goal_command or cont.loop_guard):
         if cont.mechanism in ("", "none"):
             raise DescriptorError(
@@ -282,6 +377,9 @@ def validate(sections: dict[str, Any], where: str) -> None:
         _membership(
             "continuation", cont.mechanism, "continuation.mechanism", CONTINUATION_MECHANISMS, where
         )
+
+
+def _validate_headless(sections: dict[str, Any], where: str) -> None:
     head = sections.get("headless")
     if head and head.autonomy:
         auto = sections.get("autonomy")
@@ -289,6 +387,27 @@ def validate(sections: dict[str, Any], where: str) -> None:
             raise DescriptorError(
                 f"{where}: headless.autonomy {head.autonomy!r} is not an [autonomy].profiles id"
             )
-    orch = sections.get("orchestration")
+
+
+def _validate_orchestration(orch: Any, where: str) -> None:
     if orch and orch.loop:
         _membership("orchestration", orch.loop, "orchestration.loop", ORCHESTRATION_LOOPS, where)
+
+
+def _validate_capabilities(cap: Any, where: str) -> None:
+    if not cap:
+        return
+    for field_name in ("model_visibility", "cost_exposed", "subagent_model_control"):
+        value = getattr(cap, field_name)
+        source = getattr(cap, f"{field_name}_source")
+        # a verified (non-unknown) value must cite the file and key that set it, never guess.
+        if value not in ("", "unknown") and not source.strip():
+            raise DescriptorError(
+                f"{where}: capabilities.{field_name} is {value!r} but "
+                f"capabilities.{field_name}_source names no file and key that set it"
+            )
+    if cap.patterns and not cap.patterns_source.strip():
+        raise DescriptorError(
+            f"{where}: capabilities.patterns is {list(cap.patterns)!r} but "
+            "capabilities.patterns_source names no file and key that set it"
+        )

@@ -9,11 +9,11 @@ import ast
 from collections.abc import Callable
 from pathlib import Path
 
+from ..adapters import git as GIT
 from ..config import Config
 from ..core.bookkeeping import is_state
 from ..core.globs import inside
 from ..core.model import Item
-from ..infra import git as GIT
 from ..infra import worktree as W
 
 #: The gates a TRIVIAL change (format-only / docs / comment, hence behavior-preserving)
@@ -83,6 +83,13 @@ def diff_is_trivial(item: Item, cfg: Config, repo, paths: list[str] | None) -> b
     if diff_is_docs_only(item, cfg, paths):
         return True
     base = item.base or W.default_branch(repo)
+    # A tree whose HEAD IS the base holds no committed change of this item to judge: the
+    # item already landed (the primary checkout after `merge`), so base-vs-HEAD is empty and
+    # reads as "AST unchanged". Fail closed: the landed logic change is not trivial.
+    head = W.git(tree, "rev-parse", "HEAD")
+    basecommit = W.git(tree, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
+    if not head.ok or not basecommit.ok or head.out == basecommit.out:
+        return False
     return _is_format_or_comment(tree, base, paths)
 
 

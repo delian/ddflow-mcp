@@ -26,6 +26,7 @@ No prompt text, arguments, user paths or secrets appear in any figure.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -98,8 +99,6 @@ def _floor(rollup: dict) -> float | None:
 
 
 def _is_finite(value: float) -> bool:
-    import math
-
     return math.isfinite(value)
 
 

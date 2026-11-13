@@ -27,6 +27,7 @@ from __future__ import annotations
 from ..core.digest import content_digest
 from ..core.model import Item, State, fold
 from . import approval as AP
+from . import logblobs as LB
 from .approvals import consume as CN
 from .approvals.canon import Canon
 from .gates import baseline_red as BR
@@ -55,7 +56,7 @@ def refusal(it: Item, gate: str) -> str:
             f"{it.id}.{gate} is {got or 'not run'}, not {ACCEPTABLE}: only a partial outcome "
             f"can be accepted by a person. Re-run the gate, or record it honestly"
         )
-    base = (it.gates[gate].evidence or {}).get("baseline")
+    base = LB.full(it.gates[gate].evidence or {}).get("baseline")
     if gate not in BR.GATES or not (isinstance(base, dict) and base.get("red") is True):
         return (
             f"{it.id}.{gate} is partial but was not measured baseline-red (the failing tests "
@@ -70,7 +71,7 @@ def auto_ids(it: Item, gate: str, cfg=None) -> list[str]:
     `[gates].baseline_red_auto` is still on. Needs a measured baseline-red partial."""
     if cfg is None or getattr(cfg.gates, "baseline_red_auto", "on") != "on" or refusal(it, gate):
         return []
-    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
+    auto = (LB.full(it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
     return (
         list(auto.get("ids") or [])
         if isinstance(auto, dict) and auto.get("accepted") is True
@@ -88,7 +89,7 @@ def person_only(it: Item, gate: str) -> bool:
     rec = it.gates.get(gate)
     if rec is None:
         return False
-    base = (rec.evidence or {}).get("baseline") or {}
+    base = LB.full(rec.evidence or {}).get("baseline") or {}
     return base.get("red") is True and (base.get("auto") or {}).get("accepted") is not True
 
 
@@ -124,6 +125,22 @@ def grant(
         requested_agent=requested_agent,
         proxy=proxy,
     )
+
+
+def provider(st, item: str, gate: str, args: dict[str, str]) -> str:
+    """The state digest of an `approve.partial` request an agent files by hand (`ddflow approvals
+    request approve.partial --item I --target G`): the SAME digest `approve` builds. Only a
+    measured baseline-red partial can be requested -- never a failed, unavailable, unmeasured
+    or review-gate outcome (`refusal`). The verb stays a person's: no policy rule, window or
+    retry count answers it for a person-only partial (`policy.person_only_target`)."""
+    it = st.items.get(item)
+    if it is None:
+        raise ValueError(f"no such item {item!r}")
+    if gate not in it.gates:
+        raise ValueError(f"{item} has no recorded outcome for gate {gate!r}")
+    if why := refusal(it, gate):
+        raise ValueError(why)
+    return digest(it, gate)
 
 
 def approve(
@@ -198,11 +215,12 @@ def next_step(it: Item, item_id: str, gate: str) -> str:
     other gate): never "request an approval" (D-baseline-red-auto-accept)."""
     if it.gate_outcome(gate) != ACCEPTABLE or refusal(it, gate):
         return ""
-    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto") or {}
+    auto = (LB.full(it.gates[gate].evidence or {}).get("baseline") or {}).get("auto") or {}
     why = auto.get("why") or "[gates].baseline_red_auto is off or the measurement predates it"
     return (
         f"; {gate} is partial and baseline-red but was not accepted automatically ({why}). "
         f"Do NOT request an approval: fix what it names, then re-run it (CLI `ddflow gate run {item_id} {gate}`, "
         f"MCP ddflow_gate action=run id={item_id} gate={gate}). Only a person, who runs "
-        f"`ddflow approve {item_id} {gate}`, accepts it otherwise"
+        f"`ddflow approve {item_id} {gate}`, accepts it otherwise (an agent files that request with "
+        f"`ddflow approvals request approve.partial --item {item_id} --target {gate}`)"
     )

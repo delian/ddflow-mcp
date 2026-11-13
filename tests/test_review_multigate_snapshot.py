@@ -62,14 +62,13 @@ def test_the_second_gate_sees_a_fix_the_first_gate_made_while_it_ran(repo, tmp_p
     # after duck finishes, and must then see a.py without the FINDA it found.
     duck.write_text(
         duck.read_text().replace(
-            "case \"$in\" in *FINDA*) printf",
+            'case "$in" in *FINDA*) printf',
             f"sed -i 's/FINDA/FIXED/' '{wt}/a.py'; git -C '{wt}' add a.py; case \"$in\" in *FINDA*) printf",
             1,
         )
     )
     api.review(repo, gate="rubber_duck,critic", item="T1", full=True)
     crit_found = [
-        f["title"]
-        for f in _state(repo).gates["critic"].evidence.get("chunk_findings", [])
+        f["title"] for f in _state(repo).gates["critic"].evidence.get("chunk_findings", [])
     ]
     assert "crit saw it" not in crit_found, crit_found

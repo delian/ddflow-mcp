@@ -86,7 +86,7 @@ def test_sync_records_a_branch_synced_event_with_the_merge_and_gate_outcomes(rep
 
 
 def test_sync_records_applied_commits_touching_the_globs_and_the_relevant_count(repo):
-    wt = _claimed(repo)
+    _claimed(repo)
     c1 = _land(repo, "src/a.py")
     c2 = _land(repo, "docs/b.md")
     out = sync(repo, item="T1", agent=ME)

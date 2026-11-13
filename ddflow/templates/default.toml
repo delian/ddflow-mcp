@@ -42,6 +42,9 @@ accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
 
+[baseline]
+keep = 14
+
 [bugs]
 file_task = true
 phase = "bugs"
@@ -151,6 +154,11 @@ behind = "warn"
 max_behind = 50
 machine_local_keys = []
 
+[eta]
+window_days = 30.0
+min_samples = 10
+coverage_bar = 0.8
+
 [evaluation]
 max_miss_rate = 0.0
 min_fixtures = 1
@@ -193,6 +201,8 @@ current_line = "current"
 port_strategy = "forward-merge"
 environments = []
 auto_promote = []
+pr_body_template = ""
+pr_body_cell_max = 200
 version_files = {}
 
 [gates]
@@ -327,6 +337,8 @@ fleet_failed_patterns = ["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "o
 fleet_reason_chars = 120
 watch_interval_s = 5
 advise_max = 10
+idle_s = 1800
+coordinator_max_rows = 15
 brief_notes = 3
 brief_text_chars = 1200
 stop_grace_s = 10
@@ -437,6 +449,7 @@ next_hints = "off"
 on_upgrade = "notify"
 stale_check_every_s = 60.0
 progress_s = 20.0
+init_snapshot_max_age_s = 300.0
 
 [memory]
 max_chars = 280
@@ -459,6 +472,8 @@ auto_run_max_parallel = 1
 [metrics]
 min_samples = 10
 top = 5
+runs_window_days = 30
+outlier_runs = 0
 forecast_runs = 1000
 forecast_seed = 0
 forecast_low_pct = 50
@@ -505,6 +520,7 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+json_envelope = false
 
 [perf_metrics]
 ring_max_bytes = 2000000
@@ -555,6 +571,24 @@ mergiraf_keep_pct = 10
 [plan]
 warn_missing_globs = true
 
+[premerge]
+enabled = true
+stages = ["pre-commit"]
+budget_s = 120
+on_unavailable = "unavailable"
+fix = true
+commit_fixes = true
+max_fix_rounds = 1
+precommit_command = "pre-commit"
+skip_hooks = []
+generic_hooks = true
+large_file_kb = 500
+test_command = "python -m pytest -q -x"
+
+[prices]
+limit = {}
+reset = {}
+
 [prompts]
 review_system = ""
 review_user = ""
@@ -587,6 +621,14 @@ command = ""
 model_dir = ""
 timeout_s = 60
 
+[records]
+correct_digest_chars = 12
+correct_min_digest_chars = 8
+correct_digest_old = false
+correct_digest_new = false
+correct_reason_max_chars = 500
+correct_max_fields = 8
+
 [reinstruct]
 enabled = true
 every_calls = 12
@@ -595,6 +637,14 @@ max_items = 3
 
 [release]
 manifest_lint = "block"
+
+[resultcache]
+enabled = true
+keep_days = 14
+max_mb = 64
+reuse_failed = false
+probe_commands = ["pytest --version", "uv --version"]
+env_vars = []
 
 [review]
 max_rounds = 2
@@ -613,6 +663,13 @@ exclude_pin_files = true
 chunk_max_tokens = 0
 split_rounds = 2
 degraded_cooldown_s = 3600
+
+[roles]
+budget_tokens = 600
+phase_closer_rules = []
+fixer_rules = []
+researcher_rules = []
+reviewer_rules = []
 
 [rules]
 max_rules = 200
@@ -674,6 +731,9 @@ first_call_max_tokens = 600
 replay_verify_diffs = true
 progress_after_complete = "on"
 compaction_digest_chars = 2000
+inflight_note = true
+interrupted_close_max = 20
+previous_session_chars = 600
 agent_rotate_tokens = 250000
 claude_autocompact_window = 0
 claude_autocompact_pct_override = 0
@@ -708,6 +768,17 @@ burn_rate_exhaust_s = 3600.0
 [store]
 stale_index_days = 7.0
 index_touch_s = 86400.0
+
+[suites]
+max_concurrent = 0
+cores_per_suite = 96
+load_ceiling_per_core = 0.35
+load_poll_s = 2.0
+max_wait_factor = 3.0
+agent_share = 0.5
+default_cost_s = 600.0
+cost_runs = 20
+class_patterns = {red_main = ["fix-Bmain-red", "main-red", "red-main"], integrator = ["merge[ _-]?queue", "queue run", "integrator"], phase = ["^P-", "phase[ _-]?(close|suite)"], baseline = ["baseline"]}
 
 [swarm]
 w_critical = 3.0

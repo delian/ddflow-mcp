@@ -55,12 +55,15 @@ STDLIB_HOMES: dict[str, tuple[str, ...]] = {
     "hashlib": ("ddflow.adapters.digest",),
     "http": ("ddflow.adapters.http",),
     "tomllib": ("ddflow.adapters.toml",),
+    "sqlite3": ("ddflow.adapters.indexdb",),
 }
 
 # A third-party package's declared home: the one module allowed to import the package.
 THIRD_PARTY_HOMES: dict[str, tuple[str, ...]] = {
-    "rapidfuzz": ("ddflow.core.fuzzy",),
-    "model2vec": ("ddflow.services.embed",),
+    "rapidfuzz": ("ddflow.adapters.fuzzy",),
+    "radon": ("ddflow.adapters.complexity",),
+    "model2vec": ("ddflow.adapters.embed",),
+    "jinja2": ("ddflow.adapters.templates",),
     # ADP-toml made `ddflow.adapters.toml` the single wrapper for TOML I/O: `tomllib` to
     # read and `tomlkit` to write (`TomlLibIo.dumps`/`document`). Until `infra.tomlcfg`
     # delegates to it (ADP-toml-unify), BOTH are the declared home for tomlkit.

@@ -10,11 +10,13 @@ installed command is untouched.
 
 from __future__ import annotations
 
-import os
 import shlex
 import sys
 from pathlib import Path
 
+from ddflow.adapters.env import PATH_SEP
+
+from ..adapters.env import DEFAULT as ENV
 from ..infra import fsio
 from ..infra import paths as PA
 
@@ -70,8 +72,8 @@ def with_shim_on_path(env, tree: Path) -> dict[str, str]:
     env = dict(env)
     path = env.get("PATH")
     if path is None:
-        path = os.environ.get("PATH", "")
-    env["PATH"] = str(directory) + (os.pathsep + path if path else "")
+        path = ENV.get("PATH", "")
+    env["PATH"] = str(directory) + (PATH_SEP + path if path else "")
     return env
 
 

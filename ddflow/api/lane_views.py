@@ -12,9 +12,11 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import approval as AP
+from ..services import coordinator_view as CV
 from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
+from ..services import suitelock as SL
 from ..services.lanes import launch_template as T
 from ..services.lanes import lead as LD
 from ..services.lanes.redraw import watch as _watch
@@ -23,7 +25,7 @@ from .fleet import fleet_view
 from .lifecycle.planning import plan_for
 from .reporting.waitcycles import wait_moves, wait_report
 
-VIEWS = ("state", "brief", "advise", "fleet", "resume", "lead", "approve")
+VIEWS = ("state", "brief", "advise", "fleet", "resume", "lead", "approve", "coordinator", "lease")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
 NOBODY = "\0lanes"
 
@@ -96,6 +98,18 @@ def lane_template_approve(
     )
 
 
+def _coordinator(data: dict, ledger, st, cfg, at: float, offer, item: str, view: str) -> O.Outcome:
+    """`view=coordinator` (the full screen) or `view=lease` (its holders table alone)."""
+    suites, queued = SL.running(cfg, now=at)
+    cv = CV.build(ledger, st, cfg, at, offer, suites=suites, item=item)
+    cv["suites_queued"] = queued
+    data["coordinator"] = cv
+    data["text"] = CV.render(cv) if view == "coordinator" else CV.render_holders(cv)
+    if view == "lease":
+        data["holders"] = cv["holders"]
+    return O.ok("lanes", **data)
+
+
 def lanes(
     repo: Path, *, view: str = "state", lane: str = "", now: float | None = None, agent: str = ""
 ) -> O.Outcome:
@@ -125,7 +139,10 @@ def lanes(
         "fleet": [],
         "fleet_total": 0,
         "resume": {},
+        "coordinator": {},
     }
+    if view in ("coordinator", "lease"):
+        return _coordinator(data, ledger, st, cfg, at, offer, lane, view)
     if view in ("fleet", "resume"):
         return fleet_view(
             data, view=view, lane=lane, events=events, st=st, cfg=cfg, now=at, plan=offer

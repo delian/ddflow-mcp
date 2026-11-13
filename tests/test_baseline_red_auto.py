@@ -518,6 +518,75 @@ def test_an_always_run_guard_reached_by_import_does_not_block_auto_accept(
     assert auto["accepted"] is True, auto
 
 
+def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(repo, monkeypatch) -> None:
+    """B6450ce772f: an architecture guard (`tests/test_architecture_guards.py`) declares
+    ``GOVERNS = ("ddflow/**", ...)`` but imports ddflow modules, so testselect records it with
+    the import reason ("imports ..."), not "governs ...". The reach is trivial (it governs the
+    whole tree), so when it is red on the base with the same message (`red` holds), it must not
+    block auto-accept -- the recorded selection reason must not decide it."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_architecture_guards.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text('GOVERNS = ("ddflow/**",)\ndef test_ratchet():\n    pass\n')
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(repo, monkeypatch) -> None:
+    """The governs exclusion must not leak to a guard reached by import whose declared
+    ``GOVERNS`` globs do NOT match a changed path: reaching this file by import may have
+    caused its failure, so auto-accept still declines."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_layout.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text('GOVERNS = ("pyproject.toml",)\ndef test_layout():\n    pass\n')
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_layout"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_layout.py" in auto["why"]
+
+
+def test_a_narrow_governs_guard_reached_by_import_is_also_excluded(repo, monkeypatch) -> None:
+    """A guard with a NARROW ``GOVERNS`` that matches the changed file (not whole-tree) is also
+    excluded when it is reached by import: the base comparison is whole-vs-whole, so a new
+    offender in it would not be ``red``. Asserts the intended direction for the declared-scope
+    exclusion -- the recorded reason ("imports ...") must not re-block it."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_family_schema.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text(
+        'GOVERNS = ("ddflow/api/family_schema.py",)\ndef test_index():\n    pass\n'
+    )
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_index"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
 def test_a_file_reached_by_import_that_is_not_an_always_guard_still_blocks(
     repo, monkeypatch
 ) -> None:

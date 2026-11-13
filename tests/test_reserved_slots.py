@@ -456,7 +456,9 @@ def test_next_with_nothing_ready_still_says_it(repo):
     assert api.lifecycle.claim(repo, "F1", no_worktree=True, agent="x").ok
     assert api.lifecycle.claim(repo, "F2", no_worktree=True, agent="y").ok
     code, out, _err = run_cli(repo, "next")
-    assert code == 2
+    # Operator ruling 2026-11-12 (D-next-view-rulings-2026-11-12): items held only by the cap
+    # or a reserved slot are unblocked work, so exit 0 with a held section, not 2.
+    assert code == 0
     assert "1 of 3 slot(s) reserved" in out and "F3" in out, out
 
 

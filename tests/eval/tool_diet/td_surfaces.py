@@ -78,6 +78,16 @@ def size(tools: list[dict[str, Any]]) -> int:
     return len(json.dumps(tools, separators=(",", ":")).encode())
 
 
+def _member_problem(name: str, args: dict[str, Any]) -> str:
+    """The server-side check of a call on member tool ``name``, against the family that serves
+    it (the engine's own check is per family: an argument any action advertises is known)."""
+    family = next(
+        (f for f in families.FAMILIES.values() if name in f.actions().values()),
+        families.Family(name, {name: name}, {}, True),
+    )
+    return family_schema._problem(family_schema.Routed(name, args, name), family)
+
+
 def resolve(surface: str, name: str, args: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
     """``(member tool, its arguments, an error)`` for a call on ``surface``.
 
@@ -88,7 +98,7 @@ def resolve(surface: str, name: str, args: dict[str, Any]) -> tuple[str, dict[st
     if surface == "flat":
         if name not in TOOLS:
             return "", args, f"unknown tool {name}"
-        return name, args, family_schema._problem(family_schema.Routed(name, args, name))
+        return name, args, _member_problem(name, args)
     routed = family_schema.route(name, args)
     if isinstance(routed, str):
         return "", args, routed
@@ -97,4 +107,4 @@ def resolve(surface: str, name: str, args: dict[str, Any]) -> tuple[str, dict[st
     shown = {f["function"]["name"] for f in family_tools()}
     if name not in shown:
         return "", args, f"{name} is not on this surface"
-    return name, args, family_schema._problem(family_schema.Routed(name, args, name))
+    return name, args, _member_problem(name, args)

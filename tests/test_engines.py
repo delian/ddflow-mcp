@@ -128,9 +128,9 @@ def test_fieldmap_deep_and_nonobject_input_is_empty_not_a_crash():
 def test_emit_variants_render_via_the_closed_list(variant):
     for inject in (True, False):
         for text in ("ctx", ""):
-            assert emit.render(variant, "prompt", text, inject, "BeforeAgent") == hookio.EMIT_VARIANTS[
-                variant
-            ]("prompt", text, inject, "BeforeAgent")
+            assert emit.render(
+                variant, "prompt", text, inject, "BeforeAgent"
+            ) == hookio.EMIT_VARIANTS[variant]("prompt", text, inject, "BeforeAgent")
     assert emit.variant_for(variant) == variant
 
 

@@ -14,6 +14,7 @@ from helpers import git as _git
 
 from ddflow.api import cirun as A
 from ddflow.config import Config
+from ddflow.core.model import GateRecord, Item
 from ddflow.services import ci as CI
 from ddflow.services import testscope as TSC
 
@@ -107,13 +108,15 @@ def test_a_green_run_reports_every_stage_and_keeps_its_why(branch, stubs):
 
 
 def _item(outcome, scope):
-    ci = NS(outcome=outcome, evidence={"ci_scope": {"scope": scope}} if scope else {})
-    return NS(kind="task", promote_to="", fixes=["B1"], base="main", gates={"ci": ci})
+    """A real `Item`, so a field the readers learn later is already there."""
+    ci = GateRecord("ci", outcome=outcome, evidence={"ci_scope": {"scope": scope}} if scope else {})
+    return Item(id="T1", kind="task", fixes=["B1"], base="main", gates={"ci": ci})
 
 
 def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monkeypatch, tmp_path):
     picked = NS(scope="selected", why="x", command="pytest t.py", tests=[], changed_lines=3)
     monkeypatch.setattr(TSC, "changed_lines", lambda tree, base: 3)
+    monkeypatch.setattr(TSC, "changed_paths", lambda repo, it: None)
     monkeypatch.setattr(TSC, "_selected", lambda *a, **kw: (picked, kw)[0])
     monkeypatch.setattr(TSC.W, "repo_root", lambda t: tmp_path)
     monkeypatch.setattr(TSC.W, "default_branch", lambda r: "main")

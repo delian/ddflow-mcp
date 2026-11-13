@@ -24,6 +24,10 @@
           "type": "string",
           "description": "Render this subagent's launch brief for item."
          },
+         "role": {
+          "type": "string",
+          "description": "Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -36,7 +40,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, reopen(id,reason), tag(id).",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, duplicate(id,of), reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -175,6 +179,10 @@
           "type": "number",
           "description": "Minimum score at which two bugs cluster (default: [dedupe].show_floor)."
          },
+         "of": {
+          "type": "string",
+          "description": "The FIXED bug it duplicates."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -183,6 +191,7 @@
            "found",
            "file_tasks",
            "dedupe",
+           "duplicate",
            "reopen",
            "tag"
           ],
@@ -293,6 +302,10 @@
          "approval": {
           "type": "string",
           "description": "An agent's way past unmet conditions: 'request' asks the operator, then the approval id they answered."
+         },
+         "check": {
+          "type": "boolean",
+          "description": "Read-only: print the unmet conditions, approvals needed and what policy would grant; never completes. Exit 0 nothing unmet, 1 unmet, 2 could not run."
          },
          "as_agent": {
           "type": "string",
@@ -693,6 +706,25 @@
           "type": "boolean",
           "description": "With `--phase`: return the phase's own ready items only, hiding the ready upstream blocking-dependencies shown by default."
          },
+         "tag": {
+          "type": "array",
+          "description": "Only items with this tag, e.g. wave:3; repeat: all must match.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "wave": {
+          "type": "integer",
+          "description": "Shorthand for tag wave:N."
+         },
+         "ignore_cap": {
+          "type": "boolean",
+          "description": "Offer items only the parallelism cap holds back as ready."
+         },
+         "blocked": {
+          "type": "boolean",
+          "description": "List every blocked item."
+         },
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
@@ -950,7 +982,7 @@
     'ddflow_task': '''
       {
        "name": "ddflow_task",
-       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new), phase_complete(id).",
+       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new), phase_complete(id), correct(id,field,text,reason).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1103,7 +1135,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why (recorded on the abandonment)."
+          "description": "Why the value was wrong. Required. Never the old value."
          },
          "force": {
           "type": "boolean",
@@ -1143,7 +1175,19 @@
          },
          "approval": {
           "type": "string",
-          "description": "An agent's route: 'request' asks the operator, then the approval id they answered."
+          "description": "An agent correcting another agent's record: 'request' asks the operator, then the approval id they answered."
+         },
+         "field": {
+          "type": "string",
+          "description": "The field to replace: title, body, tags, ... or a kind's own (summary, rule, why, author_model)."
+         },
+         "text": {
+          "type": "string",
+          "description": "The new text."
+         },
+         "secret": {
+          "type": "boolean",
+          "description": "The value may be a secret: keep every digest of it out of the audit entry."
          },
          "action": {
           "type": "string",
@@ -1159,7 +1203,8 @@
            "batch",
            "fold",
            "rename",
-           "phase_complete"
+           "phase_complete",
+           "correct"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -1174,7 +1219,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, dispatch, vigil, paths, perf, digest, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, dispatch, vigil, paths, perf, digest, rules_inventory, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1256,7 +1301,7 @@
          },
          "item": {
           "type": "string",
-          "description": "The item to look back on; with view=retro."
+          "description": "With coordinator: an item whose blocked-by chain to show."
          },
          "match": {
           "type": "string",
@@ -1340,11 +1385,15 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo or batch."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste."
          },
          "lane": {
           "type": "string",
           "description": "Lane name (or a unique part); with view=brief, resume or approve."
+         },
+         "coordinator": {
+          "type": "boolean",
+          "description": "The coordinator's screen: running suites, lease holders (idle ones flagged), pending approvals, ready work per ..."
          },
          "group_by": {
           "type": "string",
@@ -1425,6 +1474,7 @@
            "paths",
            "perf",
            "digest",
+           "rules_inventory",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

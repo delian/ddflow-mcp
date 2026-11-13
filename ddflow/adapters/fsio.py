@@ -245,6 +245,12 @@ def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
         _write_in_place(target, text, fsync=fsync)
 
 
+def write_in_place(path: Path | str, text: str, *, fsync: bool = False) -> None:
+    """Overwrite `path` keeping its inode: the writer for a file somebody holds a lock on
+    (a rename over it would leave the holder locking an inode nobody else opens)."""
+    _write_in_place(Path(path), text, fsync=fsync)
+
+
 def _write_in_place(path: Path, text: str, *, fsync: bool) -> None:
     """What `path.write_text(text, "utf-8")` does (truncate, write: same inode, owner,
     links), plus the flush to disk `fsync` asks for."""
@@ -289,6 +295,24 @@ def _link_exclusive(
     except BaseException:
         path.unlink(missing_ok=True)
         raise
+
+
+def append_line(path: Path | str, line: str) -> None:
+    """One whole line appended to an O_APPEND descriptor (parents created); a short write is
+    retried so a torn tail cannot glue onto the next line."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        data = (line + "\n").encode("utf-8")
+        written = 0
+        while written < len(data):
+            n = os.write(fd, data[written:])
+            if n <= 0:
+                break
+            written += n
+    finally:
+        os.close(fd)
 
 
 def lock_path_for(path: Path | str) -> Path:

@@ -24,11 +24,11 @@ import contextlib
 import json
 import math
 import re
-import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from ..adapters.clock import DEFAULT as CLOCK
 from ..core import clock
 from ..core.slug import safe_filename
 from ..infra import fsio
@@ -105,7 +105,7 @@ def send(
     body, cut = clean(text, max_chars)
     if cut and max_chars >= len(_CUT):  # the marker is inside the cap, never past it
         body = body[: max_chars - len(_CUT)] + _CUT
-    now = time.time()
+    now = CLOCK.wall()
     msg = Message(
         to=to,
         reason=reason,
@@ -162,7 +162,7 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     if not d.is_dir():
         return []
     out: list[tuple[Path, Message]] = []
-    now = time.time()
+    now = CLOCK.wall()
     for path in sorted(d.glob("*.json")):
         m = _load(path)
         if m is None or m.delivered_at > 0:
@@ -186,7 +186,7 @@ def take(repo: Path, agent: str, *, ttl_s: float = 0.0, retain_s: float = 0.0) -
         delivered(repo, agent, retain_s=retain_s)  # prune stale retained copies here too
     dst_dir = _delivered_dir(repo, agent)
     for m in got:
-        m.delivered_at = time.time()
+        m.delivered_at = CLOCK.wall()
         try:
             dst_dir.mkdir(parents=True, exist_ok=True)
             atomic_write(dst_dir / m.file, json.dumps(asdict(m)))
@@ -205,7 +205,7 @@ def delivered(repo: Path, agent: str, *, retain_s: float = 0.0) -> list[Message]
     if not d.is_dir():
         return []
     out: list[tuple[Path, Message]] = []
-    now = time.time()
+    now = CLOCK.wall()
     for path in sorted(d.glob("*.json")):
         m = _load(path)
         if m is None:

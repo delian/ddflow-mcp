@@ -31,7 +31,7 @@ from typing import Any
 
 from ..core import clock
 from ..core.docchunk import Chunk
-from .fsio import LockTimeout, file_lock, lock_path_for
+from .fsio import LockTimeout, file_lock, lock_path_for, replace_path
 
 INDEX_LAYOUT = 1  # derived, rebuilt on mismatch: not an upcast contract version
 LOCK_TIMEOUT_S = 30.0
@@ -297,7 +297,7 @@ class DocIndex:
             for suffix in ("-wal", "-shm"):  # the live file's stale sidecars are not the new one's
                 with contextlib.suppress(OSError):
                     Path(f"{self.path}{suffix}").unlink()
-            target.replace(self.path)  # one rename: a reader opens the old file or the new
+            replace_path(target, self.path)  # one rename: a reader opens the old file or the new
 
     # -- reading ----------------------------------------------------------------------
     def stats(self) -> Stats:

@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 import re
 import shlex
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+
+from ddflow.adapters.clock import DEFAULT as CLOCK
 
 from .env import Fingerprint, in_container
 
@@ -86,7 +87,7 @@ def measure(
     run: Callable[[], None],
     *,
     probe: Callable[[str], dict[str, float | None] | None],
-    clock: Callable[[], float] = time.monotonic,
+    clock: Callable[[], float] | None = None,
     container: Callable[[], bool | None] | None = None,
     env_key: str = "",
 ) -> CommandSample:
@@ -95,6 +96,7 @@ def measure(
     (or ``None``/empty when the rung could not read them); the surviving rung is recorded
     as the source, so a probe that could not run is named, never passed off as a lower one.
     ``env_key`` is the machine-class digest the sample keeps (never a hostname or path)."""
+    clock = clock or CLOCK.monotonic
     start = clock()
     run()
     wall = clock() - start

@@ -63,9 +63,7 @@ def test_test_runs_the_offline_conformance(tmp_path):
 def test_test_reports_a_failed_descriptor_through_the_cli(tmp_path, monkeypatch):
     from ddflow.services import harnessfacts
 
-    monkeypatch.setattr(
-        harnessfacts, "rows", lambda _h, **k: [{"fact": "who", "status": "bogus"}]
-    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [{"fact": "who", "status": "bogus"}])
     out = H.harness_view(tmp_path, what="test", id="claude")
     assert out.ok and out.data["status"] == "ran"
     # a fact with an unknown status fails conformance, through the CLI

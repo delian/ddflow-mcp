@@ -12,10 +12,10 @@ durations and cost only, marked approximate and versioned (those formats change)
 from __future__ import annotations
 
 import json
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 
+from ddflow.adapters.clock import DEFAULT as CLOCK
 from ddflow.services.perf import store
 
 
@@ -71,7 +71,7 @@ def record(repo, source: str, tc: ToolCall) -> None:
         repo,
         "agent_calls",
         store.Sample(
-            time.time(),
+            CLOCK.wall(),
             _js([tc.agent, tc.lane, tc.item]),
             tc.duration_s if tc.duration_s is not None else -1.0,
             tc.tool_class,

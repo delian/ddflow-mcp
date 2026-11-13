@@ -11,6 +11,7 @@ import contextlib
 from collections.abc import Callable
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core.model import Item, Lease, State
 from ...core.schedule import capacities, resource_shortfall
@@ -390,7 +391,7 @@ def peer_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "") 
     it is left unchanged (operator decision D-mu-bugfix-answers)."""
     it = _fold(log).items.get(item_id)
     lease = it.lease if it else None
-    if lease is None or not lease.live(_leases.time.time(), cfg.lease.grace_s):
+    if lease is None or not lease.live(CLOCK.wall(), cfg.lease.grace_s):
         return None
     if not lease.clone or foreign(lease, log.clone_id(create=False)):
         return None  # no recorded clone: unchanged; foreign: foreign_guard's

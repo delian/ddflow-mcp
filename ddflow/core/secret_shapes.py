@@ -45,6 +45,28 @@ SHAPES: tuple[tuple[str, str], ...] = (
     ("stripe", r"[sr]k_live_(?=[A-Za-z]{0,60}[0-9])[0-9A-Za-z]{24,}"),
     ("huggingface", _L + r"hf_[0-9A-Za-z]{30,}"),
     ("npm", _L + r"npm_[0-9A-Za-z]{36}(?![0-9A-Za-z])"),
+    ("gitlab", r"glpat-[0-9A-Za-z_-]{20,}"),
+    ("pypi", r"pypi-AgEI[0-9A-Za-z_-]{50,}"),
+    ("sendgrid", r"SG\.[0-9A-Za-z_-]{22}\.[0-9A-Za-z_-]{43}"),
+    ("linear", r"lin_api_[0-9A-Za-z]{30,}"),
+    ("digitalocean", r"do[por]_v1_[0-9a-f]{64}"),
+    ("mailgun", _L + r"key-[0-9a-f]{32}(?![0-9A-Za-z])"),
+    # three dot-separated base64url parts (RFC 7515 forbids padding, and a `=` would make the masking style keep the head); the header and the payload are JSON, so both start `eyJ`
+    ("jwt", r"eyJ[0-9A-Za-z_-]{8,}\.eyJ[0-9A-Za-z_-]{8,}\.[0-9A-Za-z_-]*"),
+    # a non-conforming padded payload: the header and payload, up to the padding; the masking style keeps
+    # whatever precedes the first `=` of a match, so none may sit inside it (the signature alone is no token)
+    ("jwt-padded", r"eyJ[0-9A-Za-z_-]{8,}\.eyJ[0-9A-Za-z_-]{8,}(?==+\.)"),
+    ("azure-key", r"(?:Account|SharedAccess)Key=[0-9A-Za-z+/]{40,}={0,2}"),
+    # `curl ... -u user:password`: scoped to curl, since `docker run -u 1000:1000` is not a credential
+    (
+        "curl-user",
+        r"\bcurl\b(?:[^\n|;&]|&(?!&)|\\\n){0,400}?\s(?:-[A-Za-z]*u|--user)[ =]*(?:\"[^\"\n:]{1,64}:[^\"\n]{4,256}|'[^'\n:]{1,64}:[^'\n]{4,256}|[^\s:'\"]{1,64}:[^\s'\"]{4,256})",
+    ),
+    # `scheme://user:password@host`: the whole password, which may itself hold an `@`
+    (
+        "url-userinfo",
+        r"(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]{1,20}://[^\s:/@]{0,64}:[^\s/]{1,256}@",
+    ),
     (
         "assigned-secret",
         r"(?i)(?:api[-_]?key|(?:access|auth|private)[-_]?key|(?<![A-Za-z0-9])key|secret|token|passw(?:or)?d)[\w-]{0,40}[\"']?\s*[:=]\s*[\"']?"

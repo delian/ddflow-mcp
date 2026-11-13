@@ -54,7 +54,12 @@ def seeded() -> Log:
 
 def test_directly_follows_counts_a_gate_pair_and_its_gap(log=None):
     row = {(r["a"], r["b"]): r for r in directly_follows(ctx_of(seeded()))}
-    assert row[("rubber_duck", "critic")] == {"a": "rubber_duck", "b": "critic", "n": 1, "median_gap_s": 100}
+    assert row[("rubber_duck", "critic")] == {
+        "a": "rubber_duck",
+        "b": "critic",
+        "n": 1,
+        "median_gap_s": 100,
+    }
     assert row[("critic", "rubber_duck")]["n"] == 1
     assert row[("critic", "rubber_duck")]["median_gap_s"] == 50
     assert row[("research", "rubber_duck")]["median_gap_s"] == 200

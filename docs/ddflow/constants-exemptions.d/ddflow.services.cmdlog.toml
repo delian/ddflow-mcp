@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/services/cmdlog.py:CAP_ENTRIES" = 'internal limit of the command-log ring: how many entries are kept before the oldest drop (a module constant for this slice; the knob is for later)'
+"ddflow/services/cmdlog.py:TAIL_CHARS" = 'internal limit of the command-log record: how many characters of one command output are kept per entry (a module constant for this slice; the knob is for later)'

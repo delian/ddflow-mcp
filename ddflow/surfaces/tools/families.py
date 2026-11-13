@@ -197,3 +197,9 @@ FAMILIES: dict[str, Family] = build(_PLACED)
 ALIASES: tuple[FamilyAlias, ...] = tuple(
     FamilyAlias(t, p.family, p.action) for t, p in _PLACED.items() if t not in HOT_SINGLES
 )
+
+
+def named_tools(tools: Mapping[str, Any]) -> dict[str, Any]:
+    """`tools` plus every family tool, for the stale-reference check (B-vocab-lacks-family-tools):
+    `ddflow_session` is a tool the lean profile lists, so a template naming it is not stale."""
+    return {**{name: {} for name in FAMILIES}, **tools}
