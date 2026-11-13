@@ -53,6 +53,8 @@ TEMPLATE_NAMES: tuple[str, ...] = (
     # The route an operator-only refusal names (RA-prompt): ask, show the operator, re-run
     # with --approval ID. Sections `driver` and `route`.
     "approvals",
+    # The pull-request description (`[flow].pr_body_template`, BL-pr-evidence-template).
+    "pr_body",
 )
 
 

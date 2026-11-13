@@ -19,6 +19,7 @@ import pytest
 
 from ddflow.surfaces import mcp as M
 from ddflow.surfaces.mcp import SERVER_INFO, SUPPORTED_PROTOCOLS, Server, serve
+from ddflow.surfaces.mcp import _serve as _S
 
 MODERN = "2026-07-28"
 SERVER_KEY = "io.modelcontextprotocol/serverInfo"
@@ -150,7 +151,7 @@ def test_an_offloaded_call_with_a_bad_version_is_refused_without_a_worker(repo, 
     def no_worker(*a, **k):
         raise AssertionError("a worker was started for a refused request")
 
-    monkeypatch.setattr(M, "_offload", no_worker)
+    monkeypatch.setattr(_S, "_offload", no_worker)
     msg = req("tools/call", {"name": "ddflow_wait", "arguments": {}}, version="1900-01-01")
     out = io.StringIO()
     serve(repo, stdin=io.StringIO(json.dumps(msg) + "\n"), stdout=out, offload=True)
@@ -164,7 +165,7 @@ def test_offload_own_replies_are_modern(repo, monkeypatch):
     def busy(srv, msg, send, n):
         send(M._ok(msg["id"], M._text("busy", meta={"exit": 2})))
 
-    monkeypatch.setattr(M, "_offload", busy)
+    monkeypatch.setattr(_S, "_offload", busy)
     msg = req("tools/call", {"name": "ddflow_wait", "arguments": {}})
     out = io.StringIO()
     serve(repo, stdin=io.StringIO(json.dumps(msg) + "\n"), stdout=out, offload=True)

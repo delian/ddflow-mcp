@@ -112,6 +112,41 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_a_quoted_heredoc_marker_is_not_a_heredoc():
+    """Bdd23c77383: `<<EOF` inside a quoted argument is literal text, not a heredoc, so the
+    command on the following line is a real command and must still be refused. An UNQUOTED
+    `<<EOF` is a real heredoc whose body stays data."""
+    assert _check("echo '<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check('echo "<<EOF"\ngit push origin main\nEOF') is not None
+    # a multi-line single quote that swallows the marker is data too, not an opener
+    assert _check("echo 'x\n<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check("echo <<EOF\ngit push origin main\nEOF") is None
+    # a `'` inside a comment is not a quote opener, so the real heredoc still strips its body
+    assert _check("# don't run\ncat <<EOF\ngit push origin main\nEOF") is None
+    # a double quote left open on one line keeps a `<<` on the next line quoted: not a heredoc
+    assert _check('echo "\n<<EOF"\ngit push origin main\nEOF') is not None
+    # an empty ``""`` that closes at the line's last char still CLOSES the quote, so the next
+    # line's `" <<EOF"` is a fresh quote and `git push` after it is a command
+    assert _check('echo ""\nfoo " <<EOF"\ngit push origin main\nEOF') is not None
+    # a quoted heredoc delimiter's closing quote is part of the marker, not a string quote, so
+    # a LATER heredoc's body is still stripped (critic #1)
+    assert _check("cat <<'EOF'\nsafe\nEOF\ncat <<EOF\ngit push origin main\nEOF") is None
+    # a quoted delimiter may hold whitespace (its delimiter is the quoted text), so the command
+    # after its terminator is a command, not a body (critic #2)
+    assert _check("cat <<'EOF with spaces'\nEOF with spaces\ngit push origin main\nEOF") is not None
+    # a CRLF heredoc line still strips its body: `\r` ends the delimiter word, not part of it
+    assert _check("cat <<EOF\r\npkill x\r\nEOF\r\n") is None
+    # a quote AFTER an unquoted prefix is part of the delimiter word (quote-removed), so the
+    # `git push` after the `safeend` terminator is a command (critic #4)
+    assert _check("cat <<safe'end'\nsafeend\ngit push origin main\nsafe") is not None
+    # a `\X` inside a DOUBLE-quoted delimiter quote-removes to `X`, so `"a\"b"` names `a"b`
+    # and the `git push` after that terminator is a command (critic #5)
+    assert _check('cat <<"a\\"b"\ngit push origin main\na"b\ngit push origin main') is not None
+    # a backslash escapes only $/backtick/"/\ in a double-quoted delimiter, so `"a\b"` names
+    # `a\b` (not `ab`) and `git push` after it is a command (critic #6/#7)
+    assert _check('cat <<"a\\b"\ngit push origin main\na\\b\ngit push origin main') is not None
+
+
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
     """B-hook-flag-match-matches-quoted-text: matching a FLAG entry is by whole words, not by
     substrings, and a quote delimiter does not neutralize the flag. `git push '--force'` is a
@@ -356,6 +391,13 @@ def test_reset_hard_only_on_primary(tmp_path):
     # from a worktree, a command that names another checkout is still judged as the primary
     assert _check(f"git -C {tmp_path} reset --hard", cwd=wt) is not None
     assert _check(f"cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # a leading VAR=x assignment must not hide the `cd`/`pushd` from the @primary check
+    # (B212779e518): `FOO=bar cd /primary && git status` still runs in the primary.
+    assert _check(f"FOO=bar cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    assert _check(f"FOO=bar pushd {tmp_path} && git reset --hard", cwd=wt) is not None
+    # `cd`/`pushd` are builtin words, not paths: an executable named `cd` cannot change
+    # the shell's cwd, so a path to it must NOT be judged as acting elsewhere.
+    assert _check(f"FOO=bar /bin/cd {tmp_path} && git reset --hard", cwd=wt) is None
     assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None

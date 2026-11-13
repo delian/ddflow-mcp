@@ -72,6 +72,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/export/select.py:disable": 1,
     "ddflow/services/export/select.py:acknowledge": 1,
     "ddflow/services/export/select.py:gate_force": 1,
+    "ddflow/api/review/scope.py:_review_force": 1,
     "ddflow/services/approvals/relayed.py:gate": 1,  # upgrade.self and plan.confirm
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup/config.py:configure": 1,
@@ -348,6 +349,15 @@ SITES: tuple[Site, ...] = (
         "the record, the fields replaced, the reason and the new text (for --secret only its length and the choice, so the ask never carries a digest of a possible secret)",
         ("ddflow/api/record_correct.py:_permission",),
         "ddflow correct <id> --field NAME --text TEXT --reason WHY --approval request|ID",
+    ),
+    Site(
+        "review.force",
+        "C",
+        T2,
+        L1,
+        "the item, the gate and the review rounds already spent (lifting the review-round budget belongs to the operator)",
+        ("ddflow/api/review/scope.py:_review_force",),
+        "ddflow review <id> --gate G --force --reason ... --approval request|ID",
     ),
 )
 

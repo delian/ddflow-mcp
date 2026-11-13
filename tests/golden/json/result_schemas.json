@@ -2895,6 +2895,41 @@
   },
   "array_schema": null
  },
+ "ddflow_dispatch": {
+  "command": "dispatch",
+  "schema": "dispatch@1",
+  "shape": "object",
+  "payload": [
+   "mode",
+   "free",
+   "limit",
+   "starts",
+   "moves",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "dispatch@1"
+    },
+    "mode": {},
+    "free": {},
+    "limit": {},
+    "starts": {},
+    "moves": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_suggest": {
   "command": "suggest",
   "schema": "suggest@1",
@@ -2975,6 +3010,68 @@
   "shape": "nested",
   "payload": "lesson",
   "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_restart": {
+  "command": "restart",
+  "schema": "restart@1",
+  "shape": "object",
+  "payload": [
+   "verb",
+   "hosting",
+   "action",
+   "message"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "restart@1"
+    },
+    "verb": {},
+    "hosting": {},
+    "action": {},
+    "message": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_kill": {
+  "command": "kill",
+  "schema": "kill@1",
+  "shape": "object",
+  "payload": [
+   "verb",
+   "hosting",
+   "action",
+   "message"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "kill@1"
+    },
+    "verb": {},
+    "hosting": {},
+    "action": {},
+    "message": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
   "array_schema": null
  },
  "ddflow_paths": {
@@ -3272,6 +3369,82 @@
   "shape": "text",
   "payload": "text",
   "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_rule_inventory": {
+  "command": "rule_inventory",
+  "schema": "rule_inventory@1",
+  "shape": "object",
+  "payload": [
+   "rows",
+   "count",
+   "agents",
+   "adopted",
+   "notes",
+   "doctor_note",
+   "tokens_note"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_inventory@1"
+    },
+    "rows": {},
+    "count": {},
+    "agents": {},
+    "adopted": {},
+    "notes": {},
+    "doctor_note": {},
+    "tokens_note": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_stacks": {
+  "command": "stacks",
+  "schema": "stacks@1",
+  "shape": "object",
+  "payload": [
+   "stack",
+   "status",
+   "detail",
+   "next_call",
+   "also",
+   "warnings",
+   "evidence",
+   "steps"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "stacks@1"
+    },
+    "stack": {},
+    "status": {},
+    "detail": {},
+    "next_call": {},
+    "also": {},
+    "warnings": {},
+    "evidence": {},
+    "steps": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
   "array_schema": null
  },
  "ddflow_sync": {

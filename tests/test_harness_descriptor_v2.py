@@ -77,7 +77,7 @@ transcript_path = "~/.acme/t.jsonl"
 [spawn]
 none = true
 [test]
-cmd = "acme -p hi"
+argv = "acme -p hi"
 """
     )
     assert h.detect.client_names == ("acme-cli",)
@@ -89,7 +89,7 @@ cmd = "acme -p hi"
     assert h.telemetry.transcript_path == "~/.acme/t.jsonl"
     assert h.autonomy.profiles == {"yolo": "--yes"} and h.detect.env == ("ACME_SESSION",)
     assert h.continuation.cap == 5 and h.reserved["spawn"].none
-    assert h.reserved["test"].values == {"cmd": "acme -p hi"}
+    assert h.reserved["test"].values == {"argv": "acme -p hi"}
 
 
 def test_falsy_value_is_still_a_fact():

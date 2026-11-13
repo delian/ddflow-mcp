@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.budget_stop_grace_s"
+new = "10.0"
+why = "LB-lane-budget-stop: seconds a lane is given to stop after its budget interrupt before the hard kill."
+impact = "additive"

@@ -40,6 +40,60 @@ from .staged import (
 )
 
 
+def _git_merge_temp(path: str) -> bool:
+    """``git merge``'s own transient working-directory temp file, not work.
+
+    A custom merge driver (`pinsregen`) makes git write the ancestor/ours/theirs
+    blobs as ``.merge_file_XXXXXX`` temp files in the tree it is merging in; a
+    concurrent ``git add -A`` stages them and then they vanish as git finishes,
+    leaving an 'AD' index entry no lease covers (B-merge-driver-temp-staged). Down
+    here it is refused as outside the lease, with a remedy to widen the globs to the
+    temp names -- widening nothing real. Git cleans these files up itself, so they
+    are never a commit the agent made and never belong to a lease.
+
+    The name alone is not enough: git's ``mkstemp`` turns the ``XXXXXX`` tail into
+    exactly six ASCII random characters, so the match is ``.merge_file_`` followed by six
+    alphanumerics, ASCII-only (``isascii``: ``isalnum`` alone would also match a real
+    Unicode name like ``.merge_file_\u03a9\u00e9\u00e9\u00e9\u00e9\u00e9``). A real
+    ``.merge_file_payload`` at the tree root does not match and is still refused outside
+    its lease (a broad prefix would wave it straight through).
+    """
+    name = path.rsplit("/", 1)[-1]
+    tail = name[len(".merge_file_") :]
+    return name.startswith(".merge_file_") and len(tail) == 6 and tail.isascii() and tail.isalnum()
+
+
+def _not_work(path: str) -> bool:
+    """A staged path the lease check waves through: ddflow's own output, or git's
+    transient merge temp file. Keeping one predicate here (rather than a second
+    comprehension in `_check_lease`) holds `_check_lease` under the complexity
+    budget `tests/test_architecture_guards.py` ratchets."""
+    return any(path.startswith(prefix) for prefix in SELF_MANAGED) or _git_merge_temp(path)
+
+
+def _unstage_git_temp(repo: Path, staged: list[str]) -> list[str]:
+    """Unstage git's transient ``.merge_file_XXXXXX`` files before the commit.
+
+    Returns the temp paths whose ``git reset`` did not take. ``_not_work`` waves temp
+    files past the lease check, but a filter alone leaves the 'AD' entry staged and the
+    commit writes the transient blob into history -- the thing the bug says must not
+    happen. Git cleans the file up itself, so dropping the index entry speaks to nothing
+    the agent made and stages nothing of the agent's. A path that could not be dropped is
+    the one case that must NOT be waived: the caller keeps it in ``paths``, so the lease
+    check refuses it (fail-closed) instead of silently committing the transient blob.
+
+    ``git reset HEAD -- <path>``, not ``git rm --cached``: a tracked path that happens to
+    match (a real ``.merge_file_123456`` committed elsewhere) must be restored to its
+    ``HEAD`` version, not deleted from the index -- ``rm --cached`` would stage the file's
+    removal and let the commit delete a tracked file.
+    """
+    stuck: list[str] = []
+    for name in (p for p in staged if _git_merge_temp(p)):
+        if not G.run(_index_tree(repo), "reset", "HEAD", "--", name).ok:
+            stuck.append(name)
+    return stuck
+
+
 def _made_tree(repo: Path, lease: Lease) -> Path | None:
     """The tree ``lease`` made, resolved; None for a lease with no tree."""
     return W.load_path(repo, lease.worktree).resolve() if lease.worktree else None
@@ -571,7 +625,8 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
         return (
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
-    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
+    stuck = set(_unstage_git_temp(repo, staged))
+    paths = [p for p in staged if p in stuck or not _not_work(p)]
     paths = _commit_scope(_index_tree(repo), paths, cfg, lease=True)
     if not paths:
         return Verdict(OK, "")

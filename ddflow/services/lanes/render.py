@@ -31,6 +31,7 @@ def _row(ln: Lane, now: float) -> tuple[str, ...]:
         safe(ln.harness) or "-",
         safe(ln.model) or "-",
         safe(ln.item) or "-",
+        safe(ln.step) or "-",
         beat,
         ln.state,
         held,
@@ -38,8 +39,8 @@ def _row(ln: Lane, now: float) -> tuple[str, ...]:
 
 
 def render_ledger(lanes: Sequence[Lane], now: float) -> str:
-    """One line per lane: name, harness, model, item, last heartbeat, state, how long."""
-    head = ("LANE", "HARNESS", "MODEL", "ITEM", "HEARTBEAT", "STATE", "FOR")
+    """One line per lane: name, harness, model, item, step, last heartbeat, state, how long."""
+    head = ("LANE", "HARNESS", "MODEL", "ITEM", "STEP", "HEARTBEAT", "STATE", "FOR")
     rows = [head, *(_row(ln, now) for ln in lanes)]
     widths = [max(len(r[i]) for r in rows) for i in range(len(head))]
     lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows]

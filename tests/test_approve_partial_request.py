@@ -100,7 +100,9 @@ def test_no_rule_or_window_grants_the_requested_partial(repo):
 
 def _window_offered(repo, ask_id: str) -> bool:
     """Does the `approvals ask` payload offer the standing-window choice for this ask?"""
-    res = API.approvals_ask(repo, ask_id, agent="bot")
+    from ddflow.api import approvals_harness as AH
+
+    res = AH.approvals_ask(repo, ask_id, agent="bot")
     body = res.data["input"]
     return any("standing window" in o["label"] for o in body["questions"][0]["options"])
 

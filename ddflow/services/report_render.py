@@ -24,6 +24,32 @@ def _unlinked(rec: dict[str, Any]) -> str:
     return "" if rec.get("linked", True) else ", not linked to the item"
 
 
+def _review_clause(rr: dict[str, Any]) -> str:
+    """The review-round clause of a gate line (DX-agent-final-report-rounds): rounds used of
+    the cap, every forced round's reason, `passed on refutation`, and the note when a reviewer
+    did not see the final commit. "" when the gate spent no review round."""
+    if not rr:
+        return ""
+    cap = rr["max"]
+    line = f", {rr['used']}/{cap} rounds" if cap else f", {rr['used']} round(s)"
+    if rr["delta"]:
+        line += f" ({rr['full']} full, {rr['delta']} delta)"
+    if rr["forced"]:
+        line += ", forced: " + "; ".join(rr["forced"])
+    if rr["refutation"]:
+        pof = rr["refutation"]
+        line += (
+            f", passed on refutation "
+            f"({pof.get('refuted', 0)} refuted, {pof.get('confirmed', 0)} confirmed)"
+        )
+    if rr.get("missed_final"):
+        line += (
+            f", reviewer did not see the final commit"
+            f" (reviewed {rr['reviewed_head'][:7]}, final {rr['missed_final'][:7]})"
+        )
+    return line
+
+
 def _gate_line(g: dict[str, Any]) -> str:
     who = g["model"] or g["by"]
     line = f"{g['gate']}: {g['outcome']}"
@@ -31,7 +57,9 @@ def _gate_line(g: dict[str, Any]) -> str:
         line += f" — reviewer {g['model'] or g['reviewer']} (family {g['family'] or 'unknown'})"
     elif who and g["outcome"] != "passed":
         line += f" — by {who}"
-    if g["rounds"]:
+    if g.get("review_rounds"):
+        line += _review_clause(g["review_rounds"])
+    elif g["rounds"]:
         line += f", {g['rounds']} round(s)"
     t = g.get("triage")
     if t:
