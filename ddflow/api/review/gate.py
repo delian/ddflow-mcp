@@ -359,13 +359,13 @@ def _name_the_item(
         return extra
     if (
         called_from is not None
-        and who.id == ID.default_agent_id(repo)
+        and who.source == "derived"
         and _in_its_own_tree(repo, lease.worktree, called_from)
     ):
         # Standing in the tree the lease made IS being its holder under the DEFAULT
         # (derived) identity: not "another agent's item", so no warning (B090201fcef). An
-        # EXPLICIT `--agent`/`DDFLOW_AGENT`/config is a declaration the caller is NOT that
-        # holder, so it still warns below.
+        # EXPLICIT `--agent`/`DDFLOW_AGENT` (an `env`/`config` declaration) is a declaration
+        # the caller is NOT that holder, so it still warns below.
         return extra
     say(
         f"→ WARNING: {item} is leased to {lease.holder}, and you are {me}: this review is "
