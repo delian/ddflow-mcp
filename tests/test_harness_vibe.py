@@ -1,5 +1,6 @@
 """Mistral Vibe descriptor (VB-descriptor): documented facts, the three documented gaps
 recorded as absent or unverified, and the harness list row."""
+
 from __future__ import annotations
 
 from ddflow.services import harnessfacts
