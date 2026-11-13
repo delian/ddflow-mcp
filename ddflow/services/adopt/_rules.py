@@ -50,9 +50,9 @@ past lessons for the task — it replaces reading this project's lesson and rule
 git worktree. An unclaimed edit can be destroyed by a parallel agent.
 
 **Pre-file triage.** Before adding a task or bug: check for a duplicate or closable
-overlap, check what is planned, reuse core modules and prior research rather than
-re-derive, ask the operator only for person-decisions — then file it in its phase with
-`--needs` and a wave tag (create the phase if none fits).
+overlap, check what is planned, reuse core modules and prior research (never
+re-derive), ask the operator only for person-decisions, then file it in its phase
+with `--needs` (or `no-deps`) and a wave tag, creating the phase if none fits.
 
 Then: `ddflow_next` → `ddflow_claim` → work in the worktree → `ddflow_gate_status`
 and satisfy each gate → `ddflow_merge` → `ddflow_complete`.

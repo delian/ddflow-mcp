@@ -21,33 +21,36 @@ WORKFLOW = H.render_topic("workflow")
 
 
 def test_the_managed_block_ships_the_triage_checklist():
-    # The compact form: the full six items in one sentence, so the short block stays short.
+    # The compact form: the full six items in one sentence, so the short block stays
+    # short. Binds BOTH a task and a bug (not tasks only), the deps/wave/phase trio and,
+    # with `no-deps`, the no-prerequisite case r-task-phase-needs-wave requires.
     for phrase in (
-        "Pre-file triage",
+        "task or bug",
         "duplicate or closable",
         "check what is planned",
         "reuse core modules",
         "prior research",
         "person-decisions",
-        "wave tag",
         "--needs",
+        "no-deps",
+        "wave tag",
+        "phase",
     ):
         assert phrase in BLOCK, f"the managed block lost {phrase!r}"
 
 
-def test_the_workflow_help_ships_the_full_triage_checklist():
-    for phrase in (
-        "duplicate or a closable overlap",
-        "what is already planned",
-        "reusable, extensible core modules",
-        "never re-derive",
-        "person-decisions",
-        "wave",
-        "--needs",
-        "right phase",
-        "create one",
+def test_the_workflow_help_ships_the_full_triage_checklist_as_a_numbered_list():
+    for must in (
+        "## Pre-file triage",
+        "1. Check existing tasks and bugs",
+        "2. Check what is already planned",
+        "3. Identify reusable, extensible core modules",
+        "4. Reuse prior research and recorded best practice",
+        "5. Ask the operator only for person-decisions",
+        "6. File it with a `wave` tag",
+        "no-deps",
     ):
-        assert phrase in WORKFLOW, f"the workflow help lost {phrase!r}"
+        assert must in WORKFLOW, f"the workflow help lost {must!r}"
 
 
 def test_the_managed_block_stays_shorter_than_its_budget_after_triage():

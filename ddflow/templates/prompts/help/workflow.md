@@ -27,8 +27,8 @@ Before you add a task or a bug, run this checklist first:
 3. Identify reusable, extensible core modules.
 4. Reuse prior research and recorded best practice — never re-derive it.
 5. Ask the operator only for person-decisions.
-6. File it with a `wave` tag, its `--needs`, and the right phase — create one
-   if none fits.
+6. File it with a `wave` tag (`no-deps` when it has no prerequisite), its `--needs`,
+   and the right phase — create one if none fits.
 
 ## Picking work up
 
