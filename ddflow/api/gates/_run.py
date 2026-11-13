@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import shlex
+import sys
+import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import replace
@@ -317,6 +319,34 @@ def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
     return None, _no_tree_reason(repo, it, item, gate, held, force)
 
 
+#: The extra wall seconds `run` keeps re-trying the events.lock to record a run's start
+#: (the `gate.started` append) after one `[lease].acquire_timeout_s` acquire timed out: a
+#: heartbeat of another lane that holds the lock past one acquire window on a loaded host
+#: must not kill a long run before its command starts (B-gate-run-dies-on-events-lock).
+#: Each retry is a new acquire attempt, announced on stderr. 0 gives up after the first
+#: timeout with a clean result instead of a raw traceback.
+_GATE_START_LOCK_RETRY_S = 300.0
+
+
+def _record_gate_started(log, item, gate, forced) -> str:
+    """Append `gate.started`, re-trying while the events.lock is held by another lane past
+    one acquire window. Returns '' once it is recorded, else a reason to stop cleanly: a
+    run must not die with a raw `TimeoutError` before its command starts
+    (B-gate-run-dies-on-events-lock)."""
+    deadline = time.monotonic() + _GATE_START_LOCK_RETRY_S
+    while True:
+        try:
+            log.append(
+                "gate.started", item, {"gate": gate, **({"forced": True} if forced else {})}
+            )
+            return ""
+        except TimeoutError as exc:
+            if _GATE_START_LOCK_RETRY_S <= 0 or time.monotonic() >= deadline:
+                return str(exc)
+            print(f"ddflow gate run: waiting to record the run start -- {exc}; retrying", file=sys.stderr)
+            time.sleep(5.0)
+
+
 def run(
     repo: Path,
     item: str,
@@ -420,7 +450,16 @@ def run(
         if twin_refusal is not None:
             return twin_refusal
         started_at = clock.now_iso()
-        log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+        start_refused = _record_gate_started(log, item, gate, forced)
+        if start_refused:
+            return O.nothing(
+                "gate.run",
+                f"the run could not record its start: {start_refused}",
+                gate=gate,
+                outcome="",
+                evidence={"reason": start_refused},
+                id=item,
+            )
         done = _guarded(
             log,
             cfg,
