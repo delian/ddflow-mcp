@@ -24,6 +24,7 @@ MOVED = (
     "ddflow.api.lifecycle.wait_approval",
     "ddflow.api.perf",
     "ddflow.api.perfreport",
+    "ddflow.api.record_correct",
     "ddflow.api.recover_adopt",
     "ddflow.services.completion.values",
     "ddflow.services.installmanifest",
