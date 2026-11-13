@@ -109,9 +109,10 @@ def test_no_review_run_gives_no_round_sample_not_a_zero():
 
 
 def test_review_gate_tie_break_is_deterministic():
-    """With both review gates carrying the same RAN count, the dominant gate must be the
-    alphabetically-greatest review gate, deterministically -- the exact pair ``_review_gate``
-    ties over when a log made the two gates equally common (no set-iteration coin flip)."""
+    """With both review gates carrying the same RAN count, the dominant gate must resolve to
+    the alphabetically-first (smallest) review gate, deterministically -- ``_review_gate``
+    holds ``max(sorted(review), ...)`` over the sorted names, so tied counts cannot coin-flip
+    across a set iteration."""
     log = Log()
     for tid in ("A", "B"):
         log.task(tid, f"{tid.lower()}.py")
@@ -120,7 +121,7 @@ def test_review_gate_tie_break_is_deterministic():
         log.add("gate.passed", tid, "a1", T0 + 60, gate="critic", by="r1", evidence={})
         log.complete("a1", tid, T0 + H)
     table = ED.build(facts_of(log)[0], Config().eta)
-    assert table.rounds.gate == "critic"  # ties broken leftmost-in-sorted order, deterministically
+    assert table.rounds.gate == "critic"  # alphabetically first (smallest)
     assert table.rounds.samples == [1.0, 1.0]
 
 
