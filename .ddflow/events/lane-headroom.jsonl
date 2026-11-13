@@ -14,3 +14,4 @@
 {"agent":"lane-headroom","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e3c73c49f1133519eff8f7fa6","kind":"cadence.ran","lamport":190513,"schema":1,"subject":"recall_recheck:SW-headroom","ts":"2026-11-13T05:38:55.939433Z"}
 {"agent":"lane-headroom","data":{"at":1794548931.025768,"holder":"lane-headroom"},"id":"ebe089fa88008194fcf515939","kind":"lease.renewed","lamport":190612,"schema":1,"subject":"SW-headroom","ts":"2026-11-13T05:48:51.200510Z"}
 {"agent":"lane-headroom","data":{"at":1794549574.0590222,"holder":"lane-headroom"},"id":"e86fcaf2da2119591b372c5d1","kind":"lease.renewed","lamport":190735,"schema":1,"subject":"SW-headroom","ts":"2026-11-13T05:59:34.190456Z"}
+{"agent":"lane-headroom","data":{"at":1794550110.8938754,"holder":"lane-headroom"},"id":"e1c8b77ca1aa16880ea5e408d","kind":"lease.renewed","lamport":190854,"schema":1,"subject":"SW-headroom","ts":"2026-11-13T06:08:31.056883Z"}
