@@ -268,18 +268,22 @@ def auto_decision(
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
     #: A failing test blocks auto-accept only when its failure could be caused by the change:
-    #: it is the item's own changed file (``f in changed`` below) or its file has a runtime
-    #: dependency on a changed file -- it imports one, uses a name a changed module re-exports,
-    #: sits under a changed conftest, or reads a changed data file. The selector's heuristic
-    #: picks alone ("named after", a spelled identifier, a listed package, a phrase, a declared
-    #: ``GOVERNS``) carry no such signal, so a test that merely reaches the change that way must
-    #: not block auto-accept (B2e41928996).
+    #: it is the item's own changed file (``f in changed`` below), reads a changed data file
+    #: (``reaches_data`` below), or its file has a runtime dependency on a changed file -- it
+    #: imports one, uses a name a changed module re-exports, or sits under a changed conftest.
+    #: The selector's heuristic picks alone ("named after", a spelled identifier, a listed
+    #: package, a phrase, a declared ``GOVERNS``) carry no such signal, so a test that merely
+    #: reaches the change that way must not block auto-accept (B2e41928996).
     reached = {
         t.path
         for t in (*sel.tests, *sel.cut)
-        if t.reason.startswith(("imports ", "uses ", "under changed ", "names data file "))
+        if t.reason.startswith(("imports ", "uses ", "under changed "))
     }
     files = test_files_of(ids)
+    #: ``select`` records the naming-convention reason FIRST (``_by_name`` runs before
+    #: ``_data_readers`` and the first reason stays), so a data-file reader's own reason never
+    #: shows up in ``sel``: re-match the failing files against the changed data files directly.
+    reaches_data = set(TS._data_readers(tree, sorted(changed), files))
     # A guard that DECLARES it governs the changed path is reached via its declared scope, not
     # just by import: an architecture guard declares ``GOVERNS = ("ddflow/**", ...)`` AND
     # imports ddflow modules, so testselect records it "imports ..." (that pick ran before
@@ -294,7 +298,11 @@ def auto_decision(
     # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
     # still declined here when the change reaches it, and an unreached one cannot be caused by
     # the change. The `full` branch above substitutes `uncompared` for that missing reach guard.
-    inside = [f for f in files if f in changed or (f in reached and f not in excluded)]
+    inside = [
+        f
+        for f in files
+        if f in changed or f in reaches_data or (f in reached and f not in excluded)
+    ]
     if inside:
         return {
             **out,

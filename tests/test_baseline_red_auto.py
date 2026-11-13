@@ -654,13 +654,20 @@ def test_a_spelled_identifier_pick_does_not_block_auto_accept(repo, monkeypatch)
 def test_a_data_file_reader_still_blocks_auto_accept(repo, monkeypatch) -> None:
     """A failing test that READS a changed data file (a golden or fixture) depends on it at run
     time, so the change could have caused the failure: the reach must still block, unlike a
-    pure naming-convention pick (B2e41928996)."""
+    pure naming-convention pick. `select` records the naming reason FIRST (`_by_name` runs before
+    `_data_readers` and the first reason stays), so the reader's own reason never shows up in the
+    selection -- the block is re-matched from the changed data files, not that shadowed reason
+    (B2e41928996, roborev finding on the first cut)."""
     from ddflow.services.testselect import Selected, Selection
 
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_golden.py").write_text(
+        'def test_reads_golden():\n    data = "tests/fixtures/golden.json"\n'
+    )
     sel = Selection(
         base="main",
         changed=["tests/fixtures/golden.json"],
-        tests=[Selected("tests/test_golden.py", "names data file tests/fixtures/golden.json", 1)],
+        tests=[Selected("tests/test_golden.py", "named after golden", 1)],
     )
     monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
     cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
