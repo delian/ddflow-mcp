@@ -126,7 +126,6 @@ record = "R-mistral-vibe"
 unverified = [
   "current version and the session storage path and format (not documented)",
   "the custom OpenAI-compatible provider schema and model flag (not documented)",
-  "session-start and session-end hooks (documented absent)",
   "the hook stdin payload shape and the session id field (no fixtures yet)",
   "the env variable that carries the session id",
   "the export.json schema and the complete permission levels",

@@ -22,7 +22,9 @@ def test_the_session_hooks_gap_is_recorded_not_guessed():
     # no session-start or session-end hook, no stable session id: never invented
     assert "session_start" not in H.hooks.events
     assert "session_end" not in H.hooks.events
-    assert any("session-start and session-end" in u for u in H.verified.unverified)
+    # the documented absence lives in the facts note, not in the unverified list (which
+    # holds only facts still NOT VERIFIED -- a documented absence is a verified fact).
+    assert "no session-start or session-end hook" in H.facts["hooks.events"]["note"]
 
 
 def test_headless_is_documented_and_names_a_profile():
