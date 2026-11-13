@@ -18,6 +18,7 @@ signal after ``stop_grace_s``).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -77,9 +78,10 @@ def _usage_cost(ev: Any) -> float | None:
     if cost is None:
         return None
     try:
-        return float(cost)
+        cost = float(cost)
     except (TypeError, ValueError):
         return None
+    return None if not math.isfinite(cost) else cost
 
 
 def _lane_name(handle: Any) -> str:
@@ -104,14 +106,16 @@ def _interrupt(driver: Any, handle: Any, stop_grace_s: float) -> int:
     return 0
 
 
-def _unenforced(record, lane: str, cap: float, spent: float, source: str, reason: str) -> Verdict:
+def _unenforced(
+    record, lane: str, cap: float, spent: float, source: str, reason: str, warned: bool = False
+) -> Verdict:
     """Record ``lane.cap_unenforced`` and return the verdict (never silently uncapped)."""
     if record is not None:
         record(
             RECORD_UNENFORCED,
             {"lane": lane, "cap": cap, "spent": spent, "source": source, "reason": reason},
         )
-    return Verdict(CAP_UNENFORCED, spent, cap, reason=reason)
+    return Verdict(CAP_UNENFORCED, spent, cap, warned=warned, reason=reason)
 
 
 def _warn(record, lane: str, cap: float, spent: float, fraction: float, source: str) -> None:
@@ -163,7 +167,9 @@ def enforce(
         seen += 1
         step = _usage_cost(ev)
         if step is None:
-            return _unenforced(record, lane, cap, spent, source, "a usage event carried no cost")
+            return _unenforced(
+                record, lane, cap, spent, source, "a usage event carried no cost", warned=warned
+            )
         spent += step
         if not warned and spent >= cap * float(warn_fraction):
             warned = True
