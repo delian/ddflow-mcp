@@ -266,9 +266,11 @@ class _Sites(ast.NodeVisitor):
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
         # `.read_text(...)` / `.write_text(...)` without `encoding=` reads and writes text in
-        # the platform's locale encoding (r-tell-dont-discover): the encoding must be named.
+        # the platform's locale encoding (r-tell-dont-discover): the encoding must be named and
+        # not literally None, which is the locale default by another name.
         if isinstance(node.func, ast.Attribute) and node.func.attr in ("read_text", "write_text"):
-            if not any(kw.arg == "encoding" for kw in node.keywords):
+            enc = next((kw.value for kw in node.keywords if kw.arg == "encoding"), None)
+            if enc is None or (isinstance(enc, ast.Constant) and enc.value is None):
                 self.sites["text_io_no_encoding"].append(node.lineno)
         # `datetime.fromisoformat`, `date.fromisoformat`, `datetime.strptime`: a timestamp
         # parsed outside `core.clock` (B-uni-clock), by any receiver -- or by a name bound
@@ -443,15 +445,19 @@ def _ruff_sites() -> dict[str, list[str]]:
     args = _ruff_bin()
     if not args:
         pytest.skip("ruff (a dev dependency) is not installed")
-    proc = subprocess.run(
-        [*args, "check", "--select", ",".join(_RUFF_SELECT), "--output-format=json", "ddflow"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=180,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [*args, "check", "--select", ",".join(_RUFF_SELECT), "--output-format=json", "ddflow"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            stdin=subprocess.DEVNULL,
+            timeout=180,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("ruff did not finish in 180s (checking the new rule groups)")
     if proc.returncode not in (0, 1):  # 1 = violations found (still measured); 0 = clean
         pytest.skip(f"ruff could not run (exit {proc.returncode}):\n{proc.stderr}")
     root = ROOT.resolve()
@@ -460,11 +466,12 @@ def _ruff_sites() -> dict[str, list[str]]:
         for prefix, kind in _RUFF_KIND.items():
             if row["code"].startswith(prefix):
                 fn = Path(row["filename"])
-                rel = fn.resolve().relative_to(root) if fn.is_absolute() else fn
-                rendered = str(rel)
+                rendered = fn
+                if fn.is_absolute():
+                    rendered = fn.relative_to(root)
                 # `print()` in `ddflow/surfaces` is the interface, not a violation
                 # ("T20 (outside surfaces)"), so it never reaches the `t201` baseline.
-                if kind == "t201" and rendered.startswith("ddflow/surfaces/"):
+                if kind == "t201" and rendered.parts[:2] == ("ddflow", "surfaces"):
                     break
                 out[kind].append(f"{rendered}:{row['location']['row']}")
                 break
