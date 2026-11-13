@@ -10,6 +10,7 @@ from typing import Any
 
 from ...core import clock
 from ...core import outcome as O
+from ...infra import worktree as W
 from ...services import gates as GD
 from ...services import identity as ID
 from ...services.completion import changed_paths
@@ -322,7 +323,15 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
 
 
 def _name_the_item(
-    repo: Path, cfg, st, item: str, gate: str, agent: str, say, extra: dict[str, Any] | None
+    repo: Path,
+    cfg,
+    st,
+    item: str,
+    gate: str,
+    agent: str,
+    say,
+    extra: dict[str, Any] | None,
+    called_from: Path | None = None,
 ) -> dict[str, Any] | None:
     """Say, loudly, WHICH item this review is recorded against and whose it is
     (DX-review-item-from-cwd). A review launched from a backgrounded shell chain once
@@ -331,6 +340,10 @@ def _name_the_item(
     No item named: the working tree is reviewed and NOTHING is recorded, said as such. An
     item whose live lease another agent holds: a WARNING and a line in the gate's evidence
     (not a refusal: agents of one clone may review each other's items, D-mu-bugfix-answers).
+    Standing in the tree the lease made under the DEFAULT (derived) identity is being the
+    holder, not another agent -- the agent whose `claim` made that tree is usually not the
+    default derived name it is called by, so it is not warned "another agent's item"
+    (B090201fcef); heartbeat renews on the holder's behalf from that same tree.
     """
     if not item:
         say(
@@ -347,8 +360,19 @@ def _name_the_item(
             )
             return {**(extra or {}), "reviewed_unleased": True}
         return extra
-    me = ID.resolve(repo, cfg, agent).id
+    who = ID.resolve(repo, cfg, agent)
+    me = who.id
     if me == lease.holder:
+        return extra
+    if (
+        called_from is not None
+        and who.source == "derived"
+        and _in_its_own_tree(repo, lease.worktree, called_from)
+    ):
+        # Standing in the tree the lease made IS being its holder under the DEFAULT
+        # (derived) identity: not "another agent's item", so no warning (B090201fcef). An
+        # EXPLICIT `--agent`/`DDFLOW_AGENT` (an `env`/`config` declaration) is a declaration
+        # the caller is NOT that holder, so it still warns below.
         return extra
     say(
         f"→ WARNING: {item} is leased to {lease.holder}, and you are {me}: this review is "
@@ -356,6 +380,15 @@ def _name_the_item(
         f"wrong item (or the wrong --agent): ask {lease.holder} to re-run the gate."
     )
     return {**(extra or {}), "reviewed_for_holder": f"{me} reviewed {lease.holder}'s {item}"}
+
+
+def _in_its_own_tree(repo: Path, stored: str, called_from: Path) -> bool:
+    """Is `called_from` the tree a lease records? `claim_tree._in_leased_tree` for a start
+    path, kept here so the review naming does not import the lifecycle layer."""
+    here = W.current(called_from)
+    if here is None or not stored:
+        return False
+    return W.load_path(repo, stored).resolve() == here.path.resolve()
 
 
 def _say_selection(selected, say) -> None:
