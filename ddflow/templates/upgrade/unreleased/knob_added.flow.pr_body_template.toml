@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "flow.pr_body_template"
+new = "\"\""
+why = "Path to the template that renders a pull request's description; empty uses the project or shipped template."
+effect = "the description of a request ddflow opens now comes from the template (gates, review rounds, bugs fixed, changelog entry), secret-redacted."
+impact = "additive"

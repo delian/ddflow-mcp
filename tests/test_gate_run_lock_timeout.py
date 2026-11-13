@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -15,7 +16,7 @@ from ddflow.core import outcome as O
 
 
 class _Item:
-    gates: dict = {}
+    gates: ClassVar[dict] = {}
 
 
 class _State:
@@ -43,9 +44,22 @@ def test_a_run_whose_record_times_out_returns_unavailable_not_a_traceback(monkey
     )
 
     out = _run._guarded(
-        None, None, tmp_path, "a1", None, "T1", "ci",
-        gdef=None, gates={}, cwd=tmp_path, scope=None, forced=False,
-        rerun_failed=False, started_on="", started_at="2026-01-01T00:00:00Z", marker=None,
+        None,
+        None,
+        tmp_path,
+        "a1",
+        None,
+        "T1",
+        "ci",
+        gdef=None,
+        gates={},
+        cwd=tmp_path,
+        scope=None,
+        forced=False,
+        rerun_failed=False,
+        started_on="",
+        started_at="2026-01-01T00:00:00Z",
+        marker=None,
     )
 
     assert isinstance(out, O.Outcome), repr(out)
@@ -77,6 +91,5 @@ def test_recording_gives_up_cleanly_after_the_retries(monkeypatch):
     monkeypatch.setattr(_run.time, "sleep", lambda s: None)
 
     assert (
-        _run._record_unavailable_reliably(None, None, None, None, "ci", "r", {}, {}, False)
-        is False
+        _run._record_unavailable_reliably(None, None, None, None, "ci", "r", {}, {}, False) is False
     )
