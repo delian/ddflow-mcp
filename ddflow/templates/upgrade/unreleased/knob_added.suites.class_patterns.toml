@@ -1,6 +1,6 @@
 [[change]]
 kind = "knob_added"
 key = "suites.class_patterns"
-new = '{}'
+new = '{"red_main": ["fix-Bmain-red", "main-red", "red-main"], "integrator": ["merge[ _-]?queue", "queue run", "integrator"], "phase": ["^P-", "phase[ _-]?(close|suite)"], "baseline": ["baseline"]}'
 why = "SQ-priority-fair-queue: priority classes, aging, fair share and an estimated wait for the suite queue."
 impact = "additive"
