@@ -13527,3 +13527,4 @@
 {"agent":"Monster3-ddflow-7267fe","data":{"ahead":["research","rules","implement"],"gate":"rubber_duck","policy":"warn"},"id":"e3c0b6eaa7cbebcc9aafd1651","kind":"gate.out_of_order","lamport":188953,"schema":1,"subject":"SPLIT-tests-test-gate-baseline-red","ts":"2026-11-13T03:43:21.187450Z"}
 {"agent":"Monster3-ddflow-7267fe","data":{"gate":"rubber_duck"},"id":"eda048688963220d2f1323c22","kind":"gate.started","lamport":188954,"schema":1,"subject":"SPLIT-tests-test-review-delta","ts":"2026-11-13T03:43:21.592537Z"}
 {"agent":"Monster3-ddflow-7267fe","data":{"gate":"rubber_duck"},"id":"e4aff2c2225393f9ba515b9e1","kind":"gate.started","lamport":188955,"schema":1,"subject":"SPLIT-tests-test-gate-baseline-red","ts":"2026-11-13T03:43:21.773274Z"}
+{"agent":"Monster3-ddflow-7267fe","data":{"gate":"ci"},"id":"e8555de1ce634d47d47e2c3aa","kind":"gate.started","lamport":189053,"schema":1,"subject":"fix-B-ci-bandit-b604-completion-shell","ts":"2026-11-13T03:51:05.729779Z"}
