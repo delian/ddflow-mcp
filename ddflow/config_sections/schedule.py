@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..adapters.optimizer import OPTIMIZERS
+from ..core.schedule_keys import DEFAULT_ORDER
 from ._docs import declare, int_at_least, knob
 
 #: Every signal the adaptive flow controller can read: the host ones
@@ -143,9 +144,6 @@ ORDER_KEYS: tuple[str, ...] = (
     "phase_priority",
     "wave",
 )
-#: The default order lives in `core.schedule_keys`, a leaf `ddflow.core` module, so importing
-#: it here (config_sections -> core) never has `core` importing `config_sections`.
-from ..core.schedule_keys import DEFAULT_ORDER
 #: The knobs' dotted names.
 ORDER = "schedule.order"
 ORDER_PIN = "schedule.order_pin"
