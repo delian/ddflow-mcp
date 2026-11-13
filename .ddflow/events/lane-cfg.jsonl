@@ -21,3 +21,4 @@
 {"agent":"lane-cfg","data":{"path":".ddflow/worktrees/CFG-defaults-shared"},"id":"eb8b4dcf04df7e2c4a10da713","kind":"worktree.removed","lamport":189987,"schema":1,"subject":"CFG-defaults-shared","ts":"2026-11-13T05:00:04.033740Z"}
 {"agent":"lane-cfg","data":{"at":1794564130.1307838,"holder":"lane-cfg"},"id":"e4e7e1eb93bd4882ce4730d82","kind":"lease.renewed","lamport":192471,"schema":1,"subject":"CFG-defaults-d-loader","ts":"2026-11-13T10:02:10.289587Z"}
 {"agent":"lane-cfg","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e9d6e941b558c38d4580d4530","kind":"cadence.ran","lamport":192480,"schema":1,"subject":"recall_recheck:CFG-defaults-d-loader","ts":"2026-11-13T10:02:40.142706Z"}
+{"agent":"lane-cfg","data":{"at":1794565765.323781,"holder":"lane-cfg"},"id":"ec34066916723de336246c2f8","kind":"lease.renewed","lamport":192701,"schema":1,"subject":"CFG-defaults-d-loader","ts":"2026-11-13T10:29:25.438312Z"}
