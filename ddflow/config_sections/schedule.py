@@ -168,6 +168,8 @@ def _order_problem(v: Any) -> str:
 
 
 def _pin_problem(v: Any) -> str:
+    if isinstance(v, list) and "id" in v:
+        return "`id` is the deterministic tie-break and cannot be pinned; `order` holds it last"
     return _keys_problem(v, last_id=False)
 
 
@@ -291,7 +293,7 @@ class ScheduleConfig:
     )
     order_pin: list[str] = knob(
         factory=list,
-        doc="Ordering keys pinned to the HEAD of the order (default none), in this order, ahead of whatever `order` says: the company floor's way to keep e.g. bugs_first first. Tighten-only across layers: a layer's keys lead and what a lower layer pinned stays; no layer can remove a pin. Same names as `order`.",
+        doc="Ordering keys pinned to the HEAD of the order (default none), in this order, ahead of whatever `order` says: the company floor's way to keep e.g. bugs_first first. Tighten-only across layers: a layer's keys lead and what a lower layer pinned stays; no layer can remove a pin. Same names as `order`, minus `id` (the tie-break is always last and cannot be pinned).",
         check=_pin_problem,
     )
     bugs_first: bool = knob(

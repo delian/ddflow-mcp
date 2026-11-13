@@ -100,6 +100,13 @@ def test_a_bad_pin_is_refused():
         Config.check({"schedule": {"order_pin": ["nope"]}})
 
 
+def test_id_cannot_be_pinned():
+    with pytest.raises(ValueError, match="cannot be pinned"):
+        Config.check({"schedule": {"order_pin": ["id"]}})
+    with pytest.raises(ValueError, match="cannot be pinned"):
+        Config.check({"schedule": {"order_pin": ["bugs_first", "id"]}})
+
+
 def test_the_pin_only_grows_across_layers():
     cfg = Config()
     cfg._apply({"schedule": {"order_pin": ["bugs_first"]}}, "file")
