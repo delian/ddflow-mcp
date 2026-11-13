@@ -60,11 +60,18 @@ def effective_floor(configured: float, requested: float = 0.0) -> float:
     return max(float(configured), float(requested))
 
 
-def refusals(s: Standing, *, floor_usd: float = 0.0, need_usd: float | None = None) -> list[str]:
-    """Why the lane is out of headroom; empty for an unknown limit (neutral)."""
+def refusals(
+    s: Standing,
+    *,
+    floor_usd: float = 0.0,
+    need_usd: float | None = None,
+    requested_floor_usd: float = 0.0,
+) -> list[str]:
+    """Why the lane is out of headroom; empty for an unknown limit (neutral). The floor is the
+    configured one, tightened (never loosened) by ``requested_floor_usd``."""
     if not s.known:
         return []
-    floor = max(0.0, float(floor_usd))
+    floor = max(0.0, effective_floor(floor_usd, requested_floor_usd))
     if s.remaining <= floor:
         return [
             f"headroom exhausted: {s.remaining:.4g} USD left of {s.limit:.4g}, floor {floor:.4g}"

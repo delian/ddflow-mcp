@@ -89,6 +89,8 @@ def test_company_floor_cannot_be_loosened_by_the_caller():
     assert H.effective_floor(2.0, 5.0) == 5.0  # a stricter one is honoured
     assert H.refusals(s, floor_usd=H.effective_floor(2.0, 0.0))
     assert not H.refusals(s, floor_usd=0.0)
+    assert H.refusals(s, floor_usd=2.0, requested_floor_usd=0.0)  # request cannot loosen
+    assert H.refusals(s, floor_usd=0.0, requested_floor_usd=2.0)  # request can tighten
 
 
 def test_weights_and_floor_read_from_config():
