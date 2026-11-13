@@ -20,6 +20,9 @@ from conftest import run_cli
 from helpers import git as _git
 
 import ddflow.api.review as api
+from ddflow.core.handlers.asks import asks_of
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
 
 REFUSED = 3
 
@@ -71,11 +74,17 @@ def test_an_agent_can_file_a_review_force_approval(repo, tmp_path):
     assert code == REFUSED, (code, err)
     assert "review.force" in err, err
     assert "approval" in err, err  # the route it files and names
-    # ...and the request is really FILED, verb and all -- not just a phrase in the refusal.
+    # ...and the request is really FILED, bound to exactly T1's critic gate (verb, item,
+    # target) -- not just a phrase in the refusal.
     code, out, _e = run_cli(repo, "--json", "approvals", "pending")
     assert code == 0, _e
     pending = json.loads(out)["approvals_pending"]
     assert any(r["verb"] == "review.force" for r in pending), pending
+    asks = asks_of(fold(EventLog(repo, "probe").read_all(), strict=False))
+    assert any(
+        row["verb"] == "review.force" and str(row.get("subject", "")).endswith(":T1:critic")
+        for row in asks.values()
+    ), list(asks.values())
 
 
 def test_an_agents_force_without_an_approval_steers_not_runs(repo, tmp_path):
