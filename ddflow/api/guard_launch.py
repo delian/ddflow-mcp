@@ -9,7 +9,6 @@ infra/services is allowed; the surface calls ``guard_foreign_launch`` through th
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -29,7 +28,7 @@ def _deliberate_outside_launch(foreign: I.ForeignLaunch) -> bool:
     """
     try:
         return I.named_on_pythonpath(foreign.worktree) and not I.in_checkout_family(
-            Path(os.getcwd()), foreign.primary
+            Path.cwd(), foreign.primary
         )
     except OSError:
         return False
@@ -44,7 +43,7 @@ def guard_foreign_launch() -> int:
     if foreign is None:
         return OK
     try:
-        own = W.current(Path(os.getcwd()))
+        own = W.current(Path.cwd())
     except Exception:
         # The import IS from a linked worktree (or the guard would have returned above),
         # so running it could execute another lane's unmerged code — the failure this

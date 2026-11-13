@@ -12,7 +12,6 @@ stays light for the id path and a heavy source is paid only on the TAB that need
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from .. import completion_ids as CI
@@ -74,7 +73,6 @@ def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
     """Paths under ``prefix`` from the filesystem (``glob``): a directory kind offers
     directories; a path kind offers files AND the directories you traverse to reach them."""
     import glob as _g
-    import os as _os
 
     if any(c in prefix for c in ("\x00", "\n", "\r")):
         return []
@@ -82,9 +80,7 @@ def _paths(prefix: str, *, dirs_only: bool) -> list[str]:
     try:
         from itertools import islice as _islice
 
-        found = [
-            f for f in _islice(_g.iglob(pat), _PATH_SCAN) if not dirs_only or _os.path.isdir(f)
-        ]
+        found = [f for f in _islice(_g.iglob(pat), _PATH_SCAN) if not dirs_only or Path(f).is_dir()]
         found.sort()
         return found[:_PATH_MAX]
     except (OSError, ValueError):
@@ -101,6 +97,6 @@ def _gate_names(root: str | None) -> list[str]:
     from ...config import Config  # heavy: only on a `gate` TAB
     from ...services.gates import defs as GD
 
-    repo = Path(root) if root is not None else Path(os.getcwd())
+    repo = Path(root) if root is not None else Path.cwd()
     cfg = Config.load(repo)
     return sorted(GD.load_gates(repo, cfg))
