@@ -54,3 +54,9 @@ def test_a_changed_visible_value_is_not_read_as_a_cut():
 def test_a_different_text_between_two_ellipses_is_still_a_new_offender():
     assert BR._differs("t::x", {"t::x": "foo...A...bar"}, {"t::x": "foo...B...bar"})
     assert not BR._differs("t::x", {"t::x": "foo...A...bar"}, {"t::x": "foo...A...bar"})
+
+
+def test_an_equal_length_change_inside_the_visible_text_is_not_read_as_a_cut():
+    a, b = {"t::x": "AssertionError abc...def"}, {"t::x": "AssertionError ab...defg"}
+    assert BR._differs("t::x", a, b)
+    assert BR._differs("t::x", b, a)

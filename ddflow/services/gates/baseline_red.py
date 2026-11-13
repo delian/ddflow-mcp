@@ -184,8 +184,8 @@ def _same_failure(branch: str, base: str) -> bool:
     the ci tree and the base's scratch tree have paths of different lengths, so the same
     failure is cut at a different place once the paths are blanked. That is told from a real
     change by the RAW texts: a cut of one repr leaves texts of equal raw length, and then the
-    blanked head of one is a prefix of the other's and the tail a suffix. Exactly one cut and
-    the same raw length, else the texts differ: a changed visible value is not read as a cut
+    blanked head of one is a prefix of the other's and the tail a suffix, both longer on the
+    same side. Exactly one cut and the same raw length, else the texts differ: a changed visible value is not read as a cut
     (B710b7cc84f)."""
     a, b = _norm(branch), _norm(base)
     if a == b:
@@ -194,6 +194,11 @@ def _same_failure(branch: str, base: str) -> bool:
     if any(len(p) != len((_ELLIPSIS, _ELLIPSIS)) for p in parts) or len(branch) != len(base):
         return False
     (head_a, tail_a), (head_b, tail_b) = parts
+    # Equal raw length: whichever tree has the shorter path keeps MORE text on BOTH sides of the
+    # cut, so the head and the tail of one are each longer (or equal) than the other's. A head
+    # longer with a tail shorter is a changed visible text, not a cut.
+    if (len(head_a) - len(head_b)) * (len(tail_a) - len(tail_b)) < 0:
+        return False
     heads = head_a.startswith(head_b) or head_b.startswith(head_a)
     tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
     return heads and tails
