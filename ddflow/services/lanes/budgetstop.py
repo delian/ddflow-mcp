@@ -52,6 +52,24 @@ class Verdict:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class Params:
+    """The runtime knobs, read once from ``[swarm]`` (mirrors ``conformance.Params``)."""
+
+    enabled: bool = True
+    warn_fraction: float = 0.5
+    stop_grace_s: float = 10.0
+
+    @classmethod
+    def from_config(cls, cfg) -> Params:
+        sw = cfg.swarm
+        return cls(
+            enabled=bool(sw.budget_stop_enabled),
+            warn_fraction=float(sw.budget_warn_fraction),
+            stop_grace_s=float(sw.budget_stop_grace_s),
+        )
+
+
 def _usage_cost(ev: Any) -> float | None:
     """The USD cost of one ``usage`` event, or ``None`` when it cannot be read."""
     fields = getattr(ev, "fields", None)
@@ -86,43 +104,56 @@ def _interrupt(driver: Any, handle: Any, stop_grace_s: float) -> int:
     return 0
 
 
+def _unenforced(record, lane: str, cap: float, spent: float, source: str, reason: str) -> Verdict:
+    """Record ``lane.cap_unenforced`` and return the verdict (never silently uncapped)."""
+    if record is not None:
+        record(
+            RECORD_UNENFORCED,
+            {"lane": lane, "cap": cap, "spent": spent, "source": source, "reason": reason},
+        )
+    return Verdict(CAP_UNENFORCED, spent, cap, reason=reason)
+
+
+def _warn(record, lane: str, cap: float, spent: float, fraction: float, source: str) -> None:
+    if record is not None:
+        record(
+            RECORD_WARNED,
+            {"lane": lane, "cap": cap, "spent": spent, "fraction": fraction, "source": source},
+        )
+
+
 def enforce(
     driver: Any,
     handle: Any,
     *,
     budget_usd: float,
-    warn_fraction: float = 0.5,
-    stop_grace_s: float = 10.0,
+    params: Params | None = None,
     source: str = "lane-budget",
     record: Record | None = None,
     max_events: int = 0,
 ) -> Verdict:
     """Sum the lane's ``usage`` events and interrupt it once at ``budget_usd``.
 
-    ``driver`` and ``handle`` come from a started lane (``driver.start``); ``record``, when given,
-    is told about the soft warn (``lane.budget_warned``), the stop (``lane.budget_stopped`` with
-    ``spent``, ``cap``, ``source``) or an unenforceable cap (``lane.cap_unenforced``). A lane that
-    reports no ``usage`` capability, or a ``usage`` event whose cost cannot be read, is
+    ``driver`` and ``handle`` come from a started lane (``driver.start``); ``params`` are the
+    ``[swarm]`` runtime knobs (``Params.from_config``): ``warn_fraction`` (the soft warn) and
+    ``stop_grace_s`` for the graceful stop, and ``enabled`` turns the stop off. ``record``, when
+    given, is told about the soft warn (``lane.budget_warned``), the stop (``lane.budget_stopped``
+    with ``spent``, ``cap``, ``source``) or an unenforceable cap (``lane.cap_unenforced``). A lane
+    that reports no ``usage`` capability, or a ``usage`` event whose cost cannot be read, is
     cap-unenforced, never silently uncapped. ``max_events`` > 0 stops collecting after that many
     events (tests); 0 is unbounded."""
+    p = params or Params()
+    warn_fraction = float(p.warn_fraction)
+    stop_grace_s = float(p.stop_grace_s)
     cap = float(budget_usd)
     lane = _lane_name(handle)
+    if not p.enabled:
+        return Verdict(UNDER, 0.0, cap, reason="the runtime budget stop is disabled")
     if cap <= 0:
         return Verdict(UNDER, 0.0, cap, reason="no budget to enforce")
     caps = getattr(handle, "capabilities", frozenset())
     if "usage" not in caps:
-        if record is not None:
-            record(
-                RECORD_UNENFORCED,
-                {
-                    "lane": lane,
-                    "cap": cap,
-                    "spent": 0.0,
-                    "source": source,
-                    "reason": "no usage capability",
-                },
-            )
-        return Verdict(CAP_UNENFORCED, 0.0, cap, reason="the lane reports no usage capability")
+        return _unenforced(record, lane, cap, 0.0, source, "the lane reports no usage capability")
     spent = 0.0
     warned = False
     seen = 0
@@ -134,32 +165,11 @@ def enforce(
             break
         step = _usage_cost(ev)
         if step is None:
-            if record is not None:
-                record(
-                    RECORD_UNENFORCED,
-                    {
-                        "lane": lane,
-                        "cap": cap,
-                        "spent": spent,
-                        "source": source,
-                        "reason": "a usage event carried no cost",
-                    },
-                )
-            return Verdict(CAP_UNENFORCED, spent, cap, reason="a usage event carried no cost")
+            return _unenforced(record, lane, cap, spent, source, "a usage event carried no cost")
         spent += step
         if not warned and spent >= cap * float(warn_fraction):
             warned = True
-            if record is not None:
-                record(
-                    RECORD_WARNED,
-                    {
-                        "lane": lane,
-                        "cap": cap,
-                        "spent": spent,
-                        "fraction": float(warn_fraction),
-                        "source": source,
-                    },
-                )
+            _warn(record, lane, cap, spent, warn_fraction, source)
         if spent >= cap:
             interrupts = _interrupt(driver, handle, stop_grace_s)
             if record is not None:
@@ -169,16 +179,5 @@ def enforce(
                 )
             return Verdict(STOPPED, spent, cap, warned=True, interrupts=interrupts)
     if seen == 0:
-        if record is not None:
-            record(
-                RECORD_UNENFORCED,
-                {
-                    "lane": lane,
-                    "cap": cap,
-                    "spent": 0.0,
-                    "source": source,
-                    "reason": "no usage event was seen",
-                },
-            )
-        return Verdict(CAP_UNENFORCED, 0.0, cap, reason="no usage event was seen")
+        return _unenforced(record, lane, cap, 0.0, source, "no usage event was seen")
     return Verdict(UNDER, spent, cap, warned=warned)

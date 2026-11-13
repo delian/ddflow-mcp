@@ -73,7 +73,11 @@ def test_usage_that_crosses_the_budget_interrupts_once_and_records_budget_stoppe
     records: list[tuple[str, dict]] = []
 
     verdict = B.enforce(
-        lane, h, budget_usd=1.0, warn_fraction=0.5, stop_grace_s=2.0, record=records.append
+        lane,
+        h,
+        budget_usd=1.0,
+        params=B.Params(warn_fraction=0.5, stop_grace_s=2.0),
+        record=lambda k, d: records.append((k, d)),
     )
 
     assert h.interrupts == 1
@@ -91,7 +95,7 @@ def test_usage_that_stays_under_budget_does_not_interrupt():
     h = lane.start(L.LaunchSpec(name="lane-1", argv=("x",)))
     records: list[tuple[str, dict]] = []
 
-    verdict = B.enforce(lane, h, budget_usd=1.0, record=records.append)
+    verdict = B.enforce(lane, h, budget_usd=1.0, record=lambda k, d: records.append((k, d)))
 
     assert h.interrupts == 0
     assert verdict.outcome == B.UNDER
@@ -104,7 +108,13 @@ def test_the_soft_warn_fires_once_at_the_fraction():
     h = lane.start(L.LaunchSpec(name="lane-1", argv=("x",)))
     records: list[tuple[str, dict]] = []
 
-    B.enforce(lane, h, budget_usd=1.0, warn_fraction=0.5, record=records.append)
+    B.enforce(
+        lane,
+        h,
+        budget_usd=1.0,
+        params=B.Params(warn_fraction=0.5),
+        record=lambda k, d: records.append((k, d)),
+    )
 
     warns = [r for r in records if r[0] == B.RECORD_WARNED]
     assert len(warns) == 1
@@ -121,7 +131,7 @@ def test_a_lane_whose_usage_cannot_be_read_is_cap_unenforced_not_stopped():
     h = lane.start(L.LaunchSpec(name="lane-1", argv=("x",)))
     records: list[tuple[str, dict]] = []
 
-    verdict = B.enforce(lane, h, budget_usd=1.0, record=records.append)
+    verdict = B.enforce(lane, h, budget_usd=1.0, record=lambda k, d: records.append((k, d)))
 
     assert h.interrupts == 0
     assert verdict.outcome == B.CAP_UNENFORCED
