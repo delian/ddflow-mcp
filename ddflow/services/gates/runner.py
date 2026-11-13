@@ -236,7 +236,18 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     holds = _runs_whole_suite(gdef)
     queued_at = time.monotonic()
     who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
-    with SL.hold(cfg, who, scope=gdef.id) if holds else nullcontext():
+    ticking = on_tick is not None and tick_s > 0
+    with (
+        SL.hold(
+            cfg,
+            who,
+            scope=gdef.id,
+            on_tick=on_tick if ticking else None,
+            tick_s=tick_s if ticking else 0,
+        )
+        if holds
+        else nullcontext()
+    ):
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
@@ -253,7 +264,6 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
             # 0 like the `SL.hold` consumer that applies it does, so a negative
             # [ci].suite_wait_s cannot SHRINK the run budget it is meant to extend.
             timeout_s += max(0, int(cfg.ci.suite_wait_s))
-        ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
             cwd=cwd,

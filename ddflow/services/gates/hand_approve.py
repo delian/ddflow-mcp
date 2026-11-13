@@ -9,10 +9,10 @@ one area. `outcomes.py` re-exports `approve`, so `outcomes.approve` keeps workin
 from __future__ import annotations
 
 import getpass
-import time
 from collections.abc import Callable
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core.model import GATE_OUTCOMES
 from ...infra import hostinfo as H
@@ -43,15 +43,15 @@ def _append_outcome(
     (blocking), and the attempt that would meet ``remaining <= 0`` raises instead of
     looping, so the loop both bounds the total and cannot spin.
     """
-    deadline = time.monotonic() + wait_s
+    deadline = CLOCK.monotonic() + wait_s
     while True:
         try:
             if wait_s <= 0:
                 return log.append(kind, item_id, payload)
-            remaining = deadline - time.monotonic()
+            remaining = deadline - CLOCK.monotonic()
             return log.append(kind, item_id, payload, lock_timeout_s=max(0.0, remaining))
         except AppendLockTimeout:
-            if wait_s <= 0 or deadline - time.monotonic() <= 0:
+            if wait_s <= 0 or deadline - CLOCK.monotonic() <= 0:
                 raise
 
 
