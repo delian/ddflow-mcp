@@ -349,7 +349,7 @@ def test_the_selected_test_stages_get_the_failed_first_environment(tmp_path):
 
     seen = tmp_path / "seen.txt"
     scope = SimpleNamespace(
-        command=f"sh -c 'echo \"$MARK\" > {shlex.quote(str(seen))}'",
+        command=shlex.join(["sh", "-c", 'echo "$MARK" > "$1"', "sh", str(seen)]),
         always_command="",
         ok={},
         always_s=0.0,
