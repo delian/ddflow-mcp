@@ -86,6 +86,17 @@ def _review_rounds(it, gate: str, cfg) -> dict[str, Any]:
     }
 
 
+def mark_missed_final(rows_: list[dict[str, Any]], final_head: str) -> None:
+    """Set ``missed_final`` on every review row whose last reviewer covered a commit that is
+    not the one that landed, so the report can note it (DX-agent-final-report-rounds)."""
+    if not final_head:
+        return
+    for r in rows_:
+        rr = r.get("review_rounds")
+        if rr and rr.get("reviewed_head") and rr["reviewed_head"] != final_head:
+            rr["missed_final"] = final_head
+
+
 def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, Any]]:
     """One row per recorded gate, in pipeline order (then any gate outside it), with the
     triage counts of a review gate."""

@@ -211,11 +211,7 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     for r in rows:
         r["earlier_tree"] = stale.get(r["gate"], "")
     landing_d = _landing(repo, cfg, it, led, rows)
-    final_head = str(landing_d.get("branch_head") or "")
-    for r in rows:
-        rr = r.get("review_rounds")
-        if rr and rr.get("reviewed_head") and final_head and rr["reviewed_head"] != final_head:
-            rr["missed_final"] = final_head
+    RG.mark_missed_final(rows, str(landing_d.get("branch_head") or ""))
     sc = cfg.session
     filed = _filed(events, st, item_id, who, sc.report_title_chars)
     tests = _bug_tests(events, st, item_id, sc.report_summary_chars)
