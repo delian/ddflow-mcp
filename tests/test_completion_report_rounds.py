@@ -80,7 +80,9 @@ def test_two_full_shas_sharing_a_prefix_still_read_as_a_missed_final():
         },
     ]
     RG.mark_missed_final(rows, "abc1234" + "1" * 33)
-    assert rows[0]["review_rounds"]["missed_final"] == "abc1234" + "1" * 33, rows[0]["review_rounds"]
+    assert rows[0]["review_rounds"]["missed_final"] == "abc1234" + "1" * 33, rows[0][
+        "review_rounds"
+    ]
 
 
 def test_the_brief_review_line_is_rounds_of_the_cap_and_refutation():
