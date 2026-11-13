@@ -224,3 +224,12 @@ def test_an_unreadable_drop_in_directory_warns_and_leaves_the_built_in_defaults(
     monkeypatch.setattr(_packaged, "dropin_files", refuse)
     assert _packaged.packaged() == {}
     assert "Permission denied" in capsys.readouterr().err
+
+
+def test_the_conflict_names_the_file_that_defined_the_table_not_one_that_only_held_it(tmp_path):
+    _put(tmp_path, "01.toml", "[a.b]\nx = 1\n")
+    _put(tmp_path, "02.toml", "[a]\ny = 1\n")
+    _put(tmp_path, "03.toml", "[a]\nz = 1\n")
+    with pytest.raises(L.DropinError) as e:
+        L.read_dropin_dir(tmp_path)
+    assert "02.toml" in str(e.value) and "01.toml" not in str(e.value)

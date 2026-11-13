@@ -123,6 +123,8 @@ def _merge_into(
                 raise DropinError(
                     f"table [{'.'.join(here)}] is defined in both {owner.get(here, '?')} and {file}"
                 )
+            if _defines(val):
+                owner[here] = file  # the first file to give the table values of its own
             _merge_into(into[key], val, owner, file, here, same_table)
         elif same_table == "merge":
             into[key] = val
@@ -133,7 +135,8 @@ def _merge_into(
 
 
 def _own(owner: dict[tuple[str, ...], str], path: tuple[str, ...], val: Any, file: str) -> None:
-    owner[path] = file
+    if not isinstance(val, dict) or _defines(val):
+        owner[path] = file
     if isinstance(val, dict):
         for k, v in val.items():
             _own(owner, (*path, k), v, file)
