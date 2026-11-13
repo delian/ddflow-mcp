@@ -1,0 +1,16 @@
+[stack]
+name = "go"
+title = "Go (modules)"
+detect = ["go.mod"]
+priority = 50
+lock_files = ["go.sum"]
+comment_tokens = ["//", "/*"]
+import_extractor = "regex:^\\s*(?:import\\s+)?\"([\\w./-]+)\""
+dead_tool = "staticcheck"
+dep_tool = "govulncheck"
+
+[commands]
+build = "go build ./..."
+smoke = "go vet ./..."
+lock_check = "go mod verify"
+test = "go test ./..."

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "verify.stacks_dir"
+new = "\".ddflow/stacks\""
+why = "A project's own stack table directory: a same-named file replaces a shipped stack, a new name adds one."
+impact = "additive"

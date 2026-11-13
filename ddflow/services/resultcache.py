@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ddflow.adapters.clock import DEFAULT as CLOCK
+from ddflow.adapters.env import DEFAULT as ENV
 
 from ..adapters import git as G
 from ..adapters.digest import hasher
@@ -145,10 +146,9 @@ def _env(cwd: Path, cfg: Any) -> str | None:
         except OSError:
             return None
     tools = [
-        f"{c}={_probe(c, str(cwd), os.environ.get('PATH', ''))}"
-        for c in cfg.resultcache.probe_commands
+        f"{c}={_probe(c, str(cwd), ENV.get('PATH', ''))}" for c in cfg.resultcache.probe_commands
     ]
-    envs = [f"{n}={os.environ.get(n, '')}" for n in sorted(cfg.resultcache.env_vars)]
+    envs = [f"{n}={ENV.get(n, '')}" for n in sorted(cfg.resultcache.env_vars)]
     return _digest(_python(), sys.platform, *locks, *tools, *envs)
 
 

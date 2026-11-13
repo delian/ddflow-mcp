@@ -509,8 +509,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=bc6aba03b64a -->
-<details><summary>All 107 commands</summary>
+<!-- ddflow:begin README/commands sha=036ba17b76e9 -->
+<details><summary>All 108 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -618,6 +618,7 @@ needs a line written by hand here.
 | `ddflow digest` | the operator queue: what waits on a person, as askable entries |
 | `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
 | `ddflow tokens` | see `ddflow tokens --help` |
+| `ddflow stacks` | show the stack this repository resolves to and its build, smoke, lock-check and test commands |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
 | `ddflow watch` | wait for a job, a file line, a process or a gate, renewing your leases; exit 2 = not yet (resume with the… |
 | `ddflow waves` | print the dependency waves; --stamp writes the derived wave:N tags, --check exits 1 when they are stale |
@@ -639,7 +640,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=dbab3cccc704 -->
+<!-- ddflow:begin README/agents sha=2fabd6b4b375 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -666,6 +667,7 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | Sourcegraph Cody | `cody` | none | not verified | nv |
 | dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
 | Grok Build | `grok` | `.grok/config.toml` | claude | native hook |
+| Mistral Vibe | `vibe` | `.vibe/config.toml` | vibe | wired, not injected |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
@@ -683,7 +685,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=13d372257129 -->
+<!-- ddflow:begin README/tools sha=4ad9b7910d4a -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -694,7 +696,7 @@ drift. The groups are the ones `ddflow help` prints.
 **Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
 
 - `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
-- `ddflow_view` (21 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `dispatch` (was `ddflow_dispatch`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `waves` (was `ddflow_waves`)
+- `ddflow_view` (23 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `archdeps` (was `ddflow_archdeps`), `dispatch` (was `ddflow_dispatch`), `vigil` (was `ddflow_vigil`), `paths` (was `ddflow_paths`), `perf` (was `ddflow_perf`), `digest` (was `ddflow_digest`), `rules_inventory` (was `ddflow_rule_inventory`), `stacks` (was `ddflow_stacks`), `waves` (was `ddflow_waves`)
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
@@ -709,7 +711,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 145 MCP tools by their own name (the flat list): 34 in the `core` tier, 53 more in `standard`, 58 more in `all`</summary>
+<details><summary>All 147 MCP tools by their own name (the flat list): 34 in the `core` tier, 53 more in `standard`, 60 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -724,6 +726,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_prompts` | all | Inspect the prompt templates this project uses and where each comes from (shipped, project override, or… |
 | Setting up | `ddflow_rule_add` | standard | Add a project rule; duplicate-checked like every add (answer new \| extends:ID \| duplicate_of:ID \| related:ID). |
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
+| Setting up | `ddflow_rule_inventory` | all | Read-only inventory of the native rule, cross-agent and command files: per file which agents load it and… |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
 | Setting up | `ddflow_rule_search` | core | Search rules by title or content, ranked by relevance, for an area or topic. |
@@ -855,6 +858,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_restart` | all | Reload this ddflow MCP server's code and re-bind its tools WITHOUT an agent restart: over MCP the server… |
 | Reading the queue | `ddflow_digest` | all | The operator queue in one fold: every thing waiting on a person to act — pending approval requests… |
 | Reading the queue | `ddflow_waves` | all | Dependency waves of the open queue: wave 0 = no open prerequisite (task-level or inherited from a phase)… |
+| Reading the queue | `ddflow_stacks` | all | Resolve this repository against the stack table (shipped ddflow/templates/stacks/*.toml plus the project's… |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
 | view | `ddflow_archdeps` | standard | The external-dependency census as a read-only report: every dependency family (third-party packages and the… |
 | view | `ddflow_paths` | all | The workflow-path variant lens over the event log: the directly-follows gate graph with median gaps, the top… |
@@ -871,8 +875,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=448040f3f0e2 -->
-<details><summary>All 730 knobs across 68 sections</summary>
+<!-- ddflow:begin README/knobs sha=428934f42962 -->
+<details><summary>All 737 knobs across 69 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1179,6 +1183,7 @@ long default is left to `ddflow config --explain`.
 | `lease.renew_log_min_s` | `120` |  |
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
+| `lease.record_lock_wait_s` | `180` |  |
 | `lease.waiter_reservation_s` | `300` |  |
 | `lease.wait_max_s` | `600` |  |
 | `lease.wait_queue` | `false` |  |
@@ -1589,6 +1594,12 @@ long default is left to `ddflow config --explain`.
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `upstream_gh.error_max` | `400` |  |
+| `verify.stack` | `""` |  |
+| `verify.stacks_dir` | `".ddflow/stacks"` |  |
+| `verify.build_cmd` | `""` |  |
+| `verify.smoke_cmd` | `""` |  |
+| `verify.lock_check_cmd` | `""` |  |
+| `verify.test_cmd` | `""` |  |
 | `wait.max_call_seconds` | `240` |  |
 | `waves.auto_stamp` | `true` |  |
 | `worktree.enabled` | `true` |  |

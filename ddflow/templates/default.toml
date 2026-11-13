@@ -359,6 +359,7 @@ renew_long_commands = true
 renew_log_min_s = 120
 grace_s = 120
 acquire_timeout_s = 30
+record_lock_wait_s = 180
 waiter_reservation_s = 300
 wait_max_s = 600
 wait_queue = false
@@ -845,6 +846,14 @@ self = "ask"
 
 [upstream_gh]
 error_max = 400
+
+[verify]
+stack = ""
+stacks_dir = ".ddflow/stacks"
+build_cmd = ""
+smoke_cmd = ""
+lock_check_cmd = ""
+test_cmd = ""
 
 [wait]
 max_call_seconds = 240

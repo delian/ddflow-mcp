@@ -62,3 +62,23 @@ the mechanical findings; everything written by a person or agent is fenced as da
 runs the optional `verify` gate: a finding is a requirement clause the evidence does not show
 as met. No reviewer configured is recorded `unavailable`, never as a pass. The `verify` gate
 is not in the default pipeline.
+
+## Build and smoke commands by stack
+
+`ddflow verify` re-derives a completion. The periodic checks that the project still BUILDS
+(a clean clone, a smoke run) need to know how, for any language, and read it from one table:
+`ddflow/templates/stacks/<stack>.toml` (python, node, rust, go, java). `ddflow stacks` prints
+what this repository resolves to: the stack, and its `build`, `smoke`, `lock_check` and `test`
+commands, each marked `unavailable` when its program is not on PATH (never passed). A project
+no entry describes gets an explicit `none` (exit 2) and the command that fixes it.
+
+Settable four ways, with the same result:
+
+    config file     .ddflow/config.toml:   [verify]  build_cmd = "make all"
+    CLI             ddflow config verify.build_cmd 'make all'    (also stack, smoke_cmd, lock_check_cmd, test_cmd, stacks_dir)
+    MCP             ddflow_view action=stacks         (read the resolution; set knobs with ddflow_configure)
+    prompt          "this is a Rust project; build it with `cargo build --locked`" -- the agent
+                    runs `ddflow config verify.stack rust` and `ddflow stacks` to confirm
+
+A project adds or replaces a stack by dropping `<stack>.toml` into `[verify].stacks_dir`
+(default `.ddflow/stacks/`); the shape is in `ddflow/templates/stacks/README.md`.
