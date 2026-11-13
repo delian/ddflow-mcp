@@ -108,9 +108,9 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
-    red = _ci_baseline_red(
-        it, tree
-    )  # measured baseline-red: the gate runs, it does not wait for ci
+    # measured baseline-red, or a partial whole-suite ci that ran on this very tree (a red
+    # main): the gate runs its own selection, it does not wait for a ci that cannot pass
+    red = _ci_baseline_red(it, tree) or _ci_partial_here(it, tree)
     why, excused = _ci_excused(cfg, it, tree, failed_sel, red)
     if why:
         return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
@@ -188,6 +188,20 @@ def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     # measured on THIS tree: a baseline-red ci of another commit proves nothing about this one
     ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
     return tree is None or (bool(ran) and ran == G.normal_fingerprint(G.tree_identity(tree)))
+
+
+def _ci_partial_here(it, tree: Path | None) -> bool:
+    """Whether the item's ci gate ended PARTIAL on exactly the commit ``tree`` holds now, clean
+    (B-unit-tests-refuses-on-partial-ci-red-main): the whole suite already ran here and a red
+    main keeps it from passing, so rerunning ci proves nothing new. The gate runs its own
+    selection; ci stays partial and still decides whether the item may complete."""
+    ci = it.gates.get("ci")
+    if tree is None or ci is None or ci.outcome != "partial":
+        return False
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    return (
+        bool(ran) and ran.endswith("+clean") and ran == G.normal_fingerprint(G.tree_identity(tree))
+    )
 
 
 def _ci_failed_selected(it) -> bool:

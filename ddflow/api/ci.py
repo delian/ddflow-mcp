@@ -76,8 +76,11 @@ def check_after_merge(
     """`[ci].on_merge`: run the CI command on the base a merge just landed on, record the
     result and file the failures. Never raises into the merge: it already landed.
     Returns what to say about it ({} when nothing ran). ``since`` is the base the merge started
-    from: the tripwire hooks run on that range, not over every file."""
+    from: the tripwire hooks run on that range, not over every file. Without it the range is the
+    merge commit's first parent up to it: a caller that does not know where the merge began still
+    gives the hooks a range, never every commit not yet on origin (B-ci-gitleaks-pushed-range)."""
     log, cfg, st = _load(repo, agent)
+    since = since or (f"{sha}^" if sha else "")
     mode = cfg.ci.on_merge
     if mode == "off":
         return {}

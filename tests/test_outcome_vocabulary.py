@@ -57,8 +57,8 @@ def test_live_items_skips_removed_and_keeps_definition_order() -> None:
 
 
 #: Sites that still spell "done or abandoned" out, awaiting their slice; only goes down.
-OLD_TERMINAL_SPELLINGS = 11
-OLD_LIVE_COMPREHENSIONS = 7
+OLD_TERMINAL_SPELLINGS = 10
+OLD_LIVE_COMPREHENSIONS = 6
 
 
 def _count(pattern: str) -> int:

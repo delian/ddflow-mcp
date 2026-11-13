@@ -25,6 +25,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
+from ..ci.failure_text import normalise as normalise_paths
 from ..flakes import LINE_CHARS
 from .baseline import cache_snapshot, cache_store
 from .testcmd import counts_of
@@ -61,9 +62,10 @@ _ADDR = re.compile(r"(?<=\bat )0x[0-9a-f]+(?=>)")
 
 
 def _norm(text: str) -> str:
-    """``text`` with a memory address in an object repr blanked to ``0x``: a hex inside an
-    assertion value is left alone, so a genuine value change still reads as a new offender."""
-    return _ADDR.sub("0x", text)
+    """``text`` with a memory address in an object repr blanked to ``0x`` and the ci tree it ran
+    in blanked to ``<tree>`` (GM-ci-path-normalise): a hex inside an assertion value is left
+    alone, so a genuine value change still reads as a new offender."""
+    return _ADDR.sub("0x", normalise_paths(text))
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:
@@ -169,7 +171,47 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    return _norm(branch) != _norm(base)
+    return not _same_failure(branch, base)
+
+
+#: pytest cuts a long repr to a fixed length, ``head...tail`` (`_pytest._io.saferepr._ellipsize`).
+_ELLIPSIS = "..."
+_RUN = re.compile(r"\.{3,}")
+
+
+def _cut(text: str) -> tuple[int, int] | None:
+    """The span ``(first, last)`` of positions where the first ellipsis of ``text`` may start,
+    or None without one. A run of more than three dots is a cut next to a literal dot (the
+    head ends in ``.`` or the tail starts with one): the cut is one of its last-three windows."""
+    m = _RUN.search(text)
+    return (m.start(), m.end() - len(_ELLIPSIS)) if m else None
+
+
+def _same_failure(branch: str, base: str) -> bool:
+    """Whether two failure texts are one failure, tree paths and addresses blanked. pytest
+    ellipsizes a long repr by LENGTH (``head...tail``, each a fixed number of characters), and
+    the ci tree and the base's scratch tree have paths of different lengths, so the same
+    failure is cut at a different place once the paths are blanked. The RAW texts tell that
+    from a real change: a cut of one repr sits at the same raw position in both, so the heads
+    have the same raw length and so do the tails; only then the blanked head of one must be a
+    prefix of the other's and the blanked tail a suffix. Anything else differs: a changed
+    visible text is not read as a cut (B710b7cc84f). What the cut hides cannot be compared; the
+    few characters one head or tail shows beyond the other's (the root-length difference) are
+    the same loss, so a change confined to them is not seen."""
+    if _norm(branch) == _norm(base):
+        return True
+    cuts = [_cut(branch), _cut(base)]
+    if None in cuts or len(branch) != len(base):
+        return False
+    lo, hi = max(c[0] for c in cuts), min(c[1] for c in cuts)  # type: ignore[index]
+    if lo > hi:  # no one position is a cut in both
+        return False
+    k = lo
+    head_a, tail_a = _norm(branch[:k]), _norm(branch[k + len(_ELLIPSIS) :])
+    head_b, tail_b = _norm(base[:k]), _norm(base[k + len(_ELLIPSIS) :])
+    heads = head_a.startswith(head_b) or head_b.startswith(head_a)
+    tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
+    return heads and tails
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:

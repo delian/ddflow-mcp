@@ -561,3 +561,27 @@ def test_a_parser_without_a_tool_table_says_its_tool_names_were_not_checked(tmp_
     assert problems == [] and len(notes) == 1
     assert "1 tool reference(s) in AGENTS.md were not checked" in notes[0]
     assert "no tool table loaded" in notes[0]
+
+
+def test_the_vocabulary_names_the_mcp_family_tools():
+    """`ddflow_session` and the other family tools are real tools, so a template naming one is not stale."""
+    import ddflow.surfaces.cli  # noqa: F401  (registers the command table)
+    from ddflow.surfaces.vocabulary import sources
+
+    _parser, tools = sources()
+    assert tools is not None
+    for name in ("ddflow_session", "ddflow_view", "ddflow_bug", "ddflow_gate", "ddflow_task"):
+        assert name in tools, name
+
+
+def test_the_mcp_server_vocabulary_names_the_family_tools():
+    import subprocess
+    import sys
+
+    code = (
+        "import ddflow.surfaces.mcp; from ddflow.surfaces.vocabulary import sources;"
+        "from ddflow.surfaces.tools.families import FAMILIES;"
+        "print(all(n in sources()[1] for n in FAMILIES), 'ddflow_brief' in sources()[1])"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.stdout.split() == ["True", "True"], out.stderr

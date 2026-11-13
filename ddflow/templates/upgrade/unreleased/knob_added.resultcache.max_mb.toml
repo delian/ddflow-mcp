@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "resultcache.max_mb"
+new = '64'
+why = "RC-tree-result-cache: reuse a ci or unit_tests result for the same code tree, command and environment."
+impact = "additive"
