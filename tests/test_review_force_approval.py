@@ -9,6 +9,7 @@ the operator approval the way `gate skip` and `merge` can. The refusal now files
 
 from __future__ import annotations
 
+import json
 import stat
 import sys
 from pathlib import Path
@@ -70,6 +71,11 @@ def test_an_agent_can_file_a_review_force_approval(repo, tmp_path):
     assert code == REFUSED, (code, err)
     assert "review.force" in err, err
     assert "approval" in err, err  # the route it files and names
+    # ...and the request is really FILED, verb and all -- not just a phrase in the refusal.
+    code, out, _e = run_cli(repo, "--json", "approvals", "pending")
+    assert code == 0, _e
+    pending = json.loads(out)["approvals_pending"]
+    assert any(r["verb"] == "review.force" for r in pending), pending
 
 
 def test_an_agents_force_without_an_approval_steers_not_runs(repo, tmp_path):
