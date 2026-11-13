@@ -209,3 +209,18 @@ def test_a_damaged_drop_in_warning_names_the_directory_not_the_single_file(
     _packaged.packaged()
     err = capsys.readouterr().err
     assert str(d) in err and "default.toml:" not in err
+
+
+def test_an_unreadable_drop_in_directory_warns_and_leaves_the_built_in_defaults(
+    tmp_path, layout, capsys, monkeypatch
+):
+    d = tmp_path / "default.d"
+    d.mkdir()
+    layout(tmp_path / "default.toml", d)
+
+    def refuse(_directory):
+        raise PermissionError(13, "Permission denied", str(d))
+
+    monkeypatch.setattr(_packaged, "dropin_files", refuse)
+    assert _packaged.packaged() == {}
+    assert "Permission denied" in capsys.readouterr().err
