@@ -547,6 +547,7 @@ def test_two_knobs_cannot_claim_one_old_name(monkeypatch):
 
     for table in ("KNOB_DOCS", "DECLARED", "DECLARED_IN", "RENAMED"):
         monkeypatch.setattr(_docs, table, dict(getattr(_docs, table)))
+    monkeypatch.setattr(_docs, "SECTION_CLASSES", {})
 
     @dataclass
     class Two:

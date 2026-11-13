@@ -25,6 +25,8 @@ _MEASURED_KEYS = {
     # Ages are measured against the clock of each call.
     "ddflow_lanes": frozenset({"now", "for_s", "heartbeat_age_s", "since"}),
     "ddflow_metrics": frozenset({"now"}),
+    # `now` is wall-clock at each call; the two surfaces run at different moments.
+    "ddflow_paths": frozenset({"now"}),
 }
 _MEASURED = "\x00measured"
 
@@ -209,6 +211,8 @@ TEXT_BODIED = {
     # The sites a forbidden pattern reappeared at ARE the finding (B20): a caller reads
     # which, rather than parsing how many.
     "ddflow_lesson_verify",
+    # A rendered queue document meant to be put to a person as-is (`prose`).
+    "ddflow_digest",
     "ddflow_configure",
     "ddflow_reviewers_list",
     "ddflow_doctor",
@@ -278,6 +282,11 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_bug_found",
     "ddflow_bug_fixed",
     "ddflow_bug_invalid",
+    # Closes a bug / cuts a suggestion onto another agent's tip: the first call changes
+    # the state the second would again; pinned by tests/test_bug_duplicate.py and
+    # tests/test_suggest.py.
+    "ddflow_bug_duplicate",
+    "ddflow_suggest",
     "ddflow_session_start",
     "ddflow_session_prompt",
     "ddflow_session_note",
