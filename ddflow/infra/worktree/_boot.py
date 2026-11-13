@@ -44,10 +44,11 @@ def stored_boot(repo: Path | str) -> str:
 def observe_boot(repo: Path | str) -> dict[str, object]:
     """Record the current boot id and say whether it CHANGED since ddflow last looked.
 
-    Returns ``{"boot_id": cur, "previous": stored, "changed": bool}``. The marker is written
-    only when the id really changed (a first sighting counts as a change, from nothing). A
-    read OR write failure clears ``changed`` -- never a fabricated "no reboot", and never a
-    "rebooted" over an unreadable previous state.
+    Returns ``{"boot_id": cur, "previous": stored, "changed": bool}``. ``changed`` is what
+    READABLE values prove: it is True when the current id differs from a previously-recorded
+    readable id, or on a first sighting; the marker write only persists the new id, and a
+    failed write does NOT clear a change the two values already prove. An UNREADABLE previous
+    value is unknown -- never a reboot from it.
     """
     cur = boot_id()
     if not cur:
