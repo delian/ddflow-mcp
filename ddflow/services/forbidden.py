@@ -102,16 +102,16 @@ class Refusal:
 _HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
 
 
-def _dquote_end(line: str, i: int, n: int) -> tuple[str, int]:
-    """The ``(quote open, index)`` after the double quote that opens at `i`: fast-forward to
-    its close (``("", close+1)``) or to the line's end (``('"', n)``, still open); a backslash
-    escapes the quote (and ``$`` / `` ` ``), so the next ``"`` is not the close."""
-    j = i + 1
-    while j < n:
-        if line[j] == '"':
-            return "", j + 1
-        j += 2 if line[j] == "\\" and j + 1 < n and line[j + 1] in ('"', "\\", "$", "`") else 1
-    return '"', n
+def _dquote_close(line: str, i: int, n: int) -> int:
+    """Index past the ``"`` closing a double quote, scanning from `i` (a char INSIDE it), or
+    `n` when it stays open to the line's end; a backslash escapes the quote (and ``$`` / `` ` ``),
+    so the next ``"`` is not the close."""
+    while i < n and line[i] != '"':
+        if line[i] == "\\" and i + 1 < n:
+            i += 2
+        else:
+            i += 1
+    return i + 1 if i < n else n
 
 
 def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
@@ -136,6 +136,9 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
             if j < 0:
                 return ms, "'"  # the single quote stays open to the next line
             quote, i = "", j + 1
+        elif quote == '"':
+            j = _dquote_close(line, i, n)  # a quote that opened on an earlier line: its close
+            quote, i = ('"' if j == n else "", j)
         elif c == "\\":
             if i + 1 < n:
                 escaped.add(i + 1)
@@ -145,7 +148,8 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
         elif c == "'":
             quote, i = "'", i + 1
         elif c == '"':
-            quote, i = _dquote_end(line, i, n)
+            j = _dquote_close(line, i + 1, n)
+            quote, i = ('"' if j == n else "", j)
         elif c == "<" and i + 1 < n and line[i + 1] == "<":
             m = _HEREDOC.match(line, i)
             if m is not None:
