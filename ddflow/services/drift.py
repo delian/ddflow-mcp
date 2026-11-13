@@ -309,7 +309,9 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
         elif kind == "D" and names:
             deleted.add(names[0])
     for old in sorted(deleted):
-        stem = old.rsplit(".", 1)[0]  # foo/bar.py -> foo/bar (with an extension dropped)
+        if not old.endswith(".py") or not old[:-3]:
+            continue  # a package split only splits a python module into a directory
+        stem = old[:-3]  # foo/bar.py -> foo/bar
         if f"{stem}/__init__.py" in added:
             out.append(Move(old, f"{stem}/__init__.py", "split"))
     return out

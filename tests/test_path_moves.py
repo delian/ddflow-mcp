@@ -42,6 +42,7 @@ def _claimed(repo: Path, item: str, glob: str, agent: str) -> None:
     code, out, err = run_cli(repo, "task", "add", item, "--title", "t", "--globs", glob, agent=agent)
     assert code == 0, out + err
     (repo / "ddflow").mkdir(exist_ok=True)
+    (repo / glob).parent.mkdir(parents=True, exist_ok=True)
     (repo / glob).write_text("x\n")
     subprocess.run(["git", "-C", str(repo), "add", glob], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
@@ -67,15 +68,16 @@ def test_moves_between_detects_a_package_split(repo):
     (repo / "mod.py").write_text("def g():\n    return 2\n")
     _commit(repo, "seed")
     before = _sha(repo)
-    (repo / "modpkg").mkdir()
-    (repo / "modpkg" / "__init__.py").write_text("all new content, nothing like before\n")
+    (repo / "mod").mkdir()
+    (repo / "mod" / "__init__.py").write_text("all new content, nothing like before\n")
     (repo / "mod.py").unlink()
     _commit(repo, "split")
     after = _sha(repo)
     moves = moves_between(repo, before, after)
     assert moves is not None
-    olds = [m.old for m in moves]
-    assert any(m.old == "mod.py" and "modpkg/__init__.py" in m.new for m in moves), moves
+    # The module body did not survive, so git rename detection links nothing: the shape
+    # `mod.py` deleted with `mod/__init__.py` added is the package split record.
+    assert any(m.old == "mod.py" and m.new == "mod/__init__.py" and m.how == "split" for m in moves), moves
 
 
 def test_merge_records_a_path_moved_event(repo):
