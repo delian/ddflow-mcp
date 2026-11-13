@@ -49,7 +49,6 @@ def test_timeout_reports_the_wait_and_this_process(tmp_path):
         p.wait()
 
 
-@needs_proc_locks
 def test_a_lock_timeout_maps_to_a_clean_exit_not_a_traceback(tmp_path):
     """B-lock-timeout-raw-traceback: when the append lock is still held at its bound,
     `_flock` raises a timeout that `exit_for` maps to a CLEAN exit code. The CLI re-raises
