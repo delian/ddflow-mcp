@@ -330,6 +330,12 @@ COMMANDS: tuple[Command, ...] = (
             else _api().show(repo, a["id"], agent=agent, history=bool(a.get("history")))
         ),
         payload="item",
+        flag_exempt={
+            "--history": (
+                "CLI text view only: the MCP show body always carries every correction in "
+                "`corrections`, so nothing is withheld"
+            )
+        },
     ),
     Command(
         path=("status",),

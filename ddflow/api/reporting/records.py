@@ -122,7 +122,7 @@ def new_reports(st, rid: str, since: float) -> dict[str, Any]:
     return {"count": len(adds) + len(linked), "additions": adds, "linked_from": linked}
 
 
-def corrections(st, kind: str, rid: str) -> list[dict[str, Any]]:
+def _corrections(st, kind: str, rid: str) -> list[dict[str, Any]]:
     """The `record.corrected` audit entries of one record, oldest first (REC-show-corrected-fields):
     who, when, why and each field named, with a digest of the old/new value only where the
     writer asked for one (never after a `--secret` correction). Empty when none."""
@@ -140,7 +140,7 @@ def corrections(st, kind: str, rid: str) -> list[dict[str, Any]]:
 def _corrected(st, kind: str, rid: str) -> dict[str, Any]:
     """The additive `show` field of a corrected record: `corrections`, every one in order.
     Absent when there is none, so an uncorrected record reads exactly as it did."""
-    found = corrections(st, kind, rid)
+    found = _corrections(st, kind, rid)
     return {"corrections": found} if found else {}
 
 
