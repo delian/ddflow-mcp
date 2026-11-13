@@ -86,18 +86,24 @@ def _review_rounds(it, gate: str, cfg) -> dict[str, Any]:
     }
 
 
+def _same_commit(a: str, b: str) -> bool:
+    """Whether ``a`` and ``b`` spell the SAME commit, so neither an abbreviation of the other
+    nor a 7-char collision reads as a different one (a git short sha is a PREFIX)."""
+    return a == b or a.startswith(b) or b.startswith(a)
+
+
 def mark_missed_final(rows_: list[dict[str, Any]], final_head: str) -> None:
     """Set ``missed_final`` on every review row whose last reviewer covered a commit that is
     not the one that landed, so the report can note it (DX-agent-final-report-rounds).
 
-    Compared by the 7-char prefix the note renders: ``reviewed_head`` is a full sha (the head
-    captured before the diff) while ``final_head`` may be an abbreviated one, and a raw
-    compare would call the same commit "missed" over the difference."""
+    ``reviewed_head`` is a full sha while ``final_head`` may be abbreviated; identity is by
+    ``_same_commit``, not by a fixed-length slice, so a short ``final_head`` spells the head
+    the reviewer already saw, and two full shas sharing a 7-char prefix still differ."""
     if not final_head:
         return
     for r in rows_:
         rr = r.get("review_rounds")
-        if rr and rr.get("reviewed_head") and rr["reviewed_head"][:7] != final_head[:7]:
+        if rr and rr.get("reviewed_head") and not _same_commit(rr["reviewed_head"], final_head):
             rr["missed_final"] = final_head
 
 

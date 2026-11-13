@@ -69,6 +69,20 @@ def test_a_reviewer_that_saw_the_final_commit_is_not_called_missed_when_one_sha_
     assert rows[0]["review_rounds"]["missed_final"] == "def9999"
 
 
+def test_two_full_shas_sharing_a_prefix_still_read_as_a_missed_final():
+    from ddflow.services import report_gates as RG
+
+    rows = [
+        {
+            "gate": "critic",
+            # the reviewer saw "abc1234" + 29 zeros; the final commit is "abc1234" + 29 ones
+            "review_rounds": {"used": 1, "max": 4, "reviewed_head": "abc1234" + "0" * 36},
+        },
+    ]
+    RG.mark_missed_final(rows, "abc1234" + "1" * 36)
+    assert rows[0]["review_rounds"]["missed_final"] == "abc1234" + "1" * 36, rows[0]["review_rounds"]
+
+
 def test_the_brief_review_line_is_rounds_of_the_cap_and_refutation():
     line = RB._review_line(
         {
