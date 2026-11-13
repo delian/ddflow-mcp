@@ -240,7 +240,7 @@ def _post(cfg: Config, repo: Path, spec: Spec):
     def run(body: str) -> tuple[str, dict[str, str]]:
         if not spec.redact:
             return body, S.redaction_attrs(None)
-        red = S.redact_text(body, cfg, exempt_contact=True)
+        red = S.redact_text(body, cfg, exempt_contact=spec.doc == "security")
         return red.text, S.redaction_attrs(red.counts)
 
     return run

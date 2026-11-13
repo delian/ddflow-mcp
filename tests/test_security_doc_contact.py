@@ -190,3 +190,15 @@ def test_outside_the_export_the_contact_is_still_redacted() -> None:
     cfg = Config()
     cfg.export.security_contact = "sec@corp.example"
     assert safe.redact_text("mail sec@corp.example", cfg).text == "mail [REDACTED:email]"
+
+
+def test_another_document_still_redacts_the_contact(repo: Path) -> None:
+    cfg = Config()
+    cfg.export.security_contact = "sec@corp.example"
+    q = query.build([])
+    q.repo = repo
+    other = ops.spec_for(cfg, "status", writing=False)
+    body = ops._post(cfg, repo, other)("mail sec@corp.example")[0]
+    assert body == "mail [REDACTED:email]"
+    sec = ops.spec_for(cfg, "security", writing=False)
+    assert ops._post(cfg, repo, sec)("mail sec@corp.example")[0] == "mail sec@corp.example"
