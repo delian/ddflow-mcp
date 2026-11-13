@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
@@ -42,15 +43,21 @@ def _claimed(repo: Path) -> None:
 
 def _watch_catch_up(monkeypatch) -> dict[str, int]:
     """Count read_all calls made WHILE the append lock is held, inside `_catch_up_globs`."""
-    seen = {"locked_reads": 0, "catch_ups": 0}
+    seen = {"locked_reads": 0, "catch_ups": 0, "locks": 0}
     inside = {"on": False}
     real_read = EventLog.read_all
     real_catch = HB._catch_up_globs
+    real_tx = EventLog.transaction
 
     def read_all(self, *a, **kw):
         if inside["on"] and _HELD.get(_held_key(self.lock_path), 0) >= 1:
             seen["locked_reads"] += 1
         return real_read(self, *a, **kw)
+
+    def transaction(self):
+        if inside["on"]:
+            seen["locks"] += 1  # the lock is TAKEN, whatever is done under it
+        return real_tx(self)
 
     def catch_up(*a, **kw):
         seen["catch_ups"] += 1
@@ -61,6 +68,7 @@ def _watch_catch_up(monkeypatch) -> dict[str, int]:
             inside["on"] = False
 
     monkeypatch.setattr(EventLog, "read_all", read_all)
+    monkeypatch.setattr(EventLog, "transaction", transaction)
     monkeypatch.setattr(HB, "_catch_up_globs", catch_up)
     return seen
 
@@ -74,7 +82,8 @@ def test_a_matching_live_lease_is_caught_up_without_reading_the_log_under_the_lo
     out = HB.heartbeat(repo, "T1", agent="alpha")
     assert out.exit == OK, out
     assert seen["catch_ups"] == 1  # the catch-up ran (the probe is live) ...
-    assert seen["locked_reads"] == 0  # ... and read nothing under the lock
+    assert seen["locks"] == 0  # ... and never took the append lock at all
+    assert seen["locked_reads"] == 0
 
 
 def test_a_mismatch_still_retargets_the_lease_and_rereads_under_the_lock(repo, monkeypatch):
@@ -96,3 +105,13 @@ def test_a_mismatch_still_retargets_the_lease_and_rereads_under_the_lock(repo, m
     assert seen["locked_reads"] >= 1  # the mismatch re-reads inside the lock
     lease = fold(EventLog(repo, "alpha").read_all(), strict=False).items["T1"].lease
     assert sorted(lease.globs) == ["i/*", "j/*"]
+
+
+def test_a_resources_only_difference_is_a_mismatch_too():
+    lease = SimpleNamespace(holder="alpha", globs=["i/*"], resources=[])
+    item = SimpleNamespace(lease=lease, globs=["i/*"], resources=["gpu:1"])
+    st = SimpleNamespace(items={"T1": item})
+    assert HB._matches(st, "T1", "alpha", "globs")
+    assert not HB._matches(st, "T1", "alpha", "resources")
+    assert not HB._matches(st, "T1", "beta", "globs")  # another holder's lease is not matched
+    assert not HB._matches(None, "T1", "alpha", "globs")  # no loaded state: look under the lock

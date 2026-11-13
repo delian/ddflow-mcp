@@ -260,7 +260,9 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str, loaded=None) -
     of ``holder`` carries what the item names) is not looked at again: the lock is taken, and
     the log re-read under it, only for a field that differs -- a no-op heartbeat holds the
     append lock for nothing (TX-heartbeat-catchup-lockfree). A state that went stale since
-    is caught up by the next heartbeat, as any edit after the load always was.
+    is caught up by the next heartbeat: `update --globs` retargets a LIVE lease itself, so only
+    a lease that lapsed can differ from its item, and only an edit inside the few milliseconds
+    between the load and the renewal is missed here.
     """
 
     why: list[str] = []
