@@ -56,9 +56,16 @@ STATES = (
 )
 
 
-def _state_token(state: str) -> str:
-    """The `command` token `output_caps` reads for `next --state`: it pages the state list."""
-    return f"next --state {state}"
+def _state_token(state: str, kind: str = "", phase: str = "", phase_only: bool = False) -> str:
+    """The `command` token `output_caps` reads for `next --state`: it pages the state list.
+    Carries kind and phase (as `lane_token` does for the lane call), so a cut list's next-page
+    call keeps the whole selection."""
+    return (
+        f"next --state {state}"
+        + (f" --kind {kind}" if kind else "")
+        + (f" --phase {phase}" if phase else "")
+        + (" --phase-only" if phase_only else "")
+    )
 
 
 def _item_row(i) -> dict:
@@ -190,7 +197,10 @@ def _next(repo, a, agent):
         ignore_cap=bool(a.get("ignore_cap", False)),
     )
     if state:
-        return _cap(repo, _state_answer(out, state, phase, tags), _state_token(state), a)
+        token = _state_token(
+            state, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
+        )
+        return _cap(repo, _state_answer(out, state, phase, tags), token, a)
     return _cap(repo, out, "next", a)
 
 
@@ -282,6 +292,7 @@ COMMANDS: tuple[Command, ...] = (
                 "blocked, ready, merged, held, review or blocking_deps",
                 default="",
                 choices=STATES,
+                exclusive="purpose",
             ),
             Param(
                 "kind",
@@ -295,6 +306,7 @@ COMMANDS: tuple[Command, ...] = (
                 help="Answer this idle lane.",
                 cli_help="answer this idle lane: its best item and a note for claim",
                 default="",
+                exclusive="purpose",
             ),
             *capped(True),
         ),
