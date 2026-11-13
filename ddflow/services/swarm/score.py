@@ -11,8 +11,8 @@ Two stages (D-swarm-answers Q1, Q5, Q10):
    window, the trust tier, and family independence (a reviewer's family differs from the
    author's, an unknown family on either side never passes; an author needs a reviewer family left that differs from its own). A refused
    pair is never scored into eligibility: no weight can override a refusal.
-2. ``evaluate``: a score from critical path, fit (ledger), cost, rework and queue, each a
-   term in [0, 1] times its ``[swarm]`` weight, kept in ``Decision.parts``. Cost only ranks
+2. ``evaluate``: a score from critical path, fit (ledger), cost, rework, headroom and
+   queue, each a term in [0, 1] times its ``[swarm]`` weight, kept in ``Decision.parts``. Cost only ranks
    lanes whose fit is within ``fit_margin`` of the best eligible lane (``rank``), so a free
    local route never wins by being free. An unmeasured pair scores neutral, and an
    ``unavailable``/``partial`` outcome is never a pass (``review_satisfied`` and the ledger).
