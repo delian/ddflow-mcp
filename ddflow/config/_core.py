@@ -87,6 +87,17 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     return value
 
 
+def _merge_layer(key: str, below: Any, value: Any) -> Any:
+    """``value`` (one layer's) over ``below``, for the knobs whose layers merge: the signal
+    marks mark by mark (`merge_signals`), the order pin tighten-only (`merge_pin`), the
+    budget tables."""
+    if key == SIGNALS and isinstance(value, dict):
+        value = merge_signals(below, value)
+    elif key == ORDER_PIN and isinstance(value, list):
+        value = merge_pin(list(below), value)
+    return _merge_budget_table(key, below, value)
+
+
 def _operator_only_refusal(sec: str, knob: str, key: str) -> str:
     """Why the committed ``file`` layer may not set ``key`` (never ``""`` for these).
 
@@ -352,12 +363,7 @@ class Config(_SectionFields):
             if why := _operator_only_refusal(sec, knob, key):
                 raise InvalidValue(why)
         written = value  # what THIS layer says, before any merge: what a note names
-        if key == SIGNALS and isinstance(value, dict):
-            # merged over the layers below, mark by mark (`merge_signals`)
-            value = merge_signals(getattr(target, knob), value)
-        if key == ORDER_PIN and isinstance(value, list):
-            value = merge_pin(list(getattr(target, knob)), value)  # tighten-only
-        value = _merge_budget_table(key, getattr(target, knob), value)
+        value = _merge_layer(key, getattr(target, knob), value)
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
