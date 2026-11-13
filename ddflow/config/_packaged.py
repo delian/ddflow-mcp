@@ -26,6 +26,7 @@ from ..config_sections._layers import (
     PACKAGED_DEFAULTS,
     PACKAGED_DIR,
     ConfigConflict,
+    dropin_files,
     read_dropin_dir,
     read_toml,
 )
@@ -57,12 +58,11 @@ def _say_drift(keys: list[str]) -> None:
 def packaged() -> dict[str, Any]:
     """The parsed packaged defaults, or `{}` (having warned) when they can not be read: the
     `default.d` drop-in directory when it holds files, else the single `default.toml`."""
+    source = PACKAGED_DIR if dropin_files(PACKAGED_DIR) else PACKAGED_DEFAULTS
     try:
-        if PACKAGED_DIR.is_dir() and any(PACKAGED_DIR.glob("*.toml")):
-            return read_dropin_dir(PACKAGED_DIR)
-        return read_toml(PACKAGED_DEFAULTS)
+        return read_dropin_dir(PACKAGED_DIR) if source is PACKAGED_DIR else read_toml(source)
     except (OSError, ValueError, ConfigConflict) as exc:  # ValueError: bad UTF-8 or TOML
-        _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}; {_BUILT_IN}")
+        _say(f"cannot read the packaged {source}: {exc}; {_BUILT_IN}")
         return {}
 
 

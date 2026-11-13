@@ -72,6 +72,12 @@ def test_sibling_subtables_of_a_container_in_two_files_merge(tmp_path):
     assert L.read_dropin_dir(tmp_path) == {"gate": {"a": {"x": 1}, "b": {"x": 2}}}
 
 
+def test_a_table_and_its_subtable_may_live_in_different_files(tmp_path):
+    _put(tmp_path, "01.toml", '[gate]\nmode = "strict"\n')
+    _put(tmp_path, "02.toml", "[gate.a]\nx = 1\n")
+    assert L.read_dropin_dir(tmp_path) == {"gate": {"mode": "strict", "a": {"x": 1}}}
+
+
 def test_merge_mode_lets_the_later_file_win(tmp_path):
     _put(tmp_path, "10.toml", "[lease]\nttl_s = 1\nother = 2\n")
     _put(tmp_path, "20.toml", "[lease]\nttl_s = 9\n")
@@ -172,3 +178,25 @@ def test_the_drop_in_load_cost_stays_inside_its_budget(tmp_path, layout):
         _packaged.apply_packaged(Config())
         best = min(best, time.perf_counter() - start)
     assert best * 1000 < LOAD_BUDGET_MS * slow_factor()
+
+
+def test_a_directory_named_like_a_drop_in_does_not_hide_the_single_file(tmp_path, layout):
+    single = tmp_path / "default.toml"
+    single.write_text("[lease]\nttl_s = 1111\n", "utf-8")
+    d = tmp_path / "default.d"
+    (d / "x.toml").mkdir(parents=True)
+    layout(single, d)
+    assert L.dropin_files(d) == []
+    assert _packaged.packaged() == {"lease": {"ttl_s": 1111}}
+
+
+def test_a_damaged_drop_in_warning_names_the_directory_not_the_single_file(
+    tmp_path, layout, capsys
+):
+    d = tmp_path / "default.d"
+    d.mkdir()
+    (d / "lease.toml").write_text("[lease]\nttl_s = = 1\n", "utf-8")
+    layout(tmp_path / "default.toml", d)
+    _packaged.packaged()
+    err = capsys.readouterr().err
+    assert str(d) in err and "default.toml:" not in err

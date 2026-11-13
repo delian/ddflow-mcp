@@ -119,7 +119,7 @@ def _merge_into(
             into[key] = val
             _own(owner, here, val, file)
         elif isinstance(val, dict) and isinstance(into[key], dict):
-            if same_table == "error" and (_defines(val) or _defines(into[key])):
+            if same_table == "error" and _defines(val) and _defines(into[key]):
                 raise DropinError(
                     f"table [{here}] is defined in both {owner.get(here, '?')} and {file}"
                 )
@@ -137,25 +137,32 @@ def _own(owner: dict[str, str], path: str, val: Any, file: str) -> None:
             _own(owner, f"{path}.{k}", v, file)
 
 
+def dropin_files(directory: Path) -> list[Path]:
+    """The regular `*.toml` files of ``directory`` in name order; `[]` when it is not there
+    (a directory or dangling link named `x.toml` is no drop-in)."""
+    root = Path(directory)
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.glob("*.toml") if p.is_file())
+
+
 def read_dropin_dir(directory: Path, *, same_table: str = "error") -> dict[str, Any]:
     """The merged tables of every `*.toml` in ``directory``, read in name order (the systemd
     `.d` model: the directory is the unit of ownership, the name orders it). A directory that
     is not there reads as empty.
 
     ``same_table="error"`` (the shipped layer): a table two files both define raises
-    `DropinError` naming both; sub-tables of a container may be spread over files.
+    `DropinError` naming both; sub-tables may be spread over files (a table's own values in
+    one file, its `[table.sub]` in another).
     ``"merge"`` (a project's `conf.d`): the later file wins key by key. A file that does not
     parse raises `DropinError` naming file and line; one holding merge-conflict markers raises
     `ConfigConflict`, as `read_toml` does.
     """
     if same_table not in ("error", "merge"):
         raise ValueError(f"same_table is 'error' or 'merge', not {same_table!r}")
-    root = Path(directory)
-    if not root.is_dir():
-        return {}
     merged: dict[str, Any] = {}
     owner: dict[str, str] = {}
-    for path in sorted(root.glob("*.toml")):
+    for path in dropin_files(directory):
         try:
             table = read_toml(path)
         except ValueError as exc:  # TOMLDecodeError says "(at line N, column M)"
