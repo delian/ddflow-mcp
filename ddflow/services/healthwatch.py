@@ -317,20 +317,20 @@ def _readies(repo: Path, st, cfg, now: float) -> list[H.Ready]:
     return out
 
 
-def _merges(repo: Path, st, cfg) -> list[H.MergeHang]:
+def _merges(repo: Path, st, cfg, now: float) -> list[H.MergeHang]:
     """A merge mid-flight in an item's worktree: MERGE_HEAD set, or a path left unmerged
-    (research row h). Only the UNAMBIGUOUS signal is detected here -- a real merge caught
-    in the middle -- because "landed but not logged" is what `_landed_anyway` sees at merge
-    time and a branch topology probe cannot tell a merged branch from one merely synced to
-    the base."""
+    (research row h). Only the UNAMBIGUOUS, holder-DEAD signal is detected here. A live
+    holder with MERGE_HEAD is resolving a conflict, not interrupted; only a dropped lane
+    (lapsed or released) whose tree is still mid-merge is a merge that was interrupted."""
     out: list[H.MergeHang] = []
     for i, it in st.items.items():
         if it.removed or it.terminal:
             continue
-        holder = it.lease.holder if it.lease else "(none)"
+        if it.lease is not None and it.lease.live(now, cfg.lease.grace_s):
+            continue  # a live holder is resolving it: not interrupted, the merge is in flight
         wt = W.load_path(repo, it.worktree) if it.worktree else None
         if wt is not None and wt.exists() and W.merging(wt) is True:
-            out.append(H.MergeHang(i, holder, str(wt), merging=True))
+            out.append(H.MergeHang(i, it.lease.holder if it.lease else "(none)", str(wt), merging=True))
     return out
 
 
@@ -419,7 +419,7 @@ def inspect(
         limits(cfg),
         _runs(repo, st),
         _readies(repo, st, cfg, now),
-        _merges(repo, st, cfg),
+        _merges(repo, st, cfg, now),
     )
     found += _loop_runaways(events, st, cfg)
     return list({f.key: f for f in found}.values())

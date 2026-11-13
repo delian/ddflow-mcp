@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .. import fsio
+
 #: The kernel rewrites this once per boot; every pid recorded before it is dead after it.
 BOOT_ID_PROC = "/proc/sys/kernel/random/boot_id"
 
@@ -62,14 +64,14 @@ def observe_boot(repo: Path | str) -> dict[str, object]:
         # (unknown is not no).
         try:
             m.parent.mkdir(parents=True, exist_ok=True)
-            m.write_text(cur + "\n")
+            fsio.atomic_write(m, cur + "\n")
         except OSError:
             pass
         return {"boot_id": cur, "previous": "", "changed": False}
     if cur != prev:
         try:
             m.parent.mkdir(parents=True, exist_ok=True)
-            m.write_text(cur + "\n")
+            fsio.atomic_write(m, cur + "\n")
         except OSError:
             return {"boot_id": cur, "previous": prev, "changed": False}
     return {"boot_id": cur, "previous": prev, "changed": cur != prev}

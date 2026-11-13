@@ -65,6 +65,11 @@ class TestReadyToLand:
         found = H.inspect([], [], [], [], 0.0, _limits(), [], ready=[r])
         assert [f.kind for f in found if f.kind == "ready_to_land"] == []
 
+    def test_zero_commits_ahead_is_not_ready_to_land(self):
+        """Nothing ahead of the base is nothing to land: no READY_TO_LAND for 0 commits."""
+        found = H.inspect([], [], [], [], 0.0, _limits(), [], ready=[H.Ready("T1", "a", 0, ())])
+        assert [f.kind for f in found if f.kind == "ready_to_land"] == []
+
 
 class TestMergeInterrupted:
     def test_mid_flight_merge(self):
@@ -82,6 +87,15 @@ class TestMergeInterrupted:
         (f,) = [f for f in found if f.kind == "merge_interrupted"]
         assert f.evidence["landed_unlogged"] is True
         assert f.evidence["head"] == "abc123"
+
+    def test_merging_takes_precedence_over_landed_unlogged(self):
+        """A mid-flight merge beats a landed-unlogged tag: never advise 'record merge'
+        while MERGE_HEAD is still set."""
+        m = H.MergeHang("T1", "a", tree="/wt", merging=True, landed_unlogged=True, head="x", base="y")
+        found = H.inspect([], [], [], [], 0.0, _limits(), [], merges=[m])
+        (f,) = [f for f in found if f.kind == "merge_interrupted"]
+        assert f.evidence["merging"] is True
+        assert "re-merge" not in f.fix.lower() or "abort" in f.fix
 
 
 class TestBootId:

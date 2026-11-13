@@ -318,6 +318,8 @@ def _readies(ready: list[Ready]) -> list[Finding]:
     """Items that finished their gates but never merged: propose landing them, land nothing."""
     out: list[Finding] = []
     for r in ready:
+        if r.commits_ahead <= 0:
+            continue  # nothing ahead of the base: nothing to land, no recovery owed
         if any(g != "merge" for g in r.owed):
             continue  # owes work beyond merge: not ready to land
         owed = ", ".join(r.owed) if r.owed else "nothing"
@@ -343,18 +345,20 @@ def _merge_hangs(merges: list[MergeHang]) -> list[Finding]:
     """A merge mid-flight, or one that landed without being logged (research row h)."""
     out: list[Finding] = []
     for m in merges:
-        if m.landed_unlogged:
+        if m.merging:
+            detail = f"a merge is mid-flight in {m.tree or 'its tree'}"
+            fix = (
+                "its owner concludes or aborts it; only a dead integrator's entries are "
+                "requeued (SAFE_AUTO) — never `merge --abort` without the owner"
+            )
+        elif m.landed_unlogged:
             detail = (
                 f"branch head {m.head[:8] or '?'} is in {m.base[:8] or 'its base'} but no "
                 "merge/complete was logged"
             )
             fix = "record merge and complete (idempotent: verify `git merge-base --is-ancestor` first)"
         else:
-            detail = f"a merge is mid-flight in {m.tree or 'its tree'}"
-            fix = (
-                "its owner concludes or aborts it; only a dead integrator's entries are "
-                "requeued (SAFE_AUTO) — never `merge --abort` without the owner"
-            )
+            continue
         out.append(
             Finding(
                 MERGE_INTERRUPTED,
