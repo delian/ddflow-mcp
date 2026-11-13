@@ -155,6 +155,8 @@ def _generic(cfg: Config, row: dict[str, Any], it: Any = None) -> bool:
     not coverable by the window, so the option is hidden there (Bdeb98fa2d1)."""
     if row["verb"] not in cfg.approvals.standing_verbs or row["min_level"] > LEVEL:
         return False
+    if row["verb"] == PO.PINS_VERB:  # the window choice switches on the generic rules: not here
+        return False
     if it is not None:
         if PO.person_only_target(it, row["verb"], str(_canon_of(row).get("target", ""))):
             return False

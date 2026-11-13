@@ -76,7 +76,7 @@ approval for you): "let agents regenerate the generated pin files without asking
 `ddflow config --local --set approvals.standing_verbs '["complete.force","claim.force","gate.skip.failed_review","approve.partial","pins.regenerate"]'`
 (over MCP: `ddflow_configure` with the same key and value); change the list with
 `approvals.policy_pin_recipes`. Each use is `policy:pins_regenerate` in `ddflow approvals log` and
-`doctor`. A use opens or extends the standing window, like any in-scope fire.
+`doctor`. The rule has a standing window of its own (`standing_window_s`, opened by its first use and extended by each later one): its uses never open or extend the window of `complete.force` and the other rules, and the window choice in a chat answer is not offered for it.
 
 ## Limits, stated plainly
 

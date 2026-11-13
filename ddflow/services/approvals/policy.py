@@ -195,7 +195,7 @@ RULES: dict[str, Rule] = {
 
 
 #: How a standing rule's answer is recorded: `policy:<id>`.
-def window_start(state, cfg: Config) -> float:
+def window_start(state, cfg: Config, *, pins: bool = False) -> float:
     """The start of the standing window: 0.0 before any IN-SCOPE standing rule has fired, else
     the epoch of the LATEST in-scope standing auto-approval's ``answered_at`` -- the most
     recent fire. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
@@ -205,13 +205,16 @@ def window_start(state, cfg: Config) -> float:
     (the first-fire anchor would leave it permanently closed once `standing_window_s` passed and
     no fire followed). The fold KEEPS every ask row for the life of the log (`use_ttl_s` bounds
     spending, not retention), so the anchor persists past an answer TTL, and
-    `approvals log`/`doctor` show what fired within it."""
+    `approvals log`/`doctor` show what fired within it. The `pins.regenerate` rule has a window
+    of its OWN (``pins``): its fires anchor only it and the generic window ignores them, so an
+    agent's regenerations can never keep the window of `complete.force` and the like open."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
         for r in asks_of(state).values()
         if r["policy"]
         and r["answered_at"]
         and r["verb"] in cfg.approvals.standing_verbs
+        and (r["verb"] == PINS_VERB) == pins
         and r["answered_by"] != f"policy:{RETRY_RULE_ID}"  # the retry rule never opens the window
     ]
     return max(starts, default=0.0)
@@ -226,7 +229,7 @@ def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
     `[approvals].standing_window_s` seconds ago."""
     if canon.verb not in cfg.approvals.standing_verbs:
         return False
-    start = window_start(state, cfg)
+    start = window_start(state, cfg, pins=canon.verb == PINS_VERB)
     if start <= 0.0:
         return True
     return now < start + cfg.approvals.standing_window_s
@@ -358,6 +361,8 @@ def apply(
     now = clock.now_utc().timestamp() if now is None else now
     if stamp := _rule_stamp(log, cfg, state, canon, it, it.id if pins else "", reason, now):
         return stamp
+    if pins:  # only its own rule answers a regeneration: never the retry threshold
+        return None
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
         if retry_armed(cfg, canon) and not person_only_target(it, canon.verb, canon.target):

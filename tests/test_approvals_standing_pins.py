@@ -275,3 +275,30 @@ def test_a_recipe_the_tree_changed_is_a_persons(proj, monkeypatch):
     path.write_text(RECIPES.replace('regen = ["{python}", "-c", "pass"]', 'regen = ["true"]', 1))
     got = _door(proj, monkeypatch)
     assert got.exit == 3, got
+
+
+def test_a_pins_use_never_opens_or_extends_the_window_of_the_other_rules(proj):
+    """The window is per scope: a regeneration anchors only the pins window, so it cannot keep
+    `complete.force` and the other generic rules answering (a widening the reviewers named)."""
+    cfg = _cfg(proj)
+    assert PO.window_start(_state(proj), cfg) == 0.0
+    assert _gate(proj, cfg).ok
+    assert PO.window_start(_state(proj), cfg) == 0.0  # the generic window did not open
+    assert PO.window_start(_state(proj), cfg, pins=True) > 0.0
+
+
+def test_the_retry_threshold_never_answers_a_regeneration(proj):
+    cfg = _cfg(proj, on=False, auto_approve_after_retries=1)
+    first = _gate(proj, cfg)  # filed and left pending: the refusal count now meets the threshold
+    again = _gate(proj, cfg)
+    assert not first.ok and not again.ok
+    assert not asks_of(_state(proj))[again.ask_id]["policy"]
+
+
+def test_the_window_choice_is_not_offered_on_a_pins_ask(proj):
+    from ddflow.services.approvals import harness as H
+
+    cfg = _cfg(proj)
+    assert VERB in cfg.approvals.standing_verbs  # in scope, and still no switch-on-four choice
+    assert not H._generic(cfg, {"verb": VERB, "min_level": 1})
+    assert H._generic(cfg, {"verb": "complete.force", "min_level": 1})
