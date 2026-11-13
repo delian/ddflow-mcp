@@ -21,13 +21,16 @@ from typing import Any
 
 from ...config import Config
 from ...core import clock
+from ...core.admission import is_shared
 from ...core.handlers.asks import EXPIRED, PENDING, asks_of
 from ...core.records.gates import COVERAGE_GAP_OUTCOMES, GateOutcome
 from .. import gate_accept as GA
+from .. import pins as PN
 from ..ask import engine as E
 from ..gates.defs import required_gates
 from ..gates.failed_gate import skipped_after_failure
 from . import request as R
+from . import sites
 from .canon import Canon
 
 #: The retry-threshold standing rule: recorded as `policy:auto-after-retries`. Not a `RULES`
@@ -115,6 +118,43 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     )
 
 
+#: The verb of the pins rule. Its canon names the RECIPE in `item` (`--only <recipe>`), not a work
+#: item, so the rule resolves the work item itself (`_acting_item`) and `when` reads the recipe.
+PINS_VERB = "pins.regenerate"
+PINS_RULE_ID = "pins_regenerate"
+
+
+def _generated_recipe(it, recipe: str, cfg: Config) -> bool:
+    """`pins_regenerate`: ``recipe`` is on the operator's allowlist
+    (`[approvals].policy_pin_recipes`), is defined in the TRUSTED checkout's recipes file
+    (`cfg.root`, the primary), and every file it owns lies inside `[lease].shared_globs`: a recipe
+    that rewrites a file the project does not call generated is a person's call."""
+    if not recipe or recipe not in cfg.approvals.policy_pin_recipes or cfg.root is None:
+        return False
+    try:
+        found = {r.name: r for r in PN.load_recipes(cfg.root, cfg)}
+    except ValueError:  # recipes that do not parse: nothing is trusted
+        return False
+    r = found.get(recipe)
+    shared = list(cfg.lease.shared_globs)
+    return r is not None and bool(r.files) and all(is_shared(f, shared) for f in r.files)
+
+
+def _acting_item(state, canon: Canon, cfg: Config):
+    """The ONE work item the acting agent holds a live lease on (None for none or several):
+    the item whose use of a pins rule is counted. A rule answers an agent that is working an item,
+    never an identity that merely names one."""
+    now = clock.now_utc().timestamp()
+    held = [
+        i
+        for i in state.items.values()
+        if i.lease is not None
+        and i.lease.holder == canon.agent
+        and i.lease.live(now, cfg.lease.grace_s)
+    ]
+    return held[0] if len(held) == 1 else None
+
+
 RULES: dict[str, Rule] = {
     r.id: r
     for r in (
@@ -142,6 +182,13 @@ RULES: dict[str, Rule] = {
             "claim.force",
             "claim an item held by a vanished/unavailable holder, inside the standing window",
             _claim_unavailable,
+        ),
+        Rule(
+            PINS_RULE_ID,
+            PINS_VERB,
+            "regenerate one generated pin recipe on the operator's allowlist, once per recipe "
+            "and work item, inside the standing window",
+            _generated_recipe,
         ),
     )
 }
@@ -185,12 +232,22 @@ def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
     return now < start + cfg.approvals.standing_window_s
 
 
-def used(state, rule_id: str, subject: str) -> int:
-    """How many times ``rule_id`` already approved this subject (item and target)."""
+def _work_item_line(item_id: str) -> str:
+    return f"\n  work item: {item_id}"
+
+
+def used(state, rule_id: str, subject: str, work_item: str = "") -> int:
+    """How many times ``rule_id`` already approved this subject (item and target); with
+    ``work_item`` only the uses recorded for that work item (the pins rule, whose subject is the
+    recipe alone)."""
+    mark = _work_item_line(work_item) if work_item else ""
     return sum(
         1
         for r in asks_of(state).values()
-        if r["policy"] and r["answered_by"] == f"policy:{rule_id}" and r["subject"] == subject
+        if r["policy"]
+        and r["answered_by"] == f"policy:{rule_id}"
+        and r["subject"] == subject
+        and (not mark or r["text"].endswith(mark + f"\n  approved by standing rule: {rule_id}"))
     )
 
 
@@ -222,7 +279,14 @@ def retry_armed(cfg: Config, canon: Canon) -> bool:
 
 
 def _approved(
-    log, cfg: Config, canon: Canon, reason: str, rule_id: str, *, notify: int = 0
+    log,
+    cfg: Config,
+    canon: Canon,
+    reason: str,
+    rule_id: str,
+    *,
+    notify: int = 0,
+    work_item: str = "",
 ) -> dict[str, Any]:
     """Record a standing-rule answer of ``canon`` (reused by the window rules and the retry rule):
     the request, its `policy:<id>` answer and its single spend, with the stamp the effect event
@@ -233,6 +297,7 @@ def _approved(
         subject=canon.subject(),
         digest=canon.digest(),
         text=R.render(canon, reason, cfg.approvals.reason_chars)
+        + (_work_item_line(work_item) if work_item else "")
         + f"\n  approved by standing rule: {rule_id}",
         command=R.command_of(canon, cfg),
         rule_id=rule_id,
@@ -264,23 +329,26 @@ def apply(
     log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
 ) -> dict[str, Any] | None:
     """The stamp of an enabled rule that approves ``canon`` now, or None (ask a person)."""
-    it = state.items.get(canon.item)
+    pins = canon.verb == PINS_VERB  # its canon names a recipe, not an item (see `PINS_VERB`)
+    it = _acting_item(state, canon, cfg) if pins else state.items.get(canon.item)
     if it is None:
         return None
+    work = it.id if pins else ""
     now = clock.now_utc().timestamp() if now is None else now
     for rule_id in cfg.approvals.policy:
         rule = RULES.get(rule_id)
         if rule is None or rule.verb != canon.verb:
             continue
-        if canon.site.min_level > 1:  # a policy answer is a standing decision, never above L1
+        # a policy answer is a standing decision: never above L1, never a tier-3 act
+        if canon.site.min_level > 1 or canon.site.tier == sites.T3:
             continue
         if not _window_open(canon, state, cfg, now):
             continue
-        if used(state, rule_id, canon.subject()) >= cfg.approvals.policy_max_uses:
+        if used(state, rule_id, canon.subject(), work) >= cfg.approvals.policy_max_uses:
             continue
-        if not rule.when(it, canon.target, cfg):
+        if not rule.when(it, canon.item if pins else canon.target, cfg):
             continue
-        return _approved(log, cfg, canon, reason, rule_id)
+        return _approved(log, cfg, canon, reason, rule_id, work_item=work)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
         if retry_armed(cfg, canon) and not person_only_target(it, canon.verb, canon.target):
