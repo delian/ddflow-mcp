@@ -108,10 +108,15 @@ def test_a_mismatch_still_retargets_the_lease_and_rereads_under_the_lock(repo, m
 
 
 def test_a_resources_only_difference_is_a_mismatch_too():
-    lease = SimpleNamespace(holder="alpha", globs=["i/*"], resources=[])
+    lease = SimpleNamespace(
+        holder="alpha", globs=["i/*"], resources=[], live=lambda now, grace=0: now < 100
+    )
     item = SimpleNamespace(lease=lease, globs=["i/*"], resources=["gpu:1"])
     st = SimpleNamespace(items={"T1": item})
-    assert HB._matches(st, "T1", "alpha", "globs")
-    assert not HB._matches(st, "T1", "alpha", "resources")
-    assert not HB._matches(st, "T1", "beta", "globs")  # another holder's lease is not matched
-    assert not HB._matches(None, "T1", "alpha", "globs")  # no loaded state: look under the lock
+    assert HB._matches(st, "T1", "alpha", "globs", 1.0, 0)
+    assert not HB._matches(st, "T1", "alpha", "resources", 1.0, 0)
+    assert not HB._matches(st, "T1", "beta", "globs", 1.0, 0)  # another holder's lease
+    assert not HB._matches(
+        None, "T1", "alpha", "globs", 1.0, 0
+    )  # nothing loaded: look under the lock
+    assert not HB._matches(st, "T1", "alpha", "globs", 200.0, 0)  # a lapsed lease is looked at

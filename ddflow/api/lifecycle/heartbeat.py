@@ -260,14 +260,14 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str, loaded=None) -
     of ``holder`` carries what the item names) is not looked at again: the lock is taken, and
     the log re-read under it, only for a field that differs -- a no-op heartbeat holds the
     append lock for nothing (TX-heartbeat-catchup-lockfree). A state that went stale since
-    is caught up by the next heartbeat: `update --globs` retargets a LIVE lease itself, so only
-    a lease that lapsed can differ from its item, and only an edit inside the few milliseconds
-    between the load and the renewal is missed here.
+    is caught up by the next heartbeat. Only a lease LIVE in ``loaded`` is skipped, and
+    `update --globs` retargets a live lease itself; a lapsed one (the only kind that can differ
+    from its item) always takes the lock and the re-read.
     """
 
     why: list[str] = []
     for field in ("globs", "resources"):
-        if _matches(loaded, item, holder, field):
+        if _matches(loaded, item, holder, field, now, cfg.lease.grace_s):
             continue
         with log.transaction():
             it = localize(fold(log.read_all(), strict=False), log, now).items.get(item)
@@ -288,11 +288,15 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str, loaded=None) -
     return "; ".join(why)
 
 
-def _matches(st, item: str, holder: str, field: str) -> bool:
-    """True when ``st`` shows ``holder``'s lease already carrying the item's own ``field``."""
+def _matches(st, item: str, holder: str, field: str, now: float, grace_s: float) -> bool:
+    """True when ``st`` shows ``holder``'s LIVE lease already carrying the item's own ``field``.
+
+    A lease that was lapsed in ``st`` is never "matching": `update --globs` leaves a lapsed
+    lease alone, so an edit may have reached the item only, and may have landed after the load
+    -- it takes the lock and the re-read, as before."""
     it = st.items.get(item) if st is not None else None
     lease = it.lease if it else None
-    if lease is None or lease.holder != holder:
+    if lease is None or lease.holder != holder or not lease.live(now, grace_s):
         return False
     return sorted(getattr(lease, field)) == sorted(getattr(it, field))
 
