@@ -643,7 +643,9 @@ def _run_stages(
         if selected:
             _say_what_ran(scope, unran)
         return p, "", spent
-    return _run_test_stages(cfg, tree, scope, budget, used, tick, p, spent, unran, holding_suite)
+    return _run_test_stages(
+        cfg, tree, scope, budget, used, tick, (p, spent), unran, holding_suite, env_extra
+    )
 
 
 def _run_test_stages(
@@ -653,14 +655,15 @@ def _run_test_stages(
     budget: int,
     used,
     tick,
-    p,
-    spent,
+    hooks,
     unran: set[str],
     holding_suite,
+    env_extra=None,
 ):
     """Run the selected-then-always test stages after the hooks passed, and fold the verdict
     into ``scope``. Extracted from `_run_stages` so the stage fan-out stays under the
-    complexity ratchet."""
+    complexity ratchet. ``hooks`` is the hook stage's ``(run, elapsed seconds)``."""
+    p, spent = hooks
     on_tick, tick_s = tick or (None, 0)
     before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
@@ -672,7 +675,7 @@ def _run_test_stages(
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
             cwd=tree,
-            env=child_env(cfg, ci=True),
+            env={**child_env(cfg, ci=True), **(env_extra or {})},
             timeout_s=max(min(budget, 60), budget - int(spent)),  # what is left, 60 s at least
             check_installed=True,  # a missing runner is unavailable, not a failed test
             on_tick=on_tick,

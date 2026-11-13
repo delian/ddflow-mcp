@@ -58,15 +58,13 @@ class Session:
     """The environment a run needs (empty without a plan) and where it will find the outcome."""
 
     env: dict[str, str] = field(default_factory=dict)
-    ids: tuple[str, ...] = ()
     out: Path | None = None
 
     def outcome(self) -> dict[str, Any]:
-        """``ran_failed_first`` and, when a test failed, ``first_failure_at_s`` (see
-        `read_outcome`); {} when there was no plan."""
+        """What the plugin noted (see `read_outcome`); {} when there was no plan."""
         if not self.env or self.out is None:
             return {}
-        return read_outcome(self.out, list(self.ids))
+        return read_outcome(self.out)
 
 
 @contextmanager
@@ -80,7 +78,7 @@ def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator
     base = dict(ENV.snapshot() if parent_env is None else parent_env)
     with fsio.scratch_dir("ddflow-failed-first-", ignore_cleanup_errors=True) as tmp:
         root = Path(tmp)
-        fsio.atomic_write(root / f"{PLUGIN}.py", PLUGIN_SOURCE.read_text("utf-8"))
+        fsio.atomic_write(root / f"{PLUGIN}.py", PLUGIN_SOURCE.read_text(encoding="utf-8"))
         ids_file = root / "ids.json"
         fsio.atomic_write(ids_file, json.dumps({"ids": list(plan.ids), "files": list(plan.files)}))
         out = root / "out.jsonl"
@@ -91,32 +89,39 @@ def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator
             "PYTHONPATH": f"{root}{os.pathsep}{old_path}" if old_path else str(root),
             "PYTEST_ADDOPTS": f"{base.get('PYTEST_ADDOPTS', '')} -p {PLUGIN}".strip(),
         }
-        yield Session(env=env, ids=plan.ids, out=out)
+        yield Session(env=env, out=out)
 
 
-def read_outcome(out: Path, ids: list[str]) -> dict[str, Any]:
-    """What the plugin noted: ``ran_failed_first`` is the ids that were ordered first;
-    ``first_failure_at_s`` is the seconds from the start of the run's first pytest session
-    (collection included) to its first failed test, ``first_failure_id`` which test. A record
-    with no failure, or an unreadable one, says nothing of the time."""
-    got: dict[str, Any] = {"ran_failed_first": list(ids)}
+def read_outcome(out: Path) -> dict[str, Any]:
+    """What the plugin noted. ``ran_failed_first`` is the ids it REALLY ordered first (those the
+    collection held), never the plan: absent when no pytest session ordered anything, so a run
+    the plugin never reached cannot claim it. ``first_failure_at_s`` is the seconds from the start
+    of the run's first pytest session (collection included) to the earliest failed test after
+    it, ``first_failure_id`` which test; absent without a failure. By timestamp, not line order."""
+    got: dict[str, Any] = {}
     starts: list[float] = []
     fails: list[tuple[float, str]] = []
+    ordered: list[str] = []
     try:
-        lines = Path(out).read_text("utf-8").splitlines()
+        lines = Path(out).read_text(encoding="utf-8").splitlines()
     except OSError:
         return got
     for line in lines:
         try:
             row = json.loads(line)
-            ev, at = row["ev"], float(row["at"])
+            ev = row["ev"]
+            if ev == "ordered":
+                ordered += [str(i) for i in row["ids"]]
+            else:
+                at = float(row["at"])
+                if ev == "start":
+                    starts.append(at)
+                elif ev == "fail":
+                    fails.append((at, str(row.get("id", ""))))
         except (ValueError, KeyError, TypeError):
             continue
-        if ev == "start":
-            starts.append(at)
-        elif ev == "fail":
-            fails.append((at, str(row.get("id", ""))))
-    # By timestamp, not by line order: the earliest start, and the earliest failure after it.
+    if ordered:
+        got["ran_failed_first"] = list(dict.fromkeys(ordered))
     after = sorted(f for f in fails if starts and f[0] >= min(starts))
     if after:
         got["first_failure_at_s"] = round(after[0][0] - min(starts), 3)

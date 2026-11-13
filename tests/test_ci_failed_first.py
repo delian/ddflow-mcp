@@ -86,7 +86,7 @@ def test_the_rerun_with_the_ids_runs_the_failing_test_first(tmp_path):
         found = sess.outcome()
     assert ran[0] == "test_many.py::test_37"
     assert sorted(ran) == sorted(f"test_many.py::test_{i:02d}" for i in range(1, 41))
-    assert found["ran_failed_first"] == ["test_many.py::test_37"]
+    assert found["ran_failed_first"] == ["test_many.py::test_37"]  # noted by the plugin itself
     # the failure is reported before the second test could have finished: far below the 3.7 s
     # the default order needs, and below the time of test 1 plus 2 s
     assert found["first_failure_at_s"] < SLOW + 2.0
@@ -204,7 +204,8 @@ def test_evidence_is_written_as_json_lines_the_run_can_read(tmp_path):
         + json.dumps({"ev": "fail", "at": 11.0, "id": "t.py::y"})
         + "\n"
     )
-    got = FF.read_outcome(out, ids=["t.py::x"])
+    out.write_text(out.read_text() + json.dumps({"ev": "ordered", "ids": ["t.py::x"]}) + "\n")
+    got = FF.read_outcome(out)
     assert got == {
         "first_failure_at_s": 0.5,
         "first_failure_id": "t.py::x",
@@ -216,7 +217,8 @@ def test_evidence_is_written_as_json_lines_the_run_can_read(tmp_path):
 def test_an_unreadable_or_failure_free_record_says_nothing_of_the_time(tmp_path, text):
     out = tmp_path / "o.jsonl"
     out.write_text(text)
-    assert "first_failure_at_s" not in FF.read_outcome(out, ids=["a"])
+    got = FF.read_outcome(out)
+    assert "first_failure_at_s" not in got and "ran_failed_first" not in got
 
 
 def test_the_failed_first_action_lists_what_the_next_run_would_put_first(repo, monkeypatch):
@@ -242,24 +244,40 @@ def test_a_rerun_of_an_item_is_handed_the_ids_its_last_ci_run_failed(repo, monke
     from ddflow.api import cirun as AR
 
     _item_with_ci(repo, monkeypatch, agent="holder-ff2")
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "test_x.py").write_text("def test_a(): pass\ndef test_b(): pass\n")
     cfg = repo / ".ddflow" / "config.toml"
     pipeline = '[gates]\ntask_pipeline = ["implement", "ci", "merge"]\n'
-    cfg.write_text(
-        f'[ci]\ncommand = "echo FAILED t.py::test_a - boom; echo FAILED t.py::test_b - x; false"\n{pipeline}'
-    )
+    fail = "echo FAILED test_x.py::test_b - boom; false"
+    cfg.write_text(f"[ci]\ncommand = {_toml(fail)}\n{pipeline}")
     first = AR.run(repo, ref="T1", agent="holder-ff2")
     assert first.exit == 1, first.data
-    assert "ran_failed_first" not in (
-        _ci_gate(repo)["evidence"].get("ci_scope") or {}
-    )  # nothing before
+    assert "ran_failed_first" not in (_ci_gate(repo)["evidence"].get("ci_scope") or {})
+    run = f"cd {shlex.quote(str(suite))} && {shlex.quote(sys.executable)} -m pytest -p no:cacheprovider -q"
+    cfg.write_text(f"[ci]\ncommand = {_toml(run)}\n{pipeline}")
+    second = AR.run(repo, ref="T1", agent="holder-ff2")
+    assert second.exit == 0, second.data
+    scope = _ci_gate(repo)["evidence"]["ci_scope"]
+    assert scope["ran_failed_first"] == ["test_x.py::test_b"]  # what the plugin really ordered
+
+
+def test_a_run_the_plugin_never_reached_claims_nothing(repo, monkeypatch, tmp_path):
+    from test_ci_gate import _ci_gate, _item_with_ci
+
+    from ddflow.api import cirun as AR
+
+    _item_with_ci(repo, monkeypatch, agent="holder-ff5")
+    cfg = repo / ".ddflow" / "config.toml"
+    pipeline = '[gates]\ntask_pipeline = ["implement", "ci", "merge"]\n'
+    cfg.write_text(f"[ci]\ncommand = {_toml('echo FAILED t.py::test_a - boom; false')}\n{pipeline}")
+    AR.run(repo, ref="T1", agent="holder-ff5")
     seen = tmp_path / "seen.json"
     cp = f'cp "${FF.IDS_ENV}" {shlex.quote(str(seen))}'
     cfg.write_text(f"[ci]\ncommand = {_toml(cp)}\n{pipeline}")
-    second = AR.run(repo, ref="T1", agent="holder-ff2")
-    assert second.exit == 0, second.data
-    assert json.loads(seen.read_text())["ids"] == ["t.py::test_a", "t.py::test_b"]
-    scope = _ci_gate(repo)["evidence"]["ci_scope"]
-    assert scope["ran_failed_first"] == ["t.py::test_a", "t.py::test_b"]
+    assert AR.run(repo, ref="T1", agent="holder-ff5").exit == 0
+    assert json.loads(seen.read_text())["ids"] == ["t.py::test_a"]  # it was handed the ids
+    assert "ran_failed_first" not in (_ci_gate(repo)["evidence"].get("ci_scope") or {})
 
 
 def test_the_knob_turns_the_ordering_off(repo, monkeypatch, tmp_path):
@@ -289,7 +307,7 @@ def test_the_outcome_is_read_by_timestamp_not_by_line_order(tmp_path):
         {"ev": "start", "at": 10.0},
     ]
     out.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    got = FF.read_outcome(out, ids=[])
+    got = FF.read_outcome(out)
     assert got["first_failure_at_s"] == 0.5 and got["first_failure_id"] == "t.py::early"
 
 
@@ -309,7 +327,7 @@ def test_a_second_session_in_one_interpreter_notes_its_own_failure(tmp_path):
             timeout=60,
         )
         rows = [json.loads(x) for x in Path(sess.env[FF.OUT_ENV]).read_text().splitlines()]
-    assert [r["ev"] for r in rows] == ["start", "fail", "start", "fail"]
+    assert [r["ev"] for r in rows if r["ev"] != "ordered"] == ["start", "fail", "start", "fail"]
 
 
 def test_the_failed_first_action_refuses_the_run_only_parameters(repo, monkeypatch):
@@ -321,3 +339,32 @@ def test_the_failed_first_action_refuses_the_run_only_parameters(repo, monkeypat
     for extra in ({"base": "main"}, {"command": "true"}, {"full": True}, {"timeout_s": 5}):
         out = AR.ci_tool(repo, action="failed-first", ref="T1", agent="holder-ff4", **extra)
         assert out.exit == 3, extra
+
+
+def test_the_selected_test_stages_get_the_failed_first_environment(tmp_path):
+    """The default item rerun runs its pytest in the selected and always STAGES, not in the hook
+    stage: the environment has to reach them, or the ordering silently does nothing."""
+    from ddflow.config import Config
+    from ddflow.services.ci import runner as R
+
+    seen = tmp_path / "seen.txt"
+    scope = SimpleNamespace(
+        command=f"sh -c 'echo \"$MARK\" > {shlex.quote(str(seen))}'",
+        always_command="",
+        ok={},
+        always_s=0.0,
+        why="",
+    )
+    hooks = SimpleNamespace(output="", elapsed_s=0.0, ran=True, code=0)
+    R._run_test_stages(
+        Config.load(tmp_path), tmp_path, scope, 60, {}, None, (hooks, 0.0), set(), False,
+        env_extra={"MARK": "reached"},
+    )  # fmt: skip
+    assert seen.read_text().strip() == "reached"
+
+
+def test_an_id_the_collection_does_not_hold_is_not_claimed_as_ordered(tmp_path):
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\n")
+    with FF.session(FF.Plan(ids=("test_gone.py::test_x",)), parent_env=_env({})) as sess:
+        _pytest(tmp_path, sess.env)
+        assert sess.outcome().get("ran_failed_first", []) == []

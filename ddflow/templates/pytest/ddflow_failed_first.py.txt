@@ -6,8 +6,8 @@ project's tests use, which need not have ddflow installed, and does nothing unle
 environment names the ids file. It is data to ddflow (``templates/pytest``), not a module of it.
 
 Ordering is applied in ``pytest_collection_modifyitems`` before xdist distributes, the same
-stable partition in every worker. Timestamps are appended to a JSON-lines file by the
-controller only. A missing or unreadable ids file is the ordinary order, never an error."""
+stable partition in every worker. The ids actually put first are noted by any process, the timestamps
+of the session and its first failure by the controller only (appended to a JSON-lines file). A missing or unreadable ids file is the ordinary order, never an error."""
 
 from __future__ import annotations
 
@@ -54,8 +54,13 @@ def pytest_collection_modifyitems(config, items):  # noqa: ARG001 -- pytest's ho
     ids, files = _read_plan()
     if not (ids or files) or not items:
         return
-    order = order_nodeids([it.nodeid for it in items], ids, files)
+    nodeids = [it.nodeid for it in items]
+    order = order_nodeids(nodeids, ids, files)
     items[:] = [items[i] for i in order]
+    # What was REALLY put first: the ids this collection holds. Under xdist only the workers
+    # collect, so any process may note it (the ids are the same in each).
+    held = set(nodeids)
+    _note(ev="ordered", ids=[i for i in ids if i in held])
 
 
 def _note(**fields: Any) -> None:
