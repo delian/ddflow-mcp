@@ -114,9 +114,16 @@ def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
             q = c
             i += 1
             while i < n and line[i] != q:
-                if q == '"' and line[i] == "\\" and i + 1 < n and line[i + 1] in ('$', '`', '"', '\\'):
-                    name.append(line[i + 1])
-                    i += 2
+                if line[i] == "\\" and i + 1 < n:
+                    nxt = line[i + 1]
+                    if q == '"' and nxt in ('$', '`', '"', '\\'):
+                        name.append(nxt)  # a backslash quote-removes these four
+                        i += 2
+                    elif nxt == "\n":
+                        i += 2  # a \newline in a double quote joins the line: both chars go
+                    else:
+                        name.append(line[i])  # an unmatched backslash stays, the next char too
+                        i += 1
                 else:
                     name.append(line[i])
                     i += 1
