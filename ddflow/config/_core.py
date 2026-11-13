@@ -13,7 +13,7 @@ from ..config_sections import SECTION_MODULES  # noqa: F401 -- imports every sec
 from ..config_sections._docs import KNOB_DOCS, RENAMED, SECTION_CLASSES
 from ..config_sections._layers import layer_path, read_toml
 from ..config_sections.export import _export_table_problem, export_table_keys
-from ..config_sections.schedule import SIGNALS, merge_signals
+from ..config_sections.schedule import ORDER_PIN, SIGNALS, merge_pin, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
 from ._decls import (
@@ -355,6 +355,8 @@ class Config(_SectionFields):
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
             value = merge_signals(getattr(target, knob), value)
+        if key == ORDER_PIN and isinstance(value, list):
+            value = merge_pin(list(getattr(target, knob)), value)  # tighten-only
         value = _merge_budget_table(key, getattr(target, knob), value)
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:

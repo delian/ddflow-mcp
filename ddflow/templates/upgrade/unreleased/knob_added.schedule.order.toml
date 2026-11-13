@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "schedule.order"
+new = '["recover_first", "bugs_first", "unphased_first", "priority", "id"]'
+why = "The ordering keys the default optimizer ranks ready work by; the default is the order ddflow always used."
+impact = "additive"

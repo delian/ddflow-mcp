@@ -15,8 +15,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ...config import Config
+from ...config_sections.schedule import DEFAULT_ORDER
 from ..admission import glob_conflict
+from ..clock import epoch
 from ..model import Item, Lease, State
+from ._chain import critical_path
+from ._colocate import wave_of
 from ._readiness import Blocked, plan_blocker
 from ._resources import capacities, interrupted, resource_shortfall
 
@@ -38,6 +42,8 @@ class PlanCtx:
     #: judge the item's own stored globs. The `globs` filter must honour this, or `wait
     #: --item --globs` reports a clash on a glob the caller left out (B-wait-globs-narrowing-ignored).
     globs: list[str] | None = None
+    #: Ids on the critical path, computed on first use by the `critical_path` key.
+    chain: frozenset[str] | None = None
 
 
 #: A readiness filter answers "why can this item not start?" -- a `Blocked` carrying the
@@ -65,22 +71,35 @@ def register_filter(name: str, fn: Filter, *, lease: bool = False) -> None:
         LEASE_FILTERS.add(name)
 
 
-def register_key(name: str, fn: Key, *, before: str = "id") -> None:
+def register_key(name: str, fn: Key, *, before: str = "id", listed: bool = True) -> None:
     """Add (or replace) the ordering key ``name``; a new one goes before ``before`` -- by
-    default ahead of the id tiebreak, which always ends the order."""
+    default ahead of the id tiebreak, which always ends the order. ``listed=False``
+    registers it for `[schedule].order` to select without putting it in the default."""
     KEYS[name] = fn
-    if name not in ORDER:
+    if listed and name not in ORDER:
         ORDER.insert(ORDER.index(before) if before in ORDER else len(ORDER) - 1, name)
 
 
+def effective_order(cfg: Config) -> list[str]:
+    """The key names the plan ranks by: `[schedule].order_pin` first, then `[schedule].order`,
+    `id` last. While `order` is still the shipped default, the module's `ORDER` stands in for
+    it, so a key a plugin registered with `register_key` still takes part."""
+    sched = cfg.schedule
+    base = list(ORDER) if list(sched.order) == list(DEFAULT_ORDER) else list(sched.order)
+    names = [*sched.order_pin, *(n for n in base if n not in sched.order_pin and n != "id")]
+    return [*names, "id"]
+
+
 def order_key(ctx: PlanCtx) -> Callable[[Item], tuple]:
-    """The sort key the plan walks candidates by: the registered keys, in order."""
-    return lambda it: tuple(KEYS[n](ctx, it) for n in ORDER)
+    """The sort key the plan walks candidates by: the effective keys, in order."""
+    names = effective_order(ctx.cfg)
+    return lambda it: tuple(KEYS[n](ctx, it) for n in names)
 
 
 def order_terms(ctx: PlanCtx) -> Callable[[Item], tuple[tuple[str, object], ...]]:
     """The same keys as `order_key`, itemised as ``(name, value)`` for the optimizer port."""
-    return lambda it: tuple((n, KEYS[n](ctx, it)) for n in ORDER)
+    names = effective_order(ctx.cfg)
+    return lambda it: tuple((n, KEYS[n](ctx, it)) for n in names)
 
 
 def _f_deps(ctx: PlanCtx, it: Item) -> Blocked | None:
@@ -155,6 +174,36 @@ register_key("bugs_first", lambda ctx, it: it.id not in ctx.bugs)
 register_key("unphased_first", lambda ctx, it: not _unphased(ctx, it))
 register_key("priority", lambda ctx, it: it.priority)
 register_key("id", lambda ctx, it: it.id)
+
+
+def _critical(ctx: PlanCtx, it: Item) -> bool:
+    if ctx.chain is None:
+        ctx.chain = frozenset(critical_path(ctx.state, "", ctx.cfg))
+    return it.id not in ctx.chain
+
+
+def _phase_priority(ctx: PlanCtx, it: Item) -> int:
+    for a in ctx.state.ancestors(it.id):
+        if a.kind == "phase":
+            return a.priority
+    return 1 << 30
+
+
+def _wave(ctx: PlanCtx, it: Item) -> int:
+    w = wave_of(list(it.tags))
+    return (1 << 30) if w is None else w
+
+
+def _waited(ctx: PlanCtx, it: Item) -> float:
+    """Older first: the filing time, no clock read; an item with none sorts last."""
+    return epoch(it.created_at) if it.created_at else float("inf")
+
+
+# Selectable through `[schedule].order`, not in the default order.
+register_key("critical_path", _critical, listed=False)
+register_key("waited", _waited, listed=False)
+register_key("phase_priority", _phase_priority, listed=False)
+register_key("wave", _wave, listed=False)
 
 
 def item_blocker(

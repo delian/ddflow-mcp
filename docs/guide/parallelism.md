@@ -309,6 +309,8 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 | `signal_interval_s` | `60` | seconds between two samples (taken by next, brief, claim and heartbeat; no daemon) |
 | `reserved_slots` | `0` | slots of the limit only bug fixes and `reserved_tags` work may take; ordinary work holds at most limit minus this, an idle reserved slot stays free, and one slot of a cap always stays ordinary |
 | `reserved_tags` | `["ddflow-gap"]` | tags that make a task reserved work, beside bug fixes |
+| `order` | `["recover_first", "bugs_first", "unphased_first", "priority", "id"]` | the ordering keys ready work is ranked by, left to right; also selectable: `critical_path`, `waited`, `phase_priority`, `wave`. `id` is always last (appended when omitted, refused elsewhere); an unknown or repeated key is refused naming the known ones. `bugs_first = false` makes the `bugs_first` key neutral. `ddflow config --set schedule.order '["bugs_first","wave","priority","id"]'` (or `ddflow_config` action set); `ddflow config` lists the effective value and its layer. Asking an agent "offer the critical path first" means setting it to `["critical_path","priority","id"]` |
+| `order_pin` | `[]` | keys pinned to the head of the order, ahead of `order`; tighten-only: a layer's keys lead and no layer removes a lower layer's pin, so a company floor can keep `bugs_first` first |
 | `[schedule.signals]` | all enabled; `load_per_core` low 0.15, high 0.75 | `enabled = [...]` switches signals; per signal `low` / `high` / optional `critical` marks, higher worse |
 
 The shipped marks (decisions D-adaptive-flow-accepted and D-unify 8); `high` shrinks the limit,

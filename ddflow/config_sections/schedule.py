@@ -130,6 +130,53 @@ def _signals_problem(v: Any) -> str:
     return ""
 
 
+#: Every ordering key a `[schedule].order` may name, spelled out because `config` imports
+#: nothing; tests/test_schedule_order_knob.py holds it together with `core.schedule.KEYS`.
+ORDER_KEYS: tuple[str, ...] = (
+    "recover_first",
+    "bugs_first",
+    "unphased_first",
+    "priority",
+    "id",
+    "critical_path",
+    "waited",
+    "phase_priority",
+    "wave",
+)
+#: The default order: today's, pinned by tests/test_schedule_order_knob.py.
+DEFAULT_ORDER: tuple[str, ...] = ("recover_first", "bugs_first", "unphased_first", "priority", "id")
+#: The knobs' dotted names.
+ORDER = "schedule.order"
+ORDER_PIN = "schedule.order_pin"
+
+
+def _keys_problem(v: Any, *, last_id: bool) -> str:
+    known = ", ".join(ORDER_KEYS)
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        return f"must be a list of ordering keys drawn from {known}"
+    if bad := [x for x in v if x not in ORDER_KEYS]:
+        return f"unknown ordering key {bad[0]!r}; the keys are {known}"
+    if dup := [x for n, x in enumerate(v) if x in v[:n]]:
+        return f"duplicate ordering key {dup[0]!r}; the keys are {known}"
+    if last_id and "id" in v and v[-1] != "id":
+        return f"`id` is the deterministic tie-break and must come last; the keys are {known}"
+    return ""
+
+
+def _order_problem(v: Any) -> str:
+    return _keys_problem(v, last_id=True)
+
+
+def _pin_problem(v: Any) -> str:
+    return _keys_problem(v, last_id=False)
+
+
+def merge_pin(base: list[str], layer: list[str]) -> list[str]:
+    """`order_pin` across layers, tighten-only: a layer's keys LEAD (a later layer is the
+    more senior) and every key a lower layer pinned stays, so no layer can unpin."""
+    return [*layer, *(k for k in base if k not in layer)]
+
+
 def _optimizer_problem(name: Any) -> str:
     return (
         ""
@@ -236,6 +283,16 @@ class ScheduleConfig:
         "greedy-v1",
         doc="Which optimizer orders the ready set and cuts it to the free slots (default `greedy-v1`: the order keys bugs first, priority, id, and a greedy cut that never offers two overlapping items). An unknown name is refused with the names known. An optimizer only reorders and cuts: hard constraints stay `needs` and `globs`.",
         check=_optimizer_problem,
+    )
+    order: list[str] = knob(
+        factory=lambda: list(DEFAULT_ORDER),
+        doc="The ordering keys the default optimizer ranks ready work by, left to right (default [recover_first, bugs_first, unphased_first, priority, id]: an interrupted item first, then bug fixes, then a task under no phase, then priority ascending, then id). Selectable keys: recover_first, bugs_first, unphased_first, priority, id, and the opt-in critical_path (on the longest dependency chain first), waited (filed longest ago first), phase_priority (the owning phase's priority ascending) and wave (wave:N ascending, unstamped last). `id` is the deterministic tie-break: it is always last (omitted, it is appended; anywhere else, refused). An unknown or repeated key is refused naming the known ones. `bugs_first = false` is the shortcut that makes the `bugs_first` key neutral. Keys `order_pin` names lead whatever is set here. `swarm-v1` ranks critical-path and longest-waiting first, then by these keys.",
+        check=_order_problem,
+    )
+    order_pin: list[str] = knob(
+        factory=list,
+        doc="Ordering keys pinned to the HEAD of the order (default none), in this order, ahead of whatever `order` says: the company floor's way to keep e.g. bugs_first first. Tighten-only across layers: a layer's keys lead and what a lower layer pinned stays; no layer can remove a pin. Same names as `order`.",
+        check=_pin_problem,
     )
     bugs_first: bool = knob(
         True,
