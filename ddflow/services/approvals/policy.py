@@ -125,7 +125,8 @@ PINS_RULE_ID = "pins_regenerate"
 
 
 def _generated_recipe(it, recipe: str, cfg: Config) -> bool:
-    """`pins_regenerate`: ``recipe`` is on the operator's allowlist
+    """`pins_regenerate` (the door, `api.pin_files._recipe_untouched`, owns that the recipe is
+    unedited in the agent's tree): ``recipe`` is on the operator's allowlist
     (`[approvals].policy_pin_recipes`), is defined in the TRUSTED checkout's recipes file
     (`cfg.root`, the primary), and every file it owns lies inside `[lease].shared_globs`: a recipe
     that rewrites a file the project does not call generated is a person's call."""
@@ -235,22 +236,33 @@ def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
     return now < start + cfg.approvals.standing_window_s
 
 
+_WORK_ITEM_PREFIX = "  work item: "
+
+
 def _work_item_line(item_id: str) -> str:
-    return f"\n  work item: {item_id}"
+    return f"\n{_WORK_ITEM_PREFIX}{item_id}"
+
+
+def _work_item_of(text: str) -> str:
+    """The work item an answer's text records ("" when it records none)."""
+    for line in text.splitlines():
+        if line.startswith(_WORK_ITEM_PREFIX):
+            return line[len(_WORK_ITEM_PREFIX) :].strip()
+    return ""
 
 
 def used(state, rule_id: str, subject: str, work_item: str = "") -> int:
     """How many times ``rule_id`` already approved this subject (item and target); with
     ``work_item`` only the uses recorded for that work item (the pins rule, whose subject is the
-    recipe alone)."""
-    mark = _work_item_line(work_item) if work_item else ""
+    recipe alone). Fails CLOSED: a use whose text records no work item counts against every one,
+    so a drifted text can only make the cap tighter, never unbounded."""
     return sum(
         1
         for r in asks_of(state).values()
         if r["policy"]
         and r["answered_by"] == f"policy:{rule_id}"
         and r["subject"] == subject
-        and (not mark or r["text"].endswith(mark + f"\n  approved by standing rule: {rule_id}"))
+        and (not work_item or _work_item_of(r["text"]) in ("", work_item))
     )
 
 

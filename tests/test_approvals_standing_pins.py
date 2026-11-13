@@ -302,3 +302,15 @@ def test_the_window_choice_is_not_offered_on_a_pins_ask(proj):
     assert VERB in cfg.approvals.standing_verbs  # in scope, and still no switch-on-four choice
     assert not H._generic(cfg, {"verb": VERB, "min_level": 1})
     assert H._generic(cfg, {"verb": "complete.force", "min_level": 1})
+
+
+def test_a_use_with_no_recorded_work_item_counts_against_every_item(proj):
+    """The cap fails closed: a drifted answer text can tighten it, never leave it unbounded."""
+    cfg = _cfg(proj)
+    got = _gate(proj, cfg)
+    assert got.ok
+    state = _state(proj)
+    assert PO.used(state, RULE, _canon().subject(), "T1") == 1
+    assert PO.used(state, RULE, _canon().subject(), "T2") == 0
+    asks_of(state)[got.ask_id]["text"] = "reworded, no marker"
+    assert PO.used(state, RULE, _canon().subject(), "T2") == 1
