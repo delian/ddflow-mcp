@@ -15,14 +15,18 @@ Only the items below differ.
 
 ## MCP registration
 
-Written automatically by `adopt` into `.vibe/config.toml` under `[[mcp_servers]]` (the
-`toml.mcp_servers` shape). Vibe reads the project file after the trust step
-(`trusted_folders.toml`), so a lane home pre-trusts the worktree. The entry `adopt` writes
-calls the already-installed `ddflow` module, never a package install:
+`adopt` writes `.vibe/config.toml` automatically. Vibe's `[[mcp_servers]]` array holds a
+stdio entry (`toml.mcp_servers`); `adopt` resolves the launcher for the installed ddflow —
+its own interpreter and package dir, not the system `python3` — so a venv or `uv tool`
+install works without the system interpreter:
 
 ```toml
 [[mcp_servers]]
 name = "ddflow"
-command = "python3"
-args = ["-m", "ddflow", "--repo", ".", "mcp"]
+command = "<ddflow's python>"
+args = ["-m", "ddflow.surfaces.mcp"]
+env = { PYTHONPATH = "<the ddflow package dir>" }
 ```
+
+Vibe reads the project file after the trust step (`trusted_folders.toml`), so a lane home
+pre-trusts the worktree.
