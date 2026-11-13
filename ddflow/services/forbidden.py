@@ -99,7 +99,7 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(['\"]?)([^\s;|&<>()'\"]+)\1?")
+_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*(?:['\"]([^\n'\"]*)['\"]|(\S+))")
 
 
 def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
@@ -122,13 +122,13 @@ def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
     return i == 0 or (line[i - 1] in _COMMENT_BOUNDARY and i - 1 not in escaped)
 
 
-def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
+def _heredoc_openers(line: str, quote: str) -> tuple[list[str], str]:
     """The `<<` heredoc markers on `line` that sit OUTSIDE a quote, and the quote (if any)
     still open at the line's end. A `<<` inside `'...'`/`"..."` is literal text, not a heredoc
     (Bdd23c77383); an escaped ``\\<`` is not a marker, and a `'`/`"` inside a comment is data,
     not a quote opener. ``quote`` is the quote open from earlier lines: a quote may span lines,
     and a `<<` it swallows is still literal."""
-    ms: list[re.Match] = []
+    ms: list[str] = []
     i, n = 0, len(line)
     escaped: set[int] = set()
     while i < n:
@@ -153,7 +153,7 @@ def _heredoc_openers(line: str, quote: str) -> tuple[list[re.Match], str]:
         elif c == "<" and i + 1 < n and line[i + 1] == "<":
             m = _HEREDOC.match(line, i)
             if m is not None:
-                ms.append(m)
+                ms.append(m.group(1) if m.group(1) is not None else m.group(2))
                 i = m.end()
                 continue
             i += 1
@@ -176,7 +176,7 @@ def _strip_heredocs(text: str) -> str:
         i += 1
         ms, quote = _heredoc_openers(line, quote)
         for m in ms:
-            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(2)), None)
+            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m), None)
             if end is not None:
                 i = end + 1
                 break
