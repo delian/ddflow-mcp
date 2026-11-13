@@ -161,7 +161,9 @@ def numeric_knobs() -> dict[str, str]:
         for f in fields(cls):
             if D.KNOB not in f.metadata:
                 continue
-            ts: Any = f.type if isinstance(f.type, str) else getattr(f.type, "__name__", str(f.type))
+            ts: Any = (
+                f.type if isinstance(f.type, str) else getattr(f.type, "__name__", str(f.type))
+            )
             number = _numeric_kind(ts)
             if number:
                 out[f"{section}.{f.name}"] = number
