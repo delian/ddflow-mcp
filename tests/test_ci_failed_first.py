@@ -23,8 +23,8 @@ SLOW = 0.1  # seconds each fixture test takes: 36 tests before the failing one c
 
 
 def _toml(text: str) -> str:
-    """``text`` as a TOML basic string (JSON's escapes are TOML's): shell quoting is not TOML quoting."""
-    return json.dumps(text)
+    """``text`` as a TOML basic string (JSON escapes, astral characters kept raw): shell quoting is not TOML quoting."""
+    return json.dumps(text, ensure_ascii=False)
 
 
 def _suite(root: Path, n: int = 40, failing: int = 37) -> Path:
