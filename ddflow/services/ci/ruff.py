@@ -19,8 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...adapters import fs as FS
-from ...infra import git as G
-from ...infra import proc as P
+from ...adapters import git as G
+from ...adapters import proc as P
 
 #: The file suffixes ruff checks and formats, and so the only ones that can drift.
 _PY = (".py", ".pyi")
