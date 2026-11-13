@@ -70,12 +70,19 @@ def test_a_fresh_lease_on_the_same_item_is_expired_again(repo, monkeypatch):
     assert _expiries(repo) == 2, "the final sweep recorded the new lease's expiry"
 
 
-def test_expire_itself_records_a_lease_once_even_on_a_stale_snapshot(repo):
-    """The guard sits where the append is decided: a second caller that read the state
-    before the first one's event (two concurrent sweeps) still adds nothing."""
+def test_a_sweep_on_a_stale_snapshot_records_nothing_more(repo, monkeypatch):
+    """Two concurrent sweeps: the second folded the log BEFORE the first one's expiry, so
+    its own check sees no `expired_at`. The guard inside `expire` (under the lock, on the
+    state the append is decided on) is what stops the second event."""
     from ddflow.services.leases import lifecycle
 
     log = _expired_empty(repo)
-    assert lifecycle.expire(log, "T1", reason="first") is True
-    assert lifecycle.expire(log, "T1", reason="second") is False
+    stale = recovery._fold(log)
+    assert not stale.items["T1"].lease.expired_at
+    assert lifecycle.expire(log, "T1", reason="the other sweep") is True
     assert _expiries(repo) == 1
+    monkeypatch.setattr(recovery, "_fold", lambda _log: stale)
+    swept = recovery.sweep(log, Config.load(repo), repo, apply=True)
+    assert [(r.item, r.salvageable) for r in swept] == [("T1", False)], "the stale view was used"
+    assert _expiries(repo) == 1, "one expiry per lease even when the snapshot was stale"
+    assert lifecycle.expire(log, "T1", reason="again") is False
