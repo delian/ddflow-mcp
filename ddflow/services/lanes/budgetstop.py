@@ -130,7 +130,6 @@ def enforce(
     params: Params | None = None,
     source: str = "lane-budget",
     record: Record | None = None,
-    max_events: int = 0,
 ) -> Verdict:
     """Sum the lane's ``usage`` events and interrupt it once at ``budget_usd``.
 
@@ -138,10 +137,11 @@ def enforce(
     ``[swarm]`` runtime knobs (``Params.from_config``): ``warn_fraction`` (the soft warn) and
     ``stop_grace_s`` for the graceful stop, and ``enabled`` turns the stop off. ``record``, when
     given, is told about the soft warn (``lane.budget_warned``), the stop (``lane.budget_stopped``
-    with ``spent``, ``cap``, ``source``) or an unenforceable cap (``lane.cap_unenforced``). A lane
-    that reports no ``usage`` capability, or a ``usage`` event whose cost cannot be read, is
-    cap-unenforced, never silently uncapped. ``max_events`` > 0 stops collecting after that many
-    events (tests); 0 is unbounded."""
+    with ``spent``, ``cap``, ``source``) or an unenforceable cap (``lane.cap_unenforced``). The
+    ``cost`` read off each ``usage`` event is the adapter's CANONICAL field, ``part.cost`` as the
+    transport's stream rules map it (``opencode.STREAM_RULES``). A lane that reports no ``usage``
+    capability, or a ``usage`` event whose cost cannot be read, is cap-unenforced, never silently
+    uncapped."""
     p = params or Params()
     warn_fraction = float(p.warn_fraction)
     stop_grace_s = float(p.stop_grace_s)
@@ -161,8 +161,6 @@ def enforce(
         if ev.event != "usage":
             continue
         seen += 1
-        if max_events and seen > max_events:
-            break
         step = _usage_cost(ev)
         if step is None:
             return _unenforced(record, lane, cap, spent, source, "a usage event carried no cost")

@@ -68,13 +68,13 @@ Test a driver with a fake agent replaying recorded stdout and exit codes
 
 Admission (`launch`) is the estimate; the runtime half stops a runaway lane. When
 `[swarm].budget_stop_enabled` is on (default true), the lane supervisor sums a running lane's
-`usage` events (`part.cost`) and interrupts it once at the template's `budget_usd`, with a soft
-warn at `budget_warn_fraction` and a grace of `budget_stop_grace_s`; a lane whose usage cannot be
-read is reported cap-unenforced, never silently uncapped. Logic: `ddflow/services/lanes/budgetstop.py`
+`usage` events (`part.cost`) and interrupts it once at the template's `budget_usd` — the cap a
+prompt such as "stop lane X at 2 USD" sets in the lane template — with a soft warn at
+`budget_warn_fraction` and a grace of `budget_stop_grace_s`; a lane whose usage cannot be read
+is reported cap-unenforced, never silently uncapped. Logic: `ddflow/services/lanes/budgetstop.py`
 (`enforce`), the one reader of a live lane's events beside `swarm/conformance.py`; it calls the
-adapter's `interrupt` capability (or the contract's `stop` where a transport has no `interrupt`).
-Prompt example: "stop lane X at 2 USD". A lane's spend since launch is the same sum the entry here
-reports; nothing is launched or stopped by ddflow itself (D-sched-no-daemon).
+adapter's `interrupt` capability (or the contract's `stop` where a transport has no `interrupt`),
+so the lane is stopped, not launched or watched by ddflow itself (D-sched-no-daemon).
 
 ## Model endpoints (SW-local-endpoint)
 
