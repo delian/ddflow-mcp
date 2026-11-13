@@ -407,3 +407,31 @@ def test_an_id_the_collection_does_not_hold_is_not_claimed_as_ordered(tmp_path):
     with FF.session(FF.Plan(ids=("test_gone.py::test_x",)), parent_env=_env({})) as sess:
         _pytest(tmp_path, sess.env)
         assert sess.outcome().get("ran_failed_first", []) == []
+
+
+def test_a_pytest_a_test_starts_in_the_same_process_stands_down(tmp_path):
+    """`pytest.main` called by a test (an in-process fixture run) shares the outer run's pid."""
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\ndef test_a2(): assert False\n")
+    (tmp_path / "outer.py").write_text(
+        "import pytest\n"
+        "def test_outer():\n"
+        "    assert pytest.main(['-p', 'no:cacheprovider', '-q', 'test_a.py']) == 1\n"
+    )
+    plan = FF.Plan(ids=("test_a.py::test_a2",))
+    with FF.session(plan, parent_env=_env({})) as sess:
+        run = subprocess.run(
+            [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "outer.py"],
+            cwd=tmp_path, env=sess.env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        assert run.returncode == 0, run.stdout + run.stderr
+        rows = [json.loads(x) for x in Path(sess.env[FF.OUT_ENV]).read_text().splitlines()]
+    assert [r["ev"] for r in rows] == ["start"]  # the inner failure is not the outer run's
+
+
+def test_with_plugin_autoload_disabled_nothing_is_ordered_and_nothing_claimed(tmp_path):
+    (tmp_path / "test_a.py").write_text("def test_a1(): pass\ndef test_a2(): pass\n")
+    parent = _env({"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"})
+    with FF.session(FF.Plan(ids=("test_a.py::test_a2",)), parent_env=parent) as sess:
+        ran = _pytest(tmp_path, {**parent, **sess.env})
+        assert sess.outcome().get("ran_failed_first", []) == []
+    assert ran == ["test_a.py::test_a1", "test_a.py::test_a2"]

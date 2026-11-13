@@ -83,7 +83,6 @@ def session(plan: Plan, parent_env: Mapping[str, str] | None = None) -> Iterator
         ids_file = root / "ids.json"
         fsio.atomic_write(ids_file, json.dumps({"ids": list(plan.ids), "files": list(plan.files)}))
         out = root / "out.jsonl"
-        old_path = base.get("PYTHONPATH", "")
         # Loaded as a pytest11 entry point of a dist-info beside the module, not by `-p`: a pytest
         # whose environment lost PYTHONPATH (a test that builds its own) then simply does not
         # find the plugin, where `-p` would stop it with "Error importing plugin".
