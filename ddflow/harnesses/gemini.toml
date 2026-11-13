@@ -16,11 +16,14 @@ claude_md = "no"
 [hooks]
 style = "gemini"
 file = ".gemini/settings.json"
-normalizer = "gemini"
-emitter = "gemini"
+emitter = "json_context"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
+
+[hooks.fields]
+prompt = ["prompt"]
+tool = ["tool_name"]
 
 [hooks.events]
 session_start = "SessionStart"
@@ -56,3 +59,4 @@ date = "2026-10-09"
 sources = ["https://github.com/google-gemini/gemini-cli/tree/main/docs/hooks"]
 record = "R-hx-gemini"
 unverified = ["bash-tool session id env"]
+

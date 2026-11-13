@@ -39,6 +39,7 @@ COMMANDS: tuple[Command, ...] = (
             shell_cwd=shell_cwd,
             agent=agent,
             approval=a.get("approval", "") or "",
+            check=bool(a.get("check")),
         ),
         payload=(
             *L.COMPLETE_BODY[:10],
@@ -82,6 +83,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "check",
+                type="boolean",
+                help="Read-only: print the unmet conditions, approvals needed and what policy would grant; never completes. Exit 0 nothing unmet, 1 unmet, 2 could not run.",
+                cli_help="read-only: print the unmet conditions and what policy would grant; never completes (exit 1 = unmet, 2 = could not run)",
+            ),
+            Param(
                 "changelog",
                 help="Optional 'Added|Changed|Deprecated|Removed|Fixed|Security: text', or skip.",
                 cli_help="'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip / internal to keep it out of the changelog; optional",
@@ -112,6 +119,7 @@ COMMANDS: tuple[Command, ...] = (
             *MUTATION_ORDER,
             "force",
             "approval",
+            "check",
         ),
     ),
     Command(
@@ -129,6 +137,7 @@ COMMANDS: tuple[Command, ...] = (
             reason=a.get("reason", "") or "",
             force=bool(a.get("force")),
             repoint_to=a.get("repoint_to", "") or "",
+            drop_edges=bool(a.get("drop_edges")),
             called_from=called_from,
             shell_cwd=shell_cwd,
             agent=agent,
@@ -159,6 +168,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="Re-point every live item that needs this one to need this id instead (cycles refused), so none is left waiting on an abandoned item.",
                 cli_help="re-point the items that need this one to need ID instead",
                 default="",
+            ),
+            Param(
+                "drop_edges",
+                type="boolean",
+                help="Drop the edge to this item from every live item that needs it, so none is left waiting on an abandoned item (otherwise the abandon is refused, naming this and --repoint-to).",
+                cli_help="drop the items that need this one from its needs",
             ),
         ),
     ),

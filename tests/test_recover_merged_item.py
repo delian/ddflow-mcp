@@ -140,6 +140,7 @@ def test_an_unmerged_item_is_still_only_advised_to_release(repo):
     out = LC.claim(repo, "T2", agent="worker")
     _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
     (rec,) = _recs(repo, "T2")
+    assert rec.salvageable is False, rec.advice
     assert "complete" not in rec.advice and "ddflow release T2" in rec.advice, rec.advice
 
 
@@ -168,3 +169,84 @@ def test_the_advice_counts_the_blockers_it_does_not_list(repo, monkeypatch):
     monkeypatch.setattr(L, "_SHOWN_BLOCKERS", 1)
     (rec,) = _recs(repo, "T1")
     assert " (+2 more)" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_whose_branch_holds_unmerged_commits_is_salvageable(repo):
+    """B5b1c6272c1: a removed tree proves nothing about the branch that carried it.
+
+    An agent (or a merge) removed the worktree while the branch ``ddflow/T3`` still held
+    commits main lacks. ``scan`` reported "worktree is gone; nothing to salvage" and told
+    the operator to sweep it, throwing those commits away. It must count the branch's
+    commits ahead of the base and report them as salvageable instead.
+    """
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T3", {"parent": "P1", "title": "T3", "globs": ["src/T3/*"]})
+    out = LC.claim(repo, "T3", agent="worker")
+    wt = Path(out.data["worktree"])
+    (wt / "src").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "a.py").write_text("x = 1\n")
+    _git("-C", str(wt), "add", "-A")
+    ident = ["-c", "user.email=t@e.com", "-c", "user.name=T"]
+    _git("-C", str(wt), *ident, "commit", "-qm", "T3 work")
+    _git("-C", str(repo), "worktree", "remove", "--force", str(wt))
+    (rec,) = _recs(repo, "T3")
+    assert rec.salvageable is True, rec.advice
+    assert rec.unmerged_commits >= 1, rec.advice
+    assert "ddflow/T3" in rec.advice, rec.advice
+    assert "ddflow release T3" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_whose_branch_could_not_be_measured_is_not_called_empty(repo, monkeypatch):
+    """The ``-1`` answer (no branch recorded, or git could not count) must not read as
+    "nothing to salvage": unknown is never empty, and ``sweep`` acts on that verdict."""
+    from ddflow.services.leases import recovery as REC
+
+    monkeypatch.setattr(REC, "_branch_ahead", lambda repo, facts, cfg, branch: -1)
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T4", {"parent": "P1", "title": "T4", "globs": ["src/T4/*"]})
+    out = LC.claim(repo, "T4", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    (rec,) = _recs(repo, "T4")
+    assert rec.salvageable is None, rec.advice
+    assert "could not be measured" in rec.advice and "ddflow release T4" in rec.advice, rec.advice
+
+
+def test_a_fatal_git_probe_leaves_the_branch_unmeasured(repo, monkeypatch):
+    """A git that runs but fails fatally (exit 128) is "unknown" (-1), not a missing ref
+    (0): folding it to 0 would reintroduce B5b1c6272c1. Exercises the real probe."""
+    from ddflow.adapters import git as GG
+    from ddflow.services.leases import recovery as REC
+
+    monkeypatch.setattr(
+        REC.G,
+        "run",
+        lambda repo, *a, **k: GG.GitResult(128, "", "fatal: not a git repository"),
+    )
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T6", {"parent": "P1", "title": "T6", "globs": ["src/T6/*"]})
+    out = LC.claim(repo, "T6", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    (rec,) = _recs(repo, "T6")
+    assert rec.salvageable is None, rec.advice
+    assert "could not be measured" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_with_no_branch_left_is_still_nothing_to_salvage(repo):
+    """The branch was deleted along with the tree: genuinely nothing left, still nil, but
+    NOT an "unknown" that the sweep would keep (the empty-vs-unknown distinction)."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T5", {"parent": "P1", "title": "T5", "globs": ["src/T5/*"]})
+    out = LC.claim(repo, "T5", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    _git("-C", str(repo), "branch", "-D", "ddflow/T5")
+    (rec,) = _recs(repo, "T5")
+    assert rec.salvageable is False, rec.advice
+    assert "ddflow release T5" in rec.advice, rec.advice

@@ -36,6 +36,15 @@ mode only, invisible to the agent reading JSON that most needed it.
 
 from __future__ import annotations
 
+from ..services import completion_shell as completion_scripts
+
+# Service helpers the surfaces reach only through this package (surfaces-through-api):
+# `output_budget` caps a prose answer for an agent, `completion_kinds` names an argument's
+# completion value kind, `completion_scripts` serves the shell activation script. Imported
+# here, so a surface never imports `ddflow.services` directly.
+from ..services import output_budget
+from ..services.completion import kinds as completion_kinds
+
 # Re-exported so `api.progress(...)` keeps working after the split. The surfaces reach
 # this layer through the PACKAGE (`_api().progress`), never through a family module, so
 # moving an operation between families is not a breaking change.
@@ -43,7 +52,7 @@ from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
 from .arch_deps import archdeps
-from .briefing import agent_brief
+from .briefing import agent_brief, brief_role
 from .cirun import ci_tool
 from .completion import completion_verdict
 from .decisions import (
@@ -101,12 +110,12 @@ from .knowledge import (
 )
 from .knowledge import (
     LessonDraft,
-    bug_dedupe,
     bug_file_tasks,
     bug_fixed,
     bug_found,
     bug_invalid,
     bug_tag,
+    dedupe_bugs,
     dupes,
     history,
     lesson_add,
@@ -161,6 +170,8 @@ from .operations import (
     precommit,
     relevant_tests,
 )
+from .perf import run_perf_env, run_perf_ingest, run_perf_run
+from .perfreport import run_perf_report
 from .plan import plan_apply, plan_check, plan_confirm, plan_lint
 from .probe import probe as conflict_probe
 from .records import record_resource_listing, record_resource_read
@@ -255,7 +266,7 @@ __all__ = [
     "block",
     "board",
     "brief",
-    "bug_dedupe",
+    "brief_role",
     "bug_file_tasks",
     "bug_fixed",
     "bug_found",
@@ -270,6 +281,8 @@ __all__ = [
     "companions_list",
     "companions_verify",
     "complete",
+    "completion_kinds",
+    "completion_scripts",
     "completion_verdict",
     "configure",
     "conflict_probe",
@@ -279,6 +292,7 @@ __all__ = [
     "decision_search",
     "decision_show",
     "decision_supersede",
+    "dedupe_bugs",
     "dedupe_check_add",
     "def_list",
     "def_merge",
@@ -330,6 +344,7 @@ __all__ = [
     "next_item",
     "next_lane",
     "onboard_run",
+    "output_budget",
     "phase_add",
     "phase_close",
     "phase_complete",
@@ -380,6 +395,10 @@ __all__ = [
     "rule_update",
     "run_docs",
     "run_metrics",
+    "run_perf_env",
+    "run_perf_ingest",
+    "run_perf_report",
+    "run_perf_run",
     "run_review",
     "session_adopt_orphans",
     "session_end",

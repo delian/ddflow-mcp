@@ -6,11 +6,13 @@ Split from tests/test_upgrade_dry_run.py (rule r-small-files); helpers live in u
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 from upgrade_dry_run_support import (
     clean_fixture,  # noqa: F401  (registered as the module fixture `clean`)
+    git,
     options,
     project,
 )
@@ -168,3 +170,44 @@ def test_a_doctor_that_crashes_or_prints_nothing_fails_the_dry_run(
     r = _doctor_rehearsal(tmp_path, monkeypatch, [(1, OLD), (2, []), (1, [])])
     assert "no readable report" in r.doctor_verdict(tmp_path, "a")
     assert "no readable report" in r.doctor_verdict(tmp_path, "b")  # exit 1 with no problem
+
+
+# -- the fixture git helper isolates a commit from a developer's global git config ------
+
+
+def test_the_fixture_git_isolates_a_commit_from_a_global_excludesfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A global core.excludesfile would silently drop the fixture file from the commit
+    # (bug Beb7591cc4a): the git() helper must not inherit it.
+    exclude = tmp_path / "excludes"
+    exclude.write_text("*.txt\n", "utf-8")
+    global_cfg = tmp_path / "global.gitconfig"
+    global_cfg.write_text(f"[core]\n\texcludesfile = {exclude}\n", "utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_cfg))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "--quiet", "-b", "main")
+    (repo / "kept.txt").write_text("kept\n", "utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "--no-verify", "-m", "fixture")
+    tracked = subprocess.check_output(["git", "-C", str(repo), "ls-files"], text=True)
+    assert "kept.txt" in tracked
+
+
+def test_the_fixture_git_isolates_a_commit_from_a_global_gpgsign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A global commit.gpgsign=true (no signing program) would fail the fixture commit
+    # (bug Beb7591cc4a): the git() helper must not inherit it.
+    global_cfg = tmp_path / "global.gitconfig"
+    global_cfg.write_text("[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n", "utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_cfg))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "--quiet", "-b", "main")
+    (repo / "kept.txt").write_text("kept\n", "utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "--no-verify", "-m", "fixture")
+    history = subprocess.check_output(["git", "-C", str(repo), "log", "--format=%s"], text=True)
+    assert "fixture" in history

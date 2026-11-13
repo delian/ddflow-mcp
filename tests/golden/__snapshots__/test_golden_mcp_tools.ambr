@@ -24,6 +24,10 @@
           "type": "string",
           "description": "Render this subagent's launch brief for item."
          },
+         "role": {
+          "type": "string",
+          "description": "Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -36,7 +40,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe.",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, duplicate(id,of), reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -113,7 +117,7 @@
          },
          "evidence": {
           "type": "string",
-          "description": "The probe command or test node id that showed it false."
+          "description": "What showed the bug: evidence kept with the record (agent-supplied text, stored, never run)."
          },
          "reopen": {
           "type": "boolean",
@@ -175,6 +179,10 @@
           "type": "number",
           "description": "Minimum score at which two bugs cluster (default: [dedupe].show_floor)."
          },
+         "of": {
+          "type": "string",
+          "description": "The FIXED bug it duplicates."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -182,7 +190,10 @@
            "invalid",
            "found",
            "file_tasks",
-           "dedupe"
+           "dedupe",
+           "duplicate",
+           "reopen",
+           "tag"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -231,7 +242,7 @@
          },
          "force": {
           "type": "boolean",
-          "description": "Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded."
+          "description": "Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded."
          },
          "approval": {
           "type": "string",
@@ -292,6 +303,10 @@
           "type": "string",
           "description": "An agent's way past unmet conditions: 'request' asks the operator, then the approval id they answered."
          },
+         "check": {
+          "type": "boolean",
+          "description": "Read-only: print the unmet conditions, approvals needed and what policy would grant; never completes. Exit 0 nothing unmet, 1 unmet, 2 could not run."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -345,11 +360,11 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why this step does not apply HERE. 'n/a' is not a reason: the next person reads this to decide whether you were right."
+          "description": "Why the gate did not pass. Required for failed/unavailable/partial/skipped; ..."
          },
          "evidence": {
           "type": "string",
-          "description": "What you ran and what it said. Required by some gates."
+          "description": "What you ran and what it said: the output you observed (a summary)."
          },
          "model": {
           "type": "string",
@@ -564,6 +579,10 @@
           "type": "string",
           "description": "Comma-separated subset of the configured kinds to look in: bug,task,phase,lesson,decision,research,memory. ..."
          },
+         "floor": {
+          "type": "number",
+          "description": "Minimum score to report (default: [dedupe].show_floor)."
+         },
          "item": {
           "type": "string",
           "description": "Only the pairs this record is in."
@@ -571,10 +590,6 @@
          "open_only": {
           "type": "boolean",
           "description": "Only pairs where both records are still live (the dedupe_sweep pass)."
-         },
-         "floor": {
-          "type": "number",
-          "description": "Minimum score to report (default: [dedupe].show_floor)."
          },
          "subject": {
           "type": "string",
@@ -679,13 +694,40 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'. With `--phase`, ready upstream blocking-dependencies are included by default (labelled); `--phase-only` restores the in-phase-only slice.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "phase": {
           "type": "string",
-          "description": "Restrict to one phase (the 'implement phase X' entry point)."
+          "description": "Restrict to one phase (the 'implement phase X' entry point). By default the phase's ready blocking-dependencies are also returned, each labelled `blocking_dependency`; `phase_only=true` hides them."
+         },
+         "phase_only": {
+          "type": "boolean",
+          "description": "With `--phase`: return the phase's own ready items only, hiding the ready upstream blocking-dependencies shown by default."
+         },
+         "tag": {
+          "type": "array",
+          "description": "Only items with this tag, e.g. wave:3; repeat: all must match.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "wave": {
+          "type": "integer",
+          "description": "Shorthand for tag wave:N."
+         },
+         "ignore_cap": {
+          "type": "boolean",
+          "description": "Offer items only the parallelism cap holds back as ready."
+         },
+         "blocked": {
+          "type": "boolean",
+          "description": "List every blocked item."
+         },
+         "state": {
+          "type": "string",
+          "description": "List the items in one report state (interrupted, running, blocked, ready, merged, held, review, blocking_deps). Echoed in --json under `state` and `filter.state`; the list is cut with the same --full / --cursor caps."
          },
          "kind": {
           "type": "string",
@@ -944,7 +986,7 @@
     'ddflow_task': '''
       {
        "name": "ddflow_task",
-       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new), phase_complete(id).",
+       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new), phase_complete(id), correct(id,field,text,reason).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1084,13 +1126,20 @@
           "type": "string",
           "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work ..."
          },
+         "set": {
+          "type": "array",
+          "description": "field=value items for a record that is not a task: its own fields (lesson why, bug severity, ...) and add_tags / ...",
+          "items": {
+           "type": "string"
+          }
+         },
          "worktree": {
           "type": "string",
           "description": "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way ..."
          },
          "reason": {
           "type": "string",
-          "description": "Why (recorded on the abandonment)."
+          "description": "Why the value was wrong. Required. Never the old value."
          },
          "force": {
           "type": "boolean",
@@ -1130,7 +1179,19 @@
          },
          "approval": {
           "type": "string",
-          "description": "An agent's route: 'request' asks the operator, then the approval id they answered."
+          "description": "An agent correcting another agent's record: 'request' asks the operator, then the approval id they answered."
+         },
+         "field": {
+          "type": "string",
+          "description": "The field to replace: title, body, tags, ... or a kind's own (summary, rule, why, author_model)."
+         },
+         "text": {
+          "type": "string",
+          "description": "The new text."
+         },
+         "secret": {
+          "type": "boolean",
+          "description": "The value may be a secret: keep every digest of it out of the audit entry."
          },
          "action": {
           "type": "string",
@@ -1146,7 +1207,8 @@
            "batch",
            "fold",
            "rename",
-           "phase_complete"
+           "phase_complete",
+           "correct"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -1161,13 +1223,13 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, digest, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, dispatch, vigil, paths, perf, digest, rules_inventory, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "op": {
           "type": "string",
-          "description": "queue: add|run|status (default)|remove."
+          "description": "queue: add|run|status (default)|remove. perf: env (the fingerprint), run (measure a command), ingest (accept a sample line) or report (the performance report)."
          },
          "id": {
           "type": "string",
@@ -1211,7 +1273,7 @@
          },
          "out": {
           "type": "string",
-          "description": "Directory for the generated views (default: docs/ddflow)."
+          "description": "with action=report and format svg/html: the file to write (default .ddflow/local/perf/reports/)."
          },
          "show": {
           "type": "string",
@@ -1243,7 +1305,11 @@
          },
          "item": {
           "type": "string",
-          "description": "The item to look back on; with view=retro."
+          "description": "With coordinator: an item whose blocked-by chain to show."
+         },
+         "match": {
+          "type": "string",
+          "description": "Only rows whose id/title contains this."
          },
          "offset": {
           "type": "integer",
@@ -1251,7 +1317,7 @@
          },
          "all": {
           "type": "boolean",
-          "description": "kind=bug|lesson: include fixed/invalid/superseded."
+          "description": "Every row (up to the most); bug|lesson also closed ones."
          },
          "mode": {
           "type": "string",
@@ -1323,11 +1389,15 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief or resume."
+          "description": "Lane name (or a unique part); with view=brief, resume or approve."
+         },
+         "coordinator": {
+          "type": "boolean",
+          "description": "The coordinator's screen: running suites, lease holders (idle ones flagged), pending approvals, ready work per ..."
          },
          "group_by": {
           "type": "string",
@@ -1352,6 +1422,30 @@
          "baseline": {
           "type": "boolean",
           "description": "With interfaces: print the ratchet baseline text instead of the report."
+         },
+         "tick": {
+          "type": "boolean",
+          "description": "Record the plan as one audit note (advise + audit)."
+         },
+         "cmd": {
+          "type": "string",
+          "description": "with action=run: the command to measure. CLI: `ddflow perf run --cmd 'pytest -q'`."
+         },
+         "line": {
+          "type": "string",
+          "description": "with action=ingest: the wrapper's one JSON line to accept."
+         },
+         "window": {
+          "type": "string",
+          "description": "with action=report: the time window, a duration back (7d, 12h) or a date YYYY-MM-DD."
+         },
+         "filters": {
+          "type": "string",
+          "description": "with action=report: comma-separated report filters; only phase=<id>."
+         },
+         "format": {
+          "type": "string",
+          "description": "with action=report: text (default), md, json, svg or html."
          },
          "ask": {
           "type": "string",
@@ -1379,8 +1473,12 @@
            "health",
            "docs",
            "archdeps",
+           "dispatch",
            "vigil",
+           "paths",
+           "perf",
            "digest",
+           "rules_inventory",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

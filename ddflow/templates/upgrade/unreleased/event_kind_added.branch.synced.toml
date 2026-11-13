@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "branch.synced"
+why = "A base was merged into an item's branch by ddflow sync, with the commits brought in and the gate outcomes still valid or stale."
+impact = "additive"

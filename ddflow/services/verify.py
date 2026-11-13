@@ -33,6 +33,7 @@ from . import backfill as BF
 from . import gate_accept as GA
 from . import gates as G
 from . import ledger as LG
+from . import upgrade_manifest as UM
 from .completion import changed_paths, fixes_of
 from .pipeline_diff import effective_pipeline
 
@@ -260,6 +261,68 @@ def _regression(
     return Claim("regression", OK, f"{len(bugs)} bug(s) closed with a regression test that exists")
 
 
+_DECL_PREFIXES = ("ddflow/config_sections/", "ddflow/core/handlers/")
+_DECL_FILES = ("ddflow/core/model.py",)
+
+
+def _declaration(path: str) -> bool:
+    """The files that register the config knobs or event kinds the upgrade manifest must
+    announce (B84a7e5b17e)."""
+    return path in _DECL_FILES or path.startswith(_DECL_PREFIXES)
+
+
+def _declares(this: Any, files: list[str]) -> bool:
+    """Does one of the landing's changed files declare this unmanifested change, so the
+    landing itself is the one that must announce it (and not some other, already-landed
+    item the tree still carries unannounced)?"""
+    if this.kind.startswith("knob_"):
+        return f"ddflow/config_sections/{this.key.split('.', 1)[0]}.py" in files
+    if this.kind == "event_kind_added":
+        return "ddflow/core/model.py" in files or any(
+            f.startswith("ddflow/core/handlers/") for f in files
+        )
+    return False
+
+
+def _manifest(led: dict[str, Any]) -> Claim | None:
+    """A landing that changed a config or event declaration is owed an announcement.
+
+    The upgrade manifest (``ddflow/templates/upgrade/``) announces every knob and event
+    kind; an item that changes a declaration and leaves the manifest out of sync used to
+    merge silently, reddening the manifest tests only once the branch was already landed
+    (LK-conflict-probe merged ``locks.probe_*`` knobs with no ``knob_added.*.toml``
+    fragments). The claim fails the completion instead."""
+    if not led["done"]["files_known"]:
+        return Claim("manifest", UNKNOWN, "the landing's files were not recorded")
+    files = led["done"]["files"]
+    if not files or not any(_declaration(f) for f in files):
+        return None
+    try:
+        res = UM.lint()
+    except (UM.ManifestError, OSError) as exc:
+        return Claim("manifest", UNKNOWN, f"manifest lint could not run: {exc}")
+    if res.clean:
+        return Claim(
+            "manifest",
+            OK,
+            "the landing changed a config/event declaration and the manifest replays it",
+        )
+    mine = [u for u in res.unmanifested if _declares(u, files)]
+    if mine:
+        return Claim(
+            "manifest",
+            FAIL,
+            "config/event change(s) this landing declares but does not announce: "
+            + _trim([u.id for u in mine]),
+        )
+    return Claim(
+        "manifest",
+        WARN,
+        "unannounced config/event change(s) not declared by this landing: "
+        + _trim([u.id for u in res.unmanifested]),
+    )
+
+
 def _accepted(st: State, item_id: str, pipeline: Sequence[str], cfg=None) -> list[str]:
     """The pipeline gates whose recorded partial outcome a person accepted (Bb999d5e20f)."""
     it = st.items.get(item_id)
@@ -397,6 +460,8 @@ def check(
     ]
     if reg := _regression(st, item_id, tracked, cfg):
         claims.append(reg)
+    if man := _manifest(led):
+        claims.append(man)
     if led["requirement_changed_after"]:
         claims.append(
             Claim("requirement", WARN, "its requirement text was edited after completion")

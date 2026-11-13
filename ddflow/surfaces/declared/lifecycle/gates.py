@@ -221,13 +221,13 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "reason",
-                help="Required for failed/unavailable/partial/skipped.",
+                help="Why the gate did not pass. Required for failed/unavailable/partial/skipped; --evidence is what you observed, not a substitute.",
                 cli_help="why the gate did not pass; REQUIRED for outcomes failed, unavailable, partial and skipped (--evidence is what you observed, not a substitute)",
                 default="",
             ),
             Param(
                 "evidence",
-                help="What you ran and what it said. Required by some gates.",
+                help="What you ran and what it said: the output you observed (a summary).",
                 cli_help="what you observed: output, a summary",
                 default="",
             ),

@@ -124,6 +124,94 @@ def test_a_whole_tree_guard_the_item_changed_still_blocks_auto_accept(repo, monk
     assert "test_architecture_guards.py" in auto["why"]
 
 
+def test_a_hub_module_change_does_not_block_auto_accept_when_all_measured(
+    repo, monkeypatch
+) -> None:
+    """B0f41a2f1d6: a hub-module change cuts the reach walk (Selection.full), so which test
+    files it reaches by import or governing cannot be told -- but `red` means every failing
+    test was measured on the base (its `unmeasured` is empty) and `uncompared` being empty
+    means each failure text was compared whole-vs-whole, so the reach is not needed to
+    attribute them. Under `full` nothing reads `sel.tests`/`sel.cut` (the walk that would fill
+    them was cut), so this accepts on `sel.changed` and the measurement alone."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": []}, {}
+    )
+    assert auto["accepted"] is True, auto
+
+
+def test_a_hub_module_change_plus_a_changed_failing_test_still_declines(repo, monkeypatch) -> None:
+    """A hub cut the reach AND the item changed a failing test FILE itself -- the changed-file
+    list is still known under `full`, so auto-accept must still decline, exactly as the reach
+    check would if it could run."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=[
+            "ddflow/services/gates/__init__.py",
+            "tests/test_ci_gate.py",
+        ],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": []}, {}
+    )
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
+def test_a_hub_module_change_with_an_uncompared_failure_still_declines(repo, monkeypatch) -> None:
+    """A failing id whose failure text is missing on one side is treated by `_differs` as
+    "not different" (an absence of evidence, not a match), so under `full` it must still
+    decline: `red` alone cannot prove it failed the same way (roborev finding on B0f41a2f1d6)."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": [fid]}, {}
+    )
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
+def test_a_hub_module_change_without_the_uncompared_field_still_declines(repo, monkeypatch) -> None:
+    """`found` that LACKS `uncompared` must decline, never read as "all compared": the
+    whole-vs-whole guarantee is absent, not empty, so the reach cannot be told."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True, "unmeasured": []}, {})
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
 def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
     _project(repo)
     calls: list[str] = []
@@ -261,11 +349,25 @@ def test_ci_red_only_from_a_large_baseline_failing_list_is_partial(repo) -> None
     base = ci.evidence["baseline"]
     assert base["red"] is True and len(base["ids"]) == 120
     assert base["auto"]["accepted"] is True
-    sha = ci.evidence["ci_scope"]["sha"]
-    assert len(BL.read_full(repo, sha)) == 120
+    stub = ci.evidence["failing_ids"]
+    assert len(BL.read_full(repo, stub)) == 120
     # unit_tests is not held back by a partial baseline-red ci
     out = json.loads(run_cli(repo, "--json", "gate", "run", "T1", "unit_tests", agent="worker")[1])
     assert "refusal" not in out, out
+
+
+def test_the_whole_failing_list_is_linked_from_the_ci_record_as_a_blob(repo) -> None:
+    from ddflow.core import blobref as B
+    from ddflow.services.gates import baseline as BL
+
+    _ci_project(repo, 120)  # far more than the evidence sample keeps
+    run_cli(repo, "--json", "gate", "run", "T1", "ci", agent="worker")
+    ci = _state(repo).items["T1"].gates["ci"]
+    # The record links the full list as a blob stub -- readable with the record, not only on
+    # the machine whose run wrote the list to a local file (B86370c6924).
+    stub = ci.evidence.get("failing_ids")
+    assert isinstance(stub, dict) and isinstance(stub.get(B.KEY), str), ci.evidence
+    assert len(BL.read_full(repo, stub)) == 120
 
 
 def test_ci_with_a_failure_not_on_the_base_stays_failed_and_says_so(repo, monkeypatch) -> None:
@@ -293,6 +395,29 @@ def test_a_failed_lint_check_keeps_ci_from_being_baseline_red() -> None:
     tests = Check("unit tests + end-to-end scenarios", False)
     assert BL.only_tests_failed([Check("ruff check", True), tests, Check("command", False)])
     assert not BL.only_tests_failed([Check("ruff check", False), tests])
+
+
+def test_a_non_test_failure_still_keeps_the_red_tests_for_the_split(repo) -> None:
+    from ddflow.api import cirun
+    from ddflow.services.ci.types import Check, Result
+
+    res = Result(
+        status="failed",
+        sha="a" * 40,
+        checks=[
+            Check("ruff check", False),
+            Check("unit tests + end-to-end scenarios", False),
+        ],
+        failures={"failed_tests": ["tests/test_x.py::test_a"]},
+        output="FAILED tests/test_x.py::test_a - boom",
+        command="ddflow ci run",
+    )
+    out = cirun._keep_failing_ids(repo, res)
+    # The failing test ids are kept aside even when a non-test check failed beside them, so
+    # the baseline_split can measure them on the base and say "tests would be accepted".
+    assert "failing_ids" in out, out
+    assert BL.read_full(repo, out["failing_ids"]) == ["tests/test_x.py::test_a"]
+    assert "ruff check" in out["failing_ids_note"]
 
 
 def test_a_malformed_cache_is_dropped_not_fatal_and_a_name_after_equals_matches(repo) -> None:
@@ -364,3 +489,119 @@ def test_a_ci_whose_always_run_guards_never_ran_is_not_baseline_red(repo, monkey
     assert "22 guard file(s)" in why
     assert "tests/test_guard_a.py" in why
     assert outcome != "partial"
+
+
+def test_an_always_run_guard_reached_by_import_does_not_block_auto_accept(
+    repo, monkeypatch
+) -> None:
+    """B-baseline-red-reach-counts-whole-tree-guards: an always-run guard (`[ci].always_tests`)
+    runs for every item, so a change that reaches it by import reaches it trivially -- the reach
+    carries no signal that this change caused the failure. When the guard is red on the base
+    with the same message (so `red` holds), it must not block auto-accept."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_always_guard.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text("def test_pins():\n    pass\n")
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(baseline_red_auto="on"),
+        ci=SimpleNamespace(always_tests=[guard]),
+    )
+    fid = f"{guard}::test_pins"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_whole_tree_guard_reached_by_import_does_not_block_auto_accept(repo, monkeypatch) -> None:
+    """B6450ce772f: an architecture guard (`tests/test_architecture_guards.py`) declares
+    ``GOVERNS = ("ddflow/**", ...)`` but imports ddflow modules, so testselect records it with
+    the import reason ("imports ..."), not "governs ...". The reach is trivial (it governs the
+    whole tree), so when it is red on the base with the same message (`red` holds), it must not
+    block auto-accept -- the recorded selection reason must not decide it."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_architecture_guards.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text('GOVERNS = ("ddflow/**",)\ndef test_ratchet():\n    pass\n')
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_whole_tree_guard_whose_govens_do_not_match_still_blocks(repo, monkeypatch) -> None:
+    """The governs exclusion must not leak to a guard reached by import whose declared
+    ``GOVERNS`` globs do NOT match a changed path: reaching this file by import may have
+    caused its failure, so auto-accept still declines."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_layout.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text('GOVERNS = ("pyproject.toml",)\ndef test_layout():\n    pass\n')
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_layout"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_layout.py" in auto["why"]
+
+
+def test_a_narrow_governs_guard_reached_by_import_is_also_excluded(repo, monkeypatch) -> None:
+    """A guard with a NARROW ``GOVERNS`` that matches the changed file (not whole-tree) is also
+    excluded when it is reached by import: the base comparison is whole-vs-whole, so a new
+    offender in it would not be ``red``. Asserts the intended direction for the declared-scope
+    exclusion -- the recorded reason ("imports ...") must not re-block it."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_family_schema.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text(
+        'GOVERNS = ("ddflow/api/family_schema.py",)\ndef test_index():\n    pass\n'
+    )
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = f"{guard}::test_index"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_file_reached_by_import_that_is_not_an_always_guard_still_blocks(
+    repo, monkeypatch
+) -> None:
+    """The always-run guard exclusion must not leak to an ordinary test file reached by import:
+    reaching THIS file by import may have caused its failure, so auto-accept still declines."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected("tests/test_family_schema.py", "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_family_schema.py::test_agent_family"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_family_schema.py" in auto["why"]

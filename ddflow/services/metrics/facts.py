@@ -9,11 +9,11 @@ left out rather than dated 1970. Nothing here is a statistic: ``summary``, ``for
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 
 from ...config import Config
 from ...core import progress as PR
 from ...core.events import Event
+from ...core.facts import Facts, Finding, Landing, Lease, Outcome, Span
 from ...core.model import State
 from ...core.schedule import inherited_deps
 
@@ -23,97 +23,6 @@ OUTCOMES = ("passed", "failed", "skipped", "unavailable", "partial")
 LEASE_KINDS = frozenset(
     {"lease.acquired", "lease.released", "lease.expired", "item.abandoned", "item.completed"}
 )
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """One recorded verdict on one gate of one item."""
-
-    item: str
-    gate: str
-    kind: str  # passed | failed | skipped | unavailable | partial
-    at: float
-    by: str = ""  # who recorded it
-    model: str = ""  # the reviewer's model, when a review recorded one
-    reason: str = ""
-    elapsed_s: float | None = None  # a review's own recorded wall time
-    #: Seconds of ``elapsed_s`` spent queued for the host suite lock or an admission slot
-    #: (B1d51fb9da1); None for an older log, which never recorded it.
-    waited_s: float | None = None
-    #: Lines the tree differed from HEAD by when the verdict was recorded (insertions plus
-    #: deletions of the evidence's ``diff_stat``); None when the evidence carried none.
-    changed_lines: int | None = None
-    #: A review's independence tier (family | model | none), "" for an older log or a
-    #: gate no reviewer judged (D-reviewer-independence-soft).
-    tier: str = ""
-
-
-@dataclass(frozen=True)
-class Landing:
-    """One `worktree.merged`: when, and the commits it names (empty when the event had none)."""
-
-    at: float
-    before: str = ""  # the target branch before the merge
-    after: str = ""  # ... and after it
-    head: str = ""  # the branch tip that was merged
-
-
-@dataclass
-class Lease:
-    item: str
-    holder: str
-    start: float
-    end: float | None = None  # None: still held at the time the facts were read
-    globs: tuple[str, ...] = ()
-
-
-@dataclass
-class Span:
-    """One item's life in the log."""
-
-    item: str
-    kind: str = "task"
-    added_at: float | None = None
-    claims: list[tuple[float, str]] = field(default_factory=list)  # (at, agent)
-    completed_at: float | None = None  # the FIRST completion
-    ready_at: float | None = None  # when its last dependency was done; None = not known
-
-    @property
-    def first_claim(self) -> float | None:
-        return self.claims[0][0] if self.claims else None
-
-    @property
-    def cycle_s(self) -> float | None:
-        """First claim to first completion; None while either is missing."""
-        a, b = self.first_claim, self.completed_at
-        return b - a if a is not None and b is not None and b >= a else None
-
-
-@dataclass
-class Facts:
-    spans: dict[str, Span] = field(default_factory=dict)
-    outcomes: list[Outcome] = field(default_factory=list)
-    #: (item, gate) -> times a run of that gate started, oldest first.
-    starts: dict[tuple[str, str], list[float]] = field(default_factory=dict)
-    leases: list[Lease] = field(default_factory=list)
-    #: (item, at) of every bug filed against an item.
-    bugs: list[tuple[str, float]] = field(default_factory=list)
-    agents: dict[str, list[float]] = field(default_factory=dict)  # agent -> its event times
-    #: item -> when each `lease.waiting` (a refused claim queued behind another lease) began.
-    waits: dict[str, list[float]] = field(default_factory=dict)
-    #: item -> when each `worktree.merged` landed its branch.
-    merges: dict[str, list[float]] = field(default_factory=dict)
-    #: item -> each `worktree.merged` with the commits it recorded (same order as ``merges``).
-    landings: dict[str, list[Landing]] = field(default_factory=dict)
-    state: State | None = None
-
-    def starts_of(self, item: str) -> list[float]:
-        """When any gate run of ``item`` started."""
-        return [t for (it, _gate), ts in self.starts.items() if it == item for t in ts]
-
-    def first_event(self) -> float | None:
-        times = [t for ts in self.agents.values() for t in ts[:1]]
-        return min(times) if times else None
 
 
 def _ordered(events: Sequence[Event]) -> list[tuple[float, Event]]:
@@ -156,7 +65,22 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         waited_s=_float(evidence.get("waited_s")),
         changed_lines=_changed_lines(evidence),
         tier=str(evidence.get("independence_tier") or ""),
+        round=_round_number(evidence),
+        tree_sha=str(evidence.get("tree_sha") or evidence.get("reviewed_head") or ""),
+        review_id=str(evidence.get("review_id") or ""),
+        note=str(evidence.get("note") or ""),
+        combined_gates=tuple(
+            g for g in (evidence.get("combined_gates") or ()) if isinstance(g, str)
+        ),
     )
+
+
+def _round_number(evidence: dict) -> int | None:
+    """A review round's number from its evidence (``round`` else ``rounds``), None for none."""
+    v = _float(evidence.get("round"))
+    if v is None:
+        v = _float(evidence.get("rounds"))
+    return int(v) if v is not None else None
 
 
 def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str, Lease]) -> None:
@@ -172,6 +96,17 @@ def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str,
         facts.leases.append(lease)
     elif ev.subject in held:  # released, expired, abandoned, completed: the hold ends
         held.pop(ev.subject).end = at
+
+
+def _finding(at: float, ev: Event) -> Finding:
+    d = ev.data if isinstance(ev.data, dict) else {}
+    return Finding(
+        ev.subject,
+        str(d.get("gate") or ""),
+        str(d.get("severity") or ""),
+        str(d.get("verdict") or ""),
+        at,
+    )
 
 
 def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
@@ -198,6 +133,8 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         )
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
         facts.bugs.append((d["item"], at))
+    elif kind == "review.triaged":
+        facts.findings.append(_finding(at, ev))
     elif kind.startswith("gate."):
         out = _outcome(at, ev)
         if out is not None:

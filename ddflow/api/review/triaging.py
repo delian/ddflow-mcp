@@ -21,7 +21,7 @@ from ..gates import item_tree
 from ..knowledge.regression import _unresolved_tests
 from ..review_finding_ref import resolve as resolve_finding
 from .findings import _chunk_numbers, _finding_listing, _mirror_sibling_gates
-from .records import _prior_evidence
+from .records import _prior_evidence, _unrechecked_confirmed
 
 _NODE = re.compile(r"[\w./-]+\.py::\S+")
 
@@ -201,6 +201,7 @@ def triage(
         severity=f.get("severity", ""),
         title=f.get("title", ""),
         location=f.get("location", ""),
+        detail=f.get("detail", ""),
     )
     log, cfg, st = _load(repo, agent)
     counts = GD.triage_counts(st.items[item], gate) or {}
@@ -210,6 +211,8 @@ def triage(
     )
     extra, this_refuted = _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored)
     text = f"{text}\n{extra}" if extra else text
+    revoke = _revoke_refutation_pass(log, cfg, st, item, gate, mirrored, verdict)
+    text = f"{text}\n{revoke}" if revoke else text
     return O.ok(
         "review.triage",
         id=item,
@@ -242,19 +245,15 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if not now:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
-        moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
-        if moved:  # a test the round did not review is not new work (triage_ignore_globs)
-            seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
-            gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
-            moved = [
-                p
-                for p in moved
-                if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)
-            ]
+        moved = _filtered_moved(repo, it, wt, ev, cfg)
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
-        reviewed = (ev.get("tree_sha") or ev.get("reviewed_head") or "")[:19]
+        # Bb2c62995e3: name the head the review READ (`reviewed_head`, captured before the
+        # diff was taken), not `tree_sha`, which a `record_measured` run stores from the tree
+        # as it was when the run ENDED -- a commit landed while the review ran that no
+        # reviewer saw. With no reviewed head (an older round), the tree it measured stands.
+        reviewed = (ev.get("reviewed_head") or ev.get("tree_sha") or "")[:19]
         return f"the round reviewed {reviewed}, and {item} holds other content now{where}; {redo}"
     return ""
 
@@ -316,13 +315,66 @@ def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     return {} if snap is None else {RP.REVIEWED_PATHS_FIELD: snap}
 
 
-def _moved_paths(repo: Path, it, wt, recorded) -> list[str] | None:
+def _moved_paths(repo: Path, it, wt, recorded: dict) -> list[str] | None:
     """The changed-set paths whose content differs from the round's `reviewed_paths`; None
     when the round has none (an older round: the whole tree stands) or they cannot be read."""
     if not isinstance(recorded, dict) or wt is None or not wt.exists():
         return None
     now_changed = changed_paths(repo, it)
     return None if now_changed is None else RP.snapshot_differing(recorded, wt, now_changed)
+
+
+def _filtered_moved(repo: Path, it, wt, ev: dict[str, Any], cfg) -> list[str] | None:
+    """The paths that differ from what the round saw, minus ones `reviewed_other_tree`
+    ignores (triage_ignore_globs); [] when none differ, None when they cannot be read (an
+    older round without `reviewed_paths`, or a tree gone): the caller reads None as
+    "cannot compare" and [] as "compare, none relevant differ"."""
+    moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
+    if not moved:  # a test the round did not review is not new work (triage_ignore_globs)
+        return moved
+    seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
+    gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
+    return [p for p in moved if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)]
+
+
+def _confirmed_files(it, gate: str) -> set[str]:
+    """The files a gate's CONFIRMED findings cite (their fix locations): a confirmed finding
+    was fixed, so a tree move confined to these files is the fix (B-review-round-budget-
+    no-fix-path), whereas a move outside them is unreviewed content (B835d22b138)."""
+    files: set[str] = set()
+    for verdict in (it.triage.get(gate, {}) if it is not None else {}).values():
+        if verdict.get("verdict") != "confirmed":
+            continue
+        loc = (verdict.get("location") or "").split(":", 1)[0].strip()
+        if loc:
+            files.add(str(loc))
+    return files
+
+
+def _movement_is_confirmed_fix(
+    counts: dict[str, int], moved: list[str] | None, it, gate: str
+) -> bool:
+    """Whether a stale tree is explained by the confirmed findings' fixes: at least one
+    confirmed finding, and every moved file is cited by a confirmed finding. A refuted
+    finding's file that also moved is NOT a confirmed fix's, so it keeps the stale block
+    (fail closed); an all-refuted round has no confirmed files and never counts. A `moved`
+    of None (no `reviewed_paths` on the round, so the moved set cannot be compared) is not
+    a verified fix either: cannot compare, so the stale block stays (fail closed)."""
+    if not counts.get("confirmed") or not moved:
+        return False
+    confirmed = _confirmed_files(it, gate)
+    return bool(confirmed) and not (set(moved) - confirmed)
+
+
+def _moved_for(repo: Path, cfg, st, item: str, gate: str) -> list[str] | None:
+    """The files the gate's recorded round saw that moved since (`_filtered_moved`), for
+    checking whether a stale tree is nothing but the confirmed findings' fixes."""
+    it = st.items.get(item)
+    rec = it.gates.get(gate) if it else None
+    if rec is None:
+        return []
+    wt, _held = item_tree(repo, cfg, st, it, None)
+    return _filtered_moved(repo, it, wt, rec.evidence or {}, cfg)
 
 
 def _name_paths(paths: list[str], cap: int = 5) -> str:
@@ -335,11 +387,17 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     confirmed -- never in `gate list --refuted` (B1396d7bd55). `rounds.settled_pass` keeps
     either off the round count."""
     rounds = {"rounds": used, "max_rounds": cap}
-    refuted = counts["refuted"]
+    refuted = counts.get("refuted", 0)
     return (
-        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts["confirmed"], **rounds}}
+        {
+            "passed_on_refutation": {
+                "refuted": refuted,
+                "confirmed": counts.get("confirmed", 0),
+                **rounds,
+            }
+        }
         if refuted
-        else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
+        else {"findings_fixed": {"confirmed": counts.get("confirmed", 0), **rounds}}
     )
 
 
@@ -352,8 +410,15 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
     if mirrored:
         parts.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
     it = st.items[item]
+    moved = _moved_for(repo, cfg, st, item, gate)
     settled = _settle_after_cap(
-        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
+        log,
+        cfg,
+        it,
+        gate,
+        counts,
+        stale=reviewed_other_tree(repo, cfg, st, item, gate),
+        moved=moved,
     )
     if settled:
         parts.append(settled)
@@ -365,13 +430,23 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
             g2,
             GD.triage_counts(it, g2) or {},
             stale=reviewed_other_tree(repo, cfg, st, item, g2),
+            moved=_moved_for(repo, cfg, st, item, g2),
         )
         if settled2:
             parts.append(settled2)
     return "\n".join(parts), "ON REFUTATION" in settled
 
 
-def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
+def _settle_after_cap(
+    log,
+    cfg,
+    it,
+    gate: str,
+    counts: dict[str, int],
+    *,
+    stale: str = "",
+    moved: list[str] | None = None,
+) -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
 
@@ -386,7 +461,16 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale:
     rec = it.gates.get(gate)
     if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
         return ""
-    if stale:
+    if stale and not _movement_is_confirmed_fix(counts, moved, it, gate):
+        # A stale round blocks a pass unless the moved tree is exactly the confirmed
+        # findings' fixes (B-review-round-budget-no-fix-path): a pure refutation says the
+        # reviewed tree is fine as it is, so it must be the tree the item holds now
+        # (B835d22b138), and a refuted finding's file that moved for its own reason is
+        # unreviewed content even with a sibling confirmed fix. When the relax applies, the
+        # settle below records it (`findings_fixed`, or `passed_on_refutation` for a mixed
+        # set) instead of leaving a gate with no path once its budget is spent. Confirmed
+        # findings still hold the gate until every finding has a verdict (the untriaged
+        # check just below).
         return f"{gate} stays {rec.outcome}: {stale}"
     if counts.get("untriaged", 1):
         return (
@@ -417,6 +501,49 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale:
     if not refuted:
         return f"recorded {it.id}.{gate} = passed (findings fixed): {verdicts}"
     return f"recorded {it.id}.{gate} = passed ON REFUTATION (flagged): {verdicts}"
+
+
+def _revoke_refutation_pass(log, cfg, st, item: str, gate: str, mirrored, verdict: str) -> str:
+    """Re-triaging a finding to CONFIRMED after ``gate`` passed on refutation revives a
+    confirmed, unfixed defect the pass no longer covers, so the pass is revoked: the gate is
+    re-recorded failed with its `passed_on_refutation` flag dropped (bug B31e91454f8). One
+    line per revoked gate, or "".
+
+    ``st`` is the state as folded in `triage` BEFORE `_settle_chain` runs: it excludes any
+    pass that settle may record in this same call. That is the desired read — a pass recorded
+    by this very call already accounts for the just-confirmed finding — so do not re-load the
+    state after settling here."""
+    if verdict != "confirmed":
+        return ""
+    parts: list[str] = []
+    for g in (gate, *(mirrored or [])):
+        it = st.items.get(item)
+        rec = it.gates.get(g) if it is not None else None
+        if rec is None or rec.outcome != "passed":
+            continue
+        flag = (rec.evidence or {}).get("passed_on_refutation")
+        if not isinstance(flag, dict):
+            continue
+        live = GD.triage_counts(it, g) or {}
+        # Skip a gate whose confirmed count did NOT grow: the pass already accounted for
+        # it. triage_counts is per gate, and a mirrored finding counted only for the
+        # primary gate leaves the mirror's count below the snapshot, so the mirror keeps
+        # its pass while the primary (whose count grew) revokes below.
+        if live.get("confirmed", 0) <= int(flag.get("confirmed", 0)):
+            continue
+        ev = {k: v for k, v in (rec.evidence or {}).items() if k != "passed_on_refutation"}
+        GD.record(
+            log,
+            cfg,
+            item,
+            g,
+            "failed",
+            reason="a finding was re-triaged confirmed over the refutation pass",
+            evidence=ev,
+            by=rec.by,
+        )
+        parts.append(f"{item}.{g} reverted to failed: {live['confirmed']} confirmed finding(s)")
+    return "\n".join(parts)
 
 
 def _hold_shape(ev: dict[str, Any]) -> bool:
@@ -472,44 +599,90 @@ def _why_outcome(log, cfg, it, gate: str, how: str, why: str, sargs: dict[str, A
     )
 
 
+def _release_settled(
+    log, cfg, it, gate: str, how: str, why: str, counts: dict[str, int]
+) -> O.Outcome:
+    """Record ``gate`` passed from settled triage (the ''held pass'' or ''confirmed-finding'' shape
+    `_unchanged_delta` re-evaluates): no round was counted for the unchanged delta, and every
+    recorded finding has a verdict with its probe."""
+    rec = it.gates.get(gate) if it is not None else None
+    mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
+    GD.record(
+        log,
+        cfg,
+        it.id,
+        gate,
+        "passed",
+        reason="",
+        evidence={**((rec.evidence or {}) if rec is not None else {}), **mark},
+        by=rec.by if rec is not None else "",
+    )
+    flag = "ON REFUTATION (flagged)" if counts.get("refuted") else "(findings fixed)"
+    tag = f"{it.id}.{gate}" if it is not None else gate
+    text = (
+        f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
+        f"{counts.get('findings', 0)} finding(s) has a verdict with its probe "
+        f"({counts.get('refuted', 0)} refuted, {counts.get('confirmed', 0)} confirmed)"
+    )
+    return O.ok(
+        "review",
+        id=getattr(it, "id", ""),
+        gate=gate,
+        outcome="passed",
+        findings=[],
+        how=how,
+        text=text,
+    )
+
+
+def _dropped_unrechecked(it, gate: str) -> list[tuple[str, str]]:
+    """Unchecked confirmed findings (`_unrechecked_confirmed`) the gate's LATEST record no
+    longer carries -- a later round reviewed the tree and did not raise them again. Only a
+    delta asked for over a tree unchanged since the reviewed head gets here (their fix IS that
+    head). A finding the latest record still carries raises no fix at all, so it is left out:
+    releasing it would merge an unfixed defect. Returns the list only when EVERY unchecked
+    confirmed finding was dropped; a mix (one dropped, another still carried) releases nothing."""
+    unrechecked, unreadable = _unrechecked_confirmed(it, gate)
+    if unreadable or not unrechecked:
+        return []
+    rec = it.gates.get(gate)
+    carried: set[str] = set()
+    found = LB.full((rec.evidence or {}) if rec is not None else {}).get("chunk_findings")
+    if GD.is_triageable(found):
+        carried = {f["digest"] for f in found}
+    dropped = [(d, fam) for d, fam in unrechecked if d not in carried]
+    return dropped if len(dropped) == len(unrechecked) else []
+
+
 def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     """A delta over a tree unchanged since the reviewed head (B10ad449deb): no reviewer
     has anything new to see, so no round runs and none counts. The gate re-evaluates
-    instead: a held pass over now-settled findings is released as passed; anything else
+    instead: a held pass over now-settled findings is released as passed; a failed gate
+    over a CONFIRMED finding whose fix is at that reviewed head is released too, because
+    the delta that would re-check the fix is empty (B-tk-delta-round-empty); anything else
     stays as recorded, and the answer says which."""
-    tag = f"{it.id}.{gate}" if it is not None else gate
     counts = _held_and_settled(it, gate)
     if counts is not None:
-        rec = it.gates.get(gate)
-        mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
-        GD.record(
-            log,
-            cfg,
-            it.id,
-            gate,
-            "passed",
-            reason="",
-            evidence={**(rec.evidence or {}), **mark},
-            by=rec.by,
-        )
-        flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
-        text = (
-            f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
-            f"{counts['findings']} finding(s) has a verdict with its probe "
-            f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
-        )
-        return O.ok(
-            "review",
-            id=getattr(it, "id", ""),
-            gate=gate,
-            outcome="passed",
-            findings=[],
-            how=how,
-            text=text,
-        )
+        return _release_settled(log, cfg, it, gate, how, why, counts)
     rec = it.gates.get(gate) if it is not None else None
     stays = rec.outcome if rec is not None else "unreviewed"
     counts = GD.triage_counts(it, gate) or {} if it is not None else {}
+    dropped = _dropped_unrechecked(it, gate) if it is not None else []
+    # B-tk-delta-round-empty: a FAILED gate over a CONFIRMED finding whose fix is now AT the
+    # reviewed head. `_delta_scope` already said nothing changed since the reviewed head, so
+    # the reviewed head answers it; a delta round that re-checks the fix is impossible because
+    # the fix IS that head (a `--delta` re-checks only what changed since it). Untriaged
+    # findings still need `ddflow review triage`, not a round this path can settle.
+    if rec is not None and rec.outcome == "failed" and dropped and not counts.get("untriaged"):
+        fix_counts = dict(counts)
+        # name the released CONFIRMED findings (the dropped list), not triage_counts' latest-
+        # record count: the pass is emitted because those findings were fixed, and reading 0
+        # would be a vacuous "0 confirmed" record (roborev job 4647).
+        fix_counts["confirmed"] = len(dropped)
+        if not fix_counts.get("findings"):
+            fix_counts["findings"] = len(dropped)
+        return _release_settled(log, cfg, it, gate, how, why, fix_counts)
+    tag = f"{it.id}.{gate}" if it is not None else gate
     reason = f"{why} No round was counted; {tag} stays {stays}."
     untriaged = counts.get("untriaged", 0)
     if untriaged:

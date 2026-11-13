@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import shutil
 import sys
 from pathlib import Path
@@ -27,19 +26,7 @@ EK = _load("_event_kind_script", ROOT / "scripts" / "event_kind.py")
 
 @pytest.fixture
 def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    for rel in (
-        "tests/fixtures/event_kinds.json",
-        "ddflow/core/redact/log.py",
-        "tests/test_coherence_coverage.py",
-        "tests/coherence_exempt.py",
-    ):
-        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(ROOT / rel, tmp_path / rel)
     (tmp_path / "frag").mkdir()
-    monkeypatch.setattr(EK, "FIXTURE", tmp_path / "tests/fixtures/event_kinds.json")
-    monkeypatch.setattr(EK, "REDACT", tmp_path / "ddflow/core/redact/log.py")
-    monkeypatch.setattr(EK, "COHERENCE", tmp_path / "tests/test_coherence_coverage.py")
-    monkeypatch.setattr(EK, "COHERENCE_EXEMPT", tmp_path / "tests/coherence_exempt.py")
     monkeypatch.setattr(EK, "FRAGMENTS", tmp_path / "frag")
     shutil.copytree(ROOT / "ddflow/templates/events", tmp_path / "events")
     monkeypatch.setattr(EK, "EVENTS", tmp_path / "events")
@@ -47,29 +34,19 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_every_kind_of_the_tree_has_all_five_edits(capsys) -> None:
+def test_every_kind_of_the_tree_has_every_edit(capsys) -> None:
     assert EK.main(["check"]) == 0
     assert "nothing missing" in capsys.readouterr().out
 
 
 def test_a_kind_with_no_edits_lists_all_of_them(tree: Path, capsys) -> None:
-    fx = tree / "tests/fixtures/event_kinds.json"
-    snap = json.loads(fx.read_text())
-    snap["kinds"]["x.new"] = {"v": 1, "fields": {"zz": ["str"]}}
-    fx.write_text(json.dumps(snap))
     assert EK.main(["check", "x.new"]) == 1
     out = capsys.readouterr().out
-    for part in ("handler", "redact", "coherence", "fragment", "registry"):
+    for part in ("handler", "registry", "fragment"):
         assert f"x.new: {part}:" in out, out
-    assert "fixture:" not in out
 
 
-def test_a_kind_unknown_everywhere_lacks_its_fixture(capsys) -> None:
-    EK.main(["check", "x.new"])
-    assert "x.new: fixture:" in capsys.readouterr().out
-
-
-def test_add_writes_the_data_edits_and_leaves_the_handler(tree: Path, capsys) -> None:
+def test_add_writes_the_declaration_and_leaves_the_handler(tree: Path, capsys) -> None:
     rc = EK.main(
         [
             "add", "x.new", "--why", "records a thing",
@@ -80,12 +57,15 @@ def test_add_writes_the_data_edits_and_leaves_the_handler(tree: Path, capsys) ->
     )  # fmt: skip
     out = capsys.readouterr().out
     assert rc == 1 and "x.new: handler:" in out  # only the code is left
-    for part in ("fixture", "redact", "coherence", "fragment", "registry"):
+    for part in ("registry", "fragment"):
         assert f"x.new: {part}:" not in out, out
-    assert 'name = "x.new"' in (tree / "events/x.toml").read_text()
-    snap = json.loads((tree / "tests/fixtures/event_kinds.json").read_text())
-    assert snap["kinds"]["x.new"]["fields"] == {"n": ["int"], "note": ["str"], "ref": ["str"]}
-    assert '"x.new": ("note",),' in (tree / "ddflow/core/redact/log.py").read_text()
+    assert (tree / "events/x.toml").exists()
+    text = (tree / "events/x.toml").read_text()
+    assert 'name = "x.new"' in text
+    assert 'fields = { "n" = ["int"], "note" = ["str"], "ref" = ["str"] }' in text
+    assert 'text = ["note"]' in text
+    assert 'lookup = { "ref" = "an id compared with another" }' in text
+    assert "exempt = " in text
     assert (tree / "frag/event_kind_added.x.new.toml").read_text().count("x.new") == 1
 
 
@@ -93,8 +73,29 @@ def test_add_twice_changes_nothing(tree: Path) -> None:
     argv = ["add", "x.new", "--why", "what it records", "--field", "n=int", "--exempt", "e" * 30]
     EK.main(argv)
     before = {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
-    EK.main(argv)
+    # a repeated add of the same kind refuses, and the tree is untouched
+    argv2 = ["add", "x.new", "--why", "what it records", "--field", "n=int", "--exempt", "e" * 30]
+    with pytest.raises(SystemExit):
+        EK.main(argv2)
     assert before == {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
+
+
+def test_a_checked_kind_declares_its_api_function(tree: Path) -> None:
+    EK.main(
+        [
+            "add",
+            "y.new",
+            "--why",
+            "records a note",
+            "--field",
+            "n=int",
+            "--text",
+            "n",
+            "--checked",
+            "items.task_add",
+        ]
+    )
+    assert 'checked = "items.task_add"' in (tree / "events/y.toml").read_text()
 
 
 def test_write_skips_a_half_written_shard(tmp_path: Path, capsys) -> None:
@@ -114,7 +115,7 @@ def test_a_refused_add_writes_nothing(tree: Path) -> None:
         ("x.new", ["--exempt", "too short"]),
         ("x.new", ["--lookup", "nowhy"]),
         ("x.new", ["--field", "a=bogus"]),
-        ("bug.found", ["--text", "detail"]),
+        ("x.new", ["--checked", "items.task_add", "--exempt", "e" * 30]),
         ("x.new", ["--owner", "Bad Owner"]),
     )
     for kind, bad in cases:
@@ -123,14 +124,25 @@ def test_a_refused_add_writes_nothing(tree: Path) -> None:
     assert before == {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
 
 
-def test_a_repeated_lookup_is_written_once(tree: Path) -> None:
-    EK.main(["add", "x.new", "--why", "what it records", "--lookup", "f=one", "--lookup", "f=two"])
-    assert (tree / "ddflow/core/redact/log.py").read_text().count('("x.new", "f")') == 1
-
-
-def test_a_kind_with_a_text_entry_is_not_given_a_second(tree: Path) -> None:
+def test_a_dotted_why_cannot_shrink_below_the_minimum(capsys) -> None:
     with pytest.raises(SystemExit):
-        EK.main(["add", "bug.found", "--why", "what it records", "--text", "detail"])
+        EK.main(["add", "w.new", "--why", "." * 30, "--exempt", "e" * 30])
+
+
+def test_a_released_kind_gets_no_new_fragment(tree: Path, capsys) -> None:
+    EK.main(["check", "task.added"])
+    assert "task.added: fragment:" not in capsys.readouterr().out
+    assert not (tree / "frag/event_kind_added.task.added.toml").exists()
+
+
+def test_add_of_a_released_kind_writes_nothing(tree: Path) -> None:
+    """A released kind is already declared and already shipped: `add` refuses it (it never
+    re-declares or re-fragments an entry that exists)."""
+    before = {p: p.read_bytes() for p in tree.rglob("*") if p.is_file()}
+    with pytest.raises(SystemExit, match=r"task\.added.*already declared"):
+        EK.main(["add", "task.added", "--why", "A task was added to the queue."])
+    assert before == {p: p.read_bytes() for p in tree.rglob("*") if p.is_file()}
+    assert not (tree / "frag/event_kind_added.task.added.toml").exists()
 
 
 def test_write_still_raises_on_a_line_that_is_json_but_not_an_event(tmp_path: Path) -> None:
@@ -146,13 +158,3 @@ def test_write_survives_a_cut_multibyte_character(tmp_path: Path) -> None:
     shard = tmp_path / "a.jsonl"
     shard.write_bytes(b'{"id": "\xe2\x82')
     assert up.read_log([shard], lenient=True) == []
-
-
-def test_a_dotted_why_cannot_shrink_below_the_minimum(tree: Path) -> None:
-    with pytest.raises(SystemExit):
-        EK.main(["add", "x.new", "--why", "." * 30])
-
-
-def test_a_released_kind_gets_no_new_fragment(tree: Path) -> None:
-    EK.main(["add", "task.added", "--why", "A task was added to the queue."])
-    assert not (tree / "frag/event_kind_added.task.added.toml").exists()

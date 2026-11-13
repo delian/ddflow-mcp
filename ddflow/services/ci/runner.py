@@ -10,12 +10,13 @@ import os
 import re
 import shlex
 import sys
-import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
+from ...adapters.clock import DEFAULT as CLOCK
+from ...adapters.env import DEFAULT as ENV
 from ...config import Config
 from ...infra import fsio
 from ...infra import worktree as W
@@ -33,19 +34,51 @@ from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
 from .types import CONFLICT, Check, Result
 
-_HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(r"^(?P<name>\S.*?)\.{3,}.*?\b(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
+CHECK_DETAIL_CHARS = 2000  #: one failing hook's own output kept as its check detail
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
+def _killed(p) -> bool:
+    """Whether ``p`` ran and was killed by a signal: the OS reports a negative return code
+    (e.g. -15 for SIGTERM), which is no verdict (B512a5d7f35)."""
+    return p.code is not None and p.code < 0
+
+
 def parse_checks(output: str) -> list[Check]:
-    """Per-hook results from pre-commit's report ("ruff check ......... Failed")."""
+    """Per-hook results from pre-commit's report ("ruff check ......... Failed").
+
+    A failing hook's ``detail`` is the output pre-commit printed for it -- the lines after
+    its "Failed" line and before the next hook's line -- kept so a red merge's cause can be
+    read back (B-post-merge-ci-failure-carries-no-detail)."""
     checks = []
+    failed: Check | None = None
+    lines: list[str] = []
     for line in output.splitlines():
-        m = _HOOK_LINE.match(line.strip())
-        if m and m["status"] != "Skipped":
-            checks.append(Check(m["name"].strip(), m["status"] == "Passed"))
+        # Hook result lines are flush-left; a hook's own output is indented, so an
+        # indented output line that merely ends in the status word is output, not a boundary.
+        m = _HOOK_LINE.match(line)
+        if m:
+            if failed is not None:
+                failed.detail = _check_detail(lines)
+            failed = None
+            lines = []
+            if m["status"] != "Skipped":
+                check = Check(m["name"].strip(), m["status"] == "Passed")
+                checks.append(check)
+                failed = check if m["status"] == "Failed" else None
+        elif failed is not None:
+            lines.append(line)
+    if failed is not None:
+        failed.detail = _check_detail(lines)
     return checks
+
+
+def _check_detail(lines: list[str]) -> str:
+    """The tail of a failed hook's own output, capped, for its check's ``detail``."""
+    kept = [ln.strip() for ln in lines if ln.strip()]
+    return "\n".join(kept)[-CHECK_DETAIL_CHARS:]
 
 
 def _merge_base(
@@ -105,9 +138,10 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     rates: Sequence[float] = (),
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
-    queued phase of the host suite lock besides (the per-run override covers the queue wait,
-    not only the run behind it, Ba5d5d63f12).
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and budgets the
+    run only. The queue wait for the host suite slot is bounded by `[ci].suite_wait_s` and does
+    not come off this budget: a run that queued near its limit must still get the whole timeout
+    to run the checks (B4f35548c0a).
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
@@ -139,10 +173,60 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     if refused is not None:
         return refused
     return _settle(
-        cfg, repo, sha, base, cmd,
-        command=command, ref=ref, timeout_s=timeout_s, tick=tick,
-        changed_from=changed_from, full=full, for_item=for_item, rates=rates,
+        cfg,
+        repo,
+        sha,
+        base,
+        cmd,
+        command=command,
+        ref=ref,
+        timeout_s=timeout_s,
+        tick=tick,
+        changed_from=changed_from,
+        full=full,
+        for_item=for_item,
+        rates=rates,
     )
+
+
+def _busy_result(cmd: str, sha: str, busy) -> Result:
+    """The Result for a run the host suite slot could not take: a busy slot is a wasted wait, not
+    a failed run, and it carries the seconds spent queued before giving up."""
+    return Result(
+        "unavailable", command=cmd, sha=sha, reason=str(busy),
+        waited_s=round(busy.waited_s, 6),
+    )  # fmt: skip
+
+
+def _merged_once(repo, cfg, sha, base, cmd, decide):
+    """Merge ``sha`` with ``base`` in a scratch tree and let ``decide(tree)`` say the outcome:
+    a `Result` to return, or `None` for "take the suite slot". A refused merge and a busy suite
+    slot become their `Result`s here, so no caller repeats that mapping."""
+    try:
+        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+            if tree is None:
+                return _merge_refused(cmd, sha, failure)
+            return decide(tree)
+    except SL.SuiteBusy as busy:
+        return _busy_result(cmd, sha, busy)
+
+
+def _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used) -> Result:
+    """The settled `Result` of a run past its verdict: a timeout or a run that never started is its
+    own Result, anything else is the command's Result, in both cases with the seconds it queued and
+    the seconds the command itself ran."""
+    if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+        unfinished.waited_s = waited
+        # A run that never started "ran for 0 s" would read as a finished run with no
+        # cost; only a TIMEOUT ran (for this many seconds). None means "no run" (B28537b615d).
+        unfinished.elapsed_s = round(elapsed, 1) if p.kind == TIMEOUT else None
+        return unfinished
+    res = _result(p, out_prefix, cmd, sha, base, scope)
+    res.waited_s = waited
+    res.elapsed_s = round(elapsed, 1)
+    if scope is None and used:
+        res.scope = {"workers": used}
+    return res
 
 
 def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
@@ -169,11 +253,20 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     holder = _holder(repo, ref)
     override = bool(command.strip())
     used: dict[str, dict] = {}
+    env_extra = _merged_range_env(repo, changed_from)
 
     def plan(tree):
         return _plan(
-            cfg, repo, cmd, tree, sha, base, changed_from,
-            full=full, override=override, for_item=for_item,
+            cfg,
+            repo,
+            cmd,
+            tree,
+            sha,
+            base,
+            changed_from,
+            full=full,
+            override=override,
+            for_item=for_item,
         )
 
     def merged(tree):
@@ -181,140 +274,127 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             return Result("failed", command=cmd, sha=sha, reason=stale)
         return plan(tree)
 
-    def finish(p, out_prefix, waited, cmd, scope):
-        if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
-            unfinished.waited_s = waited
-            return unfinished
-        res = _result(p, out_prefix, cmd, sha, base, scope)
-        res.waited_s = waited
-        if scope is None and used:
-            res.scope = {"workers": used}
-        return res
-
     def without_slot(tree, cmd, scope):
         if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
-        return finish(
-            *_run_locked(
-                cfg, holder, tree, cmd, scope, budget, tick, used, False,
-                lock_wait=_lock_wait(timeout_s),
-            ),
-            cmd, scope,
+        p, out_prefix, waited, elapsed = _run_locked(
+            cfg,
+            holder,
+            tree,
+            cmd,
+            scope,
+            budget,
+            tick,
+            used,
+            False,
+            env_extra,
         )
+        return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
+
+    def scoped_run(tree):
+        # A selected run plans the scope now: run without the slot if it fits, else return None so
+        # the caller merges afresh INSIDE the slot for the full-suite run.
+        nonlocal cmd
+        cmd, scope = plan(tree)
+        return None if _needs_suite_slot(cfg, cmd, scope, rates) else without_slot(tree, cmd, scope)
+
+    def override_run(tree):
+        # A named command merges once and takes no slot; it never falls through to the slot path.
+        name, scope = plan(tree)
+        return without_slot(tree, name, scope)
+
+    def terse_run(tree):
+        return without_slot(tree, *plan(tree))
 
     # Only a selected run merges a tree to plan its scope before it knows whether it slots; a
     # full-suite run has no scope to plan and merges afresh INSIDE the slot, so its conflict (if
     # any) is decided there, not before the wait; a named command merges once and takes no slot.
-    scope = None
     if for_item and not override:
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                cmd, scope = plan(tree)
-                if not _needs_suite_slot(cfg, cmd, scope, rates):
-                    return without_slot(tree, cmd, scope)
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
-
+        if (settled := _merged_once(repo, cfg, sha, base, cmd, scoped_run)) is not None:
+            return settled
     elif override:
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                cmd, scope = plan(tree)
-                return without_slot(tree, cmd, scope)
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
-
+        return _merged_once(repo, cfg, sha, base, cmd, override_run)
     elif not _needs_suite_slot(cfg, cmd, None, rates):
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                return without_slot(tree, *plan(tree))
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
+        return _merged_once(repo, cfg, sha, base, cmd, terse_run)
 
     try:
-        p, out_prefix, waited, cmd, scope = _run_under_slot(
-            cfg, holder, repo, sha, base, cmd, budget, tick, used,
-            lock_wait=_lock_wait(timeout_s), plan=merged,
+        p, out_prefix, waited, cmd, scope, elapsed = _run_under_slot(
+            cfg,
+            holder,
+            repo,
+            sha,
+            base,
+            cmd,
+            budget,
+            tick,
+            used,
+            plan=merged,
+            env_extra=env_extra,
         )
     except SL.SuiteBusy as busy:
-        return Result(
-            "unavailable", command=cmd, sha=sha, reason=str(busy),
-            waited_s=round(busy.waited_s, 6),
-        )  # fmt: skip
+        return _busy_result(cmd, sha, busy)
     if p is None:  # the fresh merge refused the run: a conflict, or stale pins
         out_prefix.waited_s = waited
         return out_prefix
-    return finish(p, out_prefix, waited, cmd, scope)
+    return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lock_wait, plan):
+def _run_under_slot(  # noqa: PLR0913 -- the run's whole context, one parameter per facet
+    cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan, env_extra=None
+):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
     returns the tree's (scoped command, scope) or the Result that refuses it. Returns
-    ``(run, out_prefix, waited, cmd, scope)``: ``run`` is the process, or None with ``out_prefix``
-    the Result that refused the fresh merge."""
+    ``(run, out_prefix, waited, cmd, scope, elapsed)``: ``run`` is the process, or None with
+    ``out_prefix`` the Result that refused the fresh merge and ``elapsed`` None (no command ran).
+    The queue wait (`[ci].suite_wait_s`) is separate from ``budget``: the run keeps its whole
+    budget however long it queued (B4f35548c0a)."""
     waited = None
-    queued_at = time.monotonic()
-    with SL.hold(cfg, holder, wait_s=lock_wait):
-        waited = round(time.monotonic() - queued_at, 6)
-        if lock_wait is not None:
-            budget = max(1, int(lock_wait) - int(waited))
+    queued_at = CLOCK.monotonic()
+    with SL.hold(cfg, holder, scope="ci"):
+        waited = round(CLOCK.monotonic() - queued_at, 6)
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
-                return None, Result(status, command=cmd, sha=sha, reason=failure), waited, cmd, None
+                return (
+                    None,
+                    Result(status, command=cmd, sha=sha, reason=failure),
+                    waited,
+                    cmd,
+                    None,
+                    None,
+                )
             planned = plan(tree)
             if isinstance(planned, Result):
-                return None, planned, waited, cmd, None
+                return None, planned, waited, cmd, None, None
             cmd, scope = planned
-            p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used)
-            return p, out_prefix, waited, cmd, scope
+            p, out_prefix, elapsed = _execute(
+                cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used,
+                **_extra(env_extra),
+            )  # fmt: skip
+            return p, out_prefix, waited, cmd, scope, elapsed
     raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
 
-def _lock_wait(timeout_s: int) -> float | None:
-    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone, what
-    `SL.hold` falls back to), or ``timeout_s`` when it is a positive per-run override: the
-    override caps the queued wait (this value) and is the budget of the run behind it.
-    A queued run used to give up at the knob although the caller had authorised a much
-    longer run, and a shorter run had no say about its queue wait either (Ba5d5d63f12)."""
-    if timeout_s <= 0:
-        return None
-    return float(timeout_s)
-
-
-def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None):
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, env_extra=None):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
-    its output prefix and the seconds spent queued for the slot (None without one). ``holder``
+    its output prefix, the seconds spent queued for the slot (None without one), and the run's
+    own elapsed seconds (B28537b615d). ``holder``
     is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
     an empty named command is the suite, never `not cmd.strip()` on the materialized command.
-    ``lock_wait`` replaces the wait limit for this hold (see `_lock_wait`)."""
+    The queue wait (`[ci].suite_wait_s`) never comes off ``budget``: the timeout budgets the run
+    alone (B4f35548c0a)."""
     waited: float | None = None
-    queued_at = time.monotonic()
-    with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
+    queued_at = CLOCK.monotonic()
+    with SL.hold(cfg, holder, scope="ci") if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
-            waited = round(time.monotonic() - queued_at, 6)
-            if lock_wait is not None:  # the per-run timeout also bounds the run BEHIND the wait
-                budget = max(1, int(lock_wait) - int(waited))
-        p, out_prefix = _execute(
-            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
-        )
-    return p, out_prefix, waited
+            waited = round(CLOCK.monotonic() - queued_at, 6)
+        p, out_prefix, elapsed = _execute(
+            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used,
+            **_extra(env_extra),
+        )  # fmt: skip
+    return p, out_prefix, waited, elapsed
 
 
 def _unfinished(p, cmd: str, sha: str, scope) -> Result | None:
@@ -396,6 +476,17 @@ def _default_on_the_diff(
     return scope_to_diff(cmd, tree, since)
 
 
+def _merged_range_env(repo: Path, changed_from: str) -> dict[str, str]:
+    """The range a merge added as ``PRE_COMMIT_FROM_REF``/``PRE_COMMIT_TO_REF``, for the run's
+    environment (never spliced into the command text, which may be any shell). An unscoped run
+    (`--all-files`: a whole-suite or operator-written command) has pre-commit export no range,
+    and a hook that scans commits (gitleaks-pushed.sh) would fall back to `origin/main..HEAD`,
+    every unpushed local commit. A command already scoped (`--from-ref`) sets the same values
+    itself. {} when no range is known."""
+    since = W.rev(repo, changed_from) if changed_from else ""
+    return {"PRE_COMMIT_FROM_REF": since, "PRE_COMMIT_TO_REF": "HEAD"} if since else {}
+
+
 def _worker_log(scope) -> dict[str, dict]:
     """The scope's record of the worker counts used, stage -> the count and its inputs."""
     used: dict[str, dict] = {}
@@ -439,7 +530,7 @@ def _runs_whole_suite(cmd: str, scope) -> bool:
 
 
 def _holder(repo: Path, ref: str) -> str:
-    return os.environ.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
+    return ENV.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
 
 
 @contextmanager
@@ -471,12 +562,25 @@ def localize_hooks(
         yield cmd.replace("pre-commit run", f"pre-commit run -c {shlex.quote(str(name))}")
 
 
+def _extra(env_extra) -> dict:
+    """``env_extra`` as the keyword the executors take, absent when empty."""
+    return {"env_extra": env_extra} if env_extra else {}
+
+
 def _execute(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, holding_suite=False, used=None
+    cfg: Config,
+    tree: Path,
+    cmd: str,
+    scope,
+    budget: int,
+    tick=None,
+    holding_suite=False,
+    used=None,
+    env_extra=None,
 ):
-    """(the run that decided the verdict, the output of the run before it): the command as
-    written, or -- for a selected scope -- the hooks without the suite, then the selected
-    tests on the same tree."""
+    """(the run that decided the verdict, the output of the run before it, and the run's own
+    elapsed seconds summed across its stages): the command as written, or -- for a selected
+    scope -- the hooks without the suite, then the selected tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
     cmd = _with_workers(cmd, cfg, used, "command", holding_suite=holding_suite)
@@ -485,35 +589,74 @@ def _execute(
         if holding_suite
         else nullcontext(cmd) as cmd
     ):
-        return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected, holding_suite)
+        return _run_stages(
+            cfg, tree, cmd, scope, budget, tick, used, selected, holding_suite, env_extra
+        )
 
 
 def _run_stages(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected, holding_suite=False
+    cfg: Config,
+    tree: Path,
+    cmd: str,
+    scope,
+    budget: int,
+    tick,
+    used,
+    selected,
+    holding_suite=False,
+    env_extra=None,
 ):
+    """Returns ``(run, prefix, elapsed)`` on BOTH paths: the run that decided the verdict, the
+    output emitted before it, and the run's own elapsed seconds summed across its stages
+    (``spent`` is initialized from the first stage's ``elapsed_s`` and accumulated per later
+    one, so the selected+always stages are included -- B28537b615d)."""
     on_tick, tick_s = tick or (None, 0)
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
         Declared(cmd, "[ci].command"),
         cwd=tree,
-        env={**child_env(cfg, ci=True), **({"SKIP": scope.skip} if selected else {})},
+        env={
+            **child_env(cfg, ci=True),
+            **(env_extra or {}),
+            **({"SKIP": scope.skip} if selected else {}),
+        },
         timeout_s=budget,
         check_installed=False,  # checked before the scratch worktree was made
         on_tick=on_tick,
         tick_s=tick_s,
     )
-    unran: set[str] = set()  # stages whose process never started: not a failure of the checks
+    spent = p.elapsed_s  # the run's own wall time, summed across its stages (B28537b615d)
+    unran: set[str] = set()  # stages whose process never started, or was killed: not a failure
     if selected:
         scope.unran = unran
         scope.ok["hooks"] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add("hooks")
     if not (selected and p.ran and p.code == 0):
         if selected:
             _say_what_ran(scope, unran)
-        return p, ""
-    before, spent = p.output, p.elapsed_s
+        return p, "", spent
+    return _run_test_stages(cfg, tree, scope, budget, used, tick, p, spent, unran, holding_suite)
+
+
+def _run_test_stages(
+    cfg: Config,
+    tree: Path,
+    scope,
+    budget: int,
+    used,
+    tick,
+    p,
+    spent,
+    unran: set[str],
+    holding_suite,
+):
+    """Run the selected-then-always test stages after the hooks passed, and fold the verdict
+    into ``scope``. Extracted from `_run_stages` so the stage fan-out stays under the
+    complexity ratchet."""
+    on_tick, tick_s = tick or (None, 0)
+    before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
     red = None  # the selection, when it ran and failed: the guards still run after it
@@ -531,7 +674,7 @@ def _run_stages(
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
@@ -542,7 +685,7 @@ def _run_stages(
     if red is not None:
         p = _selection_verdict(red, p, unran)
     _say_what_ran(scope, unran)
-    return p, before
+    return p, before, spent
 
 
 def _selection_verdict(red, guards, unran: set[str]):
@@ -613,23 +756,56 @@ def _scope_evidence(scope, sha: str) -> dict:
 
 def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
     out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
-    checks = parse_checks(out)
-    if out_prefix:  # the hooks passed and the selected tests ran after them
+    # A negative exit is a signal: the process was killed from outside before it could report
+    # a verdict, so it is unavailable, never a failed check (B512a5d7f35). `p.code` is None only
+    # for a run that timed out or never started, both of which `_unfinished` already turned away.
+    # A killed run gives no verdict, so it records no hook checks either (a half-run 'Failed'
+    # line is not a verdict).
+    killed = _killed(p)
+    checks = parse_checks(out) if not killed else []
+    if out_prefix and not killed:  # the hooks passed and the selected tests ran after them
         for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
             if label in scope.ok:
                 name = f"{label} tests ({count} files)"
                 checks.append(Check(name, scope.ok[label]))
-    if p.code != 0 and not any(not c.ok for c in checks):
+    if p.code != 0 and not killed and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
+    if not killed and p.code == 0 and _full_run_ran_no_test(cmd, scope, checks):
+        return Result(
+            "unavailable",
+            checks=checks,
+            sha=sha,
+            merged_with=base,
+            command=cmd,
+            reason=(
+                "the pre-commit `tests` hook was skipped (the diff matched no test file), so no "
+                "test ran: running none passes vacuously, and the gate is unavailable, not passed"
+            ),
+            output_tail=out[-TAIL_CHARS:],
+            output=out,
+            scope=_scope_evidence(scope, sha),
+        )
     return Result(
-        "passed" if p.code == 0 else "failed",
+        "unavailable" if killed else "passed" if p.code == 0 else "failed",
         checks=checks,
         sha=sha,
         merged_with=base,
         command=cmd,
-        reason="" if p.code == 0 else f"{cmd} exited {p.code}",
+        reason=""
+        if p.code == 0
+        else (f"{cmd} killed by signal {-p.code}" if killed else f"{cmd} exited {p.code}"),
         output_tail=out[-TAIL_CHARS:],
         output=out,
-        failures=failure_evidence(out) if p.code != 0 else {},
+        failures=failure_evidence(out) if p.code != 0 and not killed else {},
         scope=_scope_evidence(scope, sha),
     )
+
+
+def _full_run_ran_no_test(cmd: str, scope, checks: list[Check]) -> bool:
+    """Does a FULL-scope item run's pre-commit test hook report nothing? On an empty diff the
+    file-filtered `tests` hook is skipped, so only non-test hooks (gitleaks, lint) run and
+    `passed` would be vacuous: unavailable, never passed (B717b798547, r-unavailable-not-pass).
+    A selected scope and a non-pre-commit command are untouched."""
+    if scope is None or scope.scope != "full" or "pre-commit run" not in cmd:
+        return False
+    return not any("test" in c.id.lower() for c in checks)

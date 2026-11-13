@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.burn_rate_exhaust_s"
+new = "3600.0"
+why = "The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is flagged `burning`: the budget is on track to be spent within this horizon"
+impact = "additive"

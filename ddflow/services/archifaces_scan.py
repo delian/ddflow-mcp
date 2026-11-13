@@ -96,6 +96,44 @@ ACP_METHODS = frozenset(
     }
 )
 
+# A hand-rolled A2A (Agent2Agent) client is detected by its JSON-RPC method names
+# (v1.0.0 core methods, `message/send` kept as its deprecated alias).
+A2A_METHODS = frozenset(
+    {
+        "message/send",
+        "message/stream",
+        "tasks/get",
+        "tasks/cancel",
+        "tasks/resubscribe",
+    }
+)
+
+# A hand-rolled client of a protocol that has no home yet names the protocol by its own
+# string literal (`"openapi"` is the version key of every OpenAPI document; ``"utcp"`` is the
+# Universal Tool Calling Protocol). They have no adapter today, so any use is a new interface
+# that must go through one (see ``archifaces.PROTOCOL_HOMES``).
+OPENAPI_LITERALS = frozenset({"openapi"})
+UTCP_LITERALS = frozenset({"utcp"})
+
+# A set literal that names exactly one protocol family (the `jsonrpc` literal is handled
+# apart: it disambiguates to mcp/acp when those methods are present). The family sets are
+# required to be pairwise disjoint: a method name in two families is a defect, not a tie
+# to resolve silently, so an overlap is asserted against at import.
+_LITERAL_FAMILY: dict[str, str] = {}
+for _fam, _lits in (
+    ("mcp", MCP_METHODS),
+    ("acp", ACP_METHODS),
+    ("a2a", A2A_METHODS),
+    ("openapi", OPENAPI_LITERALS),
+    ("utcp", UTCP_LITERALS),
+):
+    _overlap = set(_lits) & _LITERAL_FAMILY.keys()
+    assert not _overlap, (
+        f"protocol literals overlap {_fam} with an earlier family: {sorted(_overlap)}"
+    )
+    for _lit in _lits:
+        _LITERAL_FAMILY[_lit] = _fam
+
 # A file another tool owns: the literal's last path component (or the whole literal).
 MANAGED_NAMES: dict[str, str] = {
     "settings.json": "settings.json",
@@ -123,6 +161,11 @@ _LOOP_SPAWN = (".subprocess_exec", ".subprocess_shell")  # asyncio event-loop me
 _ENVIRON = ("os.environ", "os.environb")
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?(\[[0-9a-f:.]+\]|[^/:?#\s{}\[\]]+)", re.IGNORECASE)
+#: URL prefixes that only IDENTIFY a message format's schema namespace (the Adaptive Cards
+#: schema the Teams channel embeds as its ``$schema`` field): not an endpoint this project
+#: calls, so not a network dependence (bug B489298dd27). The exemption is the SCHEMA namespace
+#: path, not the host -- any other path on the same host is still a network site.
+_SCHEMA_NS_PREFIXES = ("http://adaptivecards.io/schemas/", "https://adaptivecards.io/schemas/")
 
 
 @dataclass(frozen=True)
@@ -407,10 +450,8 @@ class _Scan:
             ]
             for fam in fams or ["jsonrpc"]:
                 self.add("protocol", fam, node, v)
-        elif v in MCP_METHODS:
-            self.add("protocol", "mcp", node, v)
-        elif v in ACP_METHODS:
-            self.add("protocol", "acp", node, v)
+        elif v in _LITERAL_FAMILY:
+            self.add("protocol", _LITERAL_FAMILY[v], node, v)
         m = _URL.match(v)
         name = v.rsplit("/", 1)[-1]
         if not m and name in MANAGED_NAMES and "\n" not in v and " " not in v:
@@ -418,7 +459,7 @@ class _Scan:
         hooks = v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v
         if hooks and not m:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
-        if m:
+        if m and not v.lower().startswith(_SCHEMA_NS_PREFIXES):
             host = m.group(1).lower()
             self.add("network", f"host:{host}", node, host)
 

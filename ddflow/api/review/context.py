@@ -33,8 +33,16 @@ _DELTA_CAVEAT = (
 
 
 def _converges(kind: str, fix: bool) -> bool:
-    """Whether the convergence floor applies: a full, non-fix re-review only."""
-    return kind == "full" and not fix
+    """Whether the convergence floor applies: a full or delta, non-fix re-review.
+
+    A delta round shows only the new commits, but the author has still triaged every
+    finding the earlier rounds recorded, so a delta that keeps raising a new MEDIUM or
+    LOW nit must converge the same way a full re-review does (bug
+    B-review-delta-rounds-do-not-converge). A fix round re-checks the author's fixes
+    alone, where any new finding is a real defect of the new code, so it still blocks at
+    any severity.
+    """
+    return kind in ("full", "delta") and not fix
 
 
 def _floor_for(cfg, kind: str, fix: bool) -> str:
@@ -43,8 +51,8 @@ def _floor_for(cfg, kind: str, fix: bool) -> str:
 
 
 def _floor_lines(floor: str) -> list[str]:
-    """The prompt's convergence-floor paragraph; empty when no floor applies (a delta or
-    fix round, where every finding blocks, bug Bf797745b5a)."""
+    """The prompt's convergence-floor paragraph; empty when no floor applies (a chunk
+    re-run or a fix round, where every finding blocks, bug Bf797745b5a)."""
     if not floor:
         return []
     return [
@@ -89,6 +97,7 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         return context
     mine = it.triage.get(gate, {})
     cleared = _cleared_confirmed(it, gate) if kind == "delta" else set()
+    look = "the commits shown" if kind == "delta" else "the whole diff"
     lines = [
         "## Previous findings on this change, and the author's triage",
         "",
@@ -99,8 +108,8 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         "saying why the fix or the probe does not answer it. Do not restate a finding from "
         "memory: check each previous finding against the current code, and do not carry it over "
         "when the code it cites is gone or the change answers it; if the same defect "
-        "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
-        "the whole diff -- these are not the only places to look.",
+        "still stands (even moved or edited), report it at its new place. Then look for NEW "
+        f"issues in {look} -- these are not the only places to look.",
         "",
         *_floor_lines(floor),
     ]
@@ -112,8 +121,13 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         lines.extend(_finding_lines(shown, f, mine, supers))
     if shown == 0:
         return context
+    scope = (
+        f"the delta of {item} (commits since the reviewed head)"
+        if kind == "delta"
+        else f"the whole diff of {item}"
+    )
     say(
-        f"re-review: the whole diff of {item}, with {shown} previous {gate} finding(s) "
+        f"re-review: {scope}, with {shown} previous {gate} finding(s) "
         "and their triage (D-gate-economy)"
     )
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)

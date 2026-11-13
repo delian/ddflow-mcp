@@ -59,6 +59,16 @@ def counts_of(summary: str) -> dict[str, int]:
     return {m.group(2).rstrip("s"): int(m.group(1)) for m in _COUNT.finditer(summary)}
 
 
+def coverage_of(evidence: dict) -> str:
+    """The counts a partial gate's ``summary`` lines declare -- "16 failed, 572 passed" --
+    or "" when they declare none (the caller says "unknown"). Every line is read, not just
+    the last: a second runner banner's counts must not be dropped (B-gate-status-partial-
+    did-not-run)."""
+    summary = evidence.get("summary") or []
+    counts = counts_of(" ".join(summary))
+    return ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+
+
 # -- a test gate that uses one core --------------------------------------------------
 #
 # Measured on this repository (research R537ed343e7): the unit_tests gate ran pytest

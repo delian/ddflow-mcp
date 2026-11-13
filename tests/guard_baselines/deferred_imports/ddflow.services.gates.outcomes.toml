@@ -1,0 +1,4 @@
+# Ratchet `deferred_imports` for ddflow.services.gates.outcomes (tests/test_architecture_guards.py).
+# `.failed_review` is imported lazily to break the cycle where failed_review imports this
+# module back. Lower it in the same change that removes sites; delete the file at zero; never raise it.
+baseline = 1

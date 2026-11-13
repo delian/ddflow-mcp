@@ -3,31 +3,57 @@
 [[kind]]
 name = "bug.fixed"
 doc = "A bug was closed as fixed, with its regression test and lesson."
+fields = { "changelog" = ["dict"], "lesson" = ["str"], "regression_test" = ["str"], "regression_tests" = ["list"], "regression_verified" = ["str"], "regression_verify" = ["dict"], "sha" = ["str"] }
+text = ["lesson", "changelog", "regression_verify"]
+lookup = { "regression_test" = "a test id", "regression_tests" = "test ids", "regression_verified" = "an outcome word" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "bug.invalid"
 doc = "A bug was closed as not a bug, with the evidence."
+fields = { "evidence" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "bug.reopened"
 doc = "A closed bug was reopened."
+fields = { "fix_task" = ["str"], "reason" = ["str"], "was" = ["str"] }
+text = ["reason"]
+lookup = { "was" = "a state word" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "bug.tagged"
 doc = "The tags of a bug were changed (added or removed), open or closed."
+fields = { "add" = ["list"], "remove" = ["list"], "tags" = ["list"] }
+lookup = { "add" = "the tags added: label words", "remove" = "the tags removed: label words" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "bug.reported_upstream"
 doc = "A ddflow-scoped bug was reported, or prepared for reporting, upstream."
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "decision.superseded"
 doc = "A decision was replaced by a later one."
+fields = { "by" = ["str"], "reason" = ["str"] }
+text = ["reason"]
+lookup = { "by" = "an agent id" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "memory.forgotten"
 doc = "A memory was forgotten."
+fields = { "reason" = ["str"] }
+text = ["reason"]
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "memory.redacted"
 doc = "A superseded memory's text was redacted from the log."
+fields = { "event" = ["str"], "reason" = ["str"] }
+text = ["reason"]
+lookup = { "event" = "the id of the superseded memory.recorded event that was redacted" }
+exempt = "a redaction marker names the superseded event id and why; memory_add writes it, not an authored add to duplicate-check"

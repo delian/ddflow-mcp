@@ -15,13 +15,13 @@ from pathlib import Path
 from ...core import digest as D
 from ...core import textsim
 from ...core.model import State, fold
+from ..fsio import replace_path
 from ..log import EventLog, _flock
 from ._fingerprint import (
     _INDEX_FILE,
     META_MARK,
     META_SHARD_DIGESTS,
     REBUILD_TEMP_MAX_AGE_S,
-    STALE_INDEX_DAYS,
     _capability_tables,
     _environmental,
     collect_over_cap,
@@ -203,7 +203,7 @@ class _ProjectionMixin:
         for suf in ("-wal", "-shm"):
             tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
             self.path.with_name(self.path.name + suf).unlink(missing_ok=True)
-        tmp.replace(self.path)
+        replace_path(tmp, self.path)
         self._collect_stale_indexes()
 
     def _incremental_enabled(self) -> bool:
@@ -406,12 +406,12 @@ class _ProjectionMixin:
         )
 
     def _collect_stale_indexes(self) -> list[Path]:
-        """Delete the indexes of OTHER code untouched for `STALE_INDEX_DAYS`. Best effort,
+        """Delete the indexes of OTHER code untouched for `[store].stale_index_days`. Best effort,
         and never this fingerprint's own files: an index in use is touched by `stale()` at least
         daily, and a mistaken removal only costs that checkout a rebuild."""
         gone: list[Path] = []
         mine = self.path.name
-        cutoff = time.time() - STALE_INDEX_DAYS * 86400
+        cutoff = time.time() - self.cfg.store.stale_index_days * 86400
         for f in self.path.parent.glob("index.db*"):
             if f.name.startswith(mine) or not _INDEX_FILE.match(f.name):
                 continue

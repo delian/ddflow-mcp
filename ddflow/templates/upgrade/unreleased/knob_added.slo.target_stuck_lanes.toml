@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_stuck_lanes"
+new = "2"
+why = "The stuck-lane target: the most live lanes that may be idle past `[lanes]` hold without activity before the SLI is over target"
+impact = "additive"

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "lease.inbox_retain_s"
+new = '86400'
+why = "Seconds a DELIVERED inbox message is kept after delivery, so an agent can read it again once a piped heartbeat lost it (B-inbox-message-gone-after-heartbeat)."
+impact = "additive"

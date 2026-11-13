@@ -34,6 +34,28 @@ def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _in_process_cli_runs_the_tree_under_test(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI refuses to run when its package came from a linked worktree that is not the
+    caller's own tree (``api.guard_launch``). An in-process ``cli.main`` call from a test that
+    ``chdir``s into a sandbox repository is exactly that from a lane's worktree (cwd is the
+    sandbox, the package is the lane's), though pytest imported the very tree under test on
+    purpose: the pins that record the CLI's output recorded the refusal itself, and the suite
+    went red in every lane (Bc28808f9c3, Bdc7cd5b259).
+
+    So the wrapper the CLI calls is stubbed here, and ONLY the wrapper: the guard itself
+    (``api.guard_launch.guard_foreign_launch``) and its subprocess behaviour are what
+    tests/test_foreign_worktree_import.py exercises, and a test that goes through the CLI
+    wrapper opts back in with ``@pytest.mark.real_foreign_guard``."""
+    if request.node.get_closest_marker("real_foreign_guard"):
+        return
+    from ddflow.surfaces import cli
+
+    monkeypatch.setattr(cli, "_guard_foreign_launch", lambda: cli.OK)
+
+
+@pytest.fixture(autouse=True)
 def _no_auto_wave_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
     """``[waves].auto_stamp`` (default on) tags every open task with ``wave:N`` after a command
     that changed the graph; the many tests that read an item's ``tags`` back would each see

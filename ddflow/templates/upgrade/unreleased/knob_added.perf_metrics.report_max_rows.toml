@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.report_max_rows"
+new = "20"
+why = "Perf report (PM-report-surfaces): most rows the text/markdown renderer shows per section; the cut line names the omitted count and says the json holds every row."
+impact = "additive"

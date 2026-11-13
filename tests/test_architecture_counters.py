@@ -54,6 +54,17 @@ def _iter_counter_cases() -> Iterator[tuple[str, str, int]]:
     yield ("x = ['git', 'log']\ny = ('git',)\nz = ['gitx']\n", "git_argv", 2)
     yield ("p.write_text('x')\np.read_text()\n", "write_text", 1)
     yield ("import os\nos.replace(a, b)\nos.rename(a, b)\n", "os_replace", 1)
+    yield ("from pathlib import Path\nPath('a').replace('b')\n", "os_replace", 1)
+    yield ("from pathlib import Path\nPath('a').replace('b').replace('c')\n", "os_replace", 2)
+    yield ("from pathlib import Path\nPath('a').parent.replace('b')\n", "os_replace", 1)
+    yield ("from pathlib import Path\n(Path('a') / 'b').replace('c')\n", "os_replace", 1)
+    yield (
+        "from pathlib import Path\nPath('foo').relative_to('.', 'foo').replace('d')\n",
+        "os_replace",
+        1,
+    )
+    yield ("from pathlib import Path\nPath('a').readlink().replace('d')\n", "os_replace", 1)
+    yield ("from pathlib import Path\nPath('a/b').parents[0].replace('d')\n", "os_replace", 1)
     yield ("import hashlib\nhashlib.sha256(b'').hexdigest()\n", "hashlib", 1)
     yield ("from hashlib import sha256\nsha256(b'')\nsha256(b'x')\n", "hashlib", 2)
     yield ("import fcntl\nfcntl.flock(f, fcntl.LOCK_EX)\n", "fcntl", 2)
@@ -131,10 +142,13 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
         f"importlinter-{c}.toml" for c in contracts if c not in SPLIT_CONTRACTS
     }
     split = {f"importlinter-{c}" for c in contracts if c in SPLIT_CONTRACTS}
+    # `ports_without_fake` is a per-port directory checked by tests/test_ports_contract.py
+    # (a sibling guard), not one of these counters; it lives in the same `guard_baselines`.
+    other_guards = {"ports_without_fake"}
     present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
-    assert present - set(PER_MODULE) - split == expected, (
+    assert present - set(PER_MODULE) - split - other_guards == expected, (
         f"missing: {sorted(expected - present)}; "
-        f"read by no guard: {sorted(present - expected - set(PER_MODULE) - split)}"
+        f"read by no guard: {sorted(present - expected - set(PER_MODULE) - split - other_guards)}"
     )
     modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:

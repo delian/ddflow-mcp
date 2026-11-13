@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.claude_autocompact_pct_override"
+new = "0"
+why = "`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, in percent, alongside `claude_autocompact_window`: it LOWS the window only (Claude Code honours it as a percentage override, never a raise). 0 leaves the harness default untouched."
+impact = "additive"

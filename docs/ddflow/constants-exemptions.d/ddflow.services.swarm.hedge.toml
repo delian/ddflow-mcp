@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/swarm/hedge.py:DEFAULT_CAP_RATIO" = 'SW-Q5 hedge spend-cap ratio default; the ratio itself is a parameter (budget(ratio=...) / plan(budget_usd=...)), this is only its default'

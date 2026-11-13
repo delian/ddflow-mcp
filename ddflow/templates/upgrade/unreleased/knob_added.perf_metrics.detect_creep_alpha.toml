@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_creep_alpha"
+new = "0.10"
+why = "Perf drift detector (D-perf-metrics-answers): EWMA alpha for slow creep."
+impact = "additive"

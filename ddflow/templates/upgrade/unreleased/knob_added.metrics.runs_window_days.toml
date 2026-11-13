@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.runs_window_days"
+new = "30"
+why = "The runs-to-merge view (`ddflow metrics runs`) measures merged items over a window in days back from now; the width is a knob."
+impact = "additive"

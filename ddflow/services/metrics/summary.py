@@ -35,11 +35,12 @@ def scoped_outcomes(ctx: Context) -> list[Outcome]:
     return [o for o in ctx.facts.outcomes if ctx.in_scope(o.item, o.at)]
 
 
-def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
-    """(outcome, seconds from its gate starting to the verdict). The start is the latest
-    ``gate.started`` since the item's previous verdict on that gate; failing that, a
-    review's own recorded ``elapsed_s``. An outcome with neither has no duration."""
-    out: list[tuple[Outcome, float]] = []
+def _timed(ctx: Context) -> list[tuple[Outcome, float | None]]:
+    """(outcome, its duration or None) for each RAN, in-scope outcome in time order: the span
+    from the latest ``gate.started`` since the item's previous verdict on that gate, else the
+    outcome's own ``elapsed_s``, else None (untimed). `gate_durations` and `build` read this
+    ONE scan two ways (timed durations / the untimed count), so the two cannot drift (B28537b615d)."""
+    out: list[tuple[Outcome, float | None]] = []
     last_verdict: dict[tuple[str, str], float] = {}
     for o in sorted(ctx.facts.outcomes, key=lambda o: o.at):
         key = (o.item, o.gate)
@@ -52,7 +53,16 @@ def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
             out.append((o, o.at - max(began)))
         elif o.elapsed_s is not None:
             out.append((o, o.elapsed_s))
+        else:
+            out.append((o, None))
     return out
+
+
+def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
+    """(outcome, seconds from its gate starting to the verdict). The start is the latest
+    ``gate.started`` since the item's previous verdict on that gate; failing that, a
+    review's own recorded ``elapsed_s``. An outcome with neither has no duration."""
+    return [(o, secs) for o, secs in _timed(ctx) if secs is not None]
 
 
 def gate_waits(ctx: Context) -> dict[str, list[float]]:
@@ -180,17 +190,26 @@ def build(ctx: Context, group_by: str = "gate") -> dict:
         return s
 
     cycle = need("cycle_time", [s.cycle_s for s in completed_spans(ctx)], "completed items")
+    timed = _timed(ctx)
     per_gate: dict[str, list[float]] = defaultdict(list)
-    for o, secs in gate_durations(ctx):
-        per_gate[o.gate].append(secs)
+    untimed: dict[str, int] = defaultdict(int)
+    for o, secs in timed:
+        if secs is None:
+            untimed[o.gate] += 1
+        else:
+            per_gate[o.gate].append(secs)
     waits = gate_waits(ctx)
     gate_time = [
         {
             "gate": g,
-            **stat(v, minimum),
+            **stat(per_gate.get(g, []), minimum),
+            # RAN outcomes this gate's duration figure left out (no started, no elapsed_s).
+            # A gate with ONLY untimed outcomes still appears (over its untimed count), so a
+            # window whose runs were all hand/ci-run recorded is named, not silently dropped.
+            "untimed": untimed.get(g, 0),
             **{f"wait_{k}": x for k, x in stat(waits.get(g, []), minimum).items()},
         }
-        for g, v in sorted(per_gate.items())
+        for g in sorted(set(per_gate) | set(untimed))
     ]
     if not any(r["p50_s"] is not None for r in gate_time):
         unavailable["gate_time"] = f"no gate with {minimum} timed runs"

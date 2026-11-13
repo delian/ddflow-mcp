@@ -70,6 +70,16 @@ def test_the_mcp_action_matches_the_cli(repo):
     assert cmd.payload({"action": "status"})[0] == "installed"
 
 
+def test_the_facts_help_names_control_plane_facts_and_plane_ids(repo):
+    """`harness facts` now renders control-plane facts and `--agent` takes a plane id, so the
+    help must say 'control-plane' — not 'every descriptor value'/'one agent' (B-harness-facts-
+    help-omits-planes)."""
+    _, facts_help, _ = run_cli(repo, "harness", "facts", "--help")
+    assert "control plane" in facts_help  # --agent: an agent descriptor or control plane
+    _, harness_help, _ = run_cli(repo, "harness", "--help")
+    assert "control-plane fact" in harness_help  # the `facts` subcommand description
+
+
 def test_a_toml_mcp_file_is_judged_by_its_servers_not_by_a_substring(repo):
     codex = HR.get("codex")
     path = repo / codex.mcp.path

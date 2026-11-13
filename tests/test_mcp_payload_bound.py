@@ -44,19 +44,59 @@ def _blocked_queue(repo, n: int = 40) -> None:
         log.append("task.added", f"W{i:02d}", {"title": f"waits {i}", "needs": ["READY"]})
 
 
-def test_next_cuts_the_blocked_list_and_counts_it_exactly(repo):
+def test_next_defers_the_blocked_cut_to_output_max_rows(repo):
+    """The 11..50 window: MCP shows what `--json next` shows (output_caps, max_rows 50)."""
     _blocked_queue(repo)
-    r = _call(repo, "ddflow_next")
-    body = _body(r)
+    body = _body(_call(repo, "ddflow_next"))
     assert [i["id"] for i in body["ready"]] == ["READY"]
-    assert len(body["blocked"]) == B.NEXT_BLOCKED_SHOWN
+    assert len(body["blocked"]) == 40 and "truncated" not in body
+    log = EventLog(repo, "agent-test")
+    for i in range(30):
+        log.append("task.added", f"X{i:02d}", {"title": f"x {i}", "needs": ["READY"]})
+    cut = _body(_call(repo, "ddflow_next"))
+    assert len(cut["blocked"]) == 50 and cut["truncated"]["lists"]["blocked"] == 70
+
+
+def test_next_blocked_hint_says_the_reason_is_in_next_not_show(repo):
+    """Bc4fef29fa0: the hint once said ddflow_show <id> explains why an item is blocked,
+    but show of a cap-held item gives no reason. The reason is in next's blocked list."""
+    _blocked_queue(repo, 70)
+    body = _body(_call(repo, "ddflow_next"))
     cut = body["truncated"]
-    assert cut["blocked"] == 40 and cut["shown"] == B.NEXT_BLOCKED_SHOWN
-    assert sum(cut["blocked_by_reason"].values()) == 40
+    assert "not in ddflow_show <id>" in cut["all"]
+    # the hint points at next's blocked list as the reason source: the shown rows carry one
+    assert all(b.get("reason") for b in body["blocked"])
+
+
+def test_next_clips_long_ready_bodies_and_says_so(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "READY",
+        {"title": "start here", "globs": ["r.py"], "body": "a long body " * 80},
+    )
+    row = _body(_call(repo, "ddflow_next"))["ready"][0]
+    assert row["id"] == "READY" and row["body"].endswith("[...]")
+    body = _body(_call(repo, "ddflow_next"))
+    assert body["truncated"]["clipped_strings"] == 1
+    assert "--json next" in body["truncated"]["all"]
+
+
+def test_next_clip_merges_with_the_blocked_cut_note(repo):
+    _blocked_queue(repo, 60)
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "LONG",
+        {"title": "long body", "globs": ["lg.py"], "body": "a long body " * 80},
+    )
+    cut = _body(_call(repo, "ddflow_next"))["truncated"]
+    assert cut["lists"]["blocked"] == 60 and cut["clipped_strings"] == 1
     assert "--json next" in cut["all"]
 
 
-def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
+def test_next_is_whole_below_the_bound_and_cli_and_mcp_agree_above_it(repo):
     _blocked_queue(repo, 3)
     assert "truncated" not in _body(_call(repo, "ddflow_next"))
     _blocked_queue_cli = run_cli(repo, "--json", "next")[1]
@@ -67,7 +107,7 @@ def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
         log.append("task.added", f"X{i:02d}", {"title": f"x {i}", "needs": ["READY"]})
     cli = json.loads(run_cli(repo, "--json", "next")[1])
     assert len(cli["blocked"]) == 33
-    assert len(_body(_call(repo, "ddflow_next"))["blocked"]) == B.NEXT_BLOCKED_SHOWN
+    assert len(_body(_call(repo, "ddflow_next"))["blocked"]) == 33
 
 
 def _gated(repo) -> None:
@@ -323,6 +363,34 @@ def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
     out, _ = B.bound_show(body, {})
     assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
     assert out["truncated"]["findings_cut"] > 0
+
+
+def test_show_bounds_a_flat_string_list_in_gate_evidence():
+    """A gate-evidence LIST OF BARE STRINGS is bounded too: a `ci` gate's `baseline.ids`
+    (and `failed_tests`) is a flat list of test ids, not a list of finding dicts, and its
+    50 KB of ids alone once pushed `ddflow_show` past the tool-result cap
+    (B-show-result-over-mcp-cap). Each id is short, so the string clip leaves it alone; the
+    list itself must be capped and counted, like the findings lists are."""
+    ids = [f"tests/test_x{i:04d}.py::test_thing" for i in range(5_000)]
+    body = {
+        "state": "running",
+        "gates": {
+            "ci": {
+                "outcome": "partial",
+                "evidence": {
+                    "baseline": {"ids": list(ids), "still_failing": list(ids), "red": True},
+                    "failed_tests": list(ids),
+                },
+            }
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    ev = out["gates"]["ci"]["evidence"]
+    assert len(ev["baseline"]["ids"]) <= B.FINDINGS_SHOWN
+    assert len(ev["baseline"]["still_failing"]) <= B.FINDINGS_SHOWN
+    assert len(ev["failed_tests"]) <= B.FINDINGS_SHOWN
+    assert out["truncated"]["findings_cut"] >= 3 * (5_000 - B.FINDINGS_SHOWN)
+    assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
 
 
 def test_a_gates_map_with_more_names_than_the_cap_stays_whole():

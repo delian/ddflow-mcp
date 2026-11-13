@@ -21,6 +21,7 @@ from ..services import chore as CO
 from ..services import gates as G
 from ..services.approvals import consume as CN
 from ..services.approvals import grant_site as GS
+from ..services.approvals import hints
 from ._base import _load
 from ._dedupe import Answer
 from .gates import record as gate_record
@@ -126,8 +127,8 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
         return O.refused(
             KIND,
             f"{approved.reason}. The chore class is a person's to approve: they run "
-            f"`ddflow chore approve` from their own terminal, or an agent runs it and the "
-            f"operator approves the request it files in chat (`--approval ID` then spends it).",
+            f"`ddflow chore approve`, or you run it and the operator approves the request it "
+            f"files. " + hints.route(),
         )
     if not todo:
         return O.nothing(KIND, f"nothing to commit: {', '.join(rels)} match HEAD")

@@ -71,6 +71,8 @@ class Adoption:
     image: str = ""
     #: Rewrite only the driver docs and the rules blocks (`services.adopt.refresh_docs`).
     refresh_docs: bool = False
+    #: Preview what `refresh_docs` would write, without writing anything (a diff mode).
+    plan: bool = False
 
 
 def files_tree(repo: Path, called_from: Path | None) -> Path:
@@ -131,7 +133,7 @@ def setup(
         # Documents only: no init files, hooks, MCP launches or command files, and no
         # companion scan. Into the caller's tree like every committed file.
         try:
-            actions = refresh_docs(tree, docs_dir=plan.docs)
+            actions = refresh_docs(tree, docs_dir=plan.docs, plan=plan.plan)
         except ValueError as exc:
             return O.failed("setup", str(exc), actions=[], agents=[], text="")
 

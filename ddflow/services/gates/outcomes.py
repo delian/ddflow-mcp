@@ -9,16 +9,18 @@ from typing import Any
 
 from ...config import Config
 from ...core import blobref as B
-from ...core.model import OUTCOME_MARK, State
+from ...core.model import OUTCOME_MARK, Item, State
 from .. import gate_accept as GA
 from .. import logblobs as LB
 from ..docsonly import pipeline_by_diff
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
+    _is_ancestor,
     commit_tree_entries,
     content_id,
     differing_paths,
+    head_of,
     normal_fingerprint,
     recorded_content,
     split_identity,
@@ -40,9 +42,16 @@ class GateStatus:
     done: list[str]
     current: str
     blocked_by: list[str]
+    #: Pipeline gates recorded `unavailable` OR `partial` -- a coverage gap of either kind
+    #: (`_coverage_note` separates the two: one never ran, one ran partly).
     unavailable: list[str]
     skipped: list[str]
     complete: bool
+    #: Pipeline gates recorded `partial` (ran, but not to a pass): shown apart from the
+    #: gates that never ran, with the coverage or counts their evidence recorded
+    #: (bug B-gate-status-partial-did-not-run). A subset of ``unavailable`` (kept whole for
+    #: JSON callers), so it is not put on the wire itself.
+    partial: list[str] = field(default_factory=list, metadata={"internal": True})
     #: Pipeline gates with NO recorded outcome at all. Silence is its own state: it is
     #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
     #: blocks completion.
@@ -66,6 +75,11 @@ class GateStatus:
     #: gate -> why a recorded pass no longer covers the current branch (B1aec051374): the
     #: evidence names a tree that has since changed (a `sync` merged main into its globs).
     stale: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> "all findings triaged: not blocking" for a review gate recorded FAILED whose
+    #: findings are all settled (0 untriaged and every confirmed finding later cleared by a
+    #: delta round): the failure is answered, so it blocks `complete` no more and another
+    #: review round would change nothing (bug Bf9554e4156).
+    answered: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -80,6 +94,7 @@ class GateStatus:
             + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
             + (f"  -- STALE: {self.stale[g]}" if g in self.stale else "")
             + (f"  -- {self.why[g]}" if g in self.why else "")
+            + (f"  -- {self.answered[g]}" if g in self.answered else "")
             for g, o in self.rows
         )
 
@@ -185,7 +200,9 @@ def rounds_line(it, gate: str) -> str:
 def on_refutation(it, gate: str) -> dict[str, Any] | None:
     """The `passed_on_refutation` flag of ``gate``'s recorded PASS (its refuted and
     confirmed counts and the rounds it took), or None: passed by a clean review, or not
-    passed (decision D-unify 5: such a pass is allowed, and always visible)."""
+    passed (decision D-unify 5: such a pass is allowed, and always visible). A finding
+    re-triaged CONFIRMED re-records the gate failed in `triage` (B31e91454f8), so the
+    record this reads is already no longer `passed`."""
     rec = it.gates.get(gate)
     if rec is None or rec.outcome != "passed":
         return None
@@ -263,6 +280,32 @@ def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     return {g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))}
 
 
+#: The note a FAILED review gate carries once its failure is answered (bug Bf9554e4156).
+ANSWERED_REVIEW_NOTE = "all findings triaged: not blocking"
+
+
+def _answered_failed_reviews(
+    it, gates: list[str], defs: Mapping[str, GateDef] | None
+) -> dict[str, str]:
+    """gate -> ``ANSWERED_REVIEW_NOTE`` for a review gate recorded FAILED whose findings a
+    re-review could no longer change (its failure is answered, `unresolved_review_failure`
+    has nothing left), else absent. A failed suite gate (`ci`, `unit_tests`) has no numbered
+    findings and is never "answered", so it stays a plain failure."""
+    from .failed_review import unresolved_review_failure  # lazy: failed_review imports us too
+
+    out: dict[str, str] = {}
+    for g in gates:
+        if it.gate_outcome(g) != "failed":
+            continue
+        gd = (defs or {}).get(g)
+        if gd is not None and not gd.reviewer:
+            continue  # a command gate: a failure is a failure, never an answered one
+        if unresolved_review_failure(it, g):
+            continue
+        out[g] = ANSWERED_REVIEW_NOTE
+    return out
+
+
 LOCAL_COMMAND_LABEL = "passed with a local-only command (not the committed one)"
 
 
@@ -290,6 +333,20 @@ def _stale_mark(notes: Sequence[StaleNote] | None) -> dict[str, str]:
     return {n.gate: n.why for n in (notes or []) if not n.unverified}
 
 
+def _settled(
+    state, it, gates: list[str], required, na, answered: dict[str, str], cfg
+) -> dict[str, bool]:
+    """gate -> nothing left to do: not applicable, an answered review failure, a pass (or a
+    skip when not required), or a partial a person/measurement accepted."""
+    return {
+        g: g in na
+        or g in answered
+        or it.gate_satisfied(g, g in required)
+        or GA.accepted(state, it, g, cfg).ok
+        for g in gates
+    }
+
+
 def status(
     state: State,
     cfg: Config,
@@ -298,6 +355,7 @@ def status(
     *,
     diff: DiffPaths | None = None,
     stale_notes: Sequence[StaleNote] | None = None,
+    repo: Path | None = None,
 ) -> GateStatus:
     """Where is this item in its pipeline, and what is the next thing to do?
 
@@ -314,17 +372,18 @@ def status(
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
-    gates, diff = pipeline_by_diff(it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"))
+    gates, diff = pipeline_by_diff(
+        it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"), repo=repo
+    )
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    settled = {
-        g: g in na or it.gate_satisfied(g, g in required) or GA.accepted(state, it, g, cfg).ok
-        for g in gates
-    }
+    answered = _answered_failed_reviews(it, gates, defs)
+    settled = _settled(state, it, gates, required, na, answered, cfg)
     done = [g for g in gates if settled[g] and g not in na]
-    blocked = _with_outcome(rows, "failed")
+    blocked = [g for g in _with_outcome(rows, "failed") if g not in answered]
     unavail = _with_outcome(rows, "unavailable", "partial")
+    partial = _with_outcome(rows, "partial")
     skipped = _with_outcome(rows, "skipped")
     current = next((g for g in gates if not settled[g]), "")
     complete = all(settled.values())
@@ -335,6 +394,7 @@ def status(
         current=current,
         blocked_by=blocked,
         unavailable=unavail,
+        partial=partial,
         skipped=skipped,
         complete=complete,
         rows=rows,
@@ -348,6 +408,7 @@ def status(
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
         stale=_stale_mark(stale_notes),
+        answered=answered,
     )
 
 
@@ -460,4 +521,65 @@ def stale_evidence_detail(
         else:
             continue
         stale += _differing_note(StaleNote, gid, cwd, base, dirt, now, label, own)
+    stale += _lost_branch_notes(it, cfg, cwd, landed)
     return sorted(stale)
+
+
+def lost_branch(head: str, cwd: Path, checked: str = "") -> bool:
+    """Is commit ``head`` (a `tree_identity`/fingerprint's `head_of`) no longer in the
+    branch being checked -- neither itself nor an ancestor of it -- because that branch was
+    deleted and rebuilt (a re-claim on a new tree; bug B-gates-survive-lost-branch)?
+
+    The one gate-staleness test content drift cannot make. Content is compared only for
+    `gates.evidence_required`, because the others legitimately record before the work
+    they precede is finished: research and rules are *supposed* to name an earlier tree
+    on the SAME branch. An ancestor commit is exactly that -- earlier work, not another
+    generation of it -- so an ancestry miss is the signature of the branch having been
+    rebuilt. False when git cannot tell: "could not tell" must not read as "lost"."""
+    if not head:
+        return False
+    return _is_ancestor(cwd, head, checked or "HEAD") is False
+
+
+def _lost_branch_notes(
+    it: Item,
+    cfg: Config,
+    cwd: Path,
+    landed: str,
+) -> list[StaleNote]:
+    """Notes for passed gates that outlived the branch they were recorded on.
+
+    A gate held to no evidence can still outlive its branch (B-gates-survive-lost-branch):
+    research and rules record a pass on the committed tree they were read against, and a
+    re-claim on a new tree -- the item parked, its branch deleted, then claimed afresh --
+    keeps that pass green though nothing of the branch exists. The commit its `tree_sha`
+    names is then not an ancestor of what is being checked: mark it stale, not passed.
+    Content drift within the same branch is NOT marked here -- those gates are *supposed*
+    to precede the edits that follow them (`gates.evidence_required` handles content for
+    the gates held to it above).
+
+    Only the item's own branch is checked. `landed` is "HEAD" or "" for the worktree/
+    branch the gates were recorded on (`gate status`, `sync`, a pre-landing `complete`) --
+    there, a non-ancestor commit IS a rebuilt branch. A landed-after commit (a squash or
+    rebased landing) is skipped: its commits descend from the target, not the item's
+    branch, so the same ancestry miss would read the landing itself as a rebuilt branch
+    and fire the exact always-fires warning this module guards against.
+    """
+    if landed not in ("", "HEAD"):
+        return []
+    out = []
+    required = set(cfg.gates.evidence_required)
+    for gid, rec in sorted(it.gates.items()):
+        if gid in required or not rec or rec.outcome != "passed":
+            continue
+        was_sha = normal_fingerprint((rec.evidence or {}).get("tree_sha", "") or "")
+        head = head_of(was_sha)
+        if head and lost_branch(head, cwd, landed):
+            out.append(
+                StaleNote(
+                    gid,
+                    f"it was recorded on {head}, a commit this branch no longer descends "
+                    f"from (the branch was rebuilt, so this is not this claim's pass)",
+                )
+            )
+    return out

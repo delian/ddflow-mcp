@@ -98,6 +98,7 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
     for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
+    _reopen_done_parent(st, it.id)
     plan_id = d.get("proposed")
     again = it.state == BLOCKED and (it.blocked_reason or "").startswith(PROPOSED_PREFIX)
     if plan_id and kind == "task" and (it.state == OPEN or again):
@@ -105,10 +106,37 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
         it.blocked_reason = proposed_reason(str(plan_id))
 
 
+def _reopen_done_parent(st: State, child_id: str) -> None:
+    """Re-open a phase that just gained an open task (bug B86e99de0c6): a phase that
+    reports done must hold no open task, so a task filed -- or re-opened -- under a DONE
+    phase invalidates the phase's completion, however it closed (normal or imported). Its
+    gates and `completed_at` clear, so the phase pipeline re-runs. A NEW task under a
+    truly-closed (imported) phase is refused by ``services.items.closed_phase_parent``
+    before any event is written; the fold reaches an imported phase only when one of its
+    tasks re-opens, which also re-opens the phase rather than leaving it done.
+    """
+    child = st.items.get(child_id)
+    if child is None or child.kind == "phase" or not child.parent:
+        return
+    if child.terminal:
+        # Only OPEN work re-opens a done phase. A re-add of a task that is still DONE (or
+        # abandoned) under a done phase must not invalidate it: the phase still holds no
+        # open task. `item.reopened` sets the child OPEN before this runs.
+        return
+    parent = st.items.get(child.parent)
+    if parent is None or parent.kind != "phase" or parent.state != DONE:
+        return
+    parent.state = OPEN
+    parent.completed_at = ""
+    parent.gates = {}
+    parent.lease = None
+    st.imported_done.discard(parent.id)
+
+
 def _h_updated(st: State, ev: Event, kind: str) -> None:
     it = _item(st, ev, kind)
     d = ev.data
-    for f in ("title", "parent", "body", "blocked_reason", "line"):
+    for f in ("title", "parent", "body", "blocked_reason", "line", "author_model"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
     for f in ("needs", "globs", "tags", "resources", "landed_paths"):
@@ -155,6 +183,9 @@ def _h_state(new_state: str):
             # existed only in the raw log. Third instance of this class in this series.
             it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
             it.changelog = changelog_of(ev.data.get("changelog")) or it.changelog
+            it.author_model = (
+                ev.data.get("author_model") or ev.data.get("author_family") or it.author_model
+            )
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 
@@ -181,16 +212,20 @@ def _h_reopened(st: State, ev: Event) -> None:
             "forced": bool(ev.data.get("forced")),
         }
     )
+    _reopen_done_parent(st, ev.subject)
 
 
 def _h_item_reworked(st: State, ev: Event) -> None:
     """A re-claim of an item that had already merged reopens that stale merge: the landing
     is no longer `merged_sha`, so it clears, and the item's gates clear with it -- a rework
     re-gates the new work in the normal order, exactly like `item.reopened`
-    (B-rework-of-merged-item-keeps-stale-merge)."""
+    (B-rework-of-merged-item-keeps-stale-merge). The prior landing is kept on
+    `reopened_merge`, so the gates that need it can accept the already-landed work
+    (B600455cc2a)."""
     it = st.items.get(ev.subject)
     if it is None:
         return
+    it.reopened_merge = ev.data.get("sha") or ""
     it.merged_sha = ""
     it.merged_head = ""
     it.landed_before = ""

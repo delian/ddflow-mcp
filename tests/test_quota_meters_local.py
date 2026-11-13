@@ -357,6 +357,11 @@ class TestKilo:
         kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": {"input": 10, "reasoning": 0}}])
         assert _kilo(c, "tokens").status == MB.UNAVAILABLE
 
+    def test_a_missing_output_beside_a_reasoning_figure_is_unavailable_not_a_zero(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": {"input": 10, "reasoning": 500}}])
+        assert _kilo(c, "tokens").status == MB.UNAVAILABLE
+
     def test_no_turn_in_the_window_measures_zero_tokens(self, tmp_path):
         c = ctx(tmp_path)
         kilo_db(c.kilo_db, [])

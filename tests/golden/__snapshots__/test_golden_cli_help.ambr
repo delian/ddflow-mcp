@@ -1,7 +1,7 @@
 # serializer version: 1
 # name: test_help[ddflow abandon]
   '''
-  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] id
+  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] [--drop-edges] id
   
   positional arguments:
     id
@@ -12,12 +12,13 @@
     --force
     --repoint-to REPOINT_TO
                           re-point the items that need this one to need ID instead
+    --drop-edges          drop the items that need this one from its needs
   
   '''
 # ---
 # name: test_help[ddflow adopt]
   '''
-  usage: ddflow adopt [-h] [--agents AGENTS] [--docs DOCS] [--launch {auto,uvx,docker,python}] [--image IMAGE] [--refresh-docs]
+  usage: ddflow adopt [-h] [--agents AGENTS] [--docs DOCS] [--launch {auto,uvx,docker,python}] [--image IMAGE] [--refresh-docs] [--plan]
   
   options:
     -h, --help            show this help message and exit
@@ -33,6 +34,21 @@
     --refresh-docs        rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the
                           agents' native rules from this ddflow's templates; leaves MCP launches,
                           hooks and command files alone (what `doctor` points to when drivers lag)
+    --plan                with --refresh-docs: report what it would rewrite without writing anything
+                          (a diff/plan mode)
+  
+  '''
+# ---
+# name: test_help[ddflow approvals answer]
+  '''
+  usage: ddflow approvals answer [-h] [--text TEXT] id
+  
+  positional arguments:
+    id           the question id
+  
+  options:
+    -h, --help   show this help message and exit
+    --text TEXT  the answer: one of the question's options, or the free text
   
   '''
 # ---
@@ -176,10 +192,10 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw} ...
   
   positional arguments:
-    {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
       pending             the requests still waiting for a person, each with its digest and its
@@ -197,6 +213,7 @@
       approve             a PERSON approves one request or every pending one, once (refused under an
                           agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
+      answer              a PERSON answers a question ask: free text, or one of its options
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
   
@@ -306,7 +323,7 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--role ROLE] [--note NOTE] [target]
   
   positional arguments:
     target                the item id (as --item; required with --for-agent)
@@ -319,6 +336,8 @@
     --for-agent FOR_AGENT
                           render the standard launch brief of subagent NAME for the item (`--item`
                           or the positional id)
+    --role ROLE           the project's rules for a role: phase-closer, fixer, researcher or
+                          reviewer (with --for-agent: appended to the launch brief)
     --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''
@@ -331,6 +350,19 @@
     -h, --help     show this help message and exit
     --apply        link each younger duplicate onto its cluster's canonical (nothing is closed)
     --floor FLOOR  minimum score to cluster (default: [dedupe].show_floor)
+  
+  '''
+# ---
+# name: test_help[ddflow bug duplicate]
+  '''
+  usage: ddflow bug duplicate [-h] --of OF id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+    --of OF     the already-fixed bug this one duplicates
   
   '''
 # ---
@@ -407,7 +439,8 @@
                           is reserved)
     --no-task             file no fix task: the bug is fixed in the commit that found it
     --repro-cmd REPRO_CMD
-                          the command that shows the bug, kept in the repro bundle (never run)
+                          the command that shows the bug, run once at filing in a scratch checkout
+                          of the recorded sha (CLI only; the operator's own command)
     --test TEST           a pytest id: run once, its output tail goes in the repro bundle
     --repro-capture REPRO_CAPTURE
                           off | basic | full: how much repro bundle to store (default [bugs]
@@ -441,7 +474,7 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
     -h, --help         show this help message and exit
@@ -449,10 +482,13 @@
     --phase PHASE      only rows under this phase id
     --tag TAG          only rows carrying this tag
     --since SINCE      only rows last changed at or after this ISO date or timestamp
+    --match MATCH      only rows whose id or title contains this text (case-insensitive); use it
+                       instead of `| grep`, which sees one page only
     --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                        most)
     --offset OFFSET    skip this many rows (paging)
-    --all              include fixed and invalid bugs
+    --all              include fixed and invalid bugs, and list every row (up to the most a list
+                       gives)
     --item ITEM        only bugs filed in or against this queue item id
     --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
                        newest change first
@@ -500,13 +536,14 @@
 # ---
 # name: test_help[ddflow bug]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show} ...
+  usage: ddflow bug [-h] {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show} ...
   
   positional arguments:
-    {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show}
+    {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
                           the younger ones onto each cluster's canonical
+      duplicate           close a bug as a duplicate of a bug that is already FIXED (cites its test)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       tag                 add or remove tags on an existing bug, open or closed
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
@@ -677,7 +714,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--check] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -690,6 +727,8 @@
     --approval APPROVAL   an agent: 'request' files an approval request for overriding the unmet
                           conditions (the operator answers in chat), then the approval id; a failed
                           review gate is never lifted
+    --check               read-only: print the unmet conditions and what policy would grant; never
+                          completes (exit 1 = unmet, 2 = could not run)
     --changelog CHANGELOG
                           'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip /
                           internal to keep it out of the changelog; optional
@@ -710,6 +749,21 @@
     --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
                           three mutation-file/-old/-new flags in one (as the MCP parameter); wins
                           when both forms are given
+  
+  '''
+# ---
+# name: test_help[ddflow completion]
+  '''
+  usage: ddflow completion [-h] [--yes] {bash,zsh,fish,install,uninstall} [{bash,zsh,fish}]
+  
+  positional arguments:
+    {bash,zsh,fish,install,uninstall}
+                          the shell to activate, or install/uninstall the activation block
+    {bash,zsh,fish}       for install/uninstall: the shell to edit (default bash)
+  
+  options:
+    -h, --help            show this help message and exit
+    --yes                 consent to write (never written silently)
   
   '''
 # ---
@@ -739,9 +793,30 @@
   
   '''
 # ---
+# name: test_help[ddflow correct]
+  '''
+  usage: ddflow correct [-h] --field FIELD [--text TEXT | --from-file FROM_FILE] --reason REASON [--kind KIND] [--secret] [--approval APPROVAL] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --field FIELD         the field to replace (body, title, summary, author_model, ...)
+    --text TEXT           the new text (or --from-file)
+    --from-file FROM_FILE
+                          read the new text from this file
+    --reason REASON       why it was wrong (required; never the old value)
+    --kind KIND           the record kind, when the id names more than one
+    --secret              the value may be a secret: keep digests of it out of the audit entry
+    --approval APPROVAL   an agent: 'request' files an approval request (the operator answers in
+                          chat), then the approval id; a person corrects directly
+  
+  '''
+# ---
 # name: test_help[ddflow decide]
   '''
-  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--model MODEL] id
+  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--append] [--body BODY] [--model MODEL] id
   
   positional arguments:
     id                    the decide task
@@ -750,7 +825,10 @@
     -h, --help            show this help message and exit
     --decision-id DECISION_ID
                           the recorded decision (D-x) whose document is written
-    --path PATH           the document (default docs/ddflow/decisions/<slug>.md)
+    --path PATH           the document (default: a docs/ddflow/decisions/<name>.md glob the task
+                          names, else <slug>.md)
+    --append              append to the document instead of replacing it (keeps an existing doc)
+    --body BODY           the body to append below the restated record (no second merge needed)
     --model MODEL         the author's model family
   
   '''
@@ -875,6 +953,17 @@
   
   '''
 # ---
+# name: test_help[ddflow dispatch]
+  '''
+  usage: ddflow dispatch [-h] [--tick] [--phase PHASE]
+  
+  options:
+    -h, --help     show this help message and exit
+    --tick         record one audit note (advise + audit)
+    --phase PHASE  restrict the ready set to this phase
+  
+  '''
+# ---
 # name: test_help[ddflow docs]
   '''
   usage: ddflow docs [-h] [--diff BASE] [{check}]
@@ -890,7 +979,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--fix-stale-globs] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
@@ -906,6 +995,10 @@
                           accepts directly; an agent passes approval=request, the person answers in
                           chat, and the agent re-runs with the approval id. doctor then reports them
                           as accepted notes; a changed or new finding is a PROBLEM again
+    --fix-stale-globs     rewrite the stale package glob of every unfinished item to its package
+                          path (a module that became a package left `x.py` globs covering none of
+                          the package's files), and retarget each live lease; B-stale-globs-after-
+                          split-wave
     --history-reason HISTORY_REASON
                           why the history is known and accepted (required to accept it)
     --history-note HISTORY_NOTE
@@ -1245,7 +1338,7 @@
   
   options:
     -h, --help     show this help message and exit
-    --agent AGENT  one agent (default: all)
+    --agent AGENT  an agent descriptor or control plane (default: all)
     --unverified   only leads, and sections left out
   
   '''
@@ -1336,7 +1429,8 @@
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
-      facts               every descriptor value with its status, source, tool version and date
+      facts               every descriptor value and control-plane fact with status, source, tool
+                          version and date
       add                 scaffold a descriptor skeleton with every fact left out (not verified)
       lint                a descriptor against the schema and the three-valued rule (exit 1 =
                           problems)
@@ -1381,7 +1475,8 @@
   
   positional arguments:
     topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
-                metrics, parallel, recovery, upgrade, verify, workflow. Omit for the overview.
+                metrics, onboard, parallel, recovery, update, upgrade, verify, viewers, workflow.
+                Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -1643,18 +1738,41 @@
   
   '''
 # ---
+# name: test_help[ddflow kill]
+  '''
+  usage: ddflow kill [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume}] [lane]
+  usage: ddflow lanes [-h] [--coordinator] [--item ITEM] [--watch] [{state,brief,advise,fleet,resume,lead,approve,coordinator}] [lane]
   
   positional arguments:
-    {state,brief,advise,fleet,resume}
-                          state (default), brief <lane>, advise, fleet or resume <lane>
-    lane                  with brief or resume: the lane name, or a unique part of it
+    {state,brief,advise,fleet,resume,lead,approve,coordinator}
+                          state (default), brief <lane>, advise, lead, fleet, resume <lane> or
+                          approve <template>
+    lane                  with brief, resume or approve: the lane name (for approve, the template
+                          name), or a unique part of it
   
   options:
     -h, --help            show this help message and exit
+    --coordinator         the coordinator's screen: suites, lease holders, pending approvals, ready
+                          work per phase
+    --item ITEM           with --coordinator: an item whose blocked-by chain to show
     --watch               redraw when the log changes or every [lanes] watch_interval_s
+  
+  '''
+# ---
+# name: test_help[ddflow lease]
+  '''
+  usage: ddflow lease [-h]
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -1693,7 +1811,7 @@
 # ---
 # name: test_help[ddflow lesson list]
   '''
-  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -1701,9 +1819,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            include superseded lessons
+    --all            include superseded lessons, and list every row (up to the most a list gives)
   
   '''
 # ---
@@ -1774,7 +1894,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1788,10 +1908,12 @@
     --tag TAG             only rows carrying this tag
     --owner OWNER         only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
     --item ITEM           only bugs filed in or against this queue item id
     --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
                           newest change first
@@ -1909,12 +2031,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,swarm}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,swarm}
-                          summary (default), forecast, retro <id>, skips, lanes, stages, locks or
-                          swarm
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo,batch,suitewaste}
+                          summary (default), forecast, retro <id>, skips, lanes, stages, locks,
+                          tiny, paths, variants, swarm, slo, batch or suitewaste
     item                  with retro: the item id
   
   options:
@@ -1953,16 +2075,26 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--phase-only] [--tag TAG] [--wave WAVE] [--ignore-cap] [--blocked] [--state {interrupted,running,blocked,ready,merged,held,review,blocking_deps}] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
-    -h, --help           show this help message and exit
-    --phase PHASE        limit to this phase; exit 1 if it names no phase or item
+    -h, --help            show this help message and exit
+    --phase PHASE         limit to this phase; exit 1 if it names no phase or item
+    --phase-only          with --phase: the phase's own ready items only (skip its ready blocking-
+                          dependencies)
+    --tag TAG             only items carrying this tag (repeatable: all must match); exit 1 if no
+                          item carries it
+    --wave WAVE           shorthand for --tag wave:N
+    --ignore-cap          treat items held only by the parallelism cap as ready for this call
+    --blocked             list every blocked item, dependency-blocked ones too (text view)
+    --state {interrupted,running,blocked,ready,merged,held,review,blocking_deps}
+                          list the items in one report state: interrupted, running, blocked, ready,
+                          merged, held, review or blocking_deps
     --kind {task,phase}
-    --lane LANE          answer this idle lane: its best item and a note for claim
-    --full               print everything: lift the default output caps ([output] max_rows,
-                         max_chars) for this call
-    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
+    --lane LANE           answer this idle lane: its best item and a note for claim
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
+    --cursor CURSOR       resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -1993,6 +2125,35 @@
     -h, --help     show this help message and exit
     --role ROLE    its role, a name in [agent].roles
     --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
+# name: test_help[ddflow paths]
+  '''
+  usage: ddflow paths [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow perf]
+  '''
+  usage: ddflow perf [-h] [--cmd CMD] [--line LINE] [--window WINDOW] [--filters FILTERS] [--format {text,md,json,svg,html}] [--out OUT] [{env,run,ingest,report}]
+  
+  positional arguments:
+    {env,run,ingest,report}
+                          env (default), run, ingest or report
+  
+  options:
+    -h, --help            show this help message and exit
+    --cmd CMD             with run: the command to measure
+    --line LINE           with ingest: the sample line
+    --window WINDOW       with report: a duration back (7d, 12h) or a date YYYY-MM-DD
+    --filters FILTERS     with report: only phase=<id>
+    --format {text,md,json,svg,html}
+                          with report: text (default), md, json, svg or html
+    --out OUT             with report svg/html: the file path
   
   '''
 # ---
@@ -2060,7 +2221,7 @@
 # ---
 # name: test_help[ddflow phase list]
   '''
-  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -2068,9 +2229,12 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
+    --limit LIMIT    most rows to show (default all rows, up to 1000; 0 or above 1000 = the 1000 a
+                     list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -2468,7 +2632,7 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--adopt] [--reason REASON] [--full] [--cursor CURSOR]
   
   options:
     -h, --help       show this help message and exit
@@ -2476,6 +2640,8 @@
     --apply
     --all
     --plan
+    --adopt
+    --reason REASON
     --full           print everything: lift the default output caps ([output] max_rows, max_chars)
                      for this call
     --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
@@ -2568,10 +2734,12 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
   
   positional arguments:
-    {add,list}            optional: `research add` = `research`; `research list` lists the notes
+    {add,list,show}       optional: `research add` = `research`; `research list` lists the notes;
+                          `research show <id>` reads one
+    ID                    with `research show`: the note's id
   
   options:
     -h, --help            show this help message and exit
@@ -2600,10 +2768,12 @@
     --phase PHASE         only rows under this phase id
     --tag TAG             only rows carrying this tag
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -2621,6 +2791,15 @@
     --refile-as REFILE_AS
                           re-add each definition NOT kept under these new ids (comma-separated, in
                           `show` order) in the same transaction
+  
+  '''
+# ---
+# name: test_help[ddflow restart]
+  '''
+  usage: ddflow restart [-h]
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -2657,8 +2836,8 @@
                        item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
                        out)
     --include-pinned   send the files pins.toml owns too, for this review
-    --force            run a full round past [review].max_rounds; needs --reason, recorded in the
-                       evidence
+    --force            run a round past [review].max_rounds (a delta with --delta); needs --reason,
+                       recorded in the evidence
     --reason REASON    why --force
     --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
     --refuted          triage: --probe shows the finding is false
@@ -2673,6 +2852,9 @@
     ddflow review show <id> [--gate G]        list the recorded round's numbered findings
   --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
   `triage` verb: without it they are refused, never run as a review.
+  --agent AGENT names who this review is recorded under (a global option, accepted before or
+              after `review`); pass your `as_agent` so a run from a shell is not recorded
+              under a derived {host}-{tree} identity (Bbf6e536827).
   
   '''
 # ---
@@ -2814,6 +2996,15 @@
   
   '''
 # ---
+# name: test_help[ddflow rule inventory]
+  '''
+  usage: ddflow rule inventory [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule list]
   '''
   usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
@@ -2877,10 +3068,12 @@
 # ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,inventory,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove,sync}
+    {add,edit,list,search,show,remove,inventory,sync}
+      inventory           every agent's rule and command files: who loads what, always-loaded cost,
+                          restated workflow
       sync                record hand-edited rule files in the log; write the files the log has and
                           the disk lacks
   
@@ -3047,27 +3240,29 @@
 # ---
 # name: test_help[ddflow show]
   '''
-  usage: ddflow show [-h] id
+  usage: ddflow show [-h] [--history] id
   
   positional arguments:
     id
   
   options:
     -h, --help  show this help message and exit
+    --history   list every correction of the record, in order (default: the latest per field)
   
   '''
 # ---
 # name: test_help[ddflow similar]
   '''
-  usage: ddflow similar [-h] [--kind KIND] text
+  usage: ddflow similar [-h] [--kind KIND] [--floor FLOOR] text
   
   positional arguments:
-    text         the title or summary of the record you are about to file
+    text           the title or summary of the record you are about to file
   
   options:
-    -h, --help   show this help message and exit
-    --kind KIND  comma-separated subset of [dedupe].kinds:
-                 bug,task,phase,lesson,decision,research,memory (default: all of them)
+    -h, --help     show this help message and exit
+    --kind KIND    comma-separated subset of [dedupe].kinds:
+                   bug,task,phase,lesson,decision,research,memory (default: all of them)
+    --floor FLOOR  minimum score to report (default: [dedupe].show_floor)
   
   '''
 # ---
@@ -3098,6 +3293,24 @@
                      the top blockers per value
     --full           print everything: lift the default output caps ([output] max_rows, max_chars)
                      for this call
+  
+  '''
+# ---
+# name: test_help[ddflow suggest]
+  '''
+  usage: ddflow suggest [-h] --reason REASON [--commit COMMIT] [--diff DIFF] [--blob BLOB] [--kind KIND] [--evidence EVIDENCE] item
+  
+  positional arguments:
+    item                 the item whose lease holder receives the suggestion
+  
+  options:
+    -h, --help           show this help message and exit
+    --reason REASON      why the owner should take it
+    --commit COMMIT      a revision: its diff is the suggestion
+    --diff DIFF          a file holding the git diff to suggest
+    --blob BLOB          a file holding the patch text to suggest
+    --kind KIND          optional suggestion kind
+    --evidence EVIDENCE  gate_fix: CMD,EXIT the re-run must reproduce
   
   '''
 # ---
@@ -3183,7 +3396,7 @@
 # ---
 # name: test_help[ddflow task list]
   '''
-  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -3192,9 +3405,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -3305,7 +3520,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--set SET] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -3356,6 +3571,8 @@
     --phase PHASE         same as --parent
     --kind KIND           change the work kind: task, doc, research or job (the gate pipeline
                           [gates].kind_pipelines gives it)
+    --set SET             field=value, repeatable: the record's own fields (lesson why, bug severity
+                          ...); the fields each kind has are listed by `ddflow help update`
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   
@@ -3498,7 +3715,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--notify NOTIFY] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3511,7 +3728,14 @@
     --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
                          or a path/glob (until no other agent's live lease covers it); a bare wait
                          returns the first ready item at once
+    --approval APPROVAL  wait for an operator-approval request id until it is answered; ready then
+                         means re-run the gated command with --approval ID
+    --job JOB            wait for a job (a detached review's run handle) instead of an item, lease
+                         or approval: until its process is over and its round is recorded
     --token TOKEN        resume token from an earlier wait
+    --notify NOTIFY      how to reach this waiter when its wake fires: empty (poll ddflow wait),
+                         `send_message:<session-id>` (harness session to resume) or `watch:<url>`
+                         (inbound URL to post to)
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
@@ -3630,20 +3854,21 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
       split               split an item into sub-tasks in place, keeping its id and history
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
-      update              change an item's fields
+      update              change the fields of any record (task, phase, bug, lesson, research,
+                          decision, memory, session, rule, schedule, trigger ...)
       batch               apply many item edits in one all-or-nothing transaction
       rename              move an item to a new id (and phase), re-pointing every needs edge
       chore               commit or approve chore files (no reviewer)
@@ -3651,7 +3876,8 @@
       approvals           approval requests for operator-gated commands (a person answers)
       plan                check a proposed plan, filed it PROPOSED, confirm it, or lint the whole
                           open queue
-      next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
+      next                what may start now (exit 2 = nothing ready or held, exit 1 = unknown
+                          --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
       release             give up a lease
@@ -3688,6 +3914,7 @@
       onboard             run an onboarding stage: one report, propose by default
                           (status|preflight|legacy|memory|test-gate|verify|harness)
       status              one answer to 'what is the state of this project?'
+      correct             correct a wrongly recorded value, history kept
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
       replay              reconstruct the decision history from the log
@@ -3716,13 +3943,15 @@
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
-      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`,
+                          `lanes lead`
       vigil               one compact health snapshot: bug severity counts, stale pins, active
                           lanes, interrupted, pending approvals, reviewer up/429/slow
       health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
                           the periodic watchdog pass
       decide              close a decide task: write its decision document from the record, land,
                           complete
+      completion          activate, install or uninstall ddflow completion
       docs                the mechanical documentation check: `docs check [--diff BASE]`
       metrics             metrics from the log: cycle time, review rounds, waits; `forecast`, `retro
                           <id>`, `skips`
@@ -3752,6 +3981,19 @@
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
       archdeps            the external-dependency census: families, importing modules, home,
                           violations
+      dispatch            the dispatcher's plan: what to start now, in order, on which lane (advise
+                          only)
+      suggest             send a bounded change to the lease holder of an item, as a suggestion
+      lease               the lease holders and how long each has been quiet (idle ones flagged);
+                          the holders of `lanes --coordinator`
+      restart             soft upgrade: reload this MCP server's code and re-bind its tools, keeping
+                          the connection
+      kill                hard upgrade: end this MCP server's process so your client respawns it
+                          fresh
+      paths               workflow-path variants: directly-follows, top variants, burst overlap,
+                          superseded passes, out-of-order
+      perf                perf of the host (fingerprint, measuring wrapper) and the perf report
+                          (window, filters, format)
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
       digest              the operator queue: what waits on a person, as askable entries
@@ -3785,6 +4027,7 @@
     'ddflow abandon',
     'ddflow adopt',
     'ddflow approvals',
+    'ddflow approvals answer',
     'ddflow approvals approve',
     'ddflow approvals ask',
     'ddflow approvals attest',
@@ -3805,6 +4048,7 @@
     'ddflow brief',
     'ddflow bug',
     'ddflow bug dedupe',
+    'ddflow bug duplicate',
     'ddflow bug file-tasks',
     'ddflow bug fixed',
     'ddflow bug found',
@@ -3824,7 +4068,9 @@
     'ddflow companions add',
     'ddflow companions list',
     'ddflow complete',
+    'ddflow completion',
     'ddflow config',
+    'ddflow correct',
     'ddflow decide',
     'ddflow decision',
     'ddflow decision add',
@@ -3834,6 +4080,7 @@
     'ddflow decision show',
     'ddflow decision supersede',
     'ddflow digest',
+    'ddflow dispatch',
     'ddflow docs',
     'ddflow doctor',
     'ddflow dupes',
@@ -3885,7 +4132,9 @@
     'ddflow job end',
     'ddflow job list',
     'ddflow job run',
+    'ddflow kill',
     'ddflow lanes',
+    'ddflow lease',
     'ddflow lesson',
     'ddflow lesson add',
     'ddflow lesson list',
@@ -3907,6 +4156,8 @@
     'ddflow next',
     'ddflow onboard',
     'ddflow pair',
+    'ddflow paths',
+    'ddflow perf',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
@@ -3947,6 +4198,7 @@
     'ddflow report',
     'ddflow research',
     'ddflow resolve',
+    'ddflow restart',
     'ddflow review',
     'ddflow reviewers',
     'ddflow reviewers add',
@@ -3958,6 +4210,7 @@
     'ddflow rule',
     'ddflow rule add',
     'ddflow rule edit',
+    'ddflow rule inventory',
     'ddflow rule list',
     'ddflow rule remove',
     'ddflow rule search',
@@ -3978,6 +4231,7 @@
     'ddflow similar',
     'ddflow split',
     'ddflow status',
+    'ddflow suggest',
     'ddflow sync',
     'ddflow task',
     'ddflow task add',

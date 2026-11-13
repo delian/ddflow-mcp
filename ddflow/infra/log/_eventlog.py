@@ -3,24 +3,29 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
+import stat
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from ...adapters.http import local_endpoint as _is_local_endpoint
 from ...config import Config, LogConfig, SessionConfig
+from ...core import ids as IDS
 from ...core import redact as R
 from ...core import upcasters as UP
 from ...core.events import CAPABILITIES_KIND, SEEN_KIND, SKEW_OVERRIDDEN_KIND, Event, utcnow
 from ...core.model import known_kinds
 from ...core.redact_errors import PatternError, fail_closed_data
 from ...core.secret_shapes import session_secret_patterns
-from ...core.slug import safe_filename
 from .. import blobstore as BS
 from .. import fsio
 from .. import hostinfo as H
 from .. import shardmeta as SMT
+from .. import tomlcfg as TC
 from ._agent import default_agent_id
 from ._guard import _GuardMixin
 from ._lock import _HELD, _flock, _held_key
@@ -32,6 +37,51 @@ from ._skew import LogMark
 _STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND, CAPABILITIES_KIND})
 
 T = TypeVar("T")
+
+
+@dataclass
+class _LocalReviewer:
+    """The reviewer fields redaction cares about: name, model and local endpoint."""
+
+    name: str = ""
+    model: str = ""
+    base_url: str = ""
+
+
+def _reviewer_redact_names(root: Path) -> list[str]:
+    """The LOCAL configured reviewers' service names and model strings.
+
+    A local reviewer's endpoint names a private address, so its service name and model
+    are none of a secret, a host, a path or the machine's own name: the committed-log
+    name pass must learn them or they leak into the pushed shards as review evidence
+    (bug B8ef0d325ed). A public reviewer's name and model name a public endpoint and
+    stay. Read with ``toilcfg`` (infra), never ``services.review``, so the log stays on
+    its own layer; anything unreadable is the caller's fallback, not this write's.
+    """
+    try:  # anything failing to load is the caller's fallback, not this write's
+        out: list[str] = []
+        blocks = TC.overlay_array(
+            TC.config_paths(root, "reviewers.toml"),
+            "reviewer",
+            _LocalReviewer,
+            key="name",
+            fallback_key="model",
+            lenient=True,
+            quiet=True,
+        )
+        for name, spec in blocks.items():
+            where = spec if isinstance(spec, dict) else {}
+            if not _is_local_endpoint(str(where.get("base_url") or "")):
+                continue
+            if name:
+                out.append(name)
+            model = str(where.get("model") or "")
+            if model and model != name:
+                out.append(model)
+        return out
+    except Exception:
+        return []
+
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
 #: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
@@ -72,6 +122,11 @@ class EventLog(_GuardMixin, _ReadMixin):
         # clone's `.ddflow/local/clone-id`, and a log built only to be read -- a sibling
         # project's, in `external.sync` -- must not write into that repository.
         self._agent_id = agent_id
+        if agent_id and (why := IDS.agent_id_problem(agent_id)):
+            raise ValueError(
+                f"{agent_id[:40]!r} is not a usable agent id: {why}. Name yourself with "
+                "--agent, DDFLOW_AGENT or as_agent: a short name of letters, digits, '.', '_' or '-'."
+            )
         self.lock_path = self.root / ".ddflow" / "events.lock"
         self.lock_timeout_s = lock_timeout_s
         # NOT created here. Merely constructing a log -- which happens on every CLI
@@ -101,13 +156,15 @@ class EventLog(_GuardMixin, _ReadMixin):
     # -- shard paths ---------------------------------------------------------------
     @property
     def shard(self) -> Path:
-        safe = safe_filename(self.agent_id, repl="_", unicode=True)
-        return self.dir / f"{safe}.jsonl"
+        return self.dir / f"{IDS.shard_stem(self.agent_id)}.jsonl"
 
     def shards(self) -> list[Path]:
         if not self.dir.is_dir():
             return []
-        return sorted(self.dir.glob("*.jsonl"))
+        # A symlinked `*.jsonl` is never a shard: entries are committed, so a hostile
+        # commit could point one at an operator-writable file and the next append would
+        # write ddflow lines into it (B143a77ee1d). List real files only.
+        return sorted(p for p in self.dir.glob("*.jsonl") if not p.is_symlink())
 
     def mark(self, *, clock: bool = True) -> LogMark:
         """A cheap fingerprint of how much log there IS: per shard, its size and (with
@@ -221,11 +278,16 @@ class EventLog(_GuardMixin, _ReadMixin):
         data: dict[str, Any] | None = None,
         *,
         observed: Iterable[Event] = (),
+        lock_timeout_s: float | None = None,
     ) -> Event:
         """Append one event. Returns it with id and lamport filled in.
 
         ``observed`` lets a caller declare events it has seen but not folded, so the
         Lamport clock advances past them even when the caller read a filtered view.
+
+        ``lock_timeout_s`` overrides the log's own append-lock wait for this write (a
+        retrying caller passes the time it has left for the whole retry); absent, the
+        log's ``lock_timeout_s`` applies.
         """
         if kind not in known_kinds():
             raise ValueError(
@@ -234,7 +296,9 @@ class EventLog(_GuardMixin, _ReadMixin):
         ctx = (
             contextlib.nullcontext()
             if _HELD.get(_held_key(self.lock_path), 0)
-            else _flock(self.lock_path, self.lock_timeout_s)
+            else _flock(
+                self.lock_path, self.lock_timeout_s if lock_timeout_s is None else lock_timeout_s
+            )
         )
         with ctx:
             payload = dict(data or {})
@@ -258,8 +322,20 @@ class EventLog(_GuardMixin, _ReadMixin):
                 for kind, subject, data in items:
                     out.append(self.append(kind, subject, data))
             except BaseException:
-                if self.shard.exists():
-                    os.truncate(self.shard, before)
+                try:
+                    # Roll the shard back to `before` on a failed append, no-follow: the
+                    # truncate must not chase a symlink swapped in after the write was
+                    # refused (B143a77ee1d) -- open with O_NOFOLLOW and ftruncate the fd.
+                    # O_NONBLOCK so a FIFO (mkfifo) masquerading as the shard fails open
+                    # instead of wedging the writer waiting for a reader.
+                    fd = os.open(self.shard, os.O_WRONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                except OSError:
+                    pass  # the shard vanished (or became a symlink/FIFO): nothing to roll back
+                else:
+                    try:
+                        os.ftruncate(fd, before)
+                    finally:
+                        os.close(fd)
                 self._lamport = clock
                 raise
             return out
@@ -293,7 +369,12 @@ class EventLog(_GuardMixin, _ReadMixin):
         )
         ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
         line = (ev.to_json() + "\n").encode("utf-8")
-        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o644)
+        if self.shard.is_symlink():
+            # A symlink shard is a write into whatever it points at (B143a77ee1d); refuse
+            # it outright rather than appending JSON onto an operator-writable file.
+            raise ValueError(f"refusing to write {self.shard}: it is a symlink")
+        created = not self.shard.exists()
+        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW, 0o644)
         try:
             # A shard that does not end in a newline holds a torn append from a writer
             # that died mid-line (every writer holds this lock, so none is mid-line now).
@@ -310,6 +391,10 @@ class EventLog(_GuardMixin, _ReadMixin):
             os.fsync(fd)
         finally:
             os.close(fd)
+        if created:
+            # A brand-new shard is a new name in `self.dir`: its fsync covers the bytes
+            # but not the entry, so fsync the directory too (AU-durability).
+            fsio.fsync_dir(self.dir)
         if self._meta is not None:
             self._meta.advance(self.shard, (size, before_mtime), ev, len(line))
         for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)
@@ -335,6 +420,7 @@ class EventLog(_GuardMixin, _ReadMixin):
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
                 up = getattr(cfg, "upstream", None)
                 names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
+                names.extend(_reviewer_redact_names(self.root))
             except Exception:
                 # an unreadable config: the built-in patterns for THIS write, and the config is
                 # read again on the next one, so a fixed config is not shadowed by the fallback
@@ -412,7 +498,24 @@ class EventLog(_GuardMixin, _ReadMixin):
         give it away), and the content is fsynced before the rename."""
         line = ev.to_json()
         for shard in self.shards():
-            lines = shard.read_text(encoding="utf-8").splitlines()
+            if shard.is_symlink():
+                # A symlink shard is data, not a shard to rewrite (B143a77ee1d): never read
+                # or write through it -- a line it "holds" is not really in this log.
+                continue
+            try:
+                # Read no-follow from the fd, not the path (B143a77ee1d): a shard swapped
+                # to a symlink/FIFO after shards() listed it must not be read through.
+                fd = os.open(shard, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError as e:
+                if e.errno in (errno.ELOOP, errno.ENXIO, errno.ENOENT):
+                    continue  # became a symlink (ELOOP) / a FIFO with no writer (ENXIO) / gone
+                raise  # a real shard we cannot open (EACCES, EISDIR, EMFILE) is a real failure
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                os.close(fd)
+                continue  # a FIFO/device is not a shard line source
+            with os.fdopen(fd, "r", encoding="utf-8") as fh:
+                text = fh.read()
+            lines = text.splitlines()
             for i, raw in enumerate(lines):
                 try:
                     got = json.loads(raw).get("id")
@@ -420,7 +523,9 @@ class EventLog(_GuardMixin, _ReadMixin):
                     continue
                 if got == old_id:
                     lines[i] = line
-                    fsio.replace_text(shard, "\n".join(lines) + "\n")
+                    # replace_text resolves a symlink and writes THROUGH it; the shard must
+                    # be replaced, never followed, so rename over the entry (B143a77ee1d).
+                    fsio.atomic_write(shard, "\n".join(lines) + "\n")
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
                     return

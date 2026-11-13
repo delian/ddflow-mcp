@@ -64,7 +64,7 @@ def test_alias_table_is_generated_and_covers_every_non_hot_tool():
     assert table["ddflow_gate_record"] == ("ddflow_gate", "record")
     assert len(F.ALIASES) == len(table)
     assert all(F.FAMILIES[fam].members[act] == old for old, (fam, act) in table.items())
-    assert len(table) == 128
+    assert len(table) == len(TOOLS) - len(F.HOT_SINGLES)
 
 
 def test_a_declared_family_and_action_win_over_the_legacy_placement():
@@ -134,6 +134,10 @@ def test_loading_the_mcp_server_runs_the_family_check():
     assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
 
 
+def test_perf_is_placed_in_the_view_family_as_action_perf():
+    assert F.placement("ddflow_perf") == ("ddflow_view", "perf")
+
+
 def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
     import subprocess
     import sys
@@ -145,3 +149,12 @@ def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
     run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
     assert run.returncode != 0
     assert "ddflow_zed_go" in run.stderr
+
+
+def test_dispatch_is_placed_in_the_view_family_as_action_dispatch():
+    """B9121cc2762: ddflow_dispatch declared no family/action, so importing the families
+    module raised and every ci gate failed at the install probe."""
+    from ddflow.surfaces.declared import dispatch as D
+
+    assert [(c.family, c.action) for c in D.COMMANDS] == [("ddflow_view", "dispatch")]
+    assert F.placement("ddflow_dispatch") == ("ddflow_view", "dispatch")

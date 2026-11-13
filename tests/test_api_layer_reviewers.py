@@ -144,9 +144,14 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
         return A._gate_outcome(res, [res], None, "", "critic", False, Config(), None, print)[0]
 
     # `review` dispatches one gate or several; the one-gate run takes its outcome from
-    # `_gate_outcome`, which holds the table.
+    # `_gate_outcome`, which holds the table; the exit-code table lives in `_answer_outcome`
+    # (the tail `_review_gate` and `review` share now that it was extracted past the
+    # complexity ratchet).
     src = inspect.getsource(A._review_gate)
     assert "_gate_outcome(" in src
+    assert (
+        "_answer_outcome(" in src
+    )  # the dispatch must reach the ANSWER tail, not a hard-coded one
     assert outcome(R.PARTIAL) == "partial"
     assert outcome(R.UNAVAILABLE) == "unavailable"
     assert outcome(R.ERROR) == "unavailable"
@@ -154,7 +159,8 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     assert outcome(R.REVIEWED, R.Finding("HIGH", "t")) == "failed"
 
     # And the exit codes: only a real review with no findings is success.
-    exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]
+    tail = inspect.getsource(A._answer_outcome)
+    exits = tail[tail.index("exit_code = {") : tail.index("]\n", tail.index("exit_code = {"))]
     assert "RV.UNAVAILABLE: O.NOTHING" in exits, exits
     assert "RV.ERROR: O.FAIL" in exits, exits
     assert "RV.PARTIAL: O.REFUSED" in exits, exits

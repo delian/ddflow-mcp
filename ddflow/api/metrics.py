@@ -40,7 +40,16 @@ def run_metrics(
         phase=phase or "",
         since=since or "",
         group_by=group_by or "",
-        probes=GitProbes(repo) if view == "locks" else None,
+        probes=(
+            GitProbes(
+                repo,
+                cfg.locks.probe_timeout_s,
+                cfg.locks.probe_merge_tree_min_git,
+                cfg.gates.doc_globs,
+            )
+            if view in ("locks", "suitewaste")
+            else None
+        ),
     )
     data = {
         "view": view or "summary",

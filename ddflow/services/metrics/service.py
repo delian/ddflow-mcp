@@ -10,8 +10,14 @@ from typing import Any
 from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
+from ...core import progress as PR
 from ...core.events import Event
+from ...core.metrics import VIEWS
 from ...core.model import State
+from ..perf import suitewaste as SW
+from .batch import build as batch_build
+from .batch import has_figures as batch_ok
+from .batch import text as batch_text
 from .facts import collect
 from .forecast import forecast as forecast_view
 from .grid import sample as grid_sample
@@ -20,6 +26,12 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .path_variants import build as variants_build
+from .path_variants import has_figures as variants_ok
+from .path_variants import text as variants_text
+from .paths import build as paths_build
+from .paths import has_figures as paths_ok
+from .paths import text as paths_text
 from .providers import Context, register
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
@@ -27,14 +39,18 @@ from .render import retro as text_retro
 from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
+from .runs_to_merge import provider as runs_provider
 from .skips import audit
+from .slo import assess as slo_assess
+from .slo import ok as slo_ok
+from .slo import text as slo_text
 from .stages import build as stages_build
 from .stages import has_figures as stages_ok
 from .stages import text as stages_text
 from .summary import build, has_figures
-
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm")
-
+from .tiny import build as tiny_build
+from .tiny import has_figures as tiny_ok
+from .tiny import text as tiny_text
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
 SWARM: Registry[Callable[..., Any]] = Registry("swarm metrics")
@@ -47,6 +63,7 @@ def _swarm_rows(ctx: Context) -> Any:
 
 
 register("swarm", _swarm_rows)
+register("runs", runs_provider)
 
 
 @dataclass
@@ -77,25 +94,81 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
+    return _figure(ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage")
+
+
+def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
+    """The shared figure a derived view answers: build once (a ``ValueError`` is a bad
+    call, not a figure), one min-sample gate, one text. Every derived view routes through
+    here so the repeated body is not a duplicate-code cluster."""
     try:
-        data = stages_build(ctx, group_by)
+        data = build(ctx)
     except ValueError as exc:
         return Answer(False, str(exc), failed=True)
-    ok = stages_ok(data)
-    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any stage"
-    return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
+    ok = ok_of(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any {subject}"
+    return Answer(ok, "" if ok else why, metrics=data, text=text_of(data))
+
+
+#: The views that are one figure, with their (build, has-figures, text, subject).
+_VIEW_OF_FIGURE: dict[str, tuple] = {
+    "slo": (slo_assess, slo_ok, slo_text, "service-level indicator"),
+    "batch": (batch_build, batch_ok, batch_text, "size bucket"),
+}
+
+
+def _own_fold(
+    view: str, events, state, cfg: Config, now: float, phase: str, floor, probes
+) -> Answer:
+    """The views that fold the log themselves: ``swarm`` (the baseline a fleet must beat) and
+    ``suitewaste`` (whole-suite runs by reason; it reads trees through ``probes``)."""
+    if view == "swarm":
+        return SWARM["view"](events, state, cfg, now, phase, floor)
+    if probes is None:
+        return Answer(False, "suitewaste needs a git probe to compare trees", failed=True)
+    scope = (lambda item: PR.phase_of(state, item) == phase) if phase else None
+    data = SW.build(events, cfg, now, probes, since=floor, in_scope=scope)
+    ok = SW.has_figures(data)
+    why = "" if ok else data["unavailable"].get("avoidable_share", "no whole-suite run in the log")
+    return Answer(ok, why, metrics=data, text=SW.text(data))
 
 
 def _locks(ctx: Context, probes: Probes | None) -> Answer:
-    data = locks_build(ctx, probes)
-    ok = locks_ok(data)
-    why = (
-        f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any lock figure"
-    )
-    return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
+    return _figure(ctx, lambda c: locks_build(c, probes), locks_ok, locks_text, "lock figure")
 
 
-def run(
+def _tiny(ctx: Context) -> Answer:
+    return _figure(ctx, tiny_build, tiny_ok, tiny_text, "figure")
+
+
+def _paths(ctx: Context) -> Answer:
+    return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
+
+
+def _variants(ctx: Context) -> Answer:
+    return _figure(ctx, variants_build, variants_ok, variants_text, "figure")
+
+
+def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
+    """The ``retro`` view: one item's timeline, refused without an id or a known item."""
+    if not item:
+        return Answer(False, "retro needs an item id", failed=True)
+    if item not in state.items:
+        return Answer(False, f"no item {item!r}", failed=True)
+    t = timeline(events, facts, item)
+    reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
+    return Answer(not reason, reason, metrics=t, text=text_retro(t))
+
+
+def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None) -> Answer:
+    """The ``lanes`` view: a grid sample over who worked in the window, with utilisation."""
+    g = grid_sample(events, cfg, now, floor)
+    u = utilisation(g["rows"])
+    reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
+    return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
+
+
+def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
     events: Sequence[Event],
     state: State,
     cfg: Config,
@@ -117,33 +190,32 @@ def run(
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
-    if view == "swarm":  # the baseline folds the log itself
-        return SWARM["view"](events, state, cfg, now, phase, floor)
+    if view in ("swarm", "suitewaste"):  # these fold the log themselves
+        return _own_fold(view, events, state, cfg, now, phase, floor, probes)
     facts = collect(events, state, now, cfg)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":
         f = forecast_view(facts, state, cfg, now, phase)
         return Answer(f["available"], f["reason"], metrics=f, text=text_forecast(f))
     if view == "retro":
-        if not item:
-            return Answer(False, "retro needs an item id", failed=True)
-        if item not in state.items:
-            return Answer(False, f"no item {item!r}", failed=True)
-        t = timeline(events, facts, item)
-        reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
-        return Answer(not reason, reason, metrics=t, text=text_retro(t))
+        return _retro(item, events, facts, state)
     if view == "stages":
         return _stages(ctx, group_by)
     if view == "locks":
         return _locks(ctx, probes)
+    if view == "tiny":
+        return _tiny(ctx)
+    if view == "paths":
+        return _paths(ctx)
+    if view == "variants":
+        return _variants(ctx)
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
-        g = grid_sample(events, cfg, now, floor)
-        u = utilisation(g["rows"])
-        reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
-        return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
+        return _lanes(events, cfg, now, floor)
+    if view in _VIEW_OF_FIGURE:
+        return _figure(ctx, *_VIEW_OF_FIGURE[view])
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

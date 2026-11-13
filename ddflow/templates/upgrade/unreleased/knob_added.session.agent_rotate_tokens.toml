@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_rotate_tokens"
+new = "250000"
+why = "Context tokens past which a lane agent should rotate instead of growing (`ddflow doctor`/`ddflow health` and the wake brief name it). An agent past it finishes its item, writes its hand-off note and stops; the lead starts a fresh agent whose first call is `ddflow brief`. 0 turns the hint off (D-TE-Q2)."
+impact = "additive"

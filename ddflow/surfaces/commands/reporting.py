@@ -37,6 +37,20 @@ def taken_over_note(it) -> str:
     )
 
 
+def _stale_worktree_note(c, it, wt) -> str:
+    """A note when the recorded worktree and branch are both gone (Bf3c93a0759).
+
+    `show` used to print the item's recorded worktree and branch even after the tree and
+    branch no longer exist, so a reader believed parked work was still there. An open item
+    keeps the fields (a re-claim reuses them), so the truthful thing is to say they are
+    recorded, not present."""
+    if wt.is_dir():
+        return ""
+    if it.branch and R.branch_exists(c.repo, it.branch):
+        return ""
+    return "  (recorded, but gone: no such worktree or branch)"
+
+
 def _taken(r, iid: str) -> str:
     """ " (previously taken over, first by X)" for an item `status` lists as taken over."""
     by = r.get("taken_over", {}).get(iid)
@@ -262,13 +276,22 @@ def cmd_bug_show(a, c: Ctx) -> int:
     return _show(a, c, only="bug")
 
 
+def cmd_research_show(a, c: Ctx) -> int:
+    """`ddflow research show <id>`: `show`, for a research note only (the id of anything
+    else is refused)."""
+    return _show(a, c, only="research")
+
+
 def _show(a, c: Ctx, only: str = "") -> int:
-    out = A.show(c.repo, a.id, agent=c.requested_agent)
+    out = A.show(c.repo, a.id, agent=c.requested_agent, history=bool(getattr(a, "history", False)))
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
     if only == "bug" and "bug" not in out.data["_render"]:
         print(f"{a.id} is not a bug (`ddflow show {a.id}` reads it)", file=sys.stderr)
+        return REFUSED
+    if only == "research" and "research" not in out.data["_render"]:
+        print(f"{a.id} is not a research note (`ddflow show {a.id}` reads it)", file=sys.stderr)
         return REFUSED
     if c.json:
         emit_json(out.body("item"))
@@ -294,7 +317,8 @@ def _show(a, c: Ctx, only: str = "") -> int:
             + taken_over_note(it)
         )
     if it.worktree:
-        print(f"  worktree {R.worktree_path(c.repo, it.worktree)} [{it.branch}]")
+        wt = R.worktree_path(c.repo, it.worktree)
+        print(f"  worktree {wt} [{it.branch}]{_stale_worktree_note(c, it, wt)}")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())

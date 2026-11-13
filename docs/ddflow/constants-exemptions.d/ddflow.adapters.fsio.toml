@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/adapters/fsio.py:LOCK_POLL_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'

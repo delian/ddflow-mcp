@@ -17,8 +17,7 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".openhands/hooks.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -38,3 +37,4 @@ dir = ".agents/skills"
 date = "2026-10-09"
 sources = ["https://docs.openhands.dev/openhands/usage/customization/hooks.md"]
 unverified = ["user-level hook file"]
+

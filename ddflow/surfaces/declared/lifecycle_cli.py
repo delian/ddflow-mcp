@@ -17,6 +17,7 @@ from ...core import clock
 from ...core import outcome as O
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
+from ...core.schedule import wave_of
 from ...core.tier import tier_of
 from ..tools._common import _api
 
@@ -24,6 +25,13 @@ from ..tools._common import _api
 #: whether they are build artefacts or real source -- which is the judgement the operator
 #: has to make -- without burying the remedy underneath them.
 MAX_LISTED_FILES = 10
+
+#: How many blocked rows `next`'s text lists before summarising the rest: more when
+#: nothing is ready (the blocked list IS the answer), fewer beside a ready list (they are
+#: context, not the point). A cut list says how many more, never silently (bug
+#: B-next-text-cuts-blocked-silently).
+_BLOCKED_SHOWN_NO_READY = 10
+_BLOCKED_SHOWN_WITH_READY = 6
 
 
 def waiting(rows: list, head: str) -> str:
@@ -268,28 +276,148 @@ def next_text(out, a, ctx) -> str | None:
     if out.exit == FAIL:
         return None
     p = out.data["_render"]["plan"]
-    if not p.ready:
-        return "\n".join(
-            [
-                out.reason,
-                *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:10]),
-                *([note] if (note := out.data.get("_footer")) else []),
-            ]
-        )
-    lines = [f"Ready ({p.summary()}):"]
-    for it in p.ready:
-        tier = tier_of(it.tags)
-        lines.append(f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else ""))
-        if it.globs:
-            lines.append(f"      writes: {', '.join(it.globs)}")
-    if len(p.ready) > 1:
-        lines.append("\nThese are independent — run them in parallel worktrees.")
-    lines += [f"  (blocked) {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:6]]
-    if p.finished:
+    bdeps = p.blocking_deps
+    flat = bool(a.get("flat", False))
+    clusters = out.data.get("co_location_hints") or []
+    excluded = out.data.get("excluded_leased") or []
+    lines = _lead_lines(out, p, bdeps, flat, clusters)
+    lines += _excluded_lines(excluded)
+    if bdeps:
+        lines += _blocking_dep_lines(bdeps)
+    own = out.data["_render"].get("own_sections") or {}
+    lines += _held_lines(out.data.get("held_by_cap") or [], p.cap_note, own.get("held", 0))
+    lines += _needs_complete_lines(out.data.get("needs_complete") or [], own.get("complete", 0))
+    lines += _blocked_lines(out, p, bool(p.ready or bdeps), bool(a.get("blocked")))
+    if p.finished and (p.ready or bdeps):
         lines.append(p.close_note())
     if note := out.data.get("_footer"):
         lines.append(note)
     return "\n".join(lines)
+
+
+def _lead_lines(out, p, bdeps, flat, clusters) -> list[str]:
+    """The top of `next`'s text: the ready list with its co-location advice, or, with
+    nothing to start, the headline (`No free slot under the cap`, or the refusal reason)."""
+    if not (p.ready or bdeps):
+        return [out.data.get("headline") or out.reason]
+    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
+    return lines + (_co_locate_lines(clusters) if clusters else [])
+
+
+def _held_lines(held, cap_note, total) -> list[str]:
+    """Ready items only the cap holds back: id, title, wave, globs (what a lane needs to
+    pick a parallel set), under the cap's own words."""
+    if not held:
+        return []
+    lines = [
+        f"\nReady but held by {cap_note or 'the parallelism cap'} "
+        f"({total or len(held)}; a named `ddflow claim` is not capped and grants one now):"
+    ]
+    for r in held:
+        wave = f"  [wave:{r['wave']}]" if r.get("wave") is not None else ""
+        lines.append(f"  {r['id']}  {r['title']}{wave}")
+        if r.get("globs"):
+            lines.append(f"      writes: {', '.join(r['globs'])}")
+    return lines
+
+
+def _needs_complete_lines(ids, total) -> list[str]:
+    if not ids:
+        return []
+    return [
+        f"\nMerged, not completed ({total or len(ids)}): `ddflow complete <id>` records each: "
+        f"{', '.join(ids)}"
+    ]
+
+
+def _blocked_lines(out, p, beside_ready: bool, every: bool) -> list[str]:
+    """The blocked rows that are neither cap-held nor merged-uncompleted (those have their
+    own sections): conflicts and the rest listed, dependency waits as a count unless
+    ``every`` (`--blocked`). The count of what is not shown is always said."""
+    skip = out.data["_render"].get("own_sections", {}).get("ids", frozenset())
+    rows = [b for b in p.blocked if b.item not in skip]
+    deps = [b for b in rows if b.reason == "deps"]
+    listed = rows if every else [b for b in rows if b.reason != "deps"]
+    limit = _BLOCKED_SHOWN_WITH_READY if beside_ready else _BLOCKED_SHOWN_NO_READY
+    prefix = "  (blocked) " if beside_ready else "  "
+    lines = [f"{prefix}{b.item}: {b.reason} — {b.detail}" for b in listed[:limit]]
+    if len(listed) > limit:
+        lines.append(f"  ... and {len(listed) - limit} more (--json holds them all)")
+    if deps and not every:
+        lines.append(f"  {len(deps)} blocked on dependencies (`ddflow next --blocked` lists them)")
+    return lines
+
+
+def _ready_line(it) -> str:
+    tier = tier_of(it.tags)
+    return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
+
+
+def _needs_line(it) -> str | None:
+    needs = [n for n in it.needs if n]
+    return f"      needs: {', '.join(needs)}" if needs else None
+
+
+def _next_ready_lines(p, flat, clusters) -> list[str]:
+    """The ready-list section: wave headers (unless ``flat``), each item with globs + needs.
+
+    ``clusters`` is `co_location_hints`: its presence replaces the generic "run in parallel
+    worktrees" line -- those items are the one-lane case the Co-locate section below
+    prints, so "independent" is not claimed for them.
+    """
+    lines = [f"Ready ({p.summary()}):"]
+    last_k = object()  # a fresh sentinel: distinct from every wave number AND from unstamped's None
+    for it in p.ready:
+        k = None if flat else wave_of(it.tags)
+        if not flat and last_k != k:
+            label = f"wave:{k}" if k is not None else "wave:unstamped"
+            lines.append(f"  [{label}]")
+            last_k = k
+        lines.append(_ready_line(it))
+        if it.globs:
+            lines.append(f"      writes: {', '.join(it.globs)}")
+        if needs := _needs_line(it):
+            lines.append(needs)
+    if len(p.ready) > 1 and not clusters:
+        lines.append("\nThese are independent — run them in parallel worktrees.")
+    return lines
+
+
+def _co_locate_lines(clusters) -> list[str]:
+    lines = ["\nCo-locate (place in ONE lane to minimize locking):"]
+    for c in clusters:
+        why = (
+            f"share dep(s): {', '.join(c['shared_deps'])}"
+            if c["shared_deps"]
+            else "overlapping globs"
+        )
+        lines.append(f"  {', '.join(c['items'])}  ({why})")
+    return lines
+
+
+def _excluded_lines(excluded) -> list[str]:
+    if not excluded:
+        return []
+    lines = ["\nExcluded (globs overlap another agent's live lease):"]
+    for b in excluded:
+        lines.append(f"  {b['item']}: {b['detail']}")
+    return lines
+
+
+def _blocking_dep_lines(bdeps) -> list[str]:
+    lines = [
+        f"Blocking dependencies ({len(bdeps)} ready to start — do these to unblock the phase):"
+    ]
+    for it in bdeps:
+        lines.append(_ready_line(it) + "  [blocking-dependency]")
+        if it.globs:
+            lines.append(f"      writes: {', '.join(it.globs)}")
+        if needs := _needs_line(it):
+            lines.append(needs)
+    return lines
+
+
+# -- claim -----------------------------------------------------------------------------
 
 
 # -- claim -----------------------------------------------------------------------------
@@ -486,11 +614,20 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
 
 
 def complete_body(out, a) -> Any:
+    if out.data.get("check_only"):
+        return out.body()
     return out.body(COMPLETE_BODY + tuple(k for k in COMPLETE_OPTIONAL if k in out.data))
 
 
 def complete_text(out, a, ctx) -> str:
     data = out.data
+    if data.get("check_only"):
+        blockers = data.get("blockers", [])
+        if not blockers:
+            return f"{a['id']} may complete (0 unmet conditions)."
+        return f"{len(blockers)} unmet condition(s) for {a['id']}:" + "".join(
+            f"\n  - {b}" for b in blockers
+        )
     blockers = data["blockers"]
     return (
         (f"NOTE: {data['note']}\n" if data["note"] else "")

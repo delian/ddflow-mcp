@@ -130,6 +130,16 @@ def test_an_explicit_delta_is_still_only_the_new_commits(repo, tmp_path):
     )
 
 
+def test_a_delta_prompt_tells_the_reviewer_the_delta_not_the_whole_diff(repo, tmp_path):
+    """Ba32fcedea6: the delta prompt body told the reviewer to 'look for NEW issues in the
+    whole diff' while showing only the delta; it must say the delta like the progress line."""
+    prompts = _setup(repo, tmp_path)
+    _review(repo)  # full round 1: a FINDME finding
+    _fix(repo)
+    prompt = _prompts_of(prompts, lambda: _review(repo, delta=True))
+    assert "the commits shown" in prompt and "the whole diff" not in prompt, prompt
+
+
 def test_the_cli_help_and_the_tool_schema_say_a_plain_re_review_is_full(repo):
     """They described the old default (a delta) after it flipped (roborev on 4d583a8)."""
     from ddflow.surfaces.tools import TOOLS

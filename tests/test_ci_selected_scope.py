@@ -38,7 +38,13 @@ def stubs(tmp_path, monkeypatch):
     bin_dir.mkdir()
     log.mkdir()
     for name, body in (
-        ("pre-commit", f"echo \"SKIP=$SKIP\" >> {log}/precommit\necho 'ruff check....Passed'\n"),
+        (
+            "pre-commit",
+            f"echo \"SKIP=$SKIP\" >> {log}/precommit\necho 'ruff check....Passed'\n"
+            # a full run must report its test hook (a hook skipped for want of a test file is
+            # unavailable, B717b798547): the stub reports it unless SKIP names it
+            "case \",$SKIP,\" in *,tests,*) ;; *) echo 'tests....Passed' ;; esac\n",
+        ),
         ("pytest", f'echo "$@" >> {log}/pytest\n'),
     ):
         f = bin_dir / name
@@ -262,13 +268,13 @@ def test_the_marker_line_carries_the_scope_and_the_gate_reads_it_back():
     assert CM.parse_marker(out) == ev and CM.parse_marker("nothing") == {}
 
 
-def _after(project, ran):
+def _after(project, ran, summary=()):
     from types import SimpleNamespace as NS
 
     from ddflow.services import testscope as TSC
 
     cfg = Config.load(project)
-    it = NS(fixes=[])
+    it = NS(fixes=[], gates={"ci": NS(evidence={"summary": list(summary)})})
     return TSC._after_ci(cfg, NS(bugs={}), it, "pytest -q", project, "main", 3, ran)
 
 
@@ -278,8 +284,10 @@ def test_unit_tests_is_covered_by_a_ci_run_of_equal_or_wider_scope(project, stub
     sc = _after(project, ran)
     assert sc.scope == "covered" and sc.covered_by.startswith("ci selected run ")
     assert sc.evidence()["covered_by"] == sc.covered_by
-    wide = _after(project, {"scope": "full", "sha": "abc"})
+    wide = _after(project, {"scope": "full", "sha": "abc"}, summary=["1 passed"])
     assert wide.scope == "covered" and "ci full run" in wide.covered_by
+    no_summary = _after(project, {"scope": "full", "sha": "abc"})
+    assert no_summary.scope == "full" and "no pytest summary" in no_summary.why
 
 
 def test_unit_tests_runs_only_the_difference_ci_did_not_take(project, stubs):

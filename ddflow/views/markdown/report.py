@@ -31,6 +31,9 @@ def addenda_lines(a: dict) -> list[str]:
     """`show`'s block for one record: what was added to it (verbatim, who, when, score)
     and the links in both directions."""
     out: list[str] = []
+    if a.get("author"):
+        out.append(f"  author model {a['author']}")
+    out += correction_lines(a.get("corrections") or [], bool(a.get("history")))
     if a["additions"]:
         out.append(f"  additions ({len(a['additions'])}):")
         for x in a["additions"]:
@@ -57,6 +60,35 @@ def addenda_lines(a: dict) -> list[str]:
             for x in a["linked_from"]
         ]
     return out
+
+
+def _digests(row: dict) -> str:
+    """` (old X, new Y)` for the digests a correction kept; "" when it kept none."""
+    kept = [f"{w} {row[w]}" for w in ("old", "new") if row.get(w)]
+    return f" ({', '.join(kept)})" if kept else ""
+
+
+def correction_lines(found: list[dict], history: bool) -> list[str]:
+    """`show`'s corrected-field markers (REC-show-corrected-fields): per field its latest
+    correction -- by whom, when, why -- or, with `history`, every correction in order. The old
+    and new values appear only as the digests a correction asked to keep; the log holds the
+    text, so none is printed here."""
+    if not found:
+        return []
+    if history:
+        out = [f"  corrections ({len(found)}):"]
+        for c in found:
+            out.append(f"    {c['at']} by {c['by']} -- {c['reason']}")
+            out += [f"      corrected {r['field']}{_digests(r)}" for r in c["fields"]]
+        return out
+    latest: dict[str, tuple[dict, dict]] = {}
+    for c in found:
+        for r in c["fields"]:
+            latest[r["field"]] = (c, r)
+    return [
+        f"  corrected {name}: by {c['by']} at {c['at']} -- {c['reason']}{_digests(r)}"
+        for name, (c, r) in sorted(latest.items())
+    ]
 
 
 def _reason(x: dict) -> str:
@@ -102,9 +134,10 @@ def new_reports_block(item: str, rep: dict) -> str:
 #: kind, so a run of salvageable trees cannot push a RUNNING item nobody holds, or a tree
 #: that could not be measured, off the list (rubber_duck on B20e103326b).
 _RECOVERY_SHOWN = 5
-_HOLDING, _UNMEASURED, _UNHELD = (
+_HOLDING, _UNMEASURED, _CAPPED, _UNHELD = (
     "holding work",
     "could not be measured",
+    "past the measurement cap",
     "RUNNING with nobody on it",
 )
 
@@ -113,15 +146,20 @@ def recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
     nobody on it; None for a leftover with nothing to salvage, which is counted rather
-    than listed (B20e103326b). `recover` and `status` count all three bands as "may
+    than listed (B20e103326b). A tree left unmeasured ONLY because the view hit its
+    measurement cap is its own band: still "may hold work" for `recover`/`status`, but the
+    brief counts it quietly with the other leftovers instead of raising the alarm over it
+    (Bfb4b6306d1). `recover` and `status` count every listed band as "may
     contain work" (B3f8c406fea): a truthy `salvageable` dropped the unmeasured and the
-    unheld. `doctor` makes the two TREE bands a problem and leaves a RUNNING item nobody
+    unheld. `doctor` makes the tree bands a problem and leaves a RUNNING item nobody
     holds a note, since `next` offers it to resume."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
         return _HOLDING
-    return _UNMEASURED if r.salvageable is None else None
+    if r.salvageable is None:
+        return _CAPPED if r.budget_capped else _UNMEASURED
+    return None
 
 
 #: The name tests/test_brief_recovery_all.py imports; one function, not a copy.

@@ -27,6 +27,15 @@ GOVERNS = ("pyproject.toml", "ddflow/templates/**")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _installed_means_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run of the INSTALLED wheel must import the installed code. A PYTHONPATH naming this
+    tree (a lane's shell exports one, the shim sets one) put the source ahead of site-packages,
+    so the "installed" ddflow ran the lane's code, and the foreign-launch guard refused it from
+    a linked worktree: the test failed there and passed on the primary (Bbaaaba1364)."""
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+
+
 @pytest.fixture(scope="module")
 def wheel(tmp_path_factory) -> Path:
     if not shutil.which("uv"):
@@ -78,7 +87,7 @@ def test_the_wheel_declares_both_entry_points(wheel):
 #: Kept as a ratchet rather than deleted, because the original point stands: a
 #: dependency must be a decision somebody made, not something that crept in with an
 #: import. Adding a name here should feel like this comment.
-ALLOWED_RUNTIME_DEPS = {"jinja2", "tomlkit"}
+ALLOWED_RUNTIME_DEPS = {"jinja2", "tomlkit", "argcomplete"}  # argcomplete: the CLI completion engine
 
 
 def test_the_package_declares_only_the_dependencies_we_chose(wheel):

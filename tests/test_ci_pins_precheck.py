@@ -36,12 +36,22 @@ RECIPES = """\
 [[pin]]
 name = "knobs"
 files = ["count.txt", "list.txt"]
+after_merge = false
+check = ["{python}", "gen.py", "--check"]
+regen = ["{python}", "gen.py"]
+"""
+
+REGEN_RECIPES = """\
+[[pin]]
+name = "knobs"
+files = ["count.txt", "list.txt"]
+after_merge = true
 check = ["{python}", "gen.py", "--check"]
 regen = ["{python}", "gen.py"]
 """
 
 
-def _pinned_project(repo):
+def _pinned_project(repo, after_merge: bool = False):
     _project(repo)
     default = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     (repo / ".ddflow").mkdir(exist_ok=True)
@@ -50,7 +60,7 @@ def _pinned_project(repo):
         {
             "gen.py": GEN,
             "knobs.txt": "a\nb\n",
-            ".ddflow/pins.toml": RECIPES,
+            ".ddflow/pins.toml": REGEN_RECIPES if after_merge else RECIPES,
         },
         "pins",
     )
@@ -104,6 +114,23 @@ def test_current_pins_in_the_merge_result_let_the_run_go_on(repo, monkeypatch):
     _commit(repo, {"unrelated.txt": "x\n"}, "work")
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.ok, res.reason
+
+
+def test_the_scratch_merge_re_records_an_after_merge_pin_left_stale_by_main(repo, monkeypatch):
+    """B8127ab103e: a generated region (an `after_merge` pin, as the README tables are) left
+    stale when a later editor's knobs land on the base is re-recorded by the scratch merge, so
+    the lane's own checks run on a self-consistent tree instead of failing "as new"."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    default = _pinned_project(repo, after_merge=True)
+    _drift(repo, default)
+    sha = _git(repo, "rev-parse", "HEAD")
+    # `pins` marks the ci-gate caller: only it (not the probe's plain mergeability check)
+    # re-records the after-merge pins after the merge.
+    with CI.merge_tree(repo, sha, default, pins=lambda: ()) as (tree, why):
+        assert tree is not None and why.kind == "ok"
+        # main added knob 0 and the branch added knob z: the merged tree holds four knobs, and
+        # the merge re-recorded count.txt from the "3" both sides wrote to the truth, 4.
+        assert (tree / "count.txt").read_text() == "4\n"
 
 
 @pytest.mark.usefixtures("fake_precommit")

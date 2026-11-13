@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .digest import digest_queue  # noqa: F401
 from .health import FOLD_PROBLEMS_SHOWN, doctor, fold_problem_notes  # noqa: F401
+from .metrics_lanes import lane_wait_metrics  # noqa: F401
 from .overview import STATUS_LIST_LIMIT, loops, progress, status  # noqa: F401
 from .records import addenda, new_reports, record_summary, show  # noqa: F401
 from .recovery import recover  # noqa: F401

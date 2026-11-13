@@ -154,7 +154,9 @@ class Entry:
         self.description, self.postings = description, list(postings)
 
     def total(self):
-        total = Money(0)
+        if not self.postings:
+            return Money(0)
+        total = Money(0, self.postings[0].amount.currency)
         for p in self.postings:
             total = total + p.amount
         return total

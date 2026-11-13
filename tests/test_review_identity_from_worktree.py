@@ -103,6 +103,26 @@ def test_detach_argv_is_empty_when_there_is_nothing_to_relaunch(monkeypatch):
     assert R._detach_argv(["--detach"], "sz-dry-run") == []
 
 
+def test_review_help_names_the_agent_flag():
+    """`ddflow review --help` documents `--agent`, so an agent running it from a shell can
+    attribute the review to its own name (`as_agent`/`--agent`) instead of a derived
+    `{host}-{tree}` identity (bug Bbf6e536827)."""
+    root = build_parser()
+    review = next(
+        sub
+        for action in root._actions
+        if isinstance(action, argparse._SubParsersAction)
+        for name, sub in action.choices.items()
+        if name == "review"
+    )
+    assert "--agent AGENT" in review.format_help()
+    # The flag the help documents is REAL on this subparser, not just prose: `--agent`
+    # after `review` parses to the requested agent (mirrored by
+    # `_accept_global_options_anywhere`), so passing it does record the review under that
+    # name rather than a derived `{host}-{tree}` id.
+    assert root.parse_args(["review", "T1", "--agent", "impl-ra-mcp"]).agent == "impl-ra-mcp"
+
+
 @pytest.mark.parametrize("identity", ["sz-dry-run", "-dry-run"])
 def test_detach_launches_with_the_resolved_identity(linked, monkeypatch, identity):
     """A detach with only `DDFLOW_AGENT` set (no `--agent` in argv) launches a command whose

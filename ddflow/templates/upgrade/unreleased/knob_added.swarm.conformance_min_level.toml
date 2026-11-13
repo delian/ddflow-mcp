@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "swarm.conformance_min_level"
+new = '0'
+why = "Lane conformance levels (SW-conformance): the measured conformance level a lane needs before the scheduler offers it a real item; zero does not enforce conformance."
+impact = "additive"

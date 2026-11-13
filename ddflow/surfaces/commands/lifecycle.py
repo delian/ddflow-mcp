@@ -33,6 +33,9 @@ def cmd_wait(a, c: Ctx) -> int:
         kind=a.kind,
         globs=a.globs,
         lease=a.lease or "",
+        token=a.token or "",
+        approval=a.approval or "",
+        job=a.job or "",
         timeout_s=a.timeout,
         poll_s=a.poll,
         max_s=a.max_s,
@@ -49,5 +52,7 @@ def cmd_wait(a, c: Ctx) -> int:
     print(f"READY: {', '.join(d['ready'])} (after {d['waited_s']}s)")
     for f in d["freed_by"]:
         print(f"  {f}")
+    for act in d.get("next_actions", []):
+        print(f"  {act}")
     print(d["advice"])
     return OK

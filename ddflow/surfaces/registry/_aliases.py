@@ -106,7 +106,9 @@ class AliasChoices(dict):
         return self.hidden[key]
 
     def __contains__(self, key: object) -> bool:
-        return super().__contains__(key) or key in self.hidden
+        # A positional `nargs='*'` stores a list; it is a value, not a command name, and
+        # hashing it raises TypeError (Bab15b39e03). Only a str can name a command or alias.
+        return isinstance(key, str) and (super().__contains__(key) or key in self.hidden)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self[key] if key in self else default

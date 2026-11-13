@@ -87,6 +87,7 @@ def h_proposed(st: State, ev: Event) -> None:
         "kind": str(d.get("kind", "")),
         "reason": str(d.get("reason", "")),
         "probe": str(d.get("probe", "")),
+        "evidence": str(d.get("evidence", "")),
         "state": OPEN,
         "proposed_at": ev.ts,
         "history": [],

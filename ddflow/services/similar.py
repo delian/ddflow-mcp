@@ -282,8 +282,18 @@ def _note_vs_work(a: str, b: str) -> bool:
 
 
 def _related_only(c: Candidate, kind: str, dd) -> bool:
-    """A non-identical research-note-or-decision / task-or-phase pair: listed as related, never asked."""
-    return not dd.research_task_asks and _note_vs_work(kind, c.kind) and "identical" not in c.flags
+    """A non-identical note beside the work it describes: listed as related, never asked.
+
+    A research note or decision beside the task or phase it governs (either way round)
+    is related, not a copy -- as is a note beside the bug filed against the SAME item
+    (B50cd07e49a): both describe that work. ``[dedupe].research_task_asks`` restores the
+    ask for all of these; identical text still asks.
+    """
+    if dd.research_task_asks or "identical" in c.flags:
+        return False
+    if _note_vs_work(kind, c.kind):
+        return True
+    return kind in _ABOUT_WORK and c.kind == "bug" and "same_item" in c.flags
 
 
 def _asks(c: Candidate, kind: str, words: int, dd) -> bool:

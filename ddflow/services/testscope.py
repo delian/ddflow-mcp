@@ -10,6 +10,9 @@ from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
 from ..infra import worktree as W
 from . import gates as G
+from . import logblobs as LB
+from .completion import changed_paths
+from .docsonly import diff_is_trivial
 from .pipeline_diff import effective_pipeline
 from .testselect import Selected, run_command, select
 
@@ -105,24 +108,60 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
-    red = _ci_baseline_red(
-        it, tree
-    )  # measured baseline-red: the gate runs, it does not wait for ci
-    if not failed_sel and not red and (why := _ci_not_passed_here(cfg, it, tree)):
+    # measured baseline-red, or a partial whole-suite ci that ran on this very tree (a red
+    # main): the gate runs its own selection, it does not wait for a ci that cannot pass
+    red = _ci_baseline_red(it, tree) or _ci_partial_here(it, tree)
+    why, excused = _ci_excused(cfg, it, tree, failed_sel, red)
+    if why:
         return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
-    if not failed_sel and not red and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
+    ci = it.gates.get("ci")
+    if (
+        not failed_sel
+        and not red
+        and (ran := LB.full((ci.evidence or {}) if ci else {}).get("ci_scope"))
+    ):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
-    kind = _selectable(cfg, it, lines)
+    trivial = excused or _is_trivial(cfg, it, tree)
+    kind = _selectable(cfg, it, lines, trivial=trivial)
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
     return _selected(
-        cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel, ci_red=red
+        cfg,
+        st,
+        it,
+        command,
+        tree,
+        base,
+        kind,
+        lines,
+        ci_note=_ci_note(failed_sel, red, excused),
     )
+
+
+def _ci_excused(cfg, it, tree: Path, failed_sel: bool, red: bool) -> tuple[str, bool]:
+    """("", excused) when no whole-suite obligation blocks the checks below — ``excused``
+    True when a therefore-skipped ci is why (a trivial change excuses ci), else the
+    whole-suite reason ``why`` ("" = the item's ci gate passed on this tree). A
+    baseline-red or selected-failed ci keeps this gate's own selection, never a
+    whole-suite obligation, so it returns ("", False).
+
+    A trivial change excuses the whole-suite ci gate (TRIVIAL_EXCUSED_GATES): it has no
+    ci outcome to require, and its pipeline holds no ci gate, which `_ci_not_passed_here`
+    reads as "the whole suite has not passed on this tree" and runs the whole suite. That
+    short-circuit must NOT fire for a trivial change (Bfcb327570c): it owes the SCOPED
+    tests, and the ci note says excused, not "passed" or "failed"."""
+    if failed_sel or red:
+        return "", False
+    why = _ci_not_passed_here(cfg, it, tree)
+    if not why:
+        return "", False
+    trivial = _is_trivial(cfg, it, tree)
+    return ("", trivial) if trivial else (why, False)
 
 
 def _pipeline(cfg, it, tree: Path) -> list[str]:
@@ -138,7 +177,7 @@ def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     """Whether the item's ci gate is PARTIAL because its failing tests were measured failing on
     the base too (D-baseline-red-auto-accept): that is no reason to refuse to start this gate."""
     ci = it.gates.get("ci")
-    base = (ci.evidence or {}).get("baseline") if ci is not None else None
+    base = LB.full(ci.evidence or {}).get("baseline") if ci is not None else None
     if not (
         ci is not None
         and ci.outcome == "partial"
@@ -151,6 +190,20 @@ def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     return tree is None or (bool(ran) and ran == G.normal_fingerprint(G.tree_identity(tree)))
 
 
+def _ci_partial_here(it, tree: Path | None) -> bool:
+    """Whether the item's ci gate ended PARTIAL on exactly the commit ``tree`` holds now, clean
+    (B-unit-tests-refuses-on-partial-ci-red-main): the whole suite already ran here and a red
+    main keeps it from passing, so rerunning ci proves nothing new. The gate runs its own
+    selection; ci stays partial and still decides whether the item may complete."""
+    ci = it.gates.get("ci")
+    if tree is None or ci is None or ci.outcome != "partial":
+        return False
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    return (
+        bool(ran) and ran.endswith("+clean") and ran == G.normal_fingerprint(G.tree_identity(tree))
+    )
+
+
 def _ci_failed_selected(it) -> bool:
     """Whether the item's ci gate FAILED on a selected run: the failure is a verdict on the
     tests its change reaches, so this gate runs its own selection and does not widen it to the
@@ -159,7 +212,7 @@ def _ci_failed_selected(it) -> bool:
     ci = it.gates.get("ci")
     if ci is None or ci.outcome != "failed":
         return False
-    return ((ci.evidence or {}).get("ci_scope") or {}).get("scope") == "selected"
+    return (LB.full(ci.evidence or {}).get("ci_scope") or {}).get("scope") == "selected"
 
 
 def _ci_not_passed_here(cfg, it, tree: Path) -> str:
@@ -193,21 +246,51 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
     return ""
 
 
-def _selectable(cfg, it, lines: int | None) -> str:
-    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)"), or,
-    starting "not ", why it may not."""
+def _is_trivial(cfg, it, tree: Path) -> bool:
+    """Whether ``it``'s actual diff is trivial (format-only/docs/comment; Bbd88c54354): such
+    a change runs the SCOPED tests, never the whole suite, because it changes no behavior.
+    ``diff_is_trivial`` fails closed on untracked files and dirty tracked files the committed
+    path list cannot name (rubber_duck)."""
+    try:
+        repo = W.repo_root(tree)
+    except W.GitError:
+        return False
+    return diff_is_trivial(it, cfg, repo, changed_paths(repo, it))
+
+
+def _selectable(cfg, it, lines: int | None, *, trivial: bool = False) -> str:
+    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)", "a trivial
+    change (...)"), or, starting "not ", why it may not."""
     small = cfg.gates.unit_tests_small_lines
     if it.fixes:
         return f"a bug fix ({', '.join(it.fixes)})"
+    if trivial:
+        return "a trivial change (format-only/docs/comment; no behavior change)"
     if lines is not None and small > 0 and lines < small:
         return f"a small task ({lines} changed lines < [gates].unit_tests_small_lines = {small})"
     size = "its size is unknown" if lines is None else f"{lines} changed lines"
     return f"not a bug fix, and {size} (small is under {small})"
 
 
+def _ci_note(ci_failed: bool = False, ci_red: bool = False, ci_excused: bool = False) -> str:
+    """The ci gate's suffix on the selection's ``scope_why``, from its measured state: a
+    trivial change's ci is excused, a selected-failed ci does not widen this gate to the
+    whole suite, a baseline-red one runs its own selection, else the whole suite passed."""
+    if ci_excused:
+        return "; the ci gate is excused for a trivial change (no whole-suite run)"
+    if ci_failed:
+        return (
+            "; the ci gate failed on its selected scope (it must pass before the item "
+            "completes), so this gate does not widen it to the whole suite"
+        )
+    if ci_red:
+        return "; the ci gate is partial, baseline-red only, so this gate runs its own selection"
+    return "; the ci gate passed the whole suite on this tree"
+
+
 def _selected(
     cfg, st, it, command: str, tree: Path, base: str, kind: str, lines: int | None,
-    ci_failed: bool = False, ci_red: bool = False,
+    ci_note: str = "",
 ) -> Scope:  # fmt: skip
     """The selection for a selectable item, or the whole suite when none can be made."""
     sel = select(tree, base, **limits(cfg))
@@ -244,14 +327,7 @@ def _selected(
             if sel.cut
             else ""
         )
-        + (
-            "; the ci gate failed on its selected scope (it must pass before the item completes), "
-            "so this gate does not widen it to the whole suite"
-            if ci_failed
-            else "; the ci gate is partial, baseline-red only, so this gate runs its own selection"
-            if ci_red
-            else "; the ci gate passed the whole suite on this tree"
-        ),
+        + ci_note,
         command=cmd,
         tests=tests,
         changed_lines=lines,
@@ -261,12 +337,31 @@ def _selected(
     )
 
 
+def _pytest_summary(it) -> list[str]:
+    """The pytest summary the item's ci gate recorded ([] when no pytest ran, e.g. a "full"
+    ci whose pre-commit range held no file the `tests` hook reaches)."""
+    gates = getattr(it, "gates", None) or {}
+    ci = gates.get("ci") if isinstance(gates, dict) else None
+    evidence = getattr(ci, "evidence", None) if ci is not None else None
+    return list((evidence or {}).get("summary") or ())
+
+
 def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict) -> Scope:
     """The scope when the item's ci gate passed HERE and recorded which tests it took
     (D-test-economy-r2): nothing when ci's scope is this gate's or wider, else only the
     difference -- the tests this gate's selection holds that ci did not run."""
     sha = str(ran.get("sha", ""))[:12]
     if ran.get("scope") == "full":
+        if not _pytest_summary(it):
+            # A "full" ci whose pre-commit range held no file the `tests` hook reaches ran no
+            # pytest at all (only the lint/scan hooks), so it covers nothing: the whole suite
+            # must run HERE (B847e0494de).
+            return Scope(
+                "full",
+                "the ci gate recorded a full scope but no pytest summary: the test hook never "
+                "ran, so no whole-suite run covers this tree",
+                changed_lines=lines,
+            )
         return Scope(
             "covered", "the ci gate ran the whole suite on this tree", changed_lines=lines,
             covered_by=f"ci full run {sha}",

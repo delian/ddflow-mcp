@@ -187,6 +187,33 @@ def test_protocols_by_method_and_jsonrpc_literal(tmp_path: Path):
     assert home == {"mcp": "ADP-mcp", "acp": "ADP-acp", "jsonrpc": "ADP-lane-transport"}
 
 
+def test_new_protocol_families_detected_by_literal_and_named_home(tmp_path: Path):
+    src = (
+        "def f():\n"
+        '    key = "openapi"\n'
+        '    method = "message/send"\n'
+        '    proto = "utcp"\n'
+        "    return key, method, proto\n"
+    )
+    c = I.scan(_tree(tmp_path, {"services/client.py": src}))
+    got = _sites(c, "protocol")
+    p = "ddflow/services/client.py"
+    assert ("openapi", p, _line(src, '"openapi"')) in got
+    assert ("a2a", p, _line(src, '"message/send"')) in got
+    assert ("utcp", p, _line(src, '"utcp"')) in got
+    home = {f.family: f.home for f in c.families if f.kind == "protocol"}
+    assert home["utcp"] == "ADP-utcp"
+    assert home["a2a"] == "AG-a2a"
+    assert home["openapi"] == "CN-adapter-openapi"
+
+
+def test_a_hand_rolled_utcp_call_in_services_is_counted(tmp_path: Path):
+    src = 'def call():\n    return "utcp"\n'
+    c = I.scan(_tree(tmp_path, {"services/client.py": src}))
+    utcp = next(f for f in c.families if f.kind == "protocol" and f.family == "utcp")
+    assert {s.module for s in utcp.violations} == {"ddflow.services.client"}
+
+
 def test_managed_files_exclude_prose_and_comments(tmp_path: Path):
     c = I.scan(_tree(tmp_path, ALL))
     got = {(f, line) for f, _p, line in _sites(c, "managed-file")}
@@ -236,6 +263,20 @@ def test_network_calls_and_hardcoded_hosts(tmp_path: Path):
         "host:feed.example.io",
     }
     assert all("pw" not in s.detail for f in c.families for s in f.sites)  # userinfo dropped
+
+
+def test_a_schema_namespace_url_is_not_a_network_host(tmp_path: Path):
+    """B489298dd27: a URL that only IDENTIFIES a message format's schema (an Adaptive Card
+    ``$schema`` field another system renders) is not an endpoint ddflow calls, so that URL's
+    host is not a network dependence; a non-schema path on the SAME host still is."""
+    src = (
+        'CARD_SCHEMA = "http://adaptivecards.io/schemas/adaptive-card.json"\n'
+        'NOTIFY = "https://adaptivecards.io/v1/notify"\n'
+    )
+    c = I.scan(_tree(tmp_path, {"card.py": src}))
+    counts = {f.family: len(f.sites) for f in c.families if f.kind == "network"}
+    # the schema namespace is dropped, the non-schema path on the same host is still one site
+    assert counts["host:adaptivecards.io"] == 1
 
 
 def test_unparsable_file_is_reported(tmp_path: Path):

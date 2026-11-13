@@ -182,9 +182,40 @@ def test_accuracy_threshold_and_minimum_calls():
     assert grade_calls(*base).level == 7
     assert statuses(grade_calls(*base[:4]))["tool_accuracy"] == cf.UNAVAILABLE
     assert statuses(grade_calls())["tool_accuracy"] == cf.UNAVAILABLE
-    bad = grade_calls(*base, "bash", "bash")  # 5 of 7
-    assert statuses(bad)["tool_accuracy"] == cf.FAILED and bad.level == 6
+    # bash/write calls are the lane doing real work, not malformed ddflow calls, so they do
+    # not dilute the rate (B09100a25b3). They are not ddflow calls either: LEAD + two bash
+    # calls is still 3 ddflow calls, below min_calls.
+    busy = grade_calls(*base, "bash", "write")
+    assert statuses(busy)["tool_accuracy"] == cf.PASSED and busy.level == 7
     assert grade_calls(*LEAD, "bash", "bash").level == 6
+
+
+def test_a_malformed_ddflow_call_still_counts_against_accuracy():
+    calls = [*LEAD, "brief", "show", "show", {"name": "claim", "ok": False}, "bash", "write"]
+    r = grade_calls(*calls)
+    assert statuses(r)["tool_accuracy"] == cf.FAILED, statuses(r)
+
+
+def test_harness_work_calls_do_not_dilute_accuracy():
+    """B09100a25b3: a lane that edits files and runs git while calling ddflow well keeps
+    level 7 (its write/bash calls are judged neither malformed nor well formed)."""
+    calls = [*LEAD, "brief", "show", "bash", "write", "bash", {"name": "bash"}]
+    o = cf.Observed(started=True, stopped_clean=True, tool_events=True, hook=True, lease_stop=True)
+    o.calls = [{"name": c} if isinstance(c, str) else c for c in calls]
+    r = cf.grade("x", o, P)
+    assert statuses(r)["tool_accuracy"] == cf.PASSED and r.level == 7, r.outcomes
+
+
+def test_a_refused_call_carried_in_the_output_is_not_a_success():
+    """B6eaa5f27c2: a ddflow refusal arrives as a COMPLETED tool call with the refusal only in
+    its output ({"refusal": {..., "exit": 3}}). `_ok` saw no `error` field and counted it ok, so
+    a lane whose claim/heartbeat/gate_record were all refused still passed levels 2-4. A
+    heartbeat answering `renewed: false` is the same refusal shape (~exit 2)."""
+    refused = {"name": "claim", "output": json.dumps({"refusal": {"reason": "held elsewhere"}})}
+    assert cf._ok(refused) is False
+    flat = {"name": "heartbeat", "output": json.dumps({"renewed": False})}
+    assert cf._ok(flat) is False
+    assert grade_calls(refused, flat).level == 1  # a lane that only REFUSED climbs no further
 
 
 def test_gate_call_for_another_action_is_not_a_record():
@@ -293,3 +324,13 @@ def test_non_mapping_lanes_are_replaced_not_crashed_on(tmp_path):
     cio.path_for(tmp_path).write_text('{"schema": "lane-levels@1", "lanes": ["a"]}')
     cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
     assert set(cio.load_all(tmp_path)) == {"c"}
+
+
+def test_shipped_conformance_timeout_defaults_outlast_a_real_lane():
+    """B72bcd17b4e: the shipped idle and lease-wait defaults are long enough for a REAL lane, not
+    a stub. kilo's first stream line lands ~20s after start (MCP server + plugin load), so a 5s
+    idle ended collection before any event at level 0; revocation-to-exit measured 8.5-14.1s, so
+    a 10s lease wait failed 3 of 5 runs. 120s idle / 90s wait reached level 6 in 5 of 5."""
+    c = Config().swarm
+    assert c.conformance_idle_s >= 60.0  # > kilo's ~20s first line, with margin
+    assert c.conformance_lease_wait_s >= 30.0  # > 14.1s revocation-to-exit, with margin

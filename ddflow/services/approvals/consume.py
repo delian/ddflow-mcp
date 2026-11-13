@@ -19,9 +19,9 @@ from ...core.handlers.asks import ANSWERED, asks_of
 from ...core.model import fold
 from ..ask import engine as E
 from . import harness as H  # registers the level verifier of the harness channel
+from . import hints, sites
 from . import policy as PO
 from . import request as R
-from . import sites
 from .canon import Canon
 
 
@@ -53,9 +53,8 @@ def route(ask_id: str, canon: Canon, *, new: bool, chat: bool = False) -> str:
         )
     return (
         f"{head} ({s.tier}, level L{s.min_level}+): the operator "
-        f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
-        f"it over a channel they use); then re-run this command with --approval {ask_id}. It is "
-        f"single-use, bound to this exact command and its current state, and expires."
+        f"approves it with `ddflow approvals approve {ask_id}` (or answers it over a channel "
+        f"they use). " + hints.route(ask_id)
     )
 
 
@@ -186,11 +185,14 @@ def operator_gate(
     if approval_id != REQUEST and (stamp := PO.apply(log, cfg, state, canon, reason=reason)):
         return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     if not approval_id and not auto:
+        # `operator_gate` owns the 'refusing: ' prefix on EVERY refusal, this steering
+        # message included (B-consume-refusal-prefix-owner): callers pass the message
+        # through untouched instead of re-deriving it from prose.
         return Decision(
             False,
-            f"to ask the operator to approve '{canon.verb}' for {canon.item or 'this'}, "
-            f"re-run with `--approval {REQUEST}`: a request id comes back and the operator "
-            "answers it in chat.",
+            f"refusing: to ask the operator to approve '{canon.verb}' for "
+            f"{canon.item or 'this'}, re-run with `--approval {REQUEST}`: a request id comes "
+            "back and the operator answers it in chat.",
         )
 
     filed = R.file(

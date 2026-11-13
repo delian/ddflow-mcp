@@ -9,9 +9,13 @@ from __future__ import annotations
 import pytest
 
 from ddflow.adapters.fakes.toml import FakeTomlIo
-from ddflow.adapters.toml import TomlError, TomlIo, TomlLibIo
+from ddflow.adapters.toml import DEFAULT, TomlError, TomlIo, TomlLibIo
 
 SAMPLE = 'name = "x"\nn = 3\nflag = true\nitems = [1, 2]\n\n[a]\nk = "v"\n\n[a.b]\nz = 1\n'
+
+
+class NotedTomlError(TomlError):
+    """A subclass that must round-trip as itself (ADP-toml LOW #17)."""
 
 
 def toml_cases(io) -> None:
@@ -28,6 +32,12 @@ def toml_cases(io) -> None:
     for bad in ("not toml", "a = ", "a = 1\na = 2"):
         with pytest.raises(TomlError):
             io.loads(bad)
+    # write side (ADP-toml-contract): dumps then loads gives the data back, a document round
+    # trips through dumps, and a bad document raises the one error family.
+    assert io.loads(io.dumps(data)) == data
+    assert io.loads(io.dumps(io.document(SAMPLE))) == data
+    with pytest.raises(TomlError):
+        io.document("a = ")
 
 
 CONFORMANCE = {"TomlIo": {"real": lambda monkeypatch: TomlLibIo(), "cases": toml_cases}}
@@ -35,6 +45,12 @@ CONFORMANCE = {"TomlIo": {"real": lambda monkeypatch: TomlLibIo(), "cases": toml
 
 def test_the_default_adapter_passes_the_toml_cases():
     toml_cases(TomlLibIo())
+
+
+def test_the_default_toml_io_is_looked_up_in_the_family_not_imported():
+    # A caller takes the port as an argument, or looks it up as DEFAULT, and never imports
+    # TomlLibIo at the call site (r-swap-seam).
+    assert isinstance(DEFAULT, TomlIo) and not isinstance(DEFAULT, FakeTomlIo)
 
 
 def test_the_fake_passes_the_toml_cases():
@@ -110,6 +126,23 @@ def test_the_error_survives_pickle_with_its_position():
     )
 
 
+def test_a_subclass_and_added_notes_survive_pickle():
+    import pickle
+
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().loads("a = 1\nb = ]\n")
+    err = NotedTomlError(str(caught.value), caught.value)
+    err.add_note("from a later stage")
+    err.tag = "kept"
+
+    back = pickle.loads(pickle.dumps(err))
+    assert type(back) is NotedTomlError
+    assert back.tag == "kept"
+    assert back.__notes__ == ["from a later stage"]
+    assert (back.msg, back.doc, back.pos) == (err.msg, err.doc, err.pos)
+    assert (back.lineno, back.colno) == (err.lineno, err.colno)
+
+
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):
     path = tmp_path / "bad.toml"
     path.write_bytes(b"\xff\xfe")
@@ -121,3 +154,32 @@ def test_inline_comments_are_ignored_by_both_but_not_inside_strings():
     text = 'key = 1 # why\ns = "a # b"  # c\n'
     for io in (TomlLibIo(), FakeTomlIo()):
         assert io.loads(text) == {"key": 1, "s": "a # b"}
+
+
+def test_a_document_edit_keeps_comments_and_layout():
+    # tomlkit's promise, the write side exists to honour (ADP-toml-contract)
+    text = '# top\nname = "x"  # why\n\n[a]\nk = 1\n'
+    doc = TomlLibIo().document(text)
+    assert TomlLibIo().dumps(doc) == text
+    doc["a"]["k"] = 2
+    assert TomlLibIo().dumps(doc) == text.replace("k = 1", "k = 2")
+
+
+def test_a_bad_document_carries_tomlkit_position():
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().document("a = 1\nb = ]\n")
+    assert caught.value.lineno == 2 and caught.value.colno > 1
+
+
+def test_the_fake_refuses_to_dump_what_it_cannot_read_back():
+    # outside the fake's subset -> TomlError, never an unparsable/lying document
+    for bad in ({"a.b": 1}, {"a b": 1}, {"x": None}, {"rows": [{"id": 1}]}):
+        with pytest.raises(TomlError):
+            FakeTomlIo().dumps(bad)
+
+
+def test_the_fake_dumps_a_scalar_after_a_table_stays_in_the_parent():
+    # a scalar that sits after a table in insertion order still belongs to the parent table
+    fake = FakeTomlIo()
+    data = {"section": {"x": 1}, "root_key": 2}
+    assert fake.loads(fake.dumps(data)) == data

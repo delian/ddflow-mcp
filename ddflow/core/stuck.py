@@ -1,13 +1,17 @@
-"""Needs edges that can never be met: the dependency was abandoned or removed, not done."""
+"""Needs edges that can never be met: the dependency was removed, not done.
+
+Abandoned is SETTLED (decided not done): it satisfies its dependents — they are not
+blocked, exactly as ``dep_status`` reads it (B740b7f8cf4) and ``planlint.stale_needs``
+says ("already satisfied"). A removed dependency can never finish and still blocks
+(under the default unknown-dependency policy), so it alone is "gone" here.
+"""
 
 from __future__ import annotations
 
-from .model import DONE
-
 
 def gone(dep) -> bool:
-    """A dependency that finished without being done: abandoned, or removed."""
-    return dep.removed or (dep.terminal and dep.state != DONE)
+    """A dependency that can never be met: removed from the queue without being done."""
+    return dep.removed
 
 
 def drop_command(st, item, also: str = "") -> str:

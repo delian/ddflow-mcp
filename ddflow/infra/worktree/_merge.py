@@ -175,7 +175,7 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> G.GitResu
     refusal, was_merging = _premerge(tree)
     if refusal is not None:
         return refusal
-    r = _merge_retrying_stash(tree, args)
+    r = _merge_retrying_stash(tree, args, cfg)
     if not r.ok and was_merging is True:
         r = G.GitResult(r.code, r.out, r.err, attempted=False)  # someone else's merge is open
     # Not `not was_merging`: None ("could not tell" before) still gets the re-probe and

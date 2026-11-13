@@ -30,7 +30,7 @@ auto_request = true
 reason_chars = 300
 min_digest_chars = 8
 accept_harness = true
-transcript_dirs = ["~/.claude/projects"]
+transcript_dirs = []
 expiry_warn_s = 600
 policy = []
 policy_max_uses = 1
@@ -41,6 +41,9 @@ standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "a
 accept_chat_for_t3 = false
 forbid_chat_for_t3 = false
 require_approval = []
+
+[baseline]
+keep = 14
 
 [bugs]
 file_task = true
@@ -53,7 +56,7 @@ repro_tail_bytes = 4096
 repro_events = 10
 repro_test_timeout_s = 300
 repro_runs = 1
-repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDE*", "*GATE*"]
+repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "*GATE*"]
 repro_redact_extra = []
 
 [cadence]
@@ -74,6 +77,7 @@ skip_gates = ["research", "rules", "implement", "rubber_duck", "critic", "verify
 [ci]
 command = ""
 base = ""
+ruff_autofix = true
 pins_precheck = true
 timeout_s = 3600
 workers = "auto"
@@ -150,6 +154,11 @@ behind = "warn"
 max_behind = 50
 machine_local_keys = []
 
+[eta]
+window_days = 30.0
+min_samples = 10
+coverage_bar = 0.8
+
 [evaluation]
 max_miss_rate = 0.0
 min_fixtures = 1
@@ -160,6 +169,9 @@ redact = true
 max_bytes = 60000
 refresh = "off"
 tables = {}
+
+[fasttrack]
+tiny_cold_max_source_lines = 10
 
 [flow]
 model = "trunk"
@@ -189,6 +201,8 @@ current_line = "current"
 port_strategy = "forward-merge"
 environments = []
 auto_promote = []
+pr_body_template = ""
+pr_body_cell_max = 200
 version_files = {}
 
 [gates]
@@ -267,12 +281,14 @@ idle_s = 900
 check_budget_s = 60
 reply_s = 600
 crash_s = 300
+orphan_s = 300
 mode_idle = "inherit"
 mode_stalled = "inherit"
 mode_unresponsive = "inherit"
 mode_locked = "inherit"
 mode_crashed = "inherit"
 mode_runaway = "inherit"
+mode_orphan_wait = "inherit"
 
 [hooks]
 forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
@@ -321,6 +337,8 @@ fleet_failed_patterns = ["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "o
 fleet_reason_chars = 120
 watch_interval_s = 5
 advise_max = 10
+idle_s = 1800
+coordinator_max_rows = 15
 brief_notes = 3
 brief_text_chars = 1200
 stop_grace_s = 10
@@ -341,6 +359,7 @@ renew_long_commands = true
 renew_log_min_s = 120
 grace_s = 120
 acquire_timeout_s = 30
+record_lock_wait_s = 180
 waiter_reservation_s = 300
 wait_max_s = 600
 wait_queue = false
@@ -348,6 +367,7 @@ idle_max_s = 900
 hold_max_s = 3600
 release_at_merge = true
 break_on_timeout = false
+reconcile_tests = "affected"
 inbox_max_chars = 2000
 inbox_max_pending = 50
 inbox_ttl_s = 86400
@@ -387,6 +407,8 @@ probe = true
 probe_timeout_s = 30
 probe_at = ["claim", "gate", "merge"]
 probe_merge_tree_min_git = "2.38"
+optimistic = false
+review_reuse = "off"
 
 [log]
 reuse_parsed = true
@@ -428,6 +450,7 @@ next_hints = "off"
 on_upgrade = "notify"
 stale_check_every_s = 60.0
 progress_s = 20.0
+init_snapshot_max_age_s = 300.0
 
 [memory]
 max_chars = 280
@@ -450,6 +473,8 @@ auto_run_max_parallel = 1
 [metrics]
 min_samples = 10
 top = 5
+runs_window_days = 30
+outlier_runs = 0
 forecast_runs = 1000
 forecast_seed = 0
 forecast_low_pct = 50
@@ -465,11 +490,60 @@ lock_falsifier_red_main_pct = 10
 lock_revert_key = "locks.mode"
 lock_revert_value = "strict"
 
+[notify]
+channel = "terminal"
+ask_channel = "harness"
+endpoints = {}
+token_env = {}
+send_timeout_s = 10.0
+ask_timeout_s = 300.0
+ask_attempts = 3
+email_host = ""
+email_port = 587
+email_from = ""
+email_to = ""
+email_user = ""
+email_password_env = ""
+email_tls = true
+
 [output]
 max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+json_envelope = false
+
+[perf_metrics]
+ring_max_bytes = 2000000
+ring_max_age_s = 604800
+aggregate_min_samples = 3
+detect_min_samples = 8
+detect_relative_threshold = 0.2
+detect_absolute_floor_s = 5.0
+detect_persistence_windows = 2
+detect_creep_alpha = 0.1
+detect_creep_threshold = 0.1
+flaky_window_s = 604800
+flaky_quarantine_after = 3
+flaky_quarantine_expiry_s = 2592000
+flaky_retry_cost_s = 60.0
+budget_gate_p90_s = 180.0
+budget_test_file_s = 120.0
+budget_stage_lease_wait_s = 120.0
+budget_stage_merge_wait_s = 120.0
+budget_breach_min_samples = 3
+budget_severity = "warn"
+prop_min_observations = 3
+prop_marginal_gain = 0.25
+prop_batch_dominance = 2.0
+prop_retire_payback = 2.0
+prop_split_share = 0.5
+prop_shard_skew = 0.9
+prop_select_miss_min = 2
+prop_select_min_runs = 3
+report_default_window = "28d"
+report_max_rows = 20
+report_width = 76
 
 [pins]
 recipes_file = ".ddflow/pins.toml"
@@ -487,6 +561,24 @@ mergiraf_keep_pct = 10
 
 [plan]
 warn_missing_globs = true
+
+[premerge]
+enabled = true
+stages = ["pre-commit"]
+budget_s = 120
+on_unavailable = "unavailable"
+fix = true
+commit_fixes = true
+max_fix_rounds = 1
+precommit_command = "pre-commit"
+skip_hooks = []
+generic_hooks = true
+large_file_kb = 500
+test_command = "python -m pytest -q -x"
+
+[prices]
+limit = {}
+reset = {}
 
 [prompts]
 review_system = ""
@@ -520,6 +612,14 @@ command = ""
 model_dir = ""
 timeout_s = 60
 
+[records]
+correct_digest_chars = 12
+correct_min_digest_chars = 8
+correct_digest_old = false
+correct_digest_new = false
+correct_reason_max_chars = 500
+correct_max_fields = 8
+
 [reinstruct]
 enabled = true
 every_calls = 12
@@ -528,6 +628,14 @@ max_items = 3
 
 [release]
 manifest_lint = "block"
+
+[resultcache]
+enabled = true
+keep_days = 14
+max_mb = 64
+reuse_failed = false
+probe_commands = ["pytest --version", "uv --version"]
+env_vars = []
 
 [review]
 max_rounds = 2
@@ -546,6 +654,13 @@ exclude_pin_files = true
 chunk_max_tokens = 0
 split_rounds = 2
 degraded_cooldown_s = 3600
+
+[roles]
+budget_tokens = 600
+phase_closer_rules = []
+fixer_rules = []
+researcher_rules = []
+reviewer_rules = []
 
 [rules]
 max_rules = 200
@@ -607,6 +722,12 @@ first_call_max_tokens = 600
 replay_verify_diffs = true
 progress_after_complete = "on"
 compaction_digest_chars = 2000
+inflight_note = true
+interrupted_close_max = 20
+previous_session_chars = 600
+agent_rotate_tokens = 250000
+claude_autocompact_window = 0
+claude_autocompact_pct_override = 0
 agent_brief_max_chars = 9000
 agent_brief_budget_share = 0.1
 agent_brief_min_chars = 4000
@@ -623,6 +744,33 @@ report_test_files = 12
 agent_brief_lessons = 3
 agent_brief_extra = ""
 
+[slo]
+target_command_p95_s = 2.0
+target_gate_p90_s = 300.0
+target_queue_age_s = 600.0
+target_unavailable_rate = 0.25
+target_stuck_lanes = 2
+target_ci_false_red_rate = 0.1
+target_log_events_per_item = 30.0
+target_review_finding_rate = 0.6
+burn_rate_window_s = 2592000
+burn_rate_exhaust_s = 3600.0
+
+[store]
+stale_index_days = 7.0
+index_touch_s = 86400.0
+
+[suites]
+max_concurrent = 0
+cores_per_suite = 96
+load_ceiling_per_core = 0.35
+load_poll_s = 2.0
+max_wait_factor = 3.0
+agent_share = 0.5
+default_cost_s = 600.0
+cost_runs = 20
+class_patterns = {red_main = ["fix-Bmain-red", "main-red", "red-main"], integrator = ["merge[ _-]?queue", "queue run", "integrator"], phase = ["^P-", "phase[ _-]?(close|suite)"], baseline = ["baseline"]}
+
 [swarm]
 w_critical = 3.0
 w_fit = 2.0
@@ -637,13 +785,14 @@ max_lanes = 4
 family_cap = 3
 hedge_max = 1
 default_min_trust = 0
+conformance_min_level = 0
 explore_share = 0.1
 explore_min_n = 5
 bug_window_s = 604800
 conformance_min_accuracy = 0.9
 conformance_min_calls = 5
-conformance_idle_s = 5.0
-conformance_lease_wait_s = 10.0
+conformance_idle_s = 120.0
+conformance_lease_wait_s = 90.0
 conformance_tools = ["brief", "next", "claim", "heartbeat", "show", "help", "identify", "merge", "complete", "task", "memory", "gate", "bug", "session", "rule", "view"]
 conformance_max_age_s = 2592000
 seed_max_tokens = 1500
@@ -658,6 +807,24 @@ dispatch_why_items = 5
 launch_enabled = false
 launch_templates_file = ".ddflow/local/lane-templates.toml"
 launch_max_budget_usd = 5.0
+remote_exclude = [".ddflow", ".env", "**/.env"]
+remote_bundle_max_bytes = 104857600
+remote_return_max_bytes = 52428800
+remote_return_max_commits = 200
+remote_git_timeout_s = 120
+remote_scan_max_blob_bytes = 1048576
+remote_scan_batch_files = 64
+remote_branch_prefix = "swarm/remote/"
+remote_seed_name = "SEED.md"
+remote_proposals_max = 5
+remote_proposal_chars = 400
+remote_proposals_max_bytes = 65536
+remote_ssh_argv = ["ssh"]
+remote_ssh_timeout_s = 60
+remote_ssh_connect_timeout_s = 15
+remote_copy_timeout_s = 600
+remote_lanes_root = "ddflow-lanes"
+remote_detail_chars = 200
 
 [triggers]
 max_fires_per_hour = 10
@@ -677,6 +844,20 @@ index_url = ""
 prereleases = false
 self = "ask"
 
+[upstream_gh]
+error_max = 400
+
+[verify]
+stack = ""
+stacks_dir = ".ddflow/stacks"
+build_cmd = ""
+smoke_cmd = ""
+lock_check_cmd = ""
+test_cmd = ""
+
+[wait]
+max_call_seconds = 240
+
 [waves]
 auto_stamp = true
 
@@ -690,6 +871,8 @@ remove_on_merge = true
 dispose_finished = true
 sweep_min_age_s = 3600
 sweep_interval_s = 900
+stash_retries = 4
+stash_retry_pause_s = 0.25
 max_parallel = 0
 sync_before_start = true
 adopt_existing = true

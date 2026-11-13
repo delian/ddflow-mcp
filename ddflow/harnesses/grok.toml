@@ -17,10 +17,14 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".grok/hooks/ddflow.json"
-normalizer = "copilot"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "sessionId"
+
+[hooks.fields]
+session = ["sessionId", "session_id"]
+prompt = ["prompt", "initialPrompt"]
+tool = ["toolName", "tool_name"]
 
 [hooks.events]
 session_start = "SessionStart"
@@ -156,3 +160,4 @@ unverified = [
   ".grok/rules/ (third party)",
   "the community grok-cli (superagent-ai) is a different tool and has no descriptor",
 ]
+

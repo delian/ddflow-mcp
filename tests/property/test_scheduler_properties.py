@@ -4,7 +4,8 @@
 whoever asks, an offer must be safe to take:
 
 - never before its dependencies: every need of the item and of each ancestor is DONE
-  (checked against an oracle written here, not against `dep_status`);
+  or ABANDONED (an abandoned need is settled and satisfies its dependent, B740b7f8cf4;
+  checked against an oracle written here, not against `dep_status`);
 - never two conflicting offers: no two ready items' globs overlap (a shared glob overlaps
   nothing), and no ready item overlaps, or is, another agent's live lease;
 - never more offers than free slots under `schedule.max_parallel_tasks`;
@@ -74,7 +75,8 @@ def _deps_met(state, item_id: str) -> bool:
     """The oracle: every need of the item, and every need of an ancestor that does not
     point into the item's own subtree or at one of its ancestors (an umbrella's need on
     its own child is met by running it -- `inherited_deps`, B43447abfc8), names a live
-    item that is DONE (the default `unknown_dep_policy = "block"`; no external or
+    item that is DONE or ABANDONED (an abandoned need is settled -- it satisfies its
+    dependent, B740b7f8cf4; the default `unknown_dep_policy = "block"`; no external or
     stacked needs are generated)."""
     item = state.items.get(item_id)
     # A task whose globs are all documents inherits no ancestor's needs (`[schedule].
@@ -91,7 +93,7 @@ def _deps_met(state, item_id: str) -> bool:
             if cur.id != item_id and (docs_only or dep in own_subtree):
                 continue
             d = state.items.get(dep)
-            if d is None or d.removed or d.state != DONE:
+            if d is None or d.removed or not d.terminal:
                 return False
         cur = state.items.get(cur.parent) if cur.parent else None
     return True

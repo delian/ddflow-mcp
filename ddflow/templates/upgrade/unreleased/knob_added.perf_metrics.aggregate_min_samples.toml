@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.aggregate_min_samples"
+new = "3"
+why = "Perf store (D-perf-metrics-answers): fewest samples before percentiles are reported."
+impact = "additive"

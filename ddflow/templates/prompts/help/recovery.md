@@ -16,8 +16,15 @@ expired because it died, and the difference is only visible to a human.
 `ddflow recover --apply` acts only on an expired lease whose tree it measured EMPTY: it
 records the expiry, saying nothing was lost. A tree holding work, or one it could not
 measure, is never touched. Either way the item is taken back with `ddflow claim <item>
---force`, which adopts the existing worktree, the work in it included. Nothing is
-deleted.
+--force`, which adopts the existing worktree, the work in it included — that route is a
+person's; an agent's `--force` is dropped, and its route is `ddflow claim <item>
+--approval request`. Nothing is deleted.
+
+When the dead lane's tree holds nothing uncommitted, an agent needs no approval:
+`ddflow recover --item <item> --adopt --reason "<why>"` takes the expired lease over,
+binds the same worktree (committed work stays on its branch) and records who took over,
+from whom and why in the lease note. A live lease, a tree that could not be measured and a
+tree with uncommitted files all refuse and change nothing.
 
 ## A broken index
 

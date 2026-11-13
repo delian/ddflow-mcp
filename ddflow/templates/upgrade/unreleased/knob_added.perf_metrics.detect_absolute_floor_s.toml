@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_absolute_floor_s"
+new = "5.0"
+why = "Perf drift detector (D-perf-metrics-answers): absolute step in seconds a detector must also exceed."
+impact = "additive"

@@ -93,7 +93,9 @@ def verify_test_only_fix(
     with tools.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return UNRUN, {**ev, "reason": why}
-        if not tree_provides(tools.command_for, defn.command if defn else "", ptree, tests):
+        if not tree_provides(
+            tools.command_for, defn.command if defn else "", ptree, tests, cfg=cfg
+        ):
             restored = "not run (the test is not in the base's test files)"
         else:
             command = tools.command_for(defn.command if defn else "", tests, ptree)
@@ -101,7 +103,7 @@ def verify_test_only_fix(
                 restored = "not run (no runnable pytest command)"
             else:
                 run = GateDef(id="regression_check", title="regression test", command=command)
-                outcome, rev = run_command_gate(run, ptree)
+                outcome, rev = run_command_gate(run, ptree, cfg=cfg)
                 restored = outcome
                 if outcome == "unavailable":
                     restored = f"unavailable ({rev.get('reason', 'no reason given')})"
@@ -189,7 +191,7 @@ def _by_mutation(
         if not command:
             return UNRUN, {**ev, "reason": "the mutated tree has no runnable pytest command"}
         run = GateDef(id="regression_check", title="regression test", command=command)
-        outcome, rev = run_command_gate(run, ptree)
+        outcome, rev = run_command_gate(run, ptree, cfg=cfg)
     ev = {**ev, "mutated_command": command, "mutated_outcome": outcome, "mutated_run": _ran(rev)}
     if outcome == "unavailable":
         return UNRUN, {

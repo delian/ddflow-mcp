@@ -58,8 +58,7 @@ claude_md = "no"
 [hooks]
 style = "claude"
 file = ".acme/settings.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -97,7 +96,7 @@ What each section is for:
 | top level | `id` (must equal the file name), `rank` (order of detection and of the README table), `family` (the model-family label used by review independence), `delta`, optional `title` | everywhere |
 | `[mcp]` | the file that registers MCP servers and its `shape` (a project file; for `cordis-patch-yaml` the ddflow-owned overlay; for `none` no file exists): `mcpServers`, `servers`, `mcp.servers`, `opencode`, `copilot`, `toml.mcp_servers`, `cordis-patch-yaml`, `none`; `cordis-patch-yaml` is a launch-time overlay file ddflow owns (dsh reads MCP only from Cordis patch layers: a `--patch` overlay or the `$DSH_HOME` profile/home patch files, never a project file), written as marker-tagged rows; optional `approve_file`, `approve_key`, `deny_key` when the agent needs a server approved before it starts it | `adopt`, `onboard harness` |
 | `[instructions]` | which files the agent reads and whether it reads `AGENTS.md` (`yes`, `no`, `conditional`, `config`, `fallback`, `nv`) | `adopt`, AGENTS.md |
-| `[hooks]` | the hook `style` (`claude`, `gemini`, `copilot`, `cursor`, `cline`, `cascade`, `antigravity`, `plugin`, `none`), where it lives, how a payload is normalized and an answer emitted, how a refusal is signalled (`block`), and which events can inject text (`inject`) | `hooks install`, `hooks run` |
+| `[hooks]` | the hook `style` (`claude`, `gemini`, `copilot`, `cursor`, `cline`, `cascade`, `antigravity`, `plugin`, `vibe`, `none`), where it lives, how a payload is normalized and an answer emitted, how a refusal is signalled (`block`), and which events can inject text (`inject`) | `hooks install`, `hooks run` |
 | `[hooks.events]` | canonical event to the agent's event name: `session_start`, `prompt`, `pre_tool`, `post_tool`, `pre_compact`, `stop`, `session_end` | hook writers, the ladder |
 | `[plugin]` `[commands]` `[skills]` `[subagents]` `[worktrees]` | the other surfaces the agent has, or `none = true` | `adopt`, `inventory` |
 | `[detect]` `[headless]` `[continuation]` `[meters]` `[caps]` `[autonomy]` `[telemetry]` | descriptor v2, agent parity: how the agent is recognised (`client_names`, `env`, `process_names`); how it runs unattended (the launch `argv`, `model_flag`, `effort_flag`, `mcp_flag`, `max_turns_flag`, `output_flag`, `output_format`, `resume_flag`, `exit_codes`, and `autonomy` naming a profile of `[autonomy].profiles`; the permission flags themselves live in `[autonomy]`, never in `[headless]`); how it keeps going (`mechanism` = `stop-hook-block`, `followup-message`, `plugin-idle-prompt`, `plugin-agent-end`, `external-driver` or `none`, with `cap`, `goal_command`, `loop_guard`); `context` and `quota` sources; `mcp_tools`, `instructions_bytes`, `subagent_depth`; unattended permission `profiles` and `files`; `transcript_path`, `transcript_format`, `otel`. Each is absent (not verified) or `none = true` | headless driver, governor, lanes |
@@ -196,11 +195,28 @@ From D-agent-compat. Put the agent in the lowest tier you can honestly support.
 | 4 event sources only | Dependabot, Renovate, CodeRabbit, Qodo | none; their events are read |
 
 Credentials come from the environment or the git-ignored local config, never from a commit. A
-missing key, CLI or rate limit is `unavailable`, never a pass. A tier-1 agent also needs the
-`[test]` section for the smoke harness (B-ac-smoke): the headless command, its prompt and what
-the run must show. That section is reserved by the descriptor schema work
-(P-agent-parity.descriptor-v2); until it lands a tier-1 agent is tested by the conformance run
-only, and the guide above is the whole contract.
+missing key, CLI or rate limit is `unavailable`, never a pass. A tier-1 agent also needs a headless command for the smoke harness (B-ac-smoke): `[headless]`
+`argv`, `max_turns_flag` and an `autonomy` profile are enough. A reserved `[test]` section
+overrides or adds to it; every value is a string:
+
+```toml
+[test]
+detect = "acmecli --version"   # run to prove the CLI works (exit 0)
+argv = "acmecli run"            # replaces [headless].argv
+env_keys = "ACME_API_KEY"       # comma list; an unset key makes the run unavailable
+turn_flag = "--max-turns"       # the turn cap flag
+exit_codes = "0"                # comma list of accepted exit codes
+```
+
+`scripts/ci/agent-smoke plan` lists the commands and runs nothing; `agent-smoke run <agent>
+--live` starts the REAL agent in a throwaway project (`agent.smoke` records the verdict). It
+asserts only on the event log: the MCP tool was called, a claim exists under a distinct
+identity, the item completed or was released, no stray lease, the event shard committed. A
+missing session.started or session.prompt (a harness at the "no native prompt hook, first-call
+fallback" level is expected to lack the latter) is listed as a gap in the report, not a failure.
+The smoke never installs an agent CLI on its own: a missing one is `unavailable`. Only with the
+operator's consent (`run --consent-install '<command>'`, run with `$AGENT_SMOKE_PREFIX` set to a
+scratch directory, never a global location) is it installed first, per D-agent-compat. Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
 
 ## Overriding a value
 

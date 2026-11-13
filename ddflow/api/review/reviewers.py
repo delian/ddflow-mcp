@@ -14,8 +14,8 @@ from ...core import outcome as O
 from ...core.digest import content_digest
 from ...core.slug import safe_filename
 from ...infra import tomlcfg as TC
+from ...services import modelreg, review_keys
 from ...services import review as RV
-from ...services import review_keys
 from ...services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ...views import human
 from .._base import _load
@@ -80,6 +80,13 @@ def reviewers_add(
     reviewer added here is for THIS machine (bug B-reviewers-write-committed). A command
     reviewer is written only for a ``person`` (decision D-reviewer-trust)."""
     entry = dict(RV.PRESETS.get(preset, {}))
+    if preset and not entry:
+        # A route the operator declared in `.ddflow/local/models.toml` (e.g. a self-hosted
+        # SW-local-endpoint) is a preset too: the shipped PRESETS come from the catalog's
+        # shipped routes; the machine's own endpoints arrive here, never committed.
+        entry = dict(
+            modelreg.presets(modelreg.load(local_dir=repo / ".ddflow" / "local")).get(preset, {})
+        )
     if preset and not entry:
         return O.failed(
             "reviewers.add", f"unknown preset {preset!r}; `ddflow reviewers presets`", name=name
@@ -225,10 +232,58 @@ class _ReplyFile:
         self.repo = repo
         self.item = item
         self.gate = gate
+        self.reviewer = reviewer
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
-        _ACTIVE.append(self)
+        with _ACTIVE_LOCK:
+            _ACTIVE.append(self)
+
+    def plan(
+        self, diff_sha: str, chunks_total: int, max_chunk_chars: int, wanted: list[int]
+    ) -> None:
+        """Checkpoint the cut's identity the moment it is known, so a killed review's record
+        can RESUME from the next chunk instead of re-running every chunk (bug Bd8c4e1d8d6).
+        A chunk number means nothing across two cuts, so a resume must name the same diff,
+        the same chunk size, the same reviewer and the same ``wanted`` subset -- this one line
+        carries all five."""
+        with self._lock:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("a", encoding="utf-8") as fh:
+                    fh.write(
+                        json.dumps(
+                            {
+                                "plan": {
+                                    "reviewer": self.reviewer,
+                                    "diff_sha": diff_sha,
+                                    "chunks_total": chunks_total,
+                                    "max_chunk_chars": max_chunk_chars,
+                                    "wanted": wanted,
+                                }
+                            }
+                        )
+                        + "\n"
+                    )
+                self._started = True
+            except OSError:
+                pass
+
+    def plan_meta(self) -> dict[str, Any]:
+        """The ``plan`` line this run checkpointed, or ``{}`` when it never got one."""
+        try:
+            text = self.path.read_text("utf-8", errors="replace")
+        except OSError:
+            return {}
+        lines = text.splitlines()
+        for line in reversed(lines):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if "plan" in row:
+                return row["plan"]
+        return {}
 
     def add(self, chunk: int, reply: str) -> None:
 
@@ -245,10 +300,13 @@ class _ReplyFile:
         """The (chunk, reply) pairs this run has checkpointed so far, in arrival order.
 
         Line-by-line, not whole-file: a kill can leave a truncated trailing line, and one
-        torn line must not discard the earlier checkpointed chunks it follows."""
+        torn line must not discard the earlier checkpointed chunks it follows. ``errors=
+        "replace"`` keeps a torn trailing multi-byte character from raising ``UnicodeDecodeError``
+        (a ``ValueError``, not an ``OSError``), which would otherwise lose every earlier
+        complete line."""
         rows: list[tuple[int, str]] = []
         try:
-            lines = self.path.read_text("utf-8").splitlines()
+            lines = self.path.read_text("utf-8", errors="replace").splitlines()
         except OSError:
             return []
         for line in lines:
@@ -299,16 +357,22 @@ class _ReplyFile:
 #: runs in one process -- the CLI, or the MCP worker a review tool is offloaded to -- so a
 #: process-global list is enough; `review()` clears it (`_begin_run`) at entry, so
 #: `_terminated` (bug B982d306cc8) checkpoints only the run that is being killed, never a
-#: sibling or an earlier completed review's files.
+#: sibling or an earlier completed review's files. Both append and iteration are guarded by
+#: ``_ACTIVE_LOCK`` (DX-review-concurrent-runs): a reviewer's worker threads register reply
+#: files while the killed run's read-back iterates, and a torn list must not drop one.
 _ACTIVE: list[_ReplyFile] = []
+_ACTIVE_LOCK = threading.Lock()
 
 
 def _begin_run() -> None:
     """Forget every reply file of prior runs in this process: the next run starts fresh."""
-    _ACTIVE.clear()
+    with _ACTIVE_LOCK:
+        _ACTIVE.clear()
 
 
 def active_files(item: str, gate: str) -> list[_ReplyFile]:
     """The reply files of THIS process's run for ``item.gate`` that already have a chunk:
     the checkpoint a killed review reads back (bug B982d306cc8)."""
-    return [f for f in _ACTIVE if f.item == item and f.gate == gate and f.chunks()]
+    with _ACTIVE_LOCK:
+        files = list(_ACTIVE)
+    return [f for f in files if f.item == item and f.gate == gate and f.chunks()]

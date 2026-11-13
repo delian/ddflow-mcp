@@ -8,15 +8,16 @@ stage (D-unify kind-pipeline). No network or process I/O live here.
 from __future__ import annotations
 
 import re
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config, _is_code_tree, family_for
 from ...core.digest import content_digest
 from ...infra import tomlcfg
+from .. import modelreg as _modelreg
 from .. import review_keys
 
 REVIEWED, ERROR, UNAVAILABLE, PARTIAL = 0, 1, 2, 3
@@ -40,112 +41,12 @@ WELL_KNOWN_ENDPOINTS: tuple[tuple[str, str], ...] = (
 family_of = family_for
 
 
-#: Ready-made settings for the providers people actually use. `ddflow reviewers add
-#: --preset openai` writes the block; nothing here is required, it just saves an operator
-#: looking up a base_url and guessing which env var the key lives in.
-PRESETS: dict[str, dict[str, Any]] = {
-    # --- SaaS, OpenAI-compatible -----------------------------------------------------
-    "openai": {
-        "kind": "openai",
-        "base_url": "https://api.openai.com/v1",
-        "api_key_env": "OPENAI_API_KEY",
-        "model": "gpt-5",
-    },
-    "deepseek": {
-        "kind": "openai",
-        "base_url": "https://api.deepseek.com/v1",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "model": "deepseek-chat",
-    },
-    "groq": {
-        "kind": "openai",
-        "base_url": "https://api.groq.com/openai/v1",
-        "api_key_env": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
-    },
-    "together": {
-        "kind": "openai",
-        "base_url": "https://api.together.xyz/v1",
-        "api_key_env": "TOGETHER_API_KEY",
-    },
-    "fireworks": {
-        "kind": "openai",
-        "base_url": "https://api.fireworks.ai/inference/v1",
-        "api_key_env": "FIREWORKS_API_KEY",
-    },
-    "mistral": {
-        "kind": "openai",
-        "base_url": "https://api.mistral.ai/v1",
-        "api_key_env": "MISTRAL_API_KEY",
-        "model": "mistral-large-latest",
-    },
-    "openrouter": {
-        "kind": "openai",
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-    },
-    "xai": {
-        "kind": "openai",
-        "base_url": "https://api.x.ai/v1",
-        "api_key_env": "XAI_API_KEY",
-        "model": "grok-4",
-    },
-    # --- SaaS, native wire formats ---------------------------------------------------
-    "anthropic": {
-        "kind": "anthropic",
-        "base_url": "https://api.anthropic.com/v1",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "model": "claude-sonnet-5",
-    },
-    "gemini": {
-        "kind": "gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta",
-        "api_key_env": "GEMINI_API_KEY",
-        "model": "gemini-2.5-pro",
-    },
-    # --- Local servers ---------------------------------------------------------------
-    "ollama": {
-        "kind": "openai",
-        "base_url": "http://127.0.0.1:11434/v1",
-        "model": "qwen3:8b",
-        "launch": {"command": "ollama serve", "ready_url": "http://127.0.0.1:11434/v1/models"},
-    },
-    "llamacpp": {"kind": "openai", "base_url": "http://127.0.0.1:8080/v1"},
-    "lmstudio": {"kind": "openai", "base_url": "http://127.0.0.1:1234/v1"},
-    "vllm": {"kind": "openai", "base_url": "http://127.0.0.1:8000/v1"},
-    # --- Anything else, via its own CLI ----------------------------------------------
-    # The universal escape hatch: if a model can be reached by a command that reads a
-    # prompt on stdin and writes the reply to stdout, it can be a reviewer here. No SDK,
-    # no wire format, no dependency.
-    "claude-cli": {
-        "kind": "command",
-        "command": "claude -p --model {model}",
-        "model": "claude-sonnet-5",
-        "family": "anthropic",
-    },
-    "gemini-cli": {
-        "kind": "command",
-        "command": "gemini -m {model} -p",
-        "model": "gemini-2.5-pro",
-        "family": "google",
-    },
-    "codex-cli": {
-        "kind": "command",
-        "command": "codex exec -m {model} -",
-        "model": "gpt-5",
-        "family": "openai",
-    },
-    "llm-cli": {"kind": "command", "command": "llm -m {model}", "family": "unknown"},
-    "litellm": {
-        "kind": "openai",
-        "base_url": "http://127.0.0.1:4000/v1",
-        "api_key_env": "LITELLM_API_KEY",
-        "launch": {
-            "command": "litellm --model {model} --port 4000",
-            "ready_url": "http://127.0.0.1:4000/v1/models",
-        },
-    },
-}
+#: Ready-made settings for the providers people actually use, READ from the model catalog
+#: (`modelreg.presets`, DRV-model-catalog). `ddflow reviewers add --preset openai` writes the
+#: block; nothing here is required, it just saves an operator looking up a base_url and
+#: guessing which env var the key lives in. `modelreg.presets` returns the catalog's routes
+#: exactly as this table carried them (the parity test guards the drift).
+PRESETS: dict[str, dict[str, Any]] = _modelreg.presets(_modelreg.load())
 
 
 @dataclass
@@ -269,6 +170,17 @@ class Finding:
     chunk: int = 0
     #: Digest of the finding's FULL text; what a triage is keyed by (`finding_digest`).
     digest: str = ""
+    #: The reviewer that raised it, and its family: a panel record holds every heard
+    #: reviewer's findings, so `merge_rerun` must be able to tell a peer reviewer's
+    #: finding of a re-run chunk from the one being re-run (bug B-chunk-rerun-drops-
+    #: peer-findings).
+    reviewer: str = ""
+    family: str = ""
+    #: Non-empty when this is not a finding at all -- a location field holding the reviewer
+    #: thinking aloud instead of a citation -- so the gate records it for the operator but
+    #: does not count it against the outcome (B-review-finding-is-unfinished-reasoning). The
+    #: paragraph is not classified (that half of the bug is deliberately out of scope).
+    malformed: str = ""
 
 
 #: A reply or transport error that says the REVIEWER's own quota/exhaustion wall was hit --
@@ -343,7 +255,7 @@ def active_degraded_marks(
     """
     if cooldown_s <= 0:
         return {}
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     return {
         name: row
         for name, row in degraded_marks(state).items()
@@ -394,21 +306,27 @@ def blocking_findings(
     """The findings of a review round that keep the gate open (the convergence floor).
 
     The FIRST full round blocks on every finding: the author has seen none of them yet, so a
-    MEDIUM or LOW one is still new information that must be looked at. A LATER FULL re-review
-    (``converged`` True, set by the caller only for a full re-review, bug Bf797745b5a) blocks
+    MEDIUM or LOW one is still new information that must be looked at. A LATER full re-review
+    (``converged`` True, set by the caller for a full re-review, bug Bf797745b5a) blocks
     only on findings at or above ``floor`` (`[review].converge_floor`): once the diff's
     material findings are fixed, a reviewer that keeps raising a new MEDIUM or LOW nit --
     often against a file unchanged since the last review, or a stale head -- does not
     re-open the gate. The below-floor findings are still recorded on the gate and triageable;
-    they just do not hold the pass on their own. A delta or fix round does not cite this
-    (it shows only NEW code, where any finding is a real defect), so it keeps blocking on
-    every finding.
+    they just do not hold the pass on their own. A delta round converges the same way
+    (bug B-review-delta-rounds-do-not-converge): its new below-floor finding is recorded but
+    not blocking, so a delta that keeps raising a new nit does not keep the gate failed
+    forever. A fix round shows only the fix's new code, where any finding is a real defect,
+    so it keeps blocking on every finding.
 
     ``known`` is the digests of the previous review's findings still standing (not refuted):
     a finding whose digest is in ``known`` is NOT a new nit, so the floor does not filter it
     -- an earlier below-floor finding the author neither fixed nor answered keeps blocking
     (bug B-floor-passes-repeated-untriaged-nit).
     """
+    # A malformed finding (marked at parse time) is recorded but never counts: it is the
+    # reviewer's reasoning, not a defect, so no round blocks on it and no later delta is
+    # held open by it (B-review-finding-is-unfinished-reasoning).
+    findings = [f for f in findings if not getattr(f, "malformed", "")]
     if not converged:
         return list(findings)
     limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
@@ -503,6 +421,9 @@ class ReviewResult:
                     "title": f.title,
                     "location": f.location,
                     "detail": f.detail[:FINDING_DETAIL_KEPT],
+                    "reviewer": f.reviewer,
+                    "family": f.family,
+                    "malformed": f.malformed,
                 }
                 for f in self.findings
             ],

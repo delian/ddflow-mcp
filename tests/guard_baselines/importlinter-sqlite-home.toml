@@ -1,0 +1,27 @@
+# The `ignore_imports` allowlist of the .importlinter contract `sqlite-home` (sqlite3 is
+# imported only by ddflow.adapters.indexdb), which tests/test_architecture_import_contracts.py
+# joins back into the contract before it runs import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass. An entry marked "home" is permanent:
+# the one module allowed to own that import. The rest move behind `IndexStore`
+# (ddflow.adapters.indexdb), the derived index and the two service helpers, family by
+# family.
+#
+# The roots are the unit (an external package is squashed to its root), so the entries
+# below are the modules that still `import sqlite3` directly.
+ignore_imports = [
+    # home
+    "ddflow.adapters.indexdb -> sqlite3",
+    # still to move behind the port
+    "ddflow.infra.docindex -> sqlite3",
+    "ddflow.infra.store._fingerprint -> sqlite3",
+    "ddflow.infra.store._projection -> sqlite3",
+    "ddflow.infra.store._schema -> sqlite3",
+    "ddflow.infra.store._search -> sqlite3",
+    "ddflow.services.completion_ids -> sqlite3",
+    "ddflow.services.enforce.trailers -> sqlite3",
+    "ddflow.services.similar -> sqlite3",
+]

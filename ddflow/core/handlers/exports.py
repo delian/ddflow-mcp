@@ -9,12 +9,30 @@ from ..events import Event
 from ..records import State
 
 
+def _lock_of(prev: dict) -> dict | None:
+    """The standing lock ``{by, human, at}`` of a document's fold entry, or None."""
+    if not prev.get("locked"):
+        return None
+    lock = prev.get("lock")
+    if isinstance(lock, dict):
+        return lock
+    # a lock from before the lock record existed was always the operator's
+    return {"by": str(prev.get("by", "")), "human": True, "at": str(prev.get("at", ""))}
+
+
 def _h_export_enabled(st: State, ev: Event) -> None:
     d = ev.data
     human = bool(d.get("human"))
+    by = str(d.get("by") or ev.agent)
+    lock = _lock_of(st.exports.get(ev.subject, {}))
+    # A person lifts any lock; an agent lifts only its own agent lock (B-export-agent-lock).
+    if lock and not (human or (not lock.get("human") and lock.get("by") == by)):
+        keep = lock
+    else:
+        keep = None
     st.exports[ev.subject] = {
         "enabled": True,
-        "by": str(d.get("by") or ev.agent),
+        "by": by,
         "human": human,
         "at": ev.ts,
         "path": str(d.get("path", "")),
@@ -24,7 +42,8 @@ def _h_export_enabled(st: State, ev: Event) -> None:
         # (an agent's enable of a locked document is refused); the fold ignores the event's
         # own `locked` claim and honours its `human` flag as it does for every event kind:
         # the log has no authenticity beyond what its writers record.
-        "locked": bool(st.exports.get(ev.subject, {}).get("locked")) and not human,
+        "locked": keep is not None,
+        "lock": keep,
         "acked": human,  # an agent's enable waits for the operator to acknowledge it
     }
 
@@ -32,13 +51,19 @@ def _h_export_enabled(st: State, ev: Event) -> None:
 def _h_export_disabled(st: State, ev: Event) -> None:
     d = ev.data
     prev = st.exports.get(ev.subject, {})
+    human = bool(d.get("human"))
+    lock = _lock_of(prev)
+    if d.get("locked") and (lock is None or (human and not lock.get("human"))):
+        # the first lock stands; a person's lock replaces an agent's, never the reverse
+        lock = {"by": str(d.get("by") or ev.agent), "human": human, "at": ev.ts}
     st.exports[ev.subject] = {
         **prev,
         "enabled": False,
         "by": str(d.get("by") or ev.agent),
-        "human": bool(d.get("human")),
+        "human": human,
         "at": ev.ts,
-        "locked": bool(prev.get("locked")) or bool(d.get("locked")),
+        "locked": lock is not None,
+        "lock": lock,
         "acked": True,  # stopping a document needs no acknowledgement
     }
 

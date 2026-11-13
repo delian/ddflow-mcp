@@ -19,6 +19,7 @@ from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
+from ..gates import item_tree
 from ..lifecycle.author import _author_model
 from ..review_supersede import round_evidence
 from .context import (
@@ -141,6 +142,17 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     ):
         return _review_combined(asked, args, lines, under, log, cfg)
     return _review_each(asked, args)
+
+
+def _reviewed_tree(repo: Path, cfg, st, it, called_from: Path | None) -> Path:
+    """The tree the reviewer is run in and watched in: the item's own worktree when it has
+    one (B708761957b), or the primary (``repo``) for a review with no item.
+
+    Hoisted out of ``_review_gate`` so threading the tree does not push that long function
+    past the complexity ratchet; the conditional lives here while the call site stays one
+    plain call.
+    """
+    return (item_tree(repo, cfg, st, it, called_from)[0] if it else None) or repo
 
 
 def _same_reviewers(repo: Path, gates: list[str]) -> bool:
@@ -407,6 +419,14 @@ def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
     return ordered
 
 
+def _heard_first(r) -> tuple[int, int]:
+    """A reviewer's rank as the identifying pass: one that heard part of the diff (REVIEWED
+    or PARTIAL) outranks one that could not run (UNAVAILABLE/ERROR) -- the latter says
+    nothing about the change, and naming it over a PARTIAL peer that found a finding would
+    misstate coverage and hide the finding (bug B-review-worst-reviewer-misstates-coverage)."""
+    return (0 if getattr(r, "status", None) in (RV.REVIEWED, RV.PARTIAL) else 1, r.status)
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -418,7 +438,7 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     `complete` resolves it (`[agent].family`, else the session model). The reviewer's
     family is resolved as `review_tier` resolves it (declared family, else its model).
     """
-    best = min(results, key=lambda r: r.status)
+    best = min(results, key=_heard_first)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
     if cross:
@@ -467,7 +487,7 @@ def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_mo
     return identifying
 
 
-def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -550,7 +570,9 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
     if refused is not None:
         return refused
 
-    extra_evidence = _name_the_item(repo, cfg, st, item, gate, agent, say, extra_evidence)
+    extra_evidence = _name_the_item(
+        repo, cfg, st, item, gate, agent, say, extra_evidence, called_from
+    )
     dispatch = RV.ReviewerDispatch()
     selected = dispatch.select(RV.load_reviewers(repo), gate, gates.get(gate))
     revs = selected.reviewers
@@ -649,6 +671,10 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
     _log_started(log, it, item, gate)
     results = []
     say(_BACKGROUND_HINT)
+    # The tree the reviewer is run in and watched in is the item's own worktree when it
+    # has one (B708761957b): a command reviewer must leave it as it found it, and only it
+    # is watched -- the primary (repo) is the honest fallback for a review with no item.
+    tree = _reviewed_tree(repo, cfg, st, it, called_from)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
@@ -658,12 +684,14 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
             intent,
             context=context,
             repo=repo,
+            tree=tree,
             prompt_overrides=overrides,
             on_progress=say,
             on_tick=keep_lease,
             tick_s=tick_s,
             only=only,
             on_chunk=keep.add if item else None,
+            on_plan=keep.plan if item else None,
             manifest=RM.for_review(diff, skipped, cfg),
             chunk_max_tokens=cfg.review.chunk_max_tokens,
             split_rounds=cfg.review.split_rounds,
@@ -695,7 +723,8 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         cfg,
         extra_evidence,
         say,
-        author_model,
+        author_model=author_model,
+        kind=kind,
     )
     named = _failing_reviewer(
         results, it, gate, _converges(kind, fix), cfg, identifying, author_model
@@ -717,6 +746,13 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "findings": _finding_rows(results),
         "text": "\n".join(transcript),
     }
+    return _answer_outcome(identifying, data)
+
+
+def _answer_outcome(identifying, data: dict[str, Any]):
+    """The MCP/CLI answer for a gate's identifying run: OK on REVIEWED, refused with the
+    failing reviewer's status otherwise. Extracted from `_review_gate` so its branch count
+    stays under the complexity ratchet."""
     exit_code = {
         RV.REVIEWED: O.OK,
         RV.PARTIAL: O.REFUSED,

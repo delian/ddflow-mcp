@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
@@ -41,6 +42,7 @@ from ..infra import proc as P
 from ..infra.fsio import LockTimeout, atomic_write, file_lock, replace_text
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
+from .install_info import FOREIGN_LAUNCH_REFUSAL
 from .pins_conflict import apply as apply_settled
 from .pins_conflict import settle_files, take_side
 
@@ -362,7 +364,9 @@ def _run_all(
         began = time.monotonic()
         kept = _snapshot(repo, r)
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        broke = done.error is not None or done.returncode != 0
+        poisoned = _recorded_a_refusal(repo, r, done, kept)
+        broke = done.error is not None or done.returncode != 0 or poisoned
+        elapsed = time.monotonic() - began  # one read, shared by every branch message
         # A killed or failed regeneration leaves its files as it dropped them (README.md with
         # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
         back = (
@@ -378,16 +382,59 @@ def _run_all(
             states[
                 r.name
             ].unavailable = f"the regeneration did not finish in {limit}s (timed out).{back}"
-            say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: unavailable ({elapsed:.0f}s)")
+        elif poisoned:
+            states[r.name].error = _REFUSED_RECORDING + back
+            states[r.name].unavailable = ""
+            say(f"pins: {r.name}: REFUSED ({elapsed:.0f}s)")
         elif broke:
             states[r.name].error = f"regeneration failed: {_tail(done)}{back}"
             states[r.name].unavailable = ""
-            say(f"pins: {r.name}: FAILED ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: FAILED ({elapsed:.0f}s)")
         else:
-            say(f"pins: {r.name}: re-recorded ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: re-recorded ({elapsed:.0f}s)")
             redone.append(r)
     _pmap(again, redone, workers, say, every, "re-checks")
     return [states[r.name] for r in chosen]
+
+
+_REFUSED_RECORDING = (
+    f"regeneration recorded a foreign-launch refusal ({FOREIGN_LAUNCH_REFUSAL!r}) as the pin: the"
+    " command ran from a tree whose code is not the caller's own, so what it printed is that"
+    " refusal, not the output the pin is for. Nothing was kept; regenerate from the primary"
+    " checkout, or from a lane whose own code runs."
+)
+
+
+def _recorded_a_refusal(
+    repo: Path, r: Recipe, done: P.Captured, kept: dict[Path, bytes | None] | None
+) -> bool:
+    """A regeneration that "succeeded" by writing the foreign-launch refusal into the pin."""
+    return done.error is None and done.returncode == 0 and _records_refusal(repo, r, kept)
+
+
+def _records_refusal(repo: Path, r: Recipe, kept: dict[Path, bytes | None] | None) -> bool:
+    """Whether this run wrote the guard's refusal LINE into a file the recipe owns: a line that
+    STARTS with ``ddflow: {FOREIGN_LAUNCH_REFUSAL}`` (the guard's exact refusal, anchored) appears
+    in the file MORE times than it did before the run (``kept``). A bare quote of the phrase in a
+    doc sentence carries no anchoring ``ddflow: `` and is never a refusal line; the anchored line is
+    what a poisoned transcript records (one per refused command), caught whether the run ADDS one
+    or REPLACES a documented quote at the same total count. Each of a line's occurrences before the
+    run excuses at most one occurrence after it, so a second copy the run wrote is still caught."""
+    anchor = f"ddflow: {FOREIGN_LAUNCH_REFUSAL}".encode()
+    for p in _owned(repo, r):
+        try:
+            now = p.read_bytes()
+        except OSError:
+            continue
+        before = (kept or {}).get(p) or b""
+        had = Counter(ln for ln in before.splitlines() if ln.startswith(anchor))
+        for ln in now.splitlines():
+            if ln.startswith(anchor):
+                if had[ln] == 0:
+                    return True
+                had[ln] -= 1
+    return False
 
 
 def _owned(repo: Path, r: Recipe) -> list[Path]:

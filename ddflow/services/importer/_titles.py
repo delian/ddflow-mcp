@@ -129,8 +129,9 @@ SOURCE_GLOBS = (
     + OPTMEM_GLOBS
 )
 
-#: `- [ ] **P1.T2** — do the thing` / `- [x] do the thing`
-_CHECK = re.compile(r"^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$")
+#: `- [ ] **P1.T2** — do the thing` / `- [x] do the thing`. The `*`, `+` and numbered
+#: (`1.` / `1)`) bullets are task-list items too and import with the same meaning.
+_CHECK = re.compile(r"^(\s*)(?:[-*+]|\d{1,9}[.)])\s+\[( |x|X)\]\s+(.*)$")
 #: The id, when the project already uses one. Three spellings, and the difference
 #: between them is the whole reason this is not one pattern:
 #:

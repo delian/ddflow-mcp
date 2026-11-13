@@ -22,10 +22,11 @@ from typing import Any
 from ...config import Config
 from ...core import clock
 from ...core.handlers.asks import EXPIRED, PENDING, asks_of
-from ...core.records.gates import GateOutcome
+from ...core.records.gates import COVERAGE_GAP_OUTCOMES, GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
 from ..gates.defs import required_gates
+from ..gates.failed_gate import skipped_after_failure
 from . import request as R
 from .canon import Canon
 
@@ -66,20 +67,29 @@ def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
 
 
 def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
-    return not GA.refusal(it, gate)
+    """`accept_baseline_red`: ``gate`` is a partial ddflow MEASURED baseline-red, and NOT one only
+    a person accepts. A measured partial `gate run` did not auto-accept (its failing tests sit in
+    a file the item changed or reaches, or the knob is off; `GA.person_only`) is a person's call
+    (`gate_accept.next_step`, D-baseline-red-auto-accept), so the standing rule steps aside for it
+    through the SAME helper `complete_unavailable` reads (B7657fc26be)."""
+    return not GA.refusal(it, gate) and not GA.person_only(it, gate)
 
 
-_UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.value)
+#: The required-gate outcomes a ROUTINE completion may finish over without a person: the ONE
+#: enumeration (`core.records.gates.COVERAGE_GAP_OUTCOMES`) the predicate and the completion
+#: coverage-gap set both read, never a list spelled here (Bb67dc543b6).
+_COVERAGE_GAP_OUTCOMES = COVERAGE_GAP_OUTCOMES
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     """`complete_unavailable`: `target` -- the FULL `Verdict.unmet_gates` list the
     completion site (`_auto_complete_unavailable`) passes, never a caller-derived subset --
     must be non-empty, and every gate it names a REQUIRED gate recorded `unavailable`
-    (a tool could not run) or `partial` (it reported partway). A required gate recorded
+    (a tool could not run), `partial` (it reported partway), or `skipped` (the agent set
+    it aside with a recorded reason) -- `_COVERAGE_GAP_OUTCOMES`. A required gate recorded
     `failed` ALWAYS blocks, whatever `target` names (the OVER-FIRE guard below), and a
-    never-run (silent) required gate blocks the same way -- its empty outcome is neither
-    `unavailable` nor `partial`, so the outcome check refuses it. An excused required
+    never-run (silent) required gate blocks the same way -- its empty outcome is in no
+    coverage-gap set, so the outcome check refuses it. An excused required
     gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
     already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
     the verdict alone knows what `applies_when` excused. A `partial` that only a person
@@ -90,11 +100,16 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
             return False
+        # A `skipped` that masked a FAILED run (DX-skip-failed-gate) is a failure wearing a
+        # gap's outcome: only the record path that produces it for a required gate is refused
+        # today, so this is defense-in-depth, not a reachable state (Bb67dc543b6, roborev).
+        if it.gate_outcome(g) == GateOutcome.SKIPPED.value and skipped_after_failure(it, g):
+            return False
     names = [g for g in (target or "").split(",") if g]
     return bool(names) and all(
         g in required
         and not it.gate_satisfied(g, True)
-        and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        and it.gate_outcome(g) in _COVERAGE_GAP_OUTCOMES
         and not GA.person_only(it, g)
         for g in names
     )
@@ -235,6 +250,16 @@ def _approved(
     }
 
 
+def person_only_target(it, verb: str, target: str) -> bool:
+    """Does ``verb`` over ``target`` name a measured baseline-red partial only a person accepts
+    (`GA.person_only`)? `approve.partial` targets one gate, `complete.force` the comma-joined
+    unmet gates; no other verb accepts a partial. The retry-threshold rule, which answers the
+    generic T2 verbs without a per-rule predicate, steps aside for it (B1bc4733e43)."""
+    if verb not in ("approve.partial", "complete.force"):
+        return False
+    return any(GA.person_only(it, g) for g in (target or "").split(",") if g and g in it.gates)
+
+
 def apply(
     log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
 ) -> dict[str, Any] | None:
@@ -258,7 +283,7 @@ def apply(
         return _approved(log, cfg, canon, reason, rule_id)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
-        if retry_armed(cfg, canon):
+        if retry_armed(cfg, canon) and not person_only_target(it, canon.verb, canon.target):
             n = refusals(state, canon)
             if n >= threshold:
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.

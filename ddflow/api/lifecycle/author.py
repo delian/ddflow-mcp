@@ -12,12 +12,33 @@ from __future__ import annotations
 from ...core.model import State
 from ...services import gates as G
 from ...services import leases as L
+from ...services import sessions
 
 
 def _session_model(st: State, agent: str) -> str:
     """The model `agent` declared on its most recent OPEN session, or "" (one definition,
     `leases.open_session_model`, shared with what `recover` advises)."""
     return L.open_session_model(st, agent)
+
+
+def _remember_declared_model(st: State, log, cfg, model: str, model_source: str) -> None:
+    """Persist a `--model` the author declared on `complete` (B-recover-forgets-author-model).
+
+    `complete --model X` used the flag only in-memory, and a REFUSAL recorded nothing, so
+    a later `recover`/`lanes` had no session record to read and reported "the author's
+    model is unknown". Record the flag model as a session declaration -- the one carrier
+    `open_session_model` and the lanes ledger already read. With a prior session it MERGES
+    into that record: a brand-new, never-ended session would re-point the lanes ledger's
+    `session`/`ended` signal and make a finished lane read as still open (roborev 4245).
+    With none, a fresh session IS the declaration. Deduped against that record; a
+    `[agent].family` or a session model is already durable."""
+    if model_source != "flag" or not model:
+        return
+    own = [s for s in st.sessions.values() if s.agent == log.agent_id]
+    current = max(own, key=lambda s: s.started_at) if own else None
+    if current is not None and current.model == model:
+        return
+    sessions.start(log, cfg, model=model, session_id=current.id if current else "")
 
 
 def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:

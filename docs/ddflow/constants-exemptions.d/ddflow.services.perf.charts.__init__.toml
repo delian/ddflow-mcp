@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/perf/charts/__init__.py:_MIN_LABEL_H" = 'minimum SVG segment height (drawing units) for drawing a bar segment label inside it: a rendering heuristic that decides what a chart draws, not how ddflow behaves for a person'

@@ -24,3 +24,24 @@ def test_full_and_delta_still_contradict(repo, tmp_path):
     _review(repo)
     out = _review(repo, delta=True, full=True)
     assert out.exit != 0 and "--full and --delta contradict" in out.reason, out.reason
+
+
+def test_a_delta_force_review_says_delta_not_the_whole_diff(repo, tmp_path):
+    """Ba32fcedea6: a --delta re-review printed "re-review: the whole diff" while sending
+    only the delta, so a reader believed the whole diff was reviewed."""
+    _setup(repo, tmp_path, "[review]\nmax_rounds = 1\n")
+    assert _review(repo).data["outcome"] == "failed"  # round 1 spends the budget (FINDME)
+    _fix(repo)
+    lines: list[str] = []
+    out = _review(
+        repo,
+        delta=True,
+        force=True,
+        reason="one more, only what changed",
+        on_progress=lines.append,
+    )
+    assert out.exit == 0, out.reason
+    joined = "\n".join(lines)
+    assert "re-review:" in joined, joined
+    assert "the whole diff" not in joined, joined
+    assert "delta" in joined, joined

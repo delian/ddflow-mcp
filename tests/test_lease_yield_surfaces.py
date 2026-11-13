@@ -94,6 +94,7 @@ def test_doctor_quotes_the_remedy_for_a_stale_package_glob(repo):
     (repo / "stale p").mkdir(parents=True)
     (repo / "stale p" / "__init__.py").write_text("")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "split"], check=True)
     code, out, err = run_cli(repo, "doctor", agent=A)
     assert code in (0, 1)
     note = next(ln for ln in (out + err).splitlines() if "now the package" in ln)

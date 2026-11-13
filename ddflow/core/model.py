@@ -36,7 +36,9 @@ from .events import (
 from .handlers._common import (  # noqa: F401
     _item,
 )
+from .handlers.agentsmoke import AGENTSMOKE_HANDLERS
 from .handlers.approvals import APPROVAL_HANDLERS
+from .handlers.batch import BATCH_HANDLERS
 from .handlers.defs import DEF_HANDLERS
 from .handlers.exports import (
     _h_export_acknowledged,
@@ -48,6 +50,7 @@ from .handlers.flow import (  # noqa: F401
     _h_back_merge_recorded,
     _h_deploy_recorded,
     _h_flow_chosen,
+    _h_merge_reconciled,
     _h_port_applied,
     _h_pr_changes_requested,
     _h_pr_closed,
@@ -72,6 +75,7 @@ from .handlers.gates import (  # noqa: F401
     _h_reviewer_approved,
     _h_reviewer_configured,
 )
+from .handlers.installmanifest import INSTALLMANIFEST_HANDLERS
 from .handlers.items import (  # noqa: F401
     _apply_definition,
     _definition,
@@ -141,6 +145,7 @@ from .handlers.links import (  # noqa: F401
     link_targets,
 )
 from .handlers.probe import PROBE_HANDLERS
+from .handlers.record_update import UPDATE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
@@ -217,6 +222,13 @@ def _h_merge_forced(st: State, ev: Event) -> None:
     state: `worktree.merged` is what moved the item; this names the gates and the approval."""
 
 
+def _h_branch_synced(st: State, ev: Event) -> None:
+    """`branch.synced`: the record of `ddflow sync` merging an item's base into its branch. It
+    changes no state: the merge moved git refs; this names the base sha, the commits merged, the
+    relevant count and the gate outcomes still valid or stale, so the drift notice and the report
+    can read them."""
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
@@ -249,6 +261,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
     "merge.forced": _h_merge_forced,
+    "merge.reconciled": _h_merge_reconciled,
+    "branch.synced": _h_branch_synced,
     "worktree.removed": _h_worktree_removed,
     "pr.opened": _h_pr_opened,
     "pr.synced": _h_pr_synced,
@@ -303,10 +317,18 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: services/batchgate.py (the batch record of batched gates)
+    **BATCH_HANDLERS,
+    # first writer: services/installmanifest.py (an onboarding writer's run)
+    **INSTALLMANIFEST_HANDLERS,
+    # first writer: services/agent_smoke.py (a live smoke run)
+    **AGENTSMOKE_HANDLERS,
     # first writer: api/probe.py (`ddflow probe`)
     **PROBE_HANDLERS,
     # first writer: services/auth.py (a redeemed pairing, a revocation)
     **TOKEN_HANDLERS,
+    # first writer: api/record_update.py (`ddflow update <bug|lesson|research|...>`)
+    **UPDATE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

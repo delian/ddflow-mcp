@@ -259,7 +259,8 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
     `info/attributes`, also shared and read before the tracked file: a merge reads the tree's
     attributes, not the incoming ones, so the first merge of main would otherwise conflict.
     A file a person gave another merge driver, and a driver command a person set, are left
-    alone (`driver_gaps` says so). The actions."""
+    alone (`driver_gaps` says so). The post-merge hook is also ensured here: keeping our side
+    is only safe while the hook re-records the other side's pins (B38ceb8819e). The actions."""
     files = _wanted(repo, cfg)
     if not files:
         return []
@@ -275,6 +276,7 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
             tail = "" if not text or text.endswith("\n") else "\n"
             replace_text(f, text + tail + "\n".join(add) + "\n")
             acts.append(f"added {len(add)} merge={DRIVER} line(s) to {f}")
+    acts += ensure_hook(repo, cfg)
     return acts
 
 
@@ -330,6 +332,30 @@ def sync_attributes(repo: Path, cfg: Config) -> list[str]:
     return actions
 
 
+def ensure_hook(repo: Path, cfg: Config, *, line=None) -> list[str]:
+    """Ensure the post-merge hook that re-records the pins after a merge is installed, or say
+    why it is not ddflow's to write. ``install`` (``pins regenerate --install``) writes it,
+    and ``ensure_driver`` (which every claim calls for the tree it binds) does too, so a merge
+    that drifts a pin re-records it before landing instead of leaving the queue red for a
+    manual regeneration wave each cycle (B38ceb8819e). [] when there is nothing the hook may
+    run (`[pins].after_merge` is off, or no pin files) or it is already correct."""
+    line = line or command_line
+    files = pin_files(repo, cfg)
+    if not files or cfg.pins.after_merge == "off":
+        return []
+    hook = hooks_dir(repo) / "post-merge"
+    body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
+    text = hook.read_text("utf-8", errors="replace") if hook.exists() else ""
+    if hook.exists() and HOOK_MARK not in text:
+        return [f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it"]
+    if not hook.exists() or text != body:
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(hook, body)
+        hook.chmod(0o755)
+        return [f"wrote {hook}"]
+    return []
+
+
 def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
     line = line or command_line
@@ -340,17 +366,7 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
         return []
     actions = sync_attributes(repo, cfg)
     actions += _set_driver_config(repo, line)
-    hook = hooks_dir(repo) / "post-merge"
-    body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
-    if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
-        if not hook.exists() or hook.read_text("utf-8") != body:
-            hook.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write(hook, body)
-            hook.chmod(0o755)
-            actions.append(f"wrote {hook}")
-    else:
-        actions.append(f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it")
-
+    actions += ensure_hook(repo, cfg, line=line)
     return actions
 
 

@@ -72,6 +72,11 @@ class LaunchSpec:
     cwd: str | None = None  #: the lane worktree
     prompt: str = ""  #: written to a private file for {prompt_file}, else sent on stdin
     env: Mapping[str, str] = field(default_factory=dict)  #: child var -> SOURCE env NAME (keys)
+    secret_env: Mapping[str, str] = field(
+        default_factory=dict, repr=False
+    )  #: child var -> secret VALUE (a key resolved at prepare, e.g. a lane endpoint key read
+    #: from its variable or key file). It reaches the child env, never the process
+    #: environment; `repr` hides it, but `asdict`/`vars` would not, so do not call them here
     fixed_env: Mapping[str, str] = field(
         default_factory=dict
     )  #: literal, non-secret (telemetry off)

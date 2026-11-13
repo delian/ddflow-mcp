@@ -64,15 +64,27 @@ def sync(
             changed_paths(repo, it),
             cfg.review.triage_ignore_globs,
             cfg.review.doc_globs,
+            cfg.locks.review_reuse,
         )
-        stale = {n.gate for n in notes if not n.unverified}
         unverified = {n.gate for n in notes if n.unverified}
+        stale = {n.gate for n in notes if not n.unverified and not n.reused}
         recorded = {g for g, rec in it.gates.items() if rec.outcome == "passed"}
         data["gates_valid"] = sorted(recorded - stale - unverified)
         data["gates_stale"] = sorted(recorded & stale)
         # A gate recorded failed/unavailable/partial/skipped was never green: not "valid".
         data["gates_not_passing"] = sorted(g for g, r in it.gates.items() if r.outcome != "passed")
         data["gates_unverified"] = sorted(recorded & unverified)
+        _log.append(
+            "branch.synced",
+            it.id,
+            {
+                "base_sha": r.base_sha,
+                "commits": r.commits,
+                "relevant": r.relevant,
+                "gates_valid": data["gates_valid"],
+                "gates_stale": data["gates_stale"],
+            },
+        )
     text = _text(r, data)
     if r.kept_stash:
         text += (

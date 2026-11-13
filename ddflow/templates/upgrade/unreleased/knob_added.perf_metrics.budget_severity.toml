@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.budget_severity"
+new = "\"warn\""
+why = "Time budgets (PM-budgets): 'warn' files a finding, 'block' also refuses and names the next call."
+impact = "additive"

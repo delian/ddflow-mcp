@@ -19,8 +19,7 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".claude/settings.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -51,6 +50,9 @@ dir = ".claude/agents"
 [worktrees]
 dir = ".claude/worktrees"
 
+[transcripts]
+root = ["~/.claude/projects"]
+
 [orchestration]
 loop = "self-paced-command"
 dispatch = "Agent (worktree isolation, model explicit)"
@@ -69,3 +71,4 @@ date = "2026-10-09"
 sources = ["https://code.claude.com/docs/en/hooks.md", "https://code.claude.com/docs/en/mcp.md", "https://code.claude.com/docs/en/env-vars.md"]
 record = "R-hx-claude"
 probe = "claude --version -> 2.1.285; claude mcp add --help"
+

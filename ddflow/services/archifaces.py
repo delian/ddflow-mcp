@@ -46,9 +46,21 @@ _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
 # (planned home task, modules already allowed) per program family; the default is ADP-tools.
 PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     "git": ("ADP-git", ("ddflow.infra.git",)),
-    "gh": ("ADP-forge", ("ddflow.infra.forge",)),
-    "glab": ("ADP-forge", ("ddflow.infra.forge",)),
-    DYNAMIC: ("ADP-tools", _RUNNER),
+    "gh": (
+        "ADP-forge",
+        (
+            "ddflow.infra.forge",
+            "ddflow.infra.upstream_gh",
+            "ddflow.adapters.forge",
+            "ddflow.adapters.forge_github",
+        ),
+    ),
+    "glab": (
+        "ADP-forge",
+        ("ddflow.infra.forge", "ddflow.adapters.forge", "ddflow.adapters.forge_gitlab"),
+    ),
+    # `adapters.fs.which` is the port of `shutil.which`: its argument is the caller's
+    DYNAMIC: ("ADP-tools", (*_RUNNER, "ddflow.adapters.fs")),
     **dict.fromkeys(TOOLS, ("ADP-tools", ())),
     **dict.fromkeys(PLATFORM, ("ADP-platform", ())),
     "sh": ("ADP-platform", _RUNNER),  # a shell entry point of the process runner itself
@@ -58,13 +70,23 @@ PROTOCOL_HOMES: dict[str, str] = {
     "mcp": "ADP-mcp",
     "acp": "ADP-acp",
     "jsonrpc": "ADP-lane-transport",
+    "utcp": "ADP-utcp",
+    "a2a": "AG-a2a",
+    "openapi": "CN-adapter-openapi",
 }
 
 
-# Modules already allowed to speak a protocol by hand: the adapter and its fake (ADP-mcp).
+# Modules already allowed to speak a protocol by hand: the adapter, its client side and its
+# fake (ADP-mcp; `mcp_client` holds the client ORM split out of `mcp` for r-small-files).
 PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
-    "mcp": ("ddflow.adapters.mcp", "ddflow.adapters.fakes.mcp"),
+    "mcp": (
+        "ddflow.adapters.mcp",
+        "ddflow.adapters.mcp_client",
+        "ddflow.adapters.fakes.mcp",
+    ),
     "acp": ("ddflow.adapters.acp", "ddflow.adapters.fakes.acp"),
+    # the wire framing split out of `mcp` (r-small-files): the one home of hand-written JSON-RPC
+    "jsonrpc": ("ddflow.adapters.mcp_wire",),
 }
 
 

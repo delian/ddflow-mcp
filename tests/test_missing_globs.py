@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 from conftest import run_cli
@@ -80,6 +81,26 @@ def test_claim_of_a_new_file_says_nothing(proj):
     run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/brand_new.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "warning:" not in out
+
+
+def test_a_rebound_claim_warns_against_the_items_tree_not_the_primary(proj):
+    """B-claim-glob-warning-ignores-item-tree: a file committed on the item's branch but
+    absent on main is still on the item, so a re-claim that rebinds to its own tree must not
+    warn that it does not exist (main's tracked files do not have it)."""
+    from ddflow.api import lifecycle as LC
+
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "other/real.py")
+    first = LC.claim(proj, "T1", agent="a")
+    assert first.exit == 0, first.reason
+    wt = Path(first.data["worktree"])
+    (wt / "other").mkdir()
+    (wt / "other" / "real.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=wt, check=True)
+    subprocess.run(["git", "commit", "-qm", "add other/real.py"], cwd=wt, check=True)
+    LC.release(proj, "T1", agent="a")
+    again = LC.claim(proj, "T1", agent="a")
+    assert again.exit == 0 and again.data["tree"]["how"] == "rebound", again.data
+    assert "glob_warnings" not in again.data, again.data
 
 
 def test_the_knob_turns_the_warning_off(proj):

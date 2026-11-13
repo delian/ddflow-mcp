@@ -116,6 +116,81 @@ def test_nothing_configured_is_unavailable(repo):
     assert res.status == "unavailable" and "nothing to run" in res.reason
 
 
+def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
+    """B512a5d7f35: a CI command killed from outside (subprocess return code is negative,
+    e.g. -15 for SIGTERM) never reached a verdict, so the run is unavailable -- not a failed
+    check that folds the killed hook into 'exit -15' with no failing tests."""
+    from types import SimpleNamespace
+
+    from ddflow.services.ci.runner import _result
+    from ddflow.services.cmdrunner import CommandRun
+
+    p = CommandRun(
+        "ran",
+        code=-15,
+        out="ruff check.....................Passed\nFAILED tests/test_x.py::test_y\n",
+    )
+    res = _result(p, "", "pre-commit run", "sha0", "base0", None)
+    assert res.status == "unavailable", res.status
+    assert res.exit == 2
+    assert "signal" in res.reason, res.reason
+    assert not any(not c.ok for c in res.checks), res.checks
+    assert res.failures == {}, res.failures
+
+    # A selected-scope stage killed after the hooks passed must not read as a failed check either.
+    scope = SimpleNamespace(
+        tests=["test_x.py"],
+        always=["test_y.py"],
+        ok={"selected": False, "always": False},
+        scope="selected",
+        unran=set(),
+        evidence=lambda sha: {},
+        workers=None,
+        admission=None,
+    )
+    killed_stage = CommandRun("ran", code=-15)
+    res = _result(
+        killed_stage,
+        "ruff check.....................Passed\n",
+        "pre-commit run",
+        "sha0",
+        "base0",
+        scope,
+    )
+    assert res.status == "unavailable", res.status
+    assert not any(not c.ok for c in res.checks), res.checks
+    assert res.failures == {}, res.failures
+
+
+def test_a_full_run_that_skipped_the_tests_hook_is_unavailable_not_passed():
+    """B717b798547: a full-scope run on an empty diff skips the file-filtered `tests` hook, so
+    only non-test hooks (gitleaks, lint) run and the run would read as passed vacuously. ``full``
+    whose test hook was skipped must be unavailable (r-unavailable-not-pass)."""
+    from types import SimpleNamespace
+
+    from ddflow.services.ci.runner import _result
+    from ddflow.services.cmdrunner import CommandRun
+
+    full = SimpleNamespace(
+        scope="full",
+        evidence=lambda sha: {"scope": "full"},
+        workers=None,
+        admission=None,
+    )
+    skipped = CommandRun("ran", code=0, out="gitleaks.....................Passed\n")
+    res = _result(skipped, "", "pre-commit run --hook-stage pre-push", "sha0", "base0", full)
+    assert res.status == "unavailable", res.status
+    assert "no test ran" in res.reason, res.reason
+
+    tests_ran = CommandRun(
+        "ran",
+        code=0,
+        out="gitleaks.....................Passed\ntests........................Passed\n",
+    )
+    res = _result(tests_ran, "", "pre-commit run --hook-stage pre-push", "sha0", "base0", full)
+    assert res.status == "passed", res.status
+
+
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):
     _project(repo)
     _branch(repo)
@@ -202,14 +277,14 @@ def test_the_shell_spawn_carries_its_bandit_justification():
     """bandit is a pre-push hook, not a test dependency: check the marker it keys on.
 
     The gate's own `shell=True` spawn failed `bandit -ll` on main (B7c31db560d). It now
-    lives in `proc.run_shell` (Bed0f5b6d99), which the CommandRunner calls and ci.py reaches
+    lives in `adapters/proc_server.run_shell` (Bed0f5b6d99; moved from infra/proc), which the CommandRunner calls and ci.py reaches
     through it, without `shell=True`."""
     root = Path(__file__).resolve().parents[1]
     ci_src = (root / "ddflow/services/ci/runner.py").read_text("utf-8")
     assert "shell=True" not in ci_src and "CommandRunner()" in ci_src
     runner_src = (root / "ddflow/services/cmdrunner.py").read_text("utf-8")
     assert "shell=True" not in runner_src and "P.run_shell(" in runner_src
-    src = (root / "ddflow/infra/proc.py").read_text("utf-8")
+    src = (root / "ddflow/adapters/proc_server.py").read_text("utf-8")
     call = next(ln for ln in src.splitlines() if "shell=True" in ln and "popen(" in ln)
     assert "nosec B604" in call, "the shell=True popen( line needs `# nosec B604` + why"
 
@@ -266,6 +341,21 @@ def test_ci_run_records_the_ci_gate_with_the_commit_it_ran_against(repo, monkeyp
     gate = _ci_gate(repo)
     assert gate["outcome"] == "passed", gate
     assert res.data["sha"][:12] in json.dumps(gate)
+
+
+def test_ci_run_records_the_runs_elapsed_time(repo, monkeypatch):
+    """Bug B28537b615d: `ddflow ci run` recorded the ci gate with no elapsed_s (and no
+    gate.started), so `ddflow metrics` dropped the run for the gate-time figure. The run's
+    own elapsed time is now recorded on the gate, and it reflects real process time, not
+    merely a constant."""
+    _item_with_ci(repo, monkeypatch)
+    (repo / ".ddflow" / "config.toml").write_text(
+        '[ci]\ncommand = "sleep 0.2; true"\n[gates]\ntask_pipeline = ["implement", "ci", "merge"]\n'
+    )
+    res = A.run(repo, ref="T1")
+    assert res.exit == 0 and res.data["recorded"]["ok"], res.data
+    ev = _ci_gate(repo)["evidence"]
+    assert isinstance(ev.get("elapsed_s"), float) and ev["elapsed_s"] >= 0.1, ev
 
 
 def test_a_nested_ci_run_inside_the_ci_gate_does_not_record_twice(repo, monkeypatch):

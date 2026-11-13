@@ -30,16 +30,16 @@ def _state(repo: Path):
 def test_a_cleared_confirmed_finding_does_not_block_the_refutation_pass(repo, tmp_path):
     _setup(repo, tmp_path)
     _failed_and_confirmed(repo)  # R1 full: #1 confirmed
-    # Fix #1, and draw a NEW finding (#2) so the delta re-reviews #1 WITHOUT raising it:
+    # Fix #1, and draw a NEW HIGH finding (#2) so the delta re-reviews #1 WITHOUT raising it:
     # #1 is now cleared after a delta, #2 is the last round's only finding.
     _commit(repo, "x.py", "x = 1\n")
-    _commit(repo, "y.py", "y = 1  # FINDME-B\n")
+    _commit(repo, "z.py", "z = 1  # FINDME-H\n")
     out = api.review(repo, gate="critic", item="T1", branch="feat")  # R2 delta -> #2 only
     assert out.data["outcome"] == "failed", out.data
     ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
     assert len(ev["delta_raised"]) == 1 and ev["findings"] == 2, ev
 
-    t = ST.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="y.py is fine")
+    t = ST.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="z.py is fine")
 
     assert t.exit == 0, t.reason
     assert t.data["passed_on_refutation"] is True, t.data["text"]

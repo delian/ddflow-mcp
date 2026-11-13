@@ -20,12 +20,14 @@ twelfth call site from becoming a thirteenth.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
 import selectors
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -147,8 +149,8 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
     """The ratchet. Twelve call sites had this bug; a thirteenth must not be able to.
 
     Mechanically checkable, so per the house rule it ships as a check rather than as a
-    lesson nobody greps. `proc.py` itself is the one place allowed to call the stdlib
-    directly — that is what it is for.
+    lesson nobody greps. `proc.py` (and `proc_server.py`, its stdio-relay sibling) are the
+    places allowed to call the stdlib directly — that is what they are for.
     """
     # Every way to start a process, not the five that happened to be in use, and
     # `rglob` rather than `glob`: the first version matched `subprocess.run|Popen|call|
@@ -163,12 +165,33 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
     )
     offenders = []
     for path in sorted((ROOT / "ddflow").rglob("*.py")):
-        if path.name == "proc.py":
+        if path.name in ("proc.py", "proc_server.py"):
             continue
         src = path.read_text("utf-8")
-        for n, line in enumerate(src.splitlines(), 1):
-            if spawn.search(line):
+        # A scanner (archifaces_scan) documents the calls it scans, and module docstrings
+        # quote examples; a match inside a comment or string is prose, not a spawn. Keep
+        # the (row, column) spans of COMMENT/STRING tokens (and f-string literal text on
+        # 3.12+) and only flag a match that sits in real code. `tokenize` reports raw
+        # character columns (a tab is one column), so the `re` positions agree with it --
+        # no tab expansion. Match on `split("\n")`, the same line break the tokenizer sees:
+        # `splitlines()` also breaks on \f, \v, \x85, \u2028.., which the tokenizer does not.
+        fstring_types = {
+            getattr(tokenize, n)
+            for n in ("FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END")
+            if hasattr(tokenize, n)
+        }
+        prose_types = {tokenize.COMMENT, tokenize.STRING, *fstring_types}
+        protected = [
+            (t.start, t.end)
+            for t in tokenize.generate_tokens(io.StringIO(src).readline)
+            if t.type in prose_types
+        ]
+        for n, line in enumerate(src.split("\n"), 1):
+            for m in spawn.finditer(line):
+                if any(start <= (n, m.start()) < end for start, end in protected):
+                    continue
                 offenders.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()}")
+                break
     assert not offenders, (
         "these spawn a child without the stdin guard; use `from . import proc as P` "
         "and `P.run`/`P.popen`:\n  " + "\n  ".join(offenders)

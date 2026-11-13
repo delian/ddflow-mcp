@@ -7,6 +7,7 @@ so does a register entry nothing matches any more, so the register only shrinks.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -75,7 +76,19 @@ def test_detector_folds_symbolic_name_arithmetic(tmp_path: Path) -> None:
     ]
 
 
-def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
+def test_bug_window_is_a_single_knob_not_a_hidden_duplicate(tmp_path: Path) -> None:
+    """B82352e0b9f: swarm_metrics.py duplicated ledger.py's BUG_WINDOW_S as
+    `7 * 24 * HOUR`; the pre-fold detector could not fold a Name operand, so a
+    ROOT scan passed vacuously on the unfixed tree (the duplicate was invisible
+    either way). Feed the detector the duplicate's exact shape and require it to
+    fold it to its literal value -- that part fails on a detector that still
+    cannot see `7 * 24 * HOUR` -- and keep the single-knob check on the real
+    tree so a re-introduced duplicate can never hide."""
+    a = _plant(
+        tmp_path,
+        "HOUR = 3600.0\nBUG_WINDOW_S = 7 * 24 * HOUR\n",
+    )
+    assert [(c.name, c.value) for c in a.unclassified] == [("BUG_WINDOW_S", 604800.0)]
     keys = {c.key for c in ca.scan(ROOT)}
     assert "ddflow/services/swarm/ledger.py:BUG_WINDOW_S" in keys
     assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys
@@ -91,6 +104,25 @@ def test_lane_headless_secret_min_is_exempt_and_reasoned() -> None:
     assert reg.exempt.get(key), f"SECRET_MIN left [exempt] (or lost its reason): {key}"
 
 
+def test_B36d96290a5_rc_resultcache_clock_and_classifications() -> None:
+    """B36d96290a5: main went red when C6-clock-resultcache left resultcache.py's two
+    os.environ reads un-routed and its DAY_S (same in baseline_store.py) plus overlap.py's
+    ELIGIBLE_MAX_LINES/MAX_PAIRS unclassified. Pin the Env migration (no direct clock/env
+    read left) and that each constant is a reasoned exemption, so any re-introduction fails."""
+    from tests.test_adapters_clock_env import count_reads
+
+    reg = ca.load_register(ROOT)
+    for key in (
+        "ddflow/services/resultcache.py:DAY_S",
+        "ddflow/services/baseline_store.py:DAY_S",
+        "ddflow/services/metrics/overlap.py:ELIGIBLE_MAX_LINES",
+        "ddflow/services/metrics/overlap.py:MAX_PAIRS",
+    ):
+        assert reg.exempt.get(key), f"constant left [exempt] (or lost its reason): {key}"
+    src = (ROOT / "ddflow" / "services" / "resultcache.py").read_text(encoding="utf-8")
+    assert count_reads(ast.parse(src)) == 0
+
+
 def test_ci_main_drift_reclassifies_moves_and_new_constants() -> None:
     """B-ci-main-constants-ratchet: main went red on real register drift -- the package
     splits moved constants to new modules (re-pinned at the CURRENT home, old key gone)
@@ -99,7 +131,6 @@ def test_ci_main_drift_reclassifies_moves_and_new_constants() -> None:
     reg = ca.load_register(ROOT)
     for key in (
         "ddflow/api/records/_kind.py:CELL_MAX",
-        "ddflow/infra/store/_fingerprint.py:INDEX_TOUCH_S",
         "ddflow/services/enforce/hooks.py:MAX_LISTED_PATHS",
     ):
         assert key in reg.knob, f"moved constant not re-pinned at its new home: {key}"

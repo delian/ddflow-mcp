@@ -78,7 +78,7 @@ def encode_wait(args: dict[str, Any]) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-_WAIT_ARGS = {"item": str, "phase": str, "kind": str, "lease": str, "globs": list}
+_WAIT_ARGS = {"item": str, "phase": str, "kind": str, "lease": str, "globs": list, "notify": str}
 
 
 def decode_wait(token: str) -> dict[str, Any] | None:

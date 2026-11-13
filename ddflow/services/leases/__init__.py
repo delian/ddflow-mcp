@@ -41,6 +41,8 @@ _SUBMODULE_OF = {
     "_clone_field": "common",
     "_fold": "common",
     "glob_clash": "common",
+    "glob_clashes": "common",
+    "clash_report": "common",
     "unfinished_leases": "common",
     "holder_changed_paths": "common",
     "_clash_text": "common",
@@ -73,6 +75,8 @@ _SUBMODULE_OF = {
     "release": "lifecycle",
     "foreign_live_lease": "lifecycle",
     "foreign_guard": "lifecycle",
+    "peer_live_lease": "lifecycle",
+    "peer_guard": "lifecycle",
     "expire": "lifecycle",
     # recovery
     "scan": "recovery",

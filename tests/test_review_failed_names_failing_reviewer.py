@@ -121,3 +121,49 @@ def test_a_partial_failing_reviewer_keeps_the_run_exit_ok(repo, tmp_path):
     assert out.data["outcome"] == "failed", out.data
     ev = _ev(repo)
     assert ev["reviewer"] == "failing", ev
+
+
+def _dead(path: Path) -> str:
+    """A reviewer whose every chunk comes back off-contract (no STATUS: block), so it
+    reviewed NOTHING and its result is UNAVAILABLE."""
+    path.write_text("#!/bin/sh\ncat > /dev/null\necho thinking\n")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return str(path)
+
+
+def _setup_dead_partial(repo: Path, tmp_path: Path) -> None:
+    """A dead reviewer (UNAVAILABLE, listed first) and a PARTIAL failing peer (xai, listed
+    second). The gate must record the PARTIAL finding, not read 'unavailable' from the dead
+    reviewer and drop it (bug B-review-worst-reviewer-misstates-coverage)."""
+    dead = _dead(tmp_path / "dead")
+    failing = _partial_failing(tmp_path / "failing")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        '[agent]\nfamily = "deepseek"\n'
+        f'[[reviewer]]\nname = "dead"\nkind = "command"\ncommand = "{dead}"\n'
+        'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\nmax_chunk_chars = 100\n'
+        f'[[reviewer]]\nname = "failing"\nkind = "command"\ncommand = "{failing}"\n'
+        'model = "grok-4.7"\nfamily = "xai"\ngates = ["critic"]\nmax_chunk_chars = 100\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1  # FINDME\n" + "p" * 80 + "\n")
+    (repo / "y.py").write_text("y = 2\n" + "p" * 80 + "\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+
+def test_a_dead_reviewer_does_not_hide_a_partial_peers_finding(repo, tmp_path):
+    """An UNAVAILABLE reviewer named over a PARTIAL one that found a finding misstates the
+    gate's coverage and drops the finding; the PARTIAL reviewer is the identifying pass
+    (bug B-review-worst-reviewer-misstates-coverage)."""
+    _setup_dead_partial(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.data["outcome"] in ("partial", "failed"), out.data
+    assert out.data["outcome"] != "unavailable", out.data
+    ev = _ev(repo)
+    assert ev["findings"] == 1, ev
+    assert ev["reviewer"] == "failing", ev

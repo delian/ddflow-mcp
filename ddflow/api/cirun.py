@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
+from ..core.globs import match
 from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
@@ -74,13 +75,22 @@ def held_item(repo: Path, agent: str, where: Path | None) -> str:
     return held[0]
 
 
-def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from) -> str:
+def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from, data: dict) -> str:
     """Record the item's `ci` gate from this run, as `gate run ci` does. Returns "" when it
     was recorded, else why not (never raises: the run's own verdict stands)."""
     outcome = {"passed": "passed", "failed": "failed"}.get(res.status, "unavailable")
     note = f"ddflow ci run on {res.sha[:12] or 'the branch'}" + (
         f" merged with {res.merged_with}" if res.merged_with else ""
     )
+    if data.get("corrections_unavailable"):
+        note += f"; ruff drift auto-fix unavailable: {data['corrections_unavailable']}"
+    elif corrections := data.get("corrections"):
+        fixed = ", ".join(corrections.get("reformatted", []) + corrections.get("fixed", []))
+        note += (
+            f"; ruff drift auto-corrected: {fixed}"
+            if fixed
+            else "; ruff drift not auto-correctable"
+        )
     out = record(
         repo,
         item,
@@ -92,12 +102,44 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
             command=res.command,
             exit_code={"passed": 0, "failed": 1}.get(res.status, 2),
             ci_scope=res.scope or None,
+            waited_s=res.waited_s,
+            elapsed_s=res.elapsed_s,
             ran_by=CI_RUN,
+            failing_ids=data.get("failing_ids"),
         ),
         agent=agent,
         called_from=called_from,
     )
     return "" if out.ok else out.reason
+
+
+def _auto_fix_ruff(repo: Path, cfg, st, item: str, res: CI.Result, data: dict) -> None:
+    """The `[ci].ruff_autofix` auto-correction (DX-ci-ruff-gate): when this failed item run's
+    failing checks are the pre-commit ruff hooks, run `ruff format` + `ruff check --fix` over
+    the changed Python files in the item's own worktree and record the corrections in ``data``."""
+    if not item or not cfg.ci.ruff_autofix:
+        return
+    ruff = CI.failing_ruff(res.checks)
+    if not ruff:
+        return
+    it = st.items.get(item)
+    if it is None or not getattr(it, "worktree", ""):
+        return
+    root = W.load_path(repo, it.worktree)
+    if not root.is_dir():
+        return
+    # Own edits only (three-dot, B-autoformat-stages-outside-lease) AND within the item's
+    # lease globs: a file ``sha`` edited outside its declared globs must not be reformatted.
+    owned = [
+        f
+        for f in CI.changed_python(repo, res.sha, res.merged_with, own=True)
+        if any(match(f, g) for g in it.globs)
+    ]
+    ready = CI.auto_fix(root, owned)
+    if ready.get("unavailable"):
+        data["corrections_unavailable"] = ready["unavailable"]
+    elif ready:
+        data["corrections"] = {"ruff": ruff, **ready}
 
 
 def _keep_failing_ids(repo: Path, res) -> dict:
@@ -109,13 +151,21 @@ def _keep_failing_ids(repo: Path, res) -> dict:
     out: dict = {}
     if len(everyone) > len(res.failures.get("failed_tests") or ()):
         out["failed_tests_total"] = len(everyone)
-    if not BL.only_tests_failed(res.checks):
-        names = ", ".join(c.id for c in res.checks if not c.ok)
-        out["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
-    elif kept := BL.write_full(repo, res.sha, everyone):
-        out["failing_ids_file"] = kept
-    else:
-        out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
+    # The failing test ids are kept aside even when a NON-TEST check (a lint, build or secrets
+    # check) failed beside red tests: the baseline_split must still measure those tests on the
+    # base to say "tests would be accepted" (Ba17fabe249). The non-test check is named in the
+    # note; it never stops the list from being kept.
+    non_test = [c.id for c in res.checks if not c.ok and not BL.test_check(c)]
+    kept = BL.write_full(repo, res.sha, everyone)
+    if kept:
+        out["failing_ids"] = kept
+    notes: list[str] = []
+    if non_test:
+        notes.append(f"a check other than the tests also failed ({', '.join(non_test)})")
+    if not kept:
+        notes.append(f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})")
+    if notes:
+        out["failing_ids_note"] = "; ".join(notes)
     return out
 
 
@@ -184,11 +234,12 @@ def run(
     data.update(_keep_failing_ids(repo, res))
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
+    _auto_fix_ruff(repo, cfg, st, item, res, data)
     if log_to is not None and not res.ok:  # a pass keeps no log
         log_to.parent.mkdir(parents=True, exist_ok=True)
         fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
     if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
-        why = _record_gate(repo, item, res, agent, called_from)
+        why = _record_gate(repo, item, res, agent, called_from, data)
         data["recorded"] = {
             "item": item,
             "gate": "ci",
@@ -198,7 +249,7 @@ def run(
     if res.ok:
         if full:  # the periodic full-suite pass a phase close reads (schedule.phase_full_suite)
             log.append("cadence.ran", "integration_tests",
-                       {"result": "0", "evidence": {"note": f"ci run --full on {ref}"}})  # fmt: skip
+                       {"result": "0", "evidence": {"note": f"ci run --full on {ref}", "sha": res.sha}})  # fmt: skip
         return O.ok("ci.run", **data)
     if res.status == "failed":
         return O.Outcome(kind="ci.run", data=data, exit=O.FAIL, reason=res.reason)

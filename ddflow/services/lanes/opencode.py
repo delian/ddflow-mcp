@@ -9,8 +9,9 @@ Keys go by env NAME only. Nothing is written to the project, and no model is cal
 
 Honest by construction (D-swarm-answers): ``select`` prefers opencode and falls back to kilo, and says
 which binary and version it used and whether the version was READ; a stream shape or flag nobody read on
-the real tool is ``unverified`` in ``FACTS``. ``usage`` and ``steer`` are not advertised (the stream's
-token fields were never read, and a headless run takes its prompt as argv), ``resume`` only when asked.
+the real tool is ``unverified`` in ``FACTS``. ``steer`` is not advertised (a headless run takes its
+prompt as argv) and ``resume`` only when asked; ``usage`` is advertised from the ``step_finish`` line's
+``part.tokens.total`` and ``part.cost`` (read live, SW-live-smoke).
 A live run against a real model is the operator's call: ``LIVE_PROBE`` is always ``unavailable``.
 ACP (``opencode acp``) can register as a further transport behind the same contract.
 """
@@ -26,8 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
+from ...adapters import templates as _tpl
 from ...config import Config
 from ...infra import fsio, paths
 from ...infra import proc as P
@@ -56,7 +56,7 @@ ENV_PATTERN = "DDFLOW_{}_BIN"
 EXTRA_DIRS = ("~/.local/bin",)
 LIVE_PROBE = unavailable(
     "live smoke run against a model: calls an endpoint and uses a key, so it needs the operator's "
-    "consent; run `ddflow lanes smoke` once approved and record the result"
+    "consent; run `ddflow lanes state` once approved and record the verdict"
 )
 #: Facts about the run command and its stream: (value, status, where it was read).
 FACTS = {
@@ -71,19 +71,25 @@ FACTS = {
         "verified; event names unverified",
     ),
     "acp subcommand": ("opencode 1.19.0 acp --help", "exists; not used (later transport)"),
-    "json stream shape (step_start, tool_use, error)": (
-        "opencode source, from memory",
-        "unverified",
+    "json stream shape (step_start, tool_use, step_finish, error)": (
+        "kilo 7.8.18 run --format json, read live (SW-live-smoke)",
+        "verified",
     ),
-    "usage tokens in stream": ("not read", "unverified: usage not advertised"),
+    "usage tokens in stream": (
+        "kilo 7.8.18 step_finish part.tokens.total and part.cost (SW-live-smoke)",
+        "verified",
+    ),
 }
-#: E5 rules for ``run --format json`` lines. UNVERIFIED shape: re-read against a real run.
+#: E5 rules for ``run --format json`` lines, read live on kilo 7.8.18 (SW-live-smoke).
 STREAM_RULES = (
     {"when": {"path": "type", "equals": "step_start"}, "emit": "started",
      "fields": {"session": "sessionID"}},
     {"when": {"path": "type", "equals": "tool_use"}, "emit": "tool",
      "fields": {"name": "part.tool", "action": "part.state.input.action",
-                "error": "part.state.error"}},
+                "error": "part.state.error", "output": "part.state.output",
+                "status": "part.state.status"}},
+    {"when": {"path": "type", "equals": "step_finish"}, "emit": "usage",
+     "fields": {"tokens": "part.tokens.total", "cost": "part.cost"}},
     {"when": {"path": "type", "equals": "error"}, "emit": "error",
      "fields": {"message": "error.data.message"}},
 )  # fmt: skip
@@ -137,24 +143,38 @@ def select(
 
 
 def instructions(agent: str, item: str, worktree: Path) -> str:
-    env = Environment(  # nosec B701 - markdown for an agent, not HTML
-        loader=FileSystemLoader(str(paths.package_dir() / "templates")),
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    return env.get_template("harness/opencode/instructions.md.j2").render(
-        agent=agent, item=item, worktree=str(worktree)
+    return _tpl.DEFAULT.render_from(
+        paths.package_dir() / "templates",
+        "harness/opencode/instructions.md.j2",
+        agent=agent,
+        item=item,
+        worktree=str(worktree),
     )
 
 
-def mcp_entry(repo: Path, agent: str, command: list[str] | None = None) -> dict[str, Any]:
-    """The lane's ddflow MCP server in the opencode shape, with the lane's own identity."""
+def mcp_entry(
+    repo: Path,
+    agent: str,
+    command: list[str] | None = None,
+    *,
+    worktree: Path | None = None,
+) -> dict[str, Any]:
+    """The lane's ddflow MCP server in the opencode shape, with the lane's own identity.
+
+    ``--repo`` names where the server is spawned -- the lane's WORKTREE, not the primary.
+    Pinning it to the primary hid the launched tree from the MCP path, so `claim` answered
+    `here=false` and created a SECOND worktree instead of adopting the one the lane was
+    launched in (bug B7d091d0f35): ``repo_root`` resolves the worktree to the primary for
+    the shared event log and keeps the worktree as ``called_from``, which is what makes
+    `claim` adopt it. ``worktree`` defaults to ``repo`` only for callers that name the two
+    alike (a test, or a lane launched in the primary itself)."""
+    tree = worktree if worktree is not None else repo
     argv = command or [
         sys.executable,
         "-m",
         "ddflow",
         "--repo",
-        str(repo),
+        str(tree),
         f"--agent={agent}",
         "mcp",
     ]
@@ -235,7 +255,7 @@ def prepare(  # noqa: PLR0913 - one call that writes the whole private lane
     instr = home / "ddflow-lane" / "AGENTS.md"
     instr.parent.mkdir(parents=True, exist_ok=True)
     fsio.atomic_write(instr, instructions(agent, item, worktree), mode=0o600)
-    _merge_config(ep.config, mcp_entry(repo, agent, mcp_command), instr)
+    _merge_config(ep.config, mcp_entry(repo, agent, mcp_command, worktree=worktree), instr)
     opts = lane_options(cfg or Config())
     pass_env = tuple(dict.fromkeys((*opts.pop("pass_env"), "PATH")))  # the binary needs PATH
     spec = LaunchSpec(
@@ -244,7 +264,8 @@ def prepare(  # noqa: PLR0913 - one call that writes the whole private lane
         values={"model": ep.model, "dir": str(worktree)},
         prompt=prompt,
         cwd=str(worktree),
-        env=ep.env,
+        env=dict(ep.env),
+        secret_env=dict(ep.secret_env),
         fixed_env=dict(hooks.env),
         home=home,
         pass_env=pass_env,
@@ -261,9 +282,9 @@ def cleanup(home: Path) -> str:
 
 class OpenCodeLane(ProcessHeadless):
     """``ProcessHeadless`` that states only what this lane can do: no ``steer`` (the prompt is
-    argv), no ``usage`` (stream tokens unread), ``resume`` only if a spec asks."""
+    argv), ``usage`` from the ``step_finish`` line, ``resume`` only if a spec asks."""
 
-    capabilities = frozenset({"interrupt", "tool_events"})
+    capabilities = frozenset({"interrupt", "tool_events", "usage"})
 
 
 def conformance(

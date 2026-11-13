@@ -357,9 +357,20 @@ def test_a_reason_that_is_not_text_is_no_reason(sender, owner, cfg) -> None:
 
 
 def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg) -> None:
-    quoted = 'diff --git "a/\\303\\251" "b/\\303\\251"\n--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n x\n+y\n'
+    quoted = (
+        'diff --git "a/\\303\\251" "b/\\303\\251"\n'
+        '--- "a/\\303\\251"\n'
+        '+++ "b/\\303\\251"\n'
+        "@@ -1 +1,2 @@\n x\n+y\n"
+    )
     q = P.shape(quoted)
-    assert q.added == 1 and len(q.files) == 1 and not q.malformed
+    assert q.files == ("\u00e9",), q  # the decoded name, not the raw \303\251 escape
+    assert q.added == 1 and not q.malformed
+    # A rename quotes only the side that needs it: ASCII `foo` -> `é` quotes just `b/`.
+    rename = (
+        'diff --git a/foo "b/\\303\\251"\n--- a/foo\n+++ "b/\\303\\251"\n@@ -1 +1,2 @@\n x\n+y\n'
+    )
+    assert P.shape(rename).files == ("\u00e9",), rename
     over = "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n a\ndiff --git a/y b/y\n@@ -1 +1 @@\n-b\n+c\n"
     assert P.shape(over).malformed
     cfg.handoff.reject_breaker = 2
@@ -370,3 +381,64 @@ def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg
     _send(sender, cfg, sid="C", now=time.time() + 2)
     E.move(owner, "rejected", "C", reason="no")
     _send(sender, cfg, sid="D", now=time.time() + 3)
+
+
+def test_distinct_quoted_non_utf8_names_stay_distinct() -> None:
+    # Two distinct non-UTF-8 names must not decode to the same U+FFFD (which would let the
+    # dedup in `shape` collapse them and under-count). `\200`/`\201` are bytes 0x80/0x81.
+    patch = (
+        'diff --git "a/\\200" "b/\\200"\n--- "a/\\200"\n+++ "b/\\200"\n@@ -1 +1 @@\n-x\n+y\n'
+        'diff --git "a/\\201" "b/\\201"\n--- "a/\\201"\n+++ "b/\\201"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    q = P.shape(patch)
+    assert q.files == ("\udc80", "\udc81"), q  # surrogateescape, not U+FFFD twice
+
+
+def test_unquoted_name_is_not_decoded() -> None:
+    # An UNquoted side is a literal byte string: `\303\251` here is a name that already
+    # contains a backslash + digits, and must NOT be decoded to é.
+    unquoted = (
+        "diff --git a/\\303\\251 b/\\303\\251\n"
+        "--- a/\\303\\251\n+++ b/\\303\\251\n@@ -1 +1 @@\n-x\n+y\n"
+    )
+    assert P.shape(unquoted).files == ("\\303\\251",), P.shape(unquoted)
+
+
+def test_unquoted_raw_utf8_name_is_kept() -> None:
+    # core.quotePath=false emits the raw UTF-8 bytes for é (U+00e9), not a C-escape.
+    raw = "diff --git a/caf\u00e9.txt b/caf\u00e9.txt\n--- a/caf\u00e9.txt\n+++ b/caf\u00e9.txt\n@@ -1 +1 @@\n-x\n+y\n"
+    assert P.shape(raw).files == ("caf\u00e9.txt",), P.shape(raw)
+
+
+def test_unquoted_name_with_space_is_literal() -> None:
+    # git leaves a name with a space UNquoted (`a/my file.txt`); it must still be counted.
+    spaced = (
+        "diff --git a/my file.txt b/my file.txt\n"
+        "--- a/my file.txt\n+++ b/my file.txt\n@@ -1 +1 @@\n-x\n+y\n"
+    )
+    assert P.shape(spaced).files == ("my file.txt",), P.shape(spaced)
+
+
+def test_unquoted_name_with_leading_space_is_literal() -> None:
+    # a name that *begins* with a space is still emitted unquoted (`a/ foo`).
+    leading = "diff --git a/ foo b/ foo\n--- a/ foo\n+++ b/ foo\n@@ -1 +1 @@\n-x\n+y\n"
+    assert P.shape(leading).files == (" foo",), P.shape(leading)
+
+
+def test_quoted_name_with_escaped_quote_is_decoded() -> None:
+    # `core.quotepath` writes a literal `"` in a name C-escaped inside quotes; decode it.
+    quoted = (
+        'diff --git "a/foo\\"bar.txt" "b/foo\\"bar.txt"\n'
+        '--- "a/foo\\"bar.txt"\n+++ "b/foo\\"bar.txt"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    assert P.shape(quoted).files == ('foo"bar.txt',), P.shape(quoted)
+
+
+def test_quoted_name_containing_space_b_slash_is_decoded() -> None:
+    # a quoted name may itself contain ` b/`; the splitter must not take that as the
+    # a/b separator (`foo" b/bar`).
+    quoted = (
+        'diff --git "a/foo\\" b/bar" "b/foo\\" b/bar"\n'
+        '--- "a/foo\\" b/bar"\n+++ "b/foo\\" b/bar"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    assert P.shape(quoted).files == ('foo" b/bar',), P.shape(quoted)

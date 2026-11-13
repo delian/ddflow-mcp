@@ -39,6 +39,11 @@ class LeaseConfig:
         30,
         doc="How long to block on the flock arbitrating lease acquisition before giving up. On NFS a contended acquire measured ~135 ms, so 30 s is ~200x headroom.",
     )
+    record_lock_wait_s: int = knob(
+        180,
+        doc="How long the record step of a FINISHED gate outcome (a measured run, a review, a merge, a person clearing a human gate) keeps trying to acquire the events append lock when it is contended. The outcome is work already done: losing it to a transient timeout -- a lane heartbeat holding the lock under load, in `record_measured` after a command ran to completion (B0b0b67d5e7) -- wastes the whole run. Each attempt waits the time left in this budget (not `acquire_timeout_s`), so the TOTAL wait across attempts never exceeds it; a record that still cannot get the lock gives up once the budget is spent and reports 'could not run' rather than wedging forever. 0 appends once with `acquire_timeout_s`, as before.",
+        check=int_at_least(0),
+    )
     #: How long a waiter keeps its place in line once it could claim (see the knob doc).
     waiter_reservation_s: int = knob(
         300,
@@ -69,6 +74,12 @@ class LeaseConfig:
     break_on_timeout: bool = knob(
         False,
         doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",
+    )
+    reconcile_tests: str = knob(
+        "affected",
+        doc="When this item's merge reconciled files another item changed since this one branched (recorded as merge.reconciled), complete is refused until the tests have passed on the reconciled tree: 'affected' runs the tests the reconciled files select, 'full' the whole suite, 'off' turns the reconcile guard off. D-lease-hold-limit-r2, D-gate-economy-r3.",
+        choices=("full", "affected", "off"),
+        strictest=("full", "run the whole suite, never the narrower affected set"),
     )
     inbox_max_chars: int = knob(
         2000,
@@ -121,7 +132,7 @@ class LeaseConfig:
     )
     scan_view_trees_max: int = knob(
         16,
-        doc="The most worktrees a read-only view (`status`, `brief`) measures for the recovery report. Each measured tree is a `git status` process, so a log with 126 stale leases made `status` spawn hundreds; a tree beyond the cap is reported as NOT MEASURED -- treated as holding work, never as clean -- and `ddflow recover` always measures every one. 0 measures none in a view.",
+        doc="The most worktrees a read-only view (`status`, `brief`) measures for the recovery report. Each measured tree is a `git status` process, so a log with 126 stale leases made `status` spawn hundreds; the trees are ranked by their unmerged-commit signal first, and a tree beyond the cap is still treated as holding work by `recover` and `status` (never as clean) while the brief counts it quietly -- `ddflow recover` always measures every one. 0 measures none in a view.",
         check=int_at_least(0),
     )
     scan_view_verdicts_max: int = knob(

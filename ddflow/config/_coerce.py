@@ -7,6 +7,8 @@ from typing import Any
 
 from ._decls import KNOB_STRICTEST_NUMBER
 from ._errors import InvalidValue
+from ._knob import allowed, checked_number
+from ._knob import kind as number_kind
 
 
 def csv_list(raw: str | None) -> list[str]:
@@ -18,6 +20,11 @@ def csv_list(raw: str | None) -> list[str]:
     Two parsers for one notation is two answers to "is `a,,b` two items or three".
     """
     return [x.strip() for x in (raw or "").split(",") if x.strip()]
+
+
+def _spelling(typ: Any) -> str:
+    """A field type as the string the coercion reads (a string annotation as is)."""
+    return typ if isinstance(typ, str) else getattr(typ, "__name__", str(typ))
 
 
 def _maybe_json(raw: str, want: type) -> Any:
@@ -46,7 +53,7 @@ def _coerce(raw: Any, typ: Any) -> Any:
     comma-separated. A bad bool is an error rather than a silent False -- a silently
     dropped knob is the failure class this whole module is arranged against.
     """
-    ts = typ if isinstance(typ, str) else getattr(typ, "__name__", str(typ))
+    ts = _spelling(typ)
     if not isinstance(raw, str):
         return raw
     if _outer_is_dict(ts):
@@ -85,25 +92,36 @@ def _coerce(raw: Any, typ: Any) -> Any:
     return raw
 
 
-def _coerce_layer_knob(sec: str, knob: str, raw: Any, typ: Any, lenient: bool) -> Any:
+def _coerce_layer_knob(
+    sec: str, knob: str, raw: Any, typ: Any, lenient: bool, source: str = ""
+) -> Any:
     """`_coerce_knob`, but a FILE value of a `KNOB_STRICTEST_NUMBER` knob that is not a
-    number ("ten") is kept as is: its check fails and the strictest value applies."""
+    number ("ten") is kept as is: its check fails and the strictest value applies.
+
+    A refusal names the LAYER that held the value (``source``: the committed file, the
+    machine-local file or the environment), so the person knows where to fix it."""
     try:
         return _coerce_knob(sec, knob, raw, typ)
-    except InvalidValue:
-        if not (lenient and f"{sec}.{knob}" in KNOB_STRICTEST_NUMBER):
-            raise
-        return raw
+    except InvalidValue as exc:
+        if lenient and f"{sec}.{knob}" in KNOB_STRICTEST_NUMBER:
+            return raw
+        if source:
+            raise InvalidValue(f"{exc} [read from the {source} layer]") from exc
+        raise
 
 
 def _coerce_knob(sec: str, knob: str, raw: Any, typ: Any) -> Any:
     """`_coerce` for a KNOWN knob: a value of the wrong type is an `InvalidValue` naming
     the key, refused like any other invalid value (exit 3 on the write paths)."""
     try:
-        return _coerce(raw, typ)
+        ts = _spelling(typ)
+        return checked_number(f"{sec}.{knob}", raw, _coerce(raw, typ), ts)
     except InvalidValue:
         raise
     except ValueError as exc:
+        what = number_kind(_spelling(typ))
+        if what and "allowed:" not in str(exc):  # a string that is not a number at all
+            exc = ValueError(f"{exc}; allowed: {allowed(f'{sec}.{knob}', what)}")
         raise InvalidValue(f"invalid {sec}.{knob} = {raw!r}: {exc}") from exc
 
 

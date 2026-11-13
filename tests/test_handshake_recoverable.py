@@ -15,6 +15,13 @@ from conftest import run_cli
 from ddflow.services import leases as L
 from ddflow.surfaces.mcp import _instruction_vars, _instructions
 
+
+def _volatile(repo) -> str:
+    from ddflow.services import brief_volatile
+
+    return brief_volatile.volatile_lines(_instruction_vars(repo))
+
+
 HARNESS = "/x/.claude/worktrees/bridge-cse_1"
 
 
@@ -65,5 +72,6 @@ def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkey
     )
     assert _instruction_vars(adopted)["recoverable"] == 3
     text = _instructions(adopted)
-    assert "crashed worktree(s) may hold work" in text
-    assert "3 crashed worktree(s)" in text
+    assert "crashed worktree(s) may hold work" not in text  # moved to the brief
+    lines = _volatile(adopted)
+    assert "3 crashed worktree(s) may hold work" in lines

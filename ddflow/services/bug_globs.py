@@ -7,12 +7,21 @@ from fnmatch import fnmatch
 from pathlib import Path
 from posixpath import basename
 
+from ..adapters import git as GIT
 from ..config import Config
 from ..core import globspec as GS
 from ..core.model import State
-from ..infra import git as GIT
+from . import testreach as TR
 from .completion import fixes_of
-from .testselect import RANK_DECLARED, _by_name, _data_readers, _Picks, governed, is_test_file
+from .testselect import (
+    RANK_DECLARED,
+    _by_name,
+    _data_readers,
+    _governs,
+    _Picks,
+    governed,
+    is_test_file,
+)
 
 
 def bug_globs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
@@ -114,6 +123,50 @@ def found_scope(root: Path, text: str) -> tuple[list[str], list[str]] | None:
     return kept + [t for t in sorted(pick.by) if t not in kept], dropped
 
 
+def exercised_scope(root: Path, ids: list[str]) -> list[str]:
+    """The SOURCE files a set of pytest node ids exercises: source files the ids themselves
+    name (a parametrized id names its file -- `[proc_server.py]`), the library modules each
+    failing test file imports directly, and its declared ``GOVERNS`` files -- the files a
+    fix task must carry instead of inheriting the finding item's own (test) globs, which is
+    what left main-red fix tasks ineditable (B83543b98f4). Cheap per test file, no full
+    import graph (``found_scope`` refuses it for every `bug found`)."""
+    listed = GIT.files(root, "all")
+    if listed is None:
+        return []
+    py = [p for p in listed if p.endswith(".py")]
+    by_module = {TR.module_name(p): p for p in py}
+    known = set(by_module)
+    lib = [p for p in py if not is_test_file(p)]
+    out: set[str] = set()
+    # Files the ids name, the source half (a test path is a test file, not source).
+    named, _drop = existing_globs(root, _named_files(_PATHISH.findall("\n".join(ids)), listed))
+    out.update(p for p in named if not is_test_file(p))
+    for t in sorted({i.partition("::")[0] for i in ids}):
+        out.update(_imported_and_governed(root, t, by_module, known, lib))
+    return sorted(out)
+
+
+def _imported_and_governed(
+    root: Path, test: str, by_module: dict[str, str], known: set[str], lib: list[str]
+) -> set[str]:
+    """The source files one failing test file exercises: the library modules it imports
+    directly, and its ``GOVERNS`` files."""
+    if not test.endswith(".py") or not (root / test).is_file():
+        return set()
+    try:
+        source = (root / test).read_text("utf-8", errors="replace")
+    except OSError:
+        return set()
+    out = {
+        by_module[resolved]
+        for name in TR.imports(test, source)
+        if (resolved := TR.resolve(name, known)) in by_module
+        and not is_test_file(by_module[resolved])
+    }
+    out.update(p for p in lib if any(fnmatch(p, g) for g in _governs(source)))
+    return out
+
+
 def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
     """``(kept, dropped)``: the globs that name something in the tree at ``root`` (a path
     that exists, or a pattern that matches one), and those that name nothing.
@@ -132,6 +185,19 @@ def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
     return kept, dropped
 
 
+def named_test_globs(root: Path, text: str) -> list[str]:
+    """The test files the bug's text names, existing in the tree: where the maintainer
+    writes the regression test (an edit to an existing `tests/**/test_*.py`). A named test
+    file is a glob of the fix task even for a ddflow-scoped bug, which otherwise inherits
+    no files: a source file a report quotes is symptom-or-cause (Bc0b26248e3), but a test
+    file it names is where the regression test has to land (DX-fixtask-edit-existing-test-glob)."""
+    listed = GIT.files(root, "all")
+    if listed is None:
+        return []
+    files, _dropped = existing_globs(root, _named_files(_PATHISH.findall(text), listed))
+    return [f for f in files if is_test_file(f)]
+
+
 def fix_task_globs(
     root: Path,
     globs: str,
@@ -146,7 +212,10 @@ def fix_task_globs(
     files -- the bug's own found scope (`found_scope`, B45b80286d2: two narrow sibling bugs
     no longer inherit one wide item glob and exclude each other), else the ones inherited
     from the source item, cut to those that exist in the tree (only a guess can be wrong
-    about the tree)."""
+    about the tree). A test file the bug names and that exists in the tree is carried on
+    the non-explicit paths -- `found_scope` holds it when it runs (a named test file is
+    part of the found scope), and `named_test_globs` adds it on the fall-through path --
+    so the implementer edits it without widening."""
     if globs:
         return GS.parse(globs), []
     named = sorted(
@@ -156,4 +225,8 @@ def fix_task_globs(
         found = found_scope(root, text)
         if found is not None and found[0]:
             return found  # the bug's own files (an empty find: fall back and inherit)
-    return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
+    kept, dropped = existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
+    for t in named_test_globs(root, text):
+        if t not in kept:
+            kept.append(t)
+    return kept, dropped

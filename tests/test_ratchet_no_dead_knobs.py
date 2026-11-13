@@ -59,6 +59,23 @@ KNOWN_UNREAD: dict[str, str] = {
     # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
     "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
     "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
+    # Declared for TE-limit-aware-routing: read by the section's own accessors
+    # (`PricesConfig.limit_of` / `reset_of` read `self.limit` / `self.reset`), so no source
+    # line spells `.prices.limit`. `services/limit_routing` has no production caller yet, the
+    # same standing as `pins.mergiraf_keep_pct`; `test_the_prices_accessors_read_the_knobs`
+    # proves the accessors do read them.
+    "prices.limit": "read via PricesConfig.limit_of (self.limit); services/limit_routing has no production caller yet",
+    "prices.reset": "read via PricesConfig.reset_of (self.reset); services/limit_routing has no production caller yet",
+    # Read via the EtaConfig handed to services/eta/data.build (a parameter the name-based
+    # scan cannot see): `build(facts, eta)` reads `eta.window_days` / `eta.min_samples`, and
+    # tests/test_eta_data.py proves both are live (test_gate_durations_respect_the_rolling_window,
+    # test_figures_under_min_samples_are_withheld_not_zero). data.build has no production caller
+    # yet -- the ETA-model / ETA-simulator / ETA-cli items consume the tables after this one.
+    "eta.window_days": "read via EtaConfig in services/eta/data.build(); no production caller yet (ETA-model/simulator items follow)",
+    "eta.min_samples": "read via EtaConfig in services/eta/data.build(); no production caller yet (ETA-model/simulator items follow)",
+    # The R-eta-prediction shipping bar (the item's falsifier), declared here so a stale model
+    # is demoted rather than trusted; read by the prediction item (not yet built).
+    "eta.coverage_bar": "the R-eta-prediction shipping bar; read by the prediction item (not yet built)",
 }
 
 
@@ -134,10 +151,11 @@ def dead_knobs(keys: list[str] | None = None, src: str | list[str] | None = None
         files = list(src)
     keys = [k for k, *_ in Config.load().explain()] if keys is None else keys
     per_file = [_aliases(text) for text in files]
+    unique = _unique_aliases(per_file)  # hoisted: rebuilt under the loop it was N times
     dead = []
     for key in keys:
         section, knob = key.split(".", 1)
-        if _read_in_any(section, knob, files, per_file, _unique_aliases(per_file)):
+        if _read_in_any(section, knob, files, per_file, unique):
             continue
         dead.append(key)
     return dead
@@ -179,7 +197,8 @@ def test_no_knob_is_dead():
 
 
 def test_the_allowlist_only_shrinks():
-    stale = [k for k in KNOWN_UNREAD if k not in dead_knobs()]
+    dead = dead_knobs()  # computed once: the list comprehension ran the scan per entry
+    stale = [k for k in KNOWN_UNREAD if k not in dead]
     assert not stale, f"allowlisted knobs that are now read; remove them: {stale}"
 
 
@@ -187,6 +206,25 @@ def test_the_merge_knob_require_gates_is_read():
     """`[merge].require_gates` is consumed as `cfg.merge.require_gates`
     (merge_force.mode_of), not a bare `getattr` the name-based scan cannot see."""
     assert dead_knobs(["merge.require_gates"]) == []
+
+
+def test_the_perf_detect_knobs_are_read():
+    """`[perf_metrics].detect_*` are consumed by ``core/perfdetect.py`` through a
+    ``PerfMetricsConfig`` it is handed (``cfg.detect_*``), which the name scan cannot
+    see; ``_section_knobs`` spells each as ``.perf_metrics.detect_*`` (bug B61962d45e0)."""
+    assert (
+        dead_knobs(
+            [
+                "perf_metrics.detect_min_samples",
+                "perf_metrics.detect_relative_threshold",
+                "perf_metrics.detect_absolute_floor_s",
+                "perf_metrics.detect_persistence_windows",
+                "perf_metrics.detect_creep_alpha",
+                "perf_metrics.detect_creep_threshold",
+            ]
+        )
+        == []
+    )
 
 
 def test_the_detector_resolves_section_aliases():
@@ -216,6 +254,23 @@ def test_the_detector_can_still_see():
     assert dead_knobs(["lease.ttl_s"], "x = cfg.lease.ttl_s") == []
 
 
+def test_the_alias_map_is_built_once_not_once_per_key(monkeypatch):
+    """`_unique_aliases(per_file)` sat inside the `for key` loop: a scan over N knobs
+    rebuilt the whole-tree alias map N times. Hoisted out, the map is built once,
+    whatever the key count. Pre-fix this loop built it once per key."""
+    calls: list[int] = []
+    real = _unique_aliases
+
+    def counted(per_file):
+        calls.append(1)
+        return real(per_file)
+
+    monkeypatch.setattr(sys.modules[__name__], "_unique_aliases", counted)
+    # Three keys force three loop iterations; pre-fix each one rebuilt the map.
+    dead_knobs(["ui.warp", "ui.zorch", "ui.plugh"], "u = cfg.ui\n")
+    assert calls == [1]
+
+
 def test_the_scan_is_not_vacuous():
     """Positive harvest: the real enumeration must actually find knobs to check."""
     keys = [k for k, *_ in Config.load().explain()]
@@ -226,3 +281,21 @@ def test_the_scan_is_not_vacuous():
 #: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
 #: code base, so no import closure can know a change breaks it.
 ALWAYS = True
+
+
+def test_the_prices_accessors_read_the_knobs():
+    """The `KNOWN_UNREAD` reason for `prices.limit` / `prices.reset`: the accessors really read
+    them -- per model, so a constant return cannot pass -- and an exemption cannot outlive the
+    read."""
+    cfg = Config()
+    cfg.prices.limit = {"a": "5", "b": 7}
+    cfg.prices.reset = {"a": "1d", "b": "2d"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("b")) == (5.0, 7.0)
+    assert cfg.prices.limit_of("other") is None
+    assert (cfg.prices.reset_of("a"), cfg.prices.reset_of("b")) == ("1d", "2d")
+    assert cfg.prices.reset_of("other") == "1mo"
+    cfg.prices.limit = {"a": 9, "c": "2.5"}  # a second map: only a live read follows it
+    cfg.prices.reset = {"c": "1w"}
+    assert (cfg.prices.limit_of("a"), cfg.prices.limit_of("c")) == (9.0, 2.5)
+    assert cfg.prices.limit_of("b") is None
+    assert (cfg.prices.reset_of("c"), cfg.prices.reset_of("a")) == ("1w", "1mo")

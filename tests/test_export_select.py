@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow.core import model
 from ddflow.core.events import PROVENANCE_KINDS, Event
@@ -214,9 +215,7 @@ def test_a_locked_document_refuses_an_agent_enable_and_the_operator_can_unlock(p
     assert run_cli(proj, "export", "enable", "roadmap", agent="bot")[0] == 0  # no lock now
 
 
-def test_an_agent_cannot_lock_and_a_lock_survives_a_plain_disable(proj):
-    code, _o, err = run_cli(proj, "export", "disable", "roadmap", "--lock", agent="bot")
-    assert code == 3 and "operator" in err
+def test_a_lock_survives_a_plain_disable(proj):
     assert run_human(proj, "export", "disable", "roadmap", "--lock")[0] == 0
     assert run_cli(proj, "export", "disable", "roadmap", agent="bot")[0] == 0
     assert run_cli(proj, "export", "enable", "roadmap", agent="bot")[0] == 3
@@ -241,7 +240,10 @@ def test_the_harness_marker_alone_is_an_agent(proj):
         text=True,
         env=env,
     )
-    assert p.returncode == 3 and "operator" in p.stderr
+    # an agent may lock (B-export-agent-lock): recorded as the agent's, not the operator's
+    assert p.returncode == 0, p.stderr
+    (ev,) = _events(proj, "export.disabled")
+    assert ev["data"]["human"] is False and ev["data"]["locked"] is True
 
 
 # -- events and the fold --------------------------------------------------------------
@@ -419,7 +421,7 @@ def test_template_flag_renders_without_writing(proj):
 
 def test_the_help_topic_and_readme_document_the_new_verbs():
     help_text = (ROOT / "ddflow/templates/prompts/help/export.md").read_text()
-    readme = (ROOT / "README.md").read_text()
+    readme = readme_corpus()
     for needle in (
         "export enable",
         "export disable",

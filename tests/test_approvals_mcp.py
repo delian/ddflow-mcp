@@ -15,6 +15,7 @@ from conftest import run_cli
 from ddflow.api import approvals_answer as AA
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
+from ddflow.infra import harness_identity
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
 from ddflow.surfaces.mcp import Server
@@ -80,6 +81,12 @@ def ask(repo, agent="bot", item="T1"):
 
 def person_approves(repo, ask_id, digest=None):
     row = asks_of(fold(EventLog(repo, "probe").read_all(), strict=False))[ask_id]
+    # `ask` above ran the in-process MCP server, whose handler declares the per-call
+    # `as_agent` on the harness identity (so a shelled-out command inherits the name;
+    # fix-B-ddflow-review-wrong-agent-name). This CLI call is a PERSON's act, not that
+    # agent's shell: withdraw the harness name first, or `approvals approve` refuses the
+    # call as "--agent <name>" instead of the person the `_a_person` fixture set up.
+    harness_identity.declare(repo, "")
     return run_cli(repo, "approvals", "approve", ask_id, "--digest", (digest or row["digest"])[:12])
 
 

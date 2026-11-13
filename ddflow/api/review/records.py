@@ -162,10 +162,12 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     for r in results or []:
         if r.status not in _HEARD:
             continue
-        who = getattr(r, "reviewer", "")
-        fam = (getattr(r, "family", "") or "").strip().lower()
         for fd in r.evidence()["chunk_findings"]:
-            out.append({**fd, "reviewer": who, "family": fam})
+            # `evidence()` names the reviewer on each finding: `_stamp_raised_by` stamps the
+            # one a reviewer raised, and `merge_rerun` carries a peer's (or an old record's
+            # unattributed) finding with its own `reviewer`. Emitted as-is -- a carried
+            # finding must not be relabelled to the result's reviewer.
+            out.append({**fd})
     return out
 
 
@@ -200,8 +202,9 @@ def _finding_rows(results) -> list[dict[str, str]]:
                 "title": f.title,
                 "location": f.location,
                 "detail": f.detail,
-                "reviewer": r.reviewer,
-                "family": r.family,
+                # `review()` and `merge_rerun` name the reviewer on each finding.
+                "reviewer": f.reviewer,
+                "family": f.family,
             }
             for f in r.findings
         )
@@ -408,7 +411,7 @@ def _blocking_findings(
     return blocking, discounted, converged_round
 
 
-def _gate_outcome(
+def _gate_outcome(  # noqa: PLR0913 -- the identifying pass + results + item + cfg + evidence + say
     best,
     results,
     it,
@@ -418,17 +421,20 @@ def _gate_outcome(
     cfg,
     extra_evidence,
     say,
+    *,
     author_model: str = "",
+    kind: str = "",
 ) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
-    evidence; a converged full re-review passes with a `converged` flag on the evidence, and
-    a round whose only findings are a same-family reviewer's (over a clean cross-family
-    verdict) passes with a `same_family_discounted` flag (bug B7dbf432caa).
+    evidence; a converged full or delta re-review passes with a `converged` flag on the
+    evidence, and a round whose only findings are a same-family reviewer's (over a clean
+    cross-family verdict) passes with a `same_family_discounted` flag (bug B7dbf432caa).
 
-    The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a delta or
-    fix round shows only NEW code, so its own finding is a real defect of the change and
-    blocks at any severity -- while a full re-review re-sends the whole diff the author
-    has already seen, so a new below-floor nit does not re-open the gate.
+    The convergence floor (bug Bf797745b5a) applies to a full or delta re-review: only a
+    fix round (or a chunk re-run) shows new code alone, where its own finding is a real
+    defect, so that still blocks at any severity -- while a re-review re-reads the change
+    the author has already seen, so a new below-floor nit does not re-open the gate (bug
+    B-review-delta-rounds-do-not-converge).
     """
     if best.status != RV.REVIEWED:
         return (
@@ -440,6 +446,11 @@ def _gate_outcome(
     # Every heard reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status in _HEARD for f in r.findings]
+    #: Findings `parse` marked malformed (reasoning, not a defect) are recorded but never
+    #: block, so this round is not "failed" on them -- but a pass over ONLY malformed
+    #: reasoning must not read as a clean review (a verdict of "no defect"). The count is
+    #: surfaced on the passed evidence, mirroring `same_family_discounted`.
+    malformed = [f for f in found if getattr(f, "malformed", "")]
     if not found:
         return "passed", extra_evidence
     blocking, discounted, converged_round = _blocking_findings(
@@ -447,11 +458,18 @@ def _gate_outcome(
     )
     if blocking:
         return "failed", extra_evidence
-    # A full re-review must not converge (pass on below-floor findings) while a confirmed
+    # A converged FULL re-review must not pass (on below-floor findings) while a confirmed
     # finding the gate has ever recorded still awaits a later delta round (bug
-    # B-push-failed-review-delta). A same-family confirmed finding is discounted over a
-    # clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
-    if converged_round and _confirmed_unrechecked(it, gate, results, cfg, author_model):
+    # B-push-failed-review-delta): a full round that does not raise it has not re-checked the
+    # fix. A DELTA round IS the re-check -- the findings it does not raise are the ones it
+    # cleared -- so only a full round applies the guard (bug
+    # B-review-delta-rounds-do-not-converge). A same-family confirmed finding is discounted
+    # over a clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
+    if (
+        converged_round
+        and kind != "delta"
+        and _confirmed_unrechecked(it, gate, results, cfg, author_model)
+    ):
         return "failed", extra_evidence
     # A same-family reviewer's finding does not hold the pass open when a cross-family
     # reviewer came back clean: cross-family clean is authoritative (bug B7dbf432caa). The
@@ -465,17 +483,31 @@ def _gate_outcome(
                 "note": "a cross-family reviewer passed clean",
             },
         }
+        if malformed:
+            extra["malformed_findings"] = len(malformed)
         say(
             f"→ {len(discounted)} finding(s) from a same-family/unrecognized reviewer "
             "recorded but not blocking: a cross-family reviewer passed clean"
         )
         return "passed", extra
+    #: Malformed findings are recorded but never blocking; a pass over them (a first round
+    #: whose only output is reasoning) must not read as a clean review, and a below-floor
+    #: converged re-review must not count them as real findings (B-review-finding-is-
+    #: unfinished-reasoning).
     converged = {
-        "findings_below_floor": len(found),
+        "findings_below_floor": len(found) - len(malformed),
         "floor": cfg.review.converge_floor,
     }
+    extra = {**(extra_evidence or {}), "converged": converged}
+    if malformed:
+        extra["malformed_findings"] = len(malformed)
+        say(
+            f"→ {len(malformed)} malformed finding(s) recorded but not blocking "
+            "(reasoning, not a defect)"
+        )
+        return "passed", extra
     say(
         f"→ {converged['findings_below_floor']} finding(s) below [review].converge_floor "
-        f"({converged['floor']}) recorded but not blocking: the full re-review passes (converged)"
+        f"({converged['floor']}) recorded but not blocking: the re-review passes (converged)"
     )
     return "passed", {**(extra_evidence or {}), "converged": converged}

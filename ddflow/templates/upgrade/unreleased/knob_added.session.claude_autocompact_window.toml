@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.claude_autocompact_window"
+new = "0"
+why = "The Claude Code auto-compact window, in tokens, as the alternative to lane rotation: set it to put `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the harness's environment so a long lane agent compacts instead of rotating (D-TE-Q2). 0 leaves the harness default untouched; `ddflow doctor` names it."
+impact = "additive"

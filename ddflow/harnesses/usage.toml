@@ -1,0 +1,35 @@
+# Per-harness usage semantics (ORC-usage-semantics).
+#
+# Usage figures do NOT all read the same way, and a reader that guesses double-counts or
+# under-reads. Each entry declares how one harness FAMILY's figures read, so the readers
+# (ddflow/services/metrics/usage_semantics.py, the usage meters, PM-agent-calls and
+# FOC-cost-metrics) apply the right merge instead of a guess.
+#
+#   mode                  how the figure reads, and therefore how to merge several of them:
+#                         cumulative = a RUNNING TOTAL per thread/session -> merge by MAX
+#                           (summing running totals double-counts); the same rule as
+#                           B-quota-meters (ddflow/services/meters_local.py `_merged`).
+#                         delta       = a PER-EVENT INCREMENT -> SUM.
+#                         final       = one FINAL total -> take it as-is.
+#                         none        = the harness exposes nothing -> read UNAVAILABLE,
+#                           never zero (r-no-silent-cost).
+#   subagents            included | excluded | unknown   (are subagents already counted?)
+#   model_named_per_event  true  = each event names its model (never guess it from one
+#                          figure meant for another).
+#
+# A harness NOT declared here reads as mode = "none" (unavailable), not zero.
+
+[claude-code]        # Claude Code: per-model cost in modelUsage; transcripts merge by MAX
+mode = "cumulative"
+subagents = "included"
+model_named_per_event = true
+
+[codex]              # Codex CLI: running totals per thread in turn.completed (a secondary
+mode = "cumulative"  # source); summing its running totals double-counts
+subagents = "excluded"
+model_named_per_event = false
+
+[opencode]           # the kilo store: per-message token/cost figures, summed
+mode = "delta"
+subagents = "included"
+model_named_per_event = true

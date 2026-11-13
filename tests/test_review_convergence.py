@@ -85,8 +85,7 @@ def test_a_later_rounds_new_medium_finding_does_not_block_the_pass(repo, tmp_pat
     """The regression: the HIGH finding is fixed, and the re-review's NEW MEDIUM nit is
     recorded but does not keep the gate failed -- the round converges. A confirmed finding
     needs a delta round that did not raise it again before a full round may converge
-    (D-failed-review-gate, bug B-push-failed-review-delta), so the fix gets one first; a
-    delta blocks at any severity, which is why that round's own nit fails it."""
+    (D-failed-review-gate, bug B-push-failed-review-delta), so the fix gets one first."""
     _setup(repo, tmp_path, first="HIGH", later="MEDIUM")
 
     first = _review(repo)
@@ -136,8 +135,8 @@ def test_an_unknown_severity_blocks_a_converged_round():
 
 
 def test_the_floor_paragraph_is_only_sent_where_the_floor_applies():
-    """A delta or fix round blocks at any severity, so its prompt must not tell the
-    reviewer to hold back below-floor findings."""
+    """A chunk re-run or fix round blocks at any severity, so its prompt must not tell the
+    reviewer to hold back below-floor findings; a full or delta round does."""
     assert api._floor_lines("") == []
     assert "below HIGH severity" in "".join(api._floor_lines("HIGH"))
 
@@ -183,13 +182,18 @@ def test_a_partial_reviewers_finding_blocks_beside_a_clean_reviewer():
     assert outcome == "failed"
 
 
-def test_the_floor_is_named_only_for_a_full_non_fix_round():
+def test_the_floor_is_named_for_a_full_or_delta_round_but_not_a_fix_round():
+    """Bug B-review-delta-rounds-do-not-converge: a delta re-review converges too, so its
+    prompt names the floor; only a fix round and a chunk re-run keep blocking at any
+    severity."""
     from ddflow.config import Config
 
     cfg = Config.load(None, env={})
     assert api._floor_for(cfg, "full", False) == "HIGH"
-    assert api._floor_for(cfg, "delta", False) == ""
+    assert api._floor_for(cfg, "delta", False) == "HIGH"
     assert api._floor_for(cfg, "full", True) == ""
+    assert api._converges("delta", False) is True
+    assert api._converges("delta", True) is False
 
 
 def test_a_non_converged_round_weighs_every_reviewers_findings():
@@ -260,6 +264,120 @@ def test_a_repeated_untriaged_below_floor_finding_still_blocks(monkeypatch):
         fresh, [fresh], object(), "T1", "critic", True, cfg, None, print
     )
     assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 1
+
+
+def test_a_delta_round_converges_on_a_new_below_floor_finding(monkeypatch):
+    """Bug B-review-delta-rounds-do-not-converge: a DELTA round's new below-floor finding is
+    recorded but does not keep the gate failed. Before the fix `_converges` returned False
+    for a delta, so every new nit re-opened the gate and it never converged."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "review_kind": "delta",
+        "rounds": 1,
+        "chunk_findings": [
+            {
+                "severity": "HIGH",
+                "digest": "abc123",
+                "title": "h",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ],
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    nit = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="new nit", digest="xyz")]
+    )
+    cfg = Config.load(None, env={})
+    outcome, ev = api._gate_outcome(
+        nit, [nit], object(), "T1", "critic", api._converges("delta", False), cfg, None, print
+    )
+    assert outcome == "passed", outcome
+    assert ev["converged"] == {"findings_below_floor": 1, "floor": "HIGH"}, ev
+
+
+def test_a_delta_round_new_high_finding_still_blocks(monkeypatch):
+    """The floor is not a free pass for a delta: a new HIGH finding still fails it."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "review_kind": "delta",
+        "rounds": 1,
+        "chunk_findings": [
+            {
+                "severity": "HIGH",
+                "digest": "abc123",
+                "title": "h",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ],
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad", digest="qqq")])
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        high, [high], object(), "T1", "critic", api._converges("delta", False), cfg, None, print
+    )
+    assert outcome == "failed"
+
+
+def test_a_delta_own_new_finding_does_not_hold_the_pass():
+    """Bug B-review-delta-rounds-do-not-converge: a fresh finding the delta itself raised is
+    not an EARLIER finding, so `_untriaged` does not count it against the pass -- its blocking
+    weight was already judged. A byte-identical re-raise (not ``new``) still holds."""
+    from ddflow.api.review.findings import _untriaged
+
+    kept = [
+        {"digest": "a", "severity": "HIGH"},
+        {"digest": "b", "severity": "LOW"},
+    ]
+    verdicts = {}  # both untriaged
+    # the delta raised "b" itself (new); only "a" (earlier) holds
+    assert _untriaged(kept, gone=set(), carried={}, verdicts=verdicts, new={"b"}) == 1
+    # no new set: both hold (the pre-fix behaviour)
+    assert _untriaged(kept, gone=set(), carried={}, verdicts=verdicts) == 2
+
+
+def test_a_delta_round_a_re_raised_confirmed_finding_still_blocks(monkeypatch):
+    """A delta that re-raises a still-standing confirmed finding byte-identically must still
+    fail: its digest is `known`, which `blocking_findings` keeps above the floor. The delta
+    converges only on NEW below-floor findings, not on an unanswered earlier one."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "review_kind": "delta",
+        "rounds": 1,
+        "chunk_findings": [
+            {
+                "severity": "MEDIUM",
+                "digest": "abc123",
+                "title": "m",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ],
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    repeated = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="abc123", title="m")]
+    )
+    it = NS(triage={"critic": {"abc123": {"verdict": "confirmed"}}})
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], it, "T1", "critic", api._converges("delta", False), cfg, None, print
+    )
+    assert outcome == "failed"
 
 
 def test_a_refuted_prior_finding_is_not_still_standing(monkeypatch):

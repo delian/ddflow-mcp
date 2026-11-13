@@ -31,6 +31,20 @@ def _h_worktree_merged(st: State, ev: Event) -> None:
     it.landed_after = ev.data.get("landed_after", it.landed_after)
 
 
+def _h_merge_reconciled(st: State, ev: Event) -> None:
+    """`merge.reconciled`: the item's merge touched files another item changed since it
+    branched (or overlapped one merged since its base). Complete is refused until the
+    affected tests pass on the reconciled tree, unless `[lease].reconcile_tests = off`."""
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    it.reconciled = {
+        "files": sorted(ev.data.get("files", []) or []),
+        "base": ev.data.get("base", ""),
+        "main": ev.data.get("main", ev.data.get("sha", "")),
+        "at": ev.ts,
+        "unknown": bool(ev.data.get("unknown")),
+    }
+
+
 def _h_port_applied(st: State, ev: Event) -> None:
     it = _item(st, ev, ev.data.get("kind", "task"))
     it.port = dict(ev.data)

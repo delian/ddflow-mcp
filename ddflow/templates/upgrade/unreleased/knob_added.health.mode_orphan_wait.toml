@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.mode_orphan_wait"
+new = '"inherit"'
+why = "DX-health-orphan-wait: the mode for a lane waiting on nothing (the existing nudge ladder), as mode_* for the other finding kinds."
+impact = "additive"

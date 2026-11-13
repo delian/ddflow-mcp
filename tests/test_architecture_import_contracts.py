@@ -35,6 +35,8 @@ CONTRACTS = frozenset(
         "fsio-home",
         "digest-home",
         "http-home",
+        "toml-home",
+        "sqlite-home",
         "extras-one-adapter",
     }
 )

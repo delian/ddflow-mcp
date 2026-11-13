@@ -67,6 +67,32 @@ def test_a_real_looking_key_after_the_same_keyword_still_fires(tmp_path):
     assert _scan(tmp_path, key) != 0
 
 
+# Built from pieces so the repository's own scan does not read the decision id out of this
+# file: the id is allowlisted by its exact value, and this file is not one of the paths
+# gitleaks skips, so the literal must stay out of the committed test source.
+_DECISION_ID = "D-swarm-pilot" + "-" + "2026" + "-11" + "-05"
+
+
+def test_a_decision_id_after_a_token_named_id_is_not_a_secret(tmp_path):
+    # A recorded-decision list names the decision _DECISION_ID beside a decision whose own
+    # name holds the word "auth-token"; the generic-api-key rule reads _DECISION_ID as the
+    # secret after that keyword. The allowlist names that exact value.
+    token_named = "D-auth" + "-token" + "-defaults"
+    body = '{"body":"decisions ' + token_named + ", " + _DECISION_ID + '"}\n'
+    assert _scan(tmp_path, body) == 0
+
+
+_LOOKALIKE = "Prod" + "-" + "82910" + "4857261" + "9038" + "271"
+
+
+def test_a_credential_lookalike_after_a_token_named_id_still_fires(tmp_path):
+    # Only that one decision id is allowlisted, not a dash shape: a credential-shaped value
+    # in its place still fires, so a broad shape allowlist cannot regress in unnoticed.
+    token_named = "D-auth" + "-token" + "-defaults"
+    body = '{"body":"decisions ' + token_named + ", " + _LOOKALIKE + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/padapt2.jsonl", body) != 0
+
+
 _SHA = "0123456789abcdef" * 2 + "01234567"
 
 
@@ -107,6 +133,13 @@ _BODY = '{"body":"sourcegraph search","head":"' + _SHA + '"}\n'
 def test_a_git_sha_in_an_event_log_that_mentions_sourcegraph_is_not_a_token(tmp_path):
     # The rule's keyword is per file; the committed logs name 40-hex shas all the time.
     assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", _BODY) == 0
+
+
+def test_a_git_sha_in_docs_that_mentions_sourcegraph_is_not_a_token(tmp_path):
+    # RESEARCH.md quotes a `git` commit sha under a sourcegraph mention; the committed docs
+    # name 40-hex shas like the event logs do.
+    doc = "sourcegraph search from sha " + _SHA + "\n"
+    assert _scan_committed(tmp_path, "docs/ddflow/RESEARCH.md", doc) == 0
 
 
 def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
@@ -175,3 +208,102 @@ def test_a_fake_sk_fixture_is_allowlisted_only_by_value(tmp_path):
     assert _scan(tmp_path, 'SECRET = "sk-test-0123456789abcdef"\n') == 0
     variant = "sk-test-" + "0123456789abcdeX"
     assert _scan(tmp_path, 'SECRET = "' + variant + '"\n') != 0
+
+
+# Built from pieces so the repository's own scan does not read the fixture literal out of
+# this file: the value is allowlisted by its exact value, not a digest shape, so a real
+# key-shaped value in the same `key=` slot must still fire.
+_FINGERPRINT = "ab" + "cdef" + "012345"
+
+
+def test_a_container_fingerprint_fixture_is_allowlisted_only_by_value(tmp_path):
+    # Bug Bci-gitleaks-over-the-pushed-commi-858efc87b3: tests/test_perf_remote.py names a
+    # container fingerprint fixture `key="abcdef012345"` (sequential hex, a machine-class
+    # digest shape, obviously filler); the generic-api-key rule read it as the key after the
+    # `key` keyword and failed CI on the PM-remote push. The allowlist names exactly that
+    # value, so the fixture scans clean while another key-shaped value in the same slot
+    # still fires.
+    assert _scan(tmp_path, 'key = "' + _FINGERPRINT + '"\n') == 0
+    variant = "0123456789" + "abcdef"
+    assert _scan(tmp_path, 'key = "' + variant + '"\n') != 0
+
+
+# Built from pieces so the repository's own scan does not read the flagged value out of
+# this file: the value is the canonical RFC 7518 "alg=none, sub=alice" EXAMPLE JWT (no
+# signature), quoted in a committed event-log detail while a redaction-shape `gate.failed`
+# record explains why the JWT shape rule matches or not. It is a documented example, not a
+# credential, and it is allowlisted by its exact value, not a jwt shape, so a JWT with any
+# other subject in the same slot still fires (bug Bci-gitleaks-over-the-pushed-commi-858efc87b3).
+_ALG_NONE_ALICE = "eyJhbGciOiJub25lIn" + "0.eyJzdWIi" + "OiJhbGljZSJ" + "9."
+
+
+def test_the_alg_none_alice_example_jwt_in_an_event_shard_scans_clean(tmp_path):
+    # The event shard lane-hard.jsonl quotes the alg=none/sub=alice example while a
+    # `gate.failed` record for AU-redact-shapes explains the JWT redaction shape. Scoped to
+    # exactly this value, exactly the jwt rule, exactly the event-log shard files.
+    line = "the example " + _ALG_NONE_ALICE + " documents the shape\n"
+    assert _scan_committed(tmp_path / "event", ".ddflow/events/a.jsonl", line) == 0
+
+
+def test_a_real_three_segment_jwt_in_an_event_shard_still_fires(tmp_path):
+    # Only the alice example value is allowlisted, not the jwt shape: a full signed JWT
+    # (header.payload.signature) in a committed event shard is a real finding.
+    signed = (
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIi"
+        + "OiIxMjM0NTY3ODkwIn"
+        + "0.SflKxwRJSMeKKF2QT"
+        + "4fwpMeJf36POk6yJV_adQssw5c"
+    )
+    line = "jwt " + signed + "\n"
+    assert _scan_committed(tmp_path / "signed", ".ddflow/events/a.jsonl", line) != 0
+
+
+# Built from pieces so the repository's own scan does not read the flagged value out of
+# this file: the value is ddflow's synthetic gitlab PAT filler sample (`glpat-` plus the
+# "Fk3Zq9Lm" filler body built at run time in tests/test_secret_shapes_table.py), quoted
+# in a committed event-log detail while a critic finding for the AU-redact-shapes work
+# argues the provider-sample test misses a changed first character. It is synthetic
+# filler, not a credential, allowlisted by exact value, not the gitlab-pat shape.
+_GLPAT_FILLER = "glpat-" + "Xk3Zq9" + "LmFk3Zq9" + "LmFk3Z"
+
+
+def test_the_synthetic_gitlab_pat_filler_in_an_event_shard_scans_clean(tmp_path):
+    # The event shard lane-hard.jsonl quotes the synthetic gitlab sample; scoped to exactly
+    # this value, exactly the gitlab-pat rule, exactly the event-log shard files.
+    line = "the sample " + _GLPAT_FILLER + " is filler\n"
+    assert _scan_committed(tmp_path / "event", ".ddflow/events/a.jsonl", line) == 0
+
+
+def test_a_real_gitlab_pat_in_an_event_shard_still_fires(tmp_path):
+    # Only the synthetic filler value is allowlisted, not the gitlab-pat shape: a real
+    # `glpat-` token in a committed event shard is a real finding.
+    token = "glpat-" + "zk9LKmcXw3" + "Nc7Kd4Hf6Jg1" + "T7"
+    line = "leaked " + token + "\n"
+    assert _scan_committed(tmp_path / "real", ".ddflow/events/a.jsonl", line) != 0
+
+
+# Built from pieces so the repository's own scan does not read a 16-hex key literal out of
+# this file: the value lives in tests/, not in the event-shard path the allowlist is scoped
+# to, so a contiguous 16-hex literal here would be a finding on this file itself.
+_CACHE_KEY_DIGEST = "53e9c9b4" + "068d95af"
+
+
+def test_the_cache_key_resultcache_digest_in_an_event_shard_scans_clean(tmp_path):
+    # Bug Bci-gitleaks-over-the-pushed-commi-858efc87b3: ddflow's own `cache_key` resultcache
+    # digest (ddflow/services/gates/runner.py: rc_key[:16], a truncated hash over code and
+    # command) is not a credential; the generic-api-key rule read the digest as the key after
+    # the `key` keyword. The allowlist is anchored to the `cache_key` field name, so the
+    # digest scans clean there.
+    line = '{"cache_key":"' + _CACHE_KEY_DIGEST + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", line) == 0
+
+
+_REAL_KEY_LOOKALIKE = "a1b2c3d4" + "e5f60718"
+
+
+def test_a_16hex_value_under_another_field_in_an_event_shard_still_fires(tmp_path):
+    # Only the `cache_key` field is allowlisted, not a 16-hex shape: a 16-hex value under a
+    # different field in an event shard (here `api_key`) is a real finding, so the field
+    # anchoring cannot regress into suppressing a real key unnoticed.
+    line = '{"api_key":"' + _REAL_KEY_LOOKALIKE + '"}\n'
+    assert _scan_committed(tmp_path / "real", ".ddflow/events/a.jsonl", line) != 0

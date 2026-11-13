@@ -240,3 +240,97 @@ def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
         )  # fmt: skip
         assert p.returncode != 0, p.stdout
         assert "--detach" in p.stderr and "run no review" in p.stderr, p.stderr
+
+
+def test_detach_note_names_a_stop_command_that_reaches_the_review():
+    """`--detach` names how to STOP the review, not just a pid to `kill`. The pid it prints
+    is the setsid SESSION leader (a `/bin/sh -c` wrapper): a plain `kill <pid>` kills only
+    that wrapper and leaves the python review running, so the next `ddflow review` is
+    refused with `already being reviewed (pid <review>)`. The note must name the whole
+    process group the split detached into (bug B-review-detach-prints-launcher-pid)."""
+    from ddflow.surfaces.commands import review as CR
+
+    note = CR._detach_note(2618834, "/tmp/review.log")
+    assert "review detached" in note
+    # the stop command kills the group (negative pid), which is what `setsid` created: the
+    # printed pid is the session leader, and only the group kill reaches the review itself.
+    assert "kill -TERM -2618834" in note
+    assert "/tmp/review.log" in note
+
+
+def test_detach_emits_a_stop_command_in_the_prose_and_the_data(monkeypatch):
+    """The real `--detach` flow, not just `_detach_note`: the prose AND the structured record
+    both carry `kill -TERM -<pid>` (bug B-review-detach-prints-launcher-pid). A consumer that
+    reads the `pid` field and runs plain `kill` on it still stops only the `/bin/sh -c`
+    wrapper, so the stop command has to travel with the record, not only in a sentence."""
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import review as CR
+
+    captured: dict = {}
+
+    def fake_detach(repo, item, command, *, cwd="", log_file="", agent=""):
+        return SimpleNamespace(
+            exit=0, data={"id": "j", "pid": 2618834, "log": "/tmp/review.log"}, reason=""
+        )
+
+    monkeypatch.setattr(CR.AJ, "job_detach", fake_detach)
+
+    def out(human, data=None):
+        captured.update(human=human, data=data)
+
+    a = SimpleNamespace(_argv=["--detach", "T1", "--gate", "critic"], id=["T1"])
+    c = SimpleNamespace(
+        repo=Path("."),
+        called_from=Path("."),
+        log=SimpleNamespace(agent_id="role"),
+        out=out,
+    )
+    assert CR._detach(a, c) == CR.OK
+    assert "kill -TERM -2618834" in captured["human"]
+    assert captured["data"]["stop"] == "kill -TERM -2618834"
+
+
+def test_detach_stop_command_kills_the_review_child_not_only_the_leader(tmp_path):
+    """The stop command `_detach_stop` returns must kill the review CHILD, not only the
+    group leader (bug B-review-detach-prints-launcher-pid). The launcher's pid is a
+    `/bin/sh -c` session leader and the review (python) is its child: a plain
+    `kill <leader>` stops only the wrapper and leaves the review running, so the next review
+    is refused 'already being reviewed'. Spawn that exact shape and assert BOTH die."""
+    from ddflow.surfaces.commands import review as CR
+
+    childpid = tmp_path / "child.pid"
+    leader = subprocess.Popen(
+        ["setsid", "/bin/sh", "-c", f"sleep 60 & echo $! > '{childpid}'; wait"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    review = -1
+    try:
+        # `>` creates the file before `echo` writes it, so poll until it holds the pid (not
+        # merely until it exists): an empty file would `int()` to ValueError.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            raw = childpid.read_text() if childpid.exists() else ""
+            if raw.strip().isdigit():
+                review = int(raw)
+                break
+            time.sleep(0.05)
+        assert review > 0, "the review child never started"
+        assert _alive(review), "the review child was not running"
+        subprocess.run(["bash", "-c", CR._detach_stop(leader.pid)], check=True, timeout=30)
+        leader.wait(timeout=5)
+        assert leader.returncode == -signal.SIGTERM
+        # A plain `kill <leader>` would stop only the wrapper; the group kill must also
+        # reach the review child, which proves it is a group kill and not the bug's shape.
+        # The child is reaped by init after its parent dies, so poll rather than assert at
+        # once: the leader exiting first is not the child outliving the group kill.
+        deadline = time.monotonic() + 5
+        while _alive(review) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert _alive(review) is False
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(leader.pid, signal.SIGKILL)
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(-leader.pid, signal.SIGKILL)

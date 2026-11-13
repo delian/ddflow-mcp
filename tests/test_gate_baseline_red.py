@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -119,6 +120,41 @@ def test_a_failure_the_base_does_not_show_stays_failed(repo) -> None:
     body = json.loads(out)
     assert code == 1 and body["outcome"] == "failed", body
     assert body["evidence"]["baseline"]["red"] is False
+
+
+def test_a_new_failure_reason_names_the_commit_it_compared_with(repo) -> None:
+    """B7c0121c0c4: "main" is a moving branch -- by the time the reason is read the live tip
+    has changed, so `not failing on main` names a commit the branch has left behind and a
+    reader cannot tell which commit was actually tested. The reason must name the commit
+    (`base_sha`) it measured, not only the branch name."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo, base_healthy=True)  # main passes test_a
+    base_sha = _sha(repo)
+    (repo / "healthy").unlink()  # the item's tree breaks what the base has: a new failure
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [f"1 {'failed' if failed else 'passed'} in 0.1s"],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ev["baseline"]["base_sha"] == base_sha
+    assert f"not failing on main ({base_sha[:8]})" in why, why
 
 
 def test_unattributable_failures_stay_failed(repo) -> None:
@@ -481,6 +517,59 @@ def test_a_new_offender_in_an_already_red_test_is_new_not_baseline_red(repo) -> 
     assert ID in found["new_failures"]
 
 
+def test_a_new_cause_hidden_by_a_truncated_failure_text_is_not_baseline_red(repo) -> None:
+    """B-baseline-red-hides-new-cause: a FAILED reason was cut to ``LINE_CHARS`` chars when the
+    gate stored it, so a ratchet's long message displayed byte-identically on the branch and
+    the base while the offending file/site differed below the cut -- baseline-red hid the
+    branch's new offender (which turns red again once the base is fixed). The reason is now kept
+    WHOLE, so a different full reason is a new offender."""
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # test_a fails on the base too
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services import flakes as FK
+    from ddflow.services.flakes import LINE_CHARS
+
+    # Same display prefix each side, different cause past the cut.
+    branch_full = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"
+    base_full = "ratchet grew:" + "x" * LINE_CHARS + "hookio.py"
+    assert branch_full[:LINE_CHARS] == base_full[:LINE_CHARS]
+    # The gate keeps the WHOLE reason, so the baseline comparison sees the difference.
+    ev: dict = FK.failure_evidence(f"FAILED {ID} - {branch_full}\n1 failed in 0.1s\n")
+    assert ev["failed_reasons"][ID] == branch_full  # not cut to LINE_CHARS
+
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_full},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ID in why
+    found = ev["baseline"]
+    assert found["red"] is False and found["still_failing"] == [] and ID in found["different"]
+    assert ID in found["new_failures"]
+
+
 def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     """The counterpart: a test whose failure text is byte-identical on the base stays
     baseline-red -- the text comparison must not turn a timing flake into a new offender."""
@@ -517,6 +606,128 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
 
     outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
     assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
+def test_a_red_id_whose_failure_text_is_absent_on_either_side_is_uncompared(repo) -> None:
+    """B0f41a2f1d6 tightening: when the branch run left NO failure text for a red id
+    (`failed_reasons` lacks it), `_differs` cannot claim "not different" is a match, so
+    `_tally` marks the id uncompared -- red stays true (the id did fail on the base) but the
+    whole-vs-whole comparison never happened. An auto-accept that rests on that comparison
+    (a full selection whose reach cannot be told) must treat the id as not compared."""
+    from ddflow.services.gates import baseline_red as BR
+
+    known = {ID: True}  # measured: it fails on the base too
+    branch_missing = BR._tally([ID], known, before={}, onbase={ID: "assert 1 == 2"})
+    assert branch_missing["red"] is True  # no DIFFERENCE was detected...
+    assert branch_missing["uncompared"] == [ID]  # ...only because the branch text was absent
+    assert branch_missing["different"] == [] and ID in branch_missing["still_failing"]
+    # The symmetric side: the base measured it failing but kept no reason text of its own.
+    base_missing = BR._tally([ID], known, before={ID: "assert 1 == 2"}, onbase={})
+    assert base_missing["red"] is True and base_missing["uncompared"] == [ID]
+
+
+def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
+    """B-baseline-red-hides-new-cause legacy sensitive: a base entry cached BEFORE the reason was
+    kept whole stored it cut to ``LINE_CHARS``. That cut text cannot say whether the base's
+    whole reason agreed with the branch past the cut, so the id is RE-MEASURED on the base (the
+    current code stores the whole reason) instead of being trusted either way."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.flakes import LINE_CHARS
+    from ddflow.services.gates import baseline as BL
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"  # the branch's whole reason
+    cut = whole[:LINE_CHARS]  # what the pre-fix flakes.py cached: cut, past-the-cap cause lost
+    assert len(cut) == LINE_CHARS
+    sha = _sha(repo, "main")
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    # A legacy entry already measured before the reason was kept whole: the pre-marker format
+    # is a 3-element ``[failed, measured_at, text]`` list cut to ``LINE_CHARS`` with no WHOLE
+    # marker. Written raw: ``cache_store`` now stamps the marker, so it cannot fake one.
+    path = BL._path(repo, sha, gdef.command)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"sha": sha, "ids": {ID: [True, time.time(), cut]}}))
+
+    measured = []
+
+    def run(g, where=None):
+        measured.append(where)
+        # The base re-measured with the CURRENT code keeps the WHOLE reason.
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: whole},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert measured, "a legacy cut entry is re-measured, never guessed"
+    assert outcome == "partial", why  # the base's whole reason equals the branch's: same cause
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
+def test_a_whole_cause_of_exactly_line_chars_is_not_remeasured(repo) -> None:
+    """B60e9e09308: a WHOLE failure text that happens to be exactly ``LINE_CHARS`` long is a
+    genuine whole reason, not a legacy cut-to-that-length; its WHOLE marker keeps it cached, so
+    it is NOT re-run on the base every gate execution."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.flakes import LINE_CHARS
+    from ddflow.services.gates import baseline as BL
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    whole = "ratchet grew:" + "x" * (LINE_CHARS - len("ratchet grew:"))  # whole text AT the cap
+    assert len(whole) == LINE_CHARS
+    sha = _sha(repo, "main")
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    BL.cache_store(repo, sha, {ID: True}, 3600, gdef.command, {ID: whole})
+
+    measured = []
+
+    def run(g, where=None):
+        measured.append(where)
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: whole},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert not measured, "a whole 240-char reason is trusted, never re-measured"
+    assert outcome == "partial", why  # the same whole reason on the base: still baseline-red
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
@@ -582,6 +793,64 @@ def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -
     outcome, why = GB.apply(repo, cfg, "w", it, "unit_tests", gdef, "failed", ev, None, False)
     assert outcome == "failed" and "new failure" not in why
     assert "new_failures" not in ev["baseline"] and not ev["baseline"].get("unmeasured")
+
+
+def test_a_baseline_red_fix_task_names_the_source_files_the_tests_exercise(
+    repo, monkeypatch
+) -> None:
+    """B83543b98f4: `_file` passed no globs, so the baseline-red bug's fix task inherited the
+    finding item's own (test) globs instead of the source files the failing tests exercise --
+    the fix edits source files its own task globs never named. The filed globs must name the
+    source the failing test imports."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.core import outcome as O
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # the fake pytest fails ID on the base too
+    (repo / "ddflow").mkdir()
+    (repo / "ddflow" / "mod.py").write_text("VALUE = 1\n")
+    (repo / "tests" / "test_x.py").write_text("import ddflow.mod\n\ndef test_a():\n    pass\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "add exercised source"], check=True)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        GB,
+        "bug_found",
+        lambda *a, **k: captured.update(k) or O.refused("bug.found", "dup"),
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    outcome, why = GB.apply(
+        repo,
+        cfg,
+        "worker",
+        it,
+        "unit_tests",
+        gdef,
+        "failed",
+        ev,
+        lambda g, where=None: (
+            "failed",
+            {"exit": 1, "failed_tests": [ID], "summary": ["1 failed in 0.1s"]},
+        ),
+        False,
+    )
+    assert outcome == "partial", why
+    globs = captured.get("globs") or []
+    assert "ddflow/mod.py" in globs, globs
+    assert "tests/test_x.py" in globs, globs
 
 
 def _sha(repo: Path, ref: str = "HEAD") -> str:

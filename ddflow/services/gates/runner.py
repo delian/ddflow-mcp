@@ -18,11 +18,14 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from .. import resultcache as RC
 from .. import suitelock as SL
+from .. import tree_bin as TB
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
+from ..perf import testtimes
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
 from .evidence import diff_stat, digest, tree_identity
@@ -93,15 +96,51 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
     return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
+#: Command names that run NO test suite at all: POSIX no-ops and trivial shell builtins. A
+#: `unit_tests` gate whose command is one of these must not be read as a full suite
+#: (B-suite-lock-trivial-foreign-gate): `ddflow config.toml` documents the real suite
+#: spellings (`npm test`, `cargo test`, `go test ./...`, `make check`), which keep the lock.
+#: `test` and `[` are deliberately NOT here: a real suite binary named `test` (./test) must
+#: keep the lock, so the ambiguous names over-lock (the safe direction).
+_NO_SUITE = frozenset({"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit"})
+
+#: Any of these makes the line a compound (at least two jobs), never a lone no-op.
+_COMPOUND = ("&&", "||", "|", ";", "&", "$(", "<(", ">(", "\n", "`")
+
+#: Shell words that lead a command to another: walk them (and their flag args) off.
+_PREFIX = ("uv", "run", "env", "command", "builtin", "exec")
+
+
+def _is_trivial(command: str) -> bool:
+    """Is ``command`` a known non-suite no-op (`true`, `false`, `:`, `echo ...`)? A no-op names
+    no test file, so the naive whole-suite read would queue it on the lock although it runs
+    nothing but a shell builtin.
+
+    The WHOLE command must be the no-op: any shell compound or substitution
+    (`true; make check`, `true &&pytest`, `true <(pytest)`) still runs a suite, so it is not
+    trivial."""
+    if any(c in command for c in _COMPOUND):
+        return False
+    try:
+        words = shlex.split(command, comments=True, posix=True)
+    except ValueError:
+        return False
+    while words and (words[0] in _PREFIX or "=" in words[0] or words[0].startswith("-")):
+        words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off, plus its flag args
+    if not words:
+        return True  # a lone assignment (`A=B`) runs no command at all
+    return words[0].rsplit("/", 1)[-1] in _NO_SUITE
+
+
 def _runs_whole_suite(gdef: GateDef) -> bool:
     """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
-    command names test files (a narrowed run) or is a `ddflow ci run`, which takes the lock
-    itself (taking it here too would wait on ourselves)."""
-    return (
-        gdef.id == "unit_tests"
-        and not _runs_ddflow_ci(gdef.command)
-        and WK.count_test_files(gdef.command) is None
-    )
+    command names test files (a narrowed run), is a known no-op (`true`), or is a `ddflow ci
+    run`, which takes the lock itself (taking it here too would wait on ourselves)."""
+    if gdef.id != "unit_tests" or _runs_ddflow_ci(gdef.command):
+        return False
+    if WK.count_test_files(gdef.command) is not None:
+        return False
+    return not _is_trivial(gdef.command)
 
 
 _SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
@@ -197,10 +236,23 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     holds = _runs_whole_suite(gdef)
     queued_at = time.monotonic()
     who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
-    with SL.hold(cfg, who) if holds else nullcontext():
+    with SL.hold(cfg, who, scope=gdef.id) if holds else nullcontext():
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
+        if timeout_s > 0 and _runs_ddflow_ci(command):
+            # A `ddflow ci run` command queues for the host suite lock ITSELF (this runner
+            # never takes it: `_runs_whole_suite` leaves `ci` alone, and taking it here too
+            # would wait on ourselves) and budgets the run after the wait alone, printing its
+            # queue time as `ddflow-suite-wait` (B4f35548c0a). The queue wait is bounded by
+            # `[ci].suite_wait_s` and never comes off the run budget, so the wrapping gate
+            # timeout must ADD that wait to the budget it enforces: a run that queued near
+            # the gate's own limit was killed at 3600s before it started, and
+            # `[ci].suite_wait_s`/`DDFLOW_CI_SUITE_WAIT_S` was unreachable past that
+            # (B83c7a5eb50). A `0`/negative budget stays unlimited; the wait is clamped to
+            # 0 like the `SL.hold` consumer that applies it does, so a negative
+            # [ci].suite_wait_s cannot SHRINK the run budget it is meant to extend.
+            timeout_s += max(0, int(cfg.ci.suite_wait_s))
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
@@ -211,6 +263,40 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
             tick_s=tick_s if ticking else 0,
         )
     return p, command, auto, lock_wait
+
+
+def _run_evidence(
+    gdef: GateDef, cwd: Path, p: Any, out: str, command: str, auto: Any, lock_wait: Any
+) -> dict[str, Any]:
+    """The evidence of a command that RAN: what it was, how long it took, which tree it looked at."""
+    ev = {
+        "command": gdef.command,
+        **({"command_run": command, "workers": {"n": auto.n, **auto.inputs}} if auto else {}),
+        **command_layer_evidence(gdef, cwd),
+        "exit": p.code,
+        "elapsed_s": round(p.elapsed_s, 1),
+        **_cost_evidence(p),
+        **output_evidence(out),
+        # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
+        **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
+        # How much of elapsed_s was queueing for the host suite lock or an admission slot,
+        # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
+        **_wait_evidence(gdef, p, out, lock_wait),
+        # WHICH tree this is evidence about. Without it "the tests passed" names
+        # nothing: a concurrent agent can move the tree underneath a running probe, and
+        # one agent editing between two gates makes the earlier gate's evidence describe
+        # source that no longer exists.
+        # One identity: the commit plus the tree's exact content, so `complete` can compare
+        # it with the branch that landed once the worktree is gone (`tree_identity`).
+        "tree_sha": tree_identity(cwd),
+        # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
+        # opaque; this answers "how big was the change", which is what makes a recorded
+        # pass auditable after the fact. A review gate that passed over 4,000 changed
+        # lines in two minutes is a different claim from one that passed over 12, and
+        # without this the log cannot tell them apart.
+        "diff_stat": diff_stat(cwd),
+    }
+    return ev
 
 
 def run_command_gate(
@@ -246,6 +332,15 @@ def run_command_gate(
     if not cwd.exists():
         return "unavailable", {"reason": f"working directory {cwd} does not exist"}
 
+    conf = cfg if cfg is not None else Config.load(cwd)
+    rc_key = RC.key(
+        gdef.id, f"{gdef.command}\0timeout={gdef.timeout_s}", cwd, conf
+    )  # a shorter limit may fail
+    if (hit := RC.lookup(cwd, rc_key, conf)) is not None:  # same tree, command, environment
+        return hit["outcome"], {
+            **RC.hit_evidence(hit, rc_key or ""),
+            "tree_sha": tree_identity(cwd),
+        }
     # No bytecode cache in either direction. CPython invalidates a `.pyc` on the
     # source's mtime and SIZE -- and an agent editing in a loop produces same-second,
     # same-size edits by accident, which leaves a stale cache that looks valid. The run
@@ -278,6 +373,10 @@ def run_command_gate(
             **gdef.env,
             **(env or {}),
         }
+        # A gate command that runs `ddflow ...` must get THIS tree's code, not the primary
+        # checkout's on PATH: the shim only shadows the `ddflow` name, so the branch's gate
+        # logic (runner, baseline, ci_marker) is what its own gate runs exercise (B627636de73).
+        full_env = TB.with_shim_on_path(full_env, cwd)
         # A command gate IS a shell command line the operator wrote in gates.toml, run by the
         # one CommandRunner: it checks the executable is installed BEFORE running (under
         # `shell=True` a missing binary exits 127, indistinguishable from a suite that chose
@@ -298,33 +397,7 @@ def run_command_gate(
     if not p.ran:
         return "unavailable", _unavailable_evidence(gdef, p)
     out = p.output
-    ev = {
-        "command": gdef.command,
-        **({"command_run": command, "workers": {"n": auto.n, **auto.inputs}} if auto else {}),
-        **command_layer_evidence(gdef, cwd),
-        "exit": p.code,
-        "elapsed_s": round(p.elapsed_s, 1),
-        **_cost_evidence(p),
-        **output_evidence(out),
-        # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
-        **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
-        # How much of elapsed_s was queueing for the host suite lock or an admission slot,
-        # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
-        **_wait_evidence(gdef, p, out, lock_wait),
-        # WHICH tree this is evidence about. Without it "the tests passed" names
-        # nothing: a concurrent agent can move the tree underneath a running probe, and
-        # one agent editing between two gates makes the earlier gate's evidence describe
-        # source that no longer exists.
-        # One identity: the commit plus the tree's exact content, so `complete` can compare
-        # it with the branch that landed once the worktree is gone (`tree_identity`).
-        "tree_sha": tree_identity(cwd),
-        # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
-        # opaque; this answers "how big was the change", which is what makes a recorded
-        # pass auditable after the fact. A review gate that passed over 4,000 changed
-        # lines in two minutes is a different claim from one that passed over 12, and
-        # without this the log cannot tell them apart.
-        "diff_stat": diff_stat(cwd),
-    }
+    ev = _run_evidence(gdef, cwd, p, out, command, auto, lock_wait)
     if keep_output is not None:
         # The full output the digest is over, so the digest can be checked. A log that
         # cannot be written is said so in the evidence; it does not change the outcome.
@@ -342,22 +415,31 @@ def run_command_gate(
         # passing here, which is what the gate asks, and an unavailable already says so.
         outcome = _account_for_drift(gdef, cwd, p.code, out, ev)
     _keep_cut_failing_ids(gdef, cwd, out, ev)
+    if rc_key:
+        ev["cache_key"] = rc_key[:16]  # which code, command and environment this result is about
+    RC.store(cwd, rc_key, outcome, ev, conf)  # only passed and failed are kept
     return outcome, ev
 
 
 def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]) -> None:
-    """Keep a unit_tests full-suite failure's WHOLE failing list aside for the run's own tree
-    (the evidence caps it to a sample): ``gate_baseline`` reads it to measure the failure on
-    the base, so ``[gates].baseline_red_auto`` can accept it (B69d1c0ff00). A run that could
-    not be kept is dropped: the outcome it follows is unchanged."""
-    if gdef.id != "unit_tests" or not ev.get("failed_tests_more"):
+    """Keep a ci / unit_tests full-suite failure's WHOLE failing list aside as a committed blob,
+    linked from the evidence as ``failing_ids`` (the evidence caps the list to a sample):
+    ``gate_baseline`` reads it back to measure the failure on the base, so
+    ``[gates].baseline_red_auto`` can accept it, and a teammate reads all ids from the record
+    (B86370c6924, after B69d1c0ff00). A run that could not be kept is dropped: the outcome it
+    follows is unchanged."""
+    if gdef.id not in ("ci", "unit_tests") or not ev.get("failed_tests_more"):
         return
     from .baseline import write_full  # deferred, as run_log_writer does
 
     try:
-        write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+        stub = write_full(
+            W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)]
+        )
     except (OSError, ValueError, KeyError):
         return
+    if stub:
+        ev["failing_ids"] = stub
 
 
 class Classified(NamedTuple):
@@ -470,3 +552,17 @@ _SHELL_META = cmdrunner.SHELL_META
 _SHELL_BUILTINS = cmdrunner.SHELL_WORDS
 _missing_executable = cmdrunner.executable_missing
 _looks_like_not_found = cmdrunner.looks_like_not_found
+
+
+def capture_test_durations(repo, item_id: str, gate: str, xml_report: str, workers: int) -> dict:
+    """PM-test-durations: parse a gate's junit report, fold the per-test durations into the
+    local ring, and return only the ROLLUP (count, top slowest, per-file totals, skew,
+    serial-equivalent seconds, critical-path floor) to ride the gate's evidence. The runner's
+    own pytest/junit output feeds this; other stacks plug the same parse_junit port. A report
+    that cannot be parsed is ``{"unavailable": True}``, never zero."""
+    try:
+        cases = testtimes.parse_junit(xml_report)
+        testtimes.fold(cases, repo, gate)
+        return testtimes.rollup(cases, workers)
+    except (OSError, ValueError, SyntaxError):  # ElementTree.ParseError is a SyntaxError
+        return {"unavailable": True, "item": item_id, "gate": gate}

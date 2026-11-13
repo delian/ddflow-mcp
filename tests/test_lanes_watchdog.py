@@ -86,6 +86,20 @@ def test_a_session_ended_mid_gate_names_that_gate():
     assert "critic" in lane.remedy
 
 
+def test_a_corpse_names_its_own_gate_not_the_takeover_lanes():
+    """A corpse lane names the gate IT started, not the gate the lane that later took
+    over its item started (B963975258d: _mid_gates keyed by item collides)."""
+    g = Log()
+    g.task("I", "i.py")
+    g.claim("lane-gate", "I", T0, "i.py")
+    g.add("gate.started", "I", "lane-gate", T0 + 500, gate="unit_tests")
+    g.claim("lane-take", "I", T0 + 600, "i.py")  # recover re-lease: a second lane takes I
+    g.add("gate.started", "I", "lane-take", T0 + 700, gate="ci")
+    lanes = {lane.name: lane for lane in _ledger(g)}
+    assert lanes["lane-gate"].mid_gate == "unit_tests"
+    assert lanes["lane-take"].mid_gate == "ci"
+
+
 def test_the_sheet_render_attaches_the_remedy_to_a_stopped_lane():
     g = Log()
     g.task("H2", "h2.py")
@@ -148,6 +162,26 @@ def test_six_silent_deaths_are_all_losslessly_recovered():
     # Losslessness: an auto action keeps the work, a stay never deletes it either.
     for d in got:
         assert "kept" in d.rationale or "nothing is lost" in d.rationale or d.effect == STAY
+
+
+def test_recover_auto_a_present_false_adopted_beats_the_adopted_items_fallback():
+    """A row's own ``adopted`` wins where both exist, even when it is False: a lane
+    measured as not-adopted is refused auto-resume rather than silently borrowed."""
+    rows = [
+        _row("T1", "lane-not-adopted", True, adopted=False),  # own False -> not adopted
+        _row("T2", "lane-borrowed", True),  # no own flag -> borrows the fallback True
+    ]
+    got = decisions(rows, adopted_items={"T1": True, "T2": True})
+    assert got[0].effect == AUTO_RESUME  # False won: salvageable and not adopted
+    assert got[1].effect == STAY  # fallback adopted: left alone
+
+
+def test_recover_auto_adopted_items_fills_only_a_missing_flag():
+    """A row with no ``adopted`` key borrows the caller's answer, instead of default-TRUE."""
+    rows = [_row("T1", "lane-a", True), _row("T2", "lane-b", True)]
+    got = decisions(rows, adopted_items={"T1": True, "T2": False})
+    assert got[0].effect == STAY  # inherited adopted
+    assert got[1].effect == AUTO_RESUME  # inherited not-adopted -> salvageable work resumes
 
 
 def test_recover_auto_decisions_serialise_every_verdict():

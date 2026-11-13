@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASES = ROOT / "tests" / "fixtures" / "releases"
@@ -106,7 +107,7 @@ def _section(text: str, heading: str) -> str:
 
 
 def test_readme_explains_the_upgrade_and_both_backup_options() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = readme_corpus()
     whole = _section(readme, "Upgrading a project: the whole picture")
     for needle in ("--plan", "--apply", "--confirm", "--restore", "git revert", "merge=union"):
         assert needle in whole, needle
@@ -123,7 +124,7 @@ def test_recovery_doc_points_at_the_upgrade_path() -> None:
 
 
 def test_upgrade_docs_and_templates_name_no_repository_of_this_project() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = readme_corpus()
     texts = [
         _section(readme, "Upgrading a project: the whole picture"),
         _section(readme, "Applying an upgrade"),

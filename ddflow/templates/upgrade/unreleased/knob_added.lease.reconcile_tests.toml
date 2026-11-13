@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.reconcile_tests"
+new = "\"affected\""
+why = "How far the reconcile-at-merge guard runs when a landing touched files another item changed since it forked: 'affected' (the tests the reconciled files select), 'full' (the whole suite) or 'off'. (D-lease-hold-limit-r2, D-gate-economy-r3.)"
+impact = "additive"

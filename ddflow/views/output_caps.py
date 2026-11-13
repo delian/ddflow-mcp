@@ -141,12 +141,70 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
 
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
-    names keep the lane, and its answer (one item and a note) pages no list."""
-    base, _, lane = command.partition(" --lane ")
+    names keep the lane, and its answer (one item and a note) pages no list. ``next --state S``
+    is `next` listing one state: the calls it names keep the state, and its `items` list pages."""
+    base, _, rest = command.partition(" --state ")
+    if rest:
+        cli, tool, narrow, _paged = COMMANDS[base]
+        state, kind, phase, only, tags = _split_state(rest)
+        c_args, t_args = [f"--state {shlex.quote(state)}"], [f"state={shlex.quote(state)}"]
+        for flag, val in (("kind", kind), ("phase", phase)):
+            if val:
+                c_args.append(f"--{flag} {shlex.quote(val)}")
+                t_args.append(f"{flag}={shlex.quote(val)}")
+        if only:
+            c_args.append("--phase-only")
+            t_args.append("phase_only=true")
+        if tags:
+            for t in tags:
+                c_args.append(f"--tag {shlex.quote(t)}")
+            t_args.append("tag=" + ",".join(tags))
+        return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
+    base, _, rest = command.partition(" --lane ")
     cli, tool, narrow, paged = COMMANDS[base]
-    if not lane:
+    if not rest:
         return cli, tool, narrow, paged
-    return f"{cli} --lane {shlex.quote(lane)}", f"{tool} lane={lane}", narrow, ""
+    # `next --lane L [--kind K] [--phase P]`: the rerun keeps the whole selection.
+    lane, kind, phase, only = _split_lane(rest)
+    c_args, t_args = [f"--lane {shlex.quote(lane)}"], [f"lane={shlex.quote(lane)}"]
+    for flag, val in (("kind", kind), ("phase", phase)):
+        if val:
+            c_args.append(f"--{flag} {shlex.quote(val)}")
+            t_args.append(f"{flag}={shlex.quote(val)}")
+    if only:
+        c_args.append("--phase-only")
+        t_args.append("phase_only=true")
+    return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
+
+
+def _split_state(rest: str) -> tuple[str, str, str, bool, tuple[str, ...]]:
+    """``'running --kind K --phase P --phase-only --tag T'`` -> (running, K, P, True, (T,));
+    all but the state value optional."""
+
+    tags = tuple(rest.split(" --tag ")[1:])
+    rest = rest.split(" --tag ", maxsplit=1)[0]
+    rest, only, _ = rest.partition(" --phase-only")
+    rest, _, phase = rest.partition(" --phase ")
+    state, _, kind = rest.partition(" --kind ")
+    return state, kind, phase, bool(only), tags
+
+
+def _split_lane(rest: str) -> tuple[str, str, str, bool]:
+    """``'L --kind K --phase P --phase-only'`` -> (L, K, P, True); all but L optional."""
+    rest, only, _ = rest.partition(" --phase-only")
+    rest, _, phase = rest.partition(" --phase ")
+    lane, _, kind = rest.partition(" --kind ")
+    return lane, kind, phase, bool(only)
+
+
+def lane_token(lane: str, kind: str = "", phase: str = "", phase_only: bool = False) -> str:
+    """The ``command`` token `apply` reads for `next --lane`: carries kind and phase."""
+    return (
+        f"next --lane {lane}"
+        + (f" --kind {kind}" if kind else "")
+        + (f" --phase {phase}" if phase else "")
+        + (" --phase-only" if phase_only else "")
+    )
 
 
 def _page_calls(command: str, row: int) -> tuple[str, str]:
@@ -344,6 +402,12 @@ def _conf(repo: Any, cfg: Any) -> Any:
     return cfg if cfg is not None else Config.load(repo)
 
 
+def _wire_budget(chars: int, wire: bool, data: dict[str, Any]) -> int:
+    """Halved for a `--json` body that carries prose beside its rows (`board`); one without
+    a `text` (`status`) is held to the whole budget, as the MCP call is."""
+    return max(1, chars // 2) if wire and chars and data.get("text") else chars
+
+
 def apply(
     repo: Any,
     out: Outcome,
@@ -368,7 +432,7 @@ def apply(
     rows, chars = _limits(cfg)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
-    budget = max(1, chars // 2) if wire and chars else chars
+    budget = _wire_budget(chars, wire, out.data)
     start = max(0, int(cursor or 0)) if _entry(command)[3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(

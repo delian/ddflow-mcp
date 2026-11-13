@@ -24,7 +24,7 @@ edits no shared file (ADP-modular-registry).
   `real` factory (monkeypatch to adapter), an optional `fake` factory and the `cases`; the
   one generic test runs the same cases against the adapter and its fake.
 - **Baseline**: a port that has no fake yet has one file in
-  `tests/ports_without_fake/`. The set only shrinks.
+  `tests/guard_baselines/ports_without_fake/`. The set only shrinks.
 - `adapters` is the bottom layer: it imports no other ddflow layer, and every layer may
   import it. Config for ddflow itself stays TOML only.
 

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/lanerotate.py:HANDOFF_NOTE_CHARS" = 'the bounded size of the hand-off note written into the item evidence (ids and pointers only), not a workload setting'

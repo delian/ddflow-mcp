@@ -1,0 +1,5 @@
+[exempt]
+"ddflow/config_sections/session.py:CLAUDE_WINDOW_OFF" = 'the Claude Code auto-compact window sentinel the vendor docs spell (0 = harness default) named in the claude_autocompact_window knob doc; a validation bound, not a workload setting'
+"ddflow/config_sections/session.py:CLAUDE_WINDOW_MIN" = 'the Claude Code auto-compact window range the vendor docs spell (lower bound) named in the claude_autocompact_window knob doc; a validation bound, not a workload setting'
+"ddflow/config_sections/session.py:CLAUDE_WINDOW_MAX" = 'the Claude Code auto-compact window range the vendor docs spell (upper bound) named in the claude_autocompact_window knob doc; a validation bound, not a workload setting'
+"ddflow/config_sections/session.py:CLAUDE_PCT_MAX" = 'a whole-number percentage is at most 100 (the claude_autocompact_pct_override check); a validation bound, not a workload setting'

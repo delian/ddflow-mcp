@@ -1,3 +1,0 @@
-[knob]
-"ddflow/infra/forge.py:FEEDBACK_MAX" = 'forge.feedback_max'
-"ddflow/infra/forge.py:THREAD_BODY_MAX" = 'forge.thread_body_max'

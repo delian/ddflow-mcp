@@ -14,7 +14,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.digest import content_digest
 from ...core.model import REVIEW, fold
-from ...core.schedule import needs_tree
+from ...core.schedule import needs_tree, stale_package_globs
 from ...infra import worktree as W
 from ...services import approval as AP
 from ...services import choices as CHO
@@ -170,9 +170,50 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     }  # fmt: skip
     force = force and not _agent_marker_of(agent)  # B49fa10bbb1: an agent's route is --approval
     out = _claim_once(repo, item, note=note, force=force, **kw)
-    if force or out.exit != O.REFUSED or "--force" not in (out.reason or ""):
+    if force or out.exit != O.REFUSED or not _names_claim_override(out.reason or ""):
         return out
     return _claim_by_approval(repo, item, out, approval, note, kw)
+
+
+def _names_claim_override(reason: str) -> bool:
+    """Whether a claim refusal names a route the approval gate can stand in for a person's
+    `--force`: that flag itself, or an agent's `--approval request` (`_take_over` names the
+    agent's route, never `--force`, which `claim()` drops for an agent). Before the second
+    marker, a claim refused only for a foreign expired lease -- whose refusal names
+    `--approval request` -- was swallowed: the request returned exit 3 with nothing filed
+    (Be62e44611e)."""
+    return "--force" in reason or "--approval request" in reason
+
+
+def _correct_stale_package_globs(
+    repo: Path, want: list[str] | None, claimed: Any
+) -> tuple[list[str] | None, list[str]]:
+    """The globs a claim is about to lease, with each stale package glob corrected, and one
+    sentence per correction (B-stale-globs-after-split-wave).
+
+    A module split into a package leaves open items declaring ``x.py`` where ``x/`` now is;
+    a lease on ``x.py`` covers none of the package's files, so overlaps with another task
+    editing those files go unseen. Claim corrects such a glob on the way in -- the lease and
+    the item both take the package path -- instead of leasing a path that protects nothing.
+    ``want`` is unchanged when nothing is stale; a git listing that could not run returns a
+    note saying the check could not run (a check that could not run is said, never read as
+    "nothing to correct").
+    """
+    globs = want if want is not None else list(claimed.globs if claimed is not None else [])
+    if not any(g.endswith(".py") for g in globs):
+        return want, []
+    tracked = W.git_paths(repo, "ls-tree", "-r", "--name-only", W.default_branch(repo))
+    if tracked is None:
+        return want, ["stale package globs not checked: git could not list the tracked files"]
+    stale = stale_package_globs(globs, tracked)
+    if not stale:
+        return want, []
+    fixed = dict(stale)
+    corrected = [fixed.get(g, g) for g in globs]
+    return corrected, [
+        f"{g!r} names the package {pkg} (its module was split into one); claimed as {pkg}"
+        for g, pkg in stale
+    ]
 
 
 def _agent_marker_of(agent: str) -> str:
@@ -190,6 +231,36 @@ def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str,
         json.dumps({"state": it.state if it else "", "holder": lease.holder if lease else ""})
     )
     canon = Canon(verb="claim.force", agent=log.agent_id, item=item, state=state)
+    if approval and approval != CN.REQUEST:
+        # A real approval id: VALIDATE it but do NOT spend it yet (B6365c86730). The forced
+        # claim may still refuse (a live lease overlap `--force` cannot break), and that refusal
+        # must not spend the operator's single-use approval -- the use is recorded only once the
+        # claim has actually landed.
+        decision = CN.check(log, canon, approval, cfg=cfg)
+        if not decision.ok:
+            return O.refused(
+                "item.claimed", f"{refused.reason}\n{decision.message}", id=item, alternatives=[]
+            )
+        stamp = decision.stamp
+        why = f"{note} [operator approval {stamp['ask']} by {stamp['approved_by']} via {stamp['via']}]"
+        out = _claim_once(repo, item, note=why.strip(), force=True, **kw)
+        if not out.ok:
+            return O.refused(
+                "item.claimed",
+                f"{out.reason}\nrefusing: the operator approval {stamp['ask']} was NOT consumed "
+                "(the forced claim still refused); run again once it can land.",
+                id=item,
+                alternatives=[],
+            )
+        spent = CN.spend(log, canon, approval, cfg=cfg)
+        if not spent.ok:
+            # `check` validated this answer moments ago against this same pre-claim canon, so this
+            # cannot fail in practice; a spend that does fail (a TTL lapse, a concurrent identical
+            # spend) is surfaced in the answer rather than silently dropping the use.
+            out.data["approval_not_consumed"] = spent.message
+        return out
+    # No id (a steering refusal, or a standing rule may answer) or `--approval request` files the
+    # request: exactly the operator_gate path, whose standing-rule stamp may still auto-approve.
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
     if not decision.ok:
         return O.refused(
@@ -241,6 +312,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
     if held_before:
         want = _widened(want, prior, claimed)
+    want, stale_notes = _correct_stale_package_globs(repo, want, claimed)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
@@ -258,6 +330,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
         note,
         force,
         resources,
+        agent,
         queue,
         {"break_lease": break_lease, "broke": broke},
     )
@@ -283,7 +356,13 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
     # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
     out.data.update(_reopen_stale_merge(log, claimed, item))
-    if warned := missing_globs(repo, cfg, lz.globs):
+    # A glob the item declares lives on the item's own branch, not the primary's: a re-claim
+    # that rebinds to the item's recorded tree must check THAT tree, or a file committed on the
+    # branch but missing (or moved) on main warns that it does not exist
+    # (B-claim-glob-warning-ignores-item-tree).
+    stand = Path(wt.path) if wt is not None else repo
+    warned = [*missing_globs(stand, cfg, lz.globs), *stale_notes]
+    if warned:
         out.data["glob_warnings"] = warned
     out.data.update(OG.claim_fields(st, cfg, item, repo))
     if bug_globs:
@@ -332,7 +411,19 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, brk=None
+    repo: Path,
+    log,
+    cfg,
+    st,
+    item: str,
+    want,
+    prior,
+    note,
+    force,
+    resources,
+    agent="",
+    queue=False,
+    brk=None,
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
@@ -344,6 +435,7 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
             note=note,
             force=force,
             resources=csv_list(resources) or None,
+            agent=agent,
             offer=alternatives_offer(repo, log, cfg),
             **(brk or {}),
         )

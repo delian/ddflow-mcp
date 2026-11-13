@@ -1,6 +1,22 @@
 {
  "format": 1,
  "kinds": {
+  "agent.onboarded": {
+   "fields": {
+    "agent": ["str"],
+    "artifacts": ["list"]
+   },
+   "v": 1
+  },
+  "agent.smoke": {
+   "fields": {
+    "agent": ["str"],
+    "attempts": ["list"],
+    "reason": ["str"],
+    "verdict": ["str"]
+   },
+   "v": 1
+  },
   "approval.granted": {
    "fields": {
     "digest": ["str"],
@@ -95,6 +111,65 @@
    },
    "v": 1
   },
+  "batch.culprit": {
+   "fields": {
+    "member": ["str"],
+    "runs": ["int"]
+   },
+   "v": 1
+  },
+  "batch.dissolved": {
+   "fields": {
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "batch.formed": {
+   "fields": {
+    "base": ["str"],
+    "members": ["list"],
+    "trigger": ["str"]
+   },
+   "v": 1
+  },
+  "batch.gate_finished": {
+   "fields": {
+    "elapsed_s": ["float", "int"],
+    "gate": ["str"],
+    "members": ["list"],
+    "outcome": ["str"],
+    "queue_wait_s": ["float", "int"],
+    "reason": ["str"],
+    "run": ["str"],
+    "tree_sha": ["str"]
+   },
+   "v": 1
+  },
+  "batch.gate_started": {
+   "fields": {
+    "command_digest": ["str"],
+    "gate": ["str"],
+    "run": ["str"],
+    "tree_sha": ["str"]
+   },
+   "v": 1
+  },
+  "batch.landed": {
+   "fields": {
+    "sha": ["str"]
+   },
+   "v": 1
+  },
+  "branch.synced": {
+   "fields": {
+    "base_sha": ["str"],
+    "commits": ["list"],
+    "gates_stale": ["list"],
+    "gates_valid": ["list"],
+    "relevant": ["int"]
+   },
+   "v": 1
+  },
   "bug.fixed": {
    "fields": {
     "changelog": ["dict"],
@@ -151,6 +226,12 @@
     "add": ["list"],
     "remove": ["list"],
     "tags": ["list"]
+   },
+   "v": 1
+  },
+  "bug.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
@@ -211,6 +292,12 @@
    "fields": {
     "by": ["str"],
     "reason": ["str"]
+   },
+   "v": 1
+  },
+  "decision.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
@@ -565,6 +652,12 @@
    },
    "v": 1
   },
+  "lesson.updated": {
+   "fields": {
+    "fields": ["dict"]
+   },
+   "v": 1
+  },
   "link.recorded": {
    "fields": {
     "by": ["str"],
@@ -597,12 +690,27 @@
    },
    "v": 1
   },
+  "memory.updated": {
+   "fields": {
+    "fields": ["dict"]
+   },
+   "v": 1
+  },
   "merge.forced": {
    "fields": {
     "agent": ["str"],
     "approval": ["dict"],
     "sha": ["str"],
     "unmet_gates": ["list"]
+   },
+   "v": 1
+  },
+  "merge.reconciled": {
+   "fields": {
+    "base": ["str"],
+    "files": ["list"],
+    "main": ["str"],
+    "unknown": ["bool"]
    },
    "v": 1
   },
@@ -697,6 +805,18 @@
    },
    "v": 1
   },
+  "record.corrected": {
+   "fields": {
+    "digest_chars": ["int"],
+    "digest_new": ["bool"],
+    "digest_old": ["bool"],
+    "fields": ["dict"],
+    "kind": ["str"],
+    "min_chars": ["int"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
   "record.extended": {
    "fields": {
     "auto": ["bool"],
@@ -739,6 +859,12 @@
     "sources": ["list"],
     "tags": ["list"],
     "verdict": ["str"]
+   },
+   "v": 1
+  },
+  "research.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
@@ -819,6 +945,12 @@
     "implicit": ["bool"],
     "model": ["str"],
     "tool": ["str"]
+   },
+   "v": 1
+  },
+  "session.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },

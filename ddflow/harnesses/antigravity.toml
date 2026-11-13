@@ -17,11 +17,17 @@ claude_md = "no"
 [hooks]
 style = "antigravity"
 file = ".agents/hooks.json"
-normalizer = "antigravity"
-emitter = "antigravity"
+emitter = "empty_json"
 block = "json"
 session_id = "conversationId"
 inject = ["prompt"]
+
+[hooks.fields]
+session = ["conversationId"]
+source = []
+model = ["modelName"]
+cwd = ["workspacePaths.0"]
+tool = ["toolCall.name"]
 
 [hooks.events]
 prompt = "PreInvocation"
@@ -44,3 +50,4 @@ date = "2026-10-09"
 sources = ["https://antigravity.google/docs/hooks"]
 record = "R-hx-antigravity"
 unverified = ["MCP instructions", "worktree dir", "exit code 2"]
+

@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..core import globs
+from ..core.admission import shared_globs
 from ..core.records.state import State
 from .completion._changed import changed_paths
 
@@ -40,18 +41,25 @@ def _read(read: Callable | None) -> Callable:
     return read if read is not None else changed_paths
 
 
-def verdict_notice(state: State, cfg, item_id: str, repo: Path) -> tuple[str, bool]:
+def verdict_notice(
+    state: State, cfg, item_id: str, repo: Path, read: Callable | None = None
+) -> tuple[str, bool]:
     """(notice, whether it blocks `complete`): blocking only for a known undeclared write
     under ``undeclared_write = block``; a check that could not run only warns."""
-    text = undeclared_report(state, cfg, item_id, repo=repo)
+    text = undeclared_report(state, cfg, item_id, repo=repo, read=read)
     return text, bool(text) and text != unknown(item_id) and cfg.locks.undeclared_write == "block"
 
 
-def split(paths: list[str], declared: list[str]) -> tuple[list[str], list[str]]:
+def split(
+    paths: list[str], declared: list[str], *, shared: list[str] | None = None
+) -> tuple[list[str], list[str]]:
     """(undeclared paths, declared globs that matched no path). A path is declared when it
-    is inside one of ``declared``; ddflow's own `.ddflow/**` files are not counted."""
+    is inside one of ``declared``; ddflow's own ``.ddflow/**`` files, and every shared glob
+    (`[lease].shared_globs`, ``append_only_globs``, export targets -- regenerated pins the
+    brief already says are never leased), are never the task's to declare (B38c3ac0f60)."""
     mine = [p for p in paths if not any(globs.inside(p, g) for g in _OWN)]
-    undeclared = [p for p in mine if not any(globs.inside(p, g) for g in declared)]
+    covered = [*declared, *(shared or [])]
+    undeclared = [p for p in mine if not any(globs.inside(p, g) for g in covered)]
     untouched = [g for g in declared if not any(globs.inside(p, g) for p in mine)]
     return undeclared, untouched
 
@@ -96,7 +104,7 @@ def undeclared_report(
     changed = _read(read)(repo, it)
     if changed is None:
         return unknown(item_id)
-    undeclared, _ = split(changed, list(it.globs or []))
+    undeclared, _ = split(changed, list(it.globs or []), shared=shared_globs(cfg))
     if not undeclared:
         return ""
     shown = cfg.locks.suggest_shown
@@ -118,11 +126,15 @@ def untouched_report(
     changed = _read(read)(repo, it)
     if not changed or not it.globs or all(globs.inside(p, ".ddflow/**") for p in changed):
         return ""  # unknown or nothing changed yet: narrowing is not yet knowable
-    _, untouched = split(changed, list(it.globs or []))
+    _, untouched = split(changed, list(it.globs or []), shared=shared_globs(cfg))
     if not untouched:
         return ""
     keep = [g for g in it.globs if g not in untouched]
-    wrote = [] if keep else directory_globs(split(changed, [])[0])
+    wrote = [] if keep else directory_globs(split(changed, [], shared=shared_globs(cfg))[0])
+    if not keep and not wrote:
+        # Every non-.ddflow write was a shared pin and every declared glob was untouched:
+        # there is nothing the task can usefully declare or narrow (B38c3ac0f60).
+        return ""
     if wrote:  # nothing was written inside any glob: replace the declaration by what was
         return (
             f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}; "
@@ -149,7 +161,11 @@ def _habits(state: State, cfg, it, repo: Path, read) -> dict[str, int]:
     counts: dict[str, int] = {}
     for o in past[: cfg.locks.suggest_history]:
         changed = _read(read)(repo, o)
-        undeclared = split(changed, list(o.globs or []))[0] if changed is not None else []
+        undeclared = (
+            split(changed, list(o.globs or []), shared=shared_globs(cfg))[0]
+            if changed is not None
+            else []
+        )
         for g in directory_globs(undeclared):
             counts[g] = counts.get(g, 0) + 1
     return counts
@@ -180,9 +196,11 @@ def claim_fields(state: State, cfg, item_id: str, repo: Path) -> dict[str, str]:
     return {"glob_suggestion": hint} if hint else {}
 
 
-def add_notice(verdict, state: State, cfg, item_id: str, repo: Path) -> None:
+def add_notice(
+    verdict, state: State, cfg, item_id: str, repo: Path, read: Callable | None = None
+) -> None:
     """Put the undeclared-write notice on ``verdict`` as a blocker or a warning."""
-    text, blocks = verdict_notice(state, cfg, item_id, repo)
+    text, blocks = verdict_notice(state, cfg, item_id, repo, read=read)
     if text:
         (verdict.blockers if blocks else verdict.warnings).append(text)
 

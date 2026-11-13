@@ -52,6 +52,7 @@ UNRELEASED = "unreleased"
 KINDS = (
     "knob_added",
     "knob_changed",
+    "knob_semantics_changed",
     "knob_removed",
     "event_kind_added",
     "event_kind_removed",

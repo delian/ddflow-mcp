@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.budget_gate_p90_s"
+new = "180.0"
+why = "Time budgets (PM-budgets): p90 seconds one gate wall time may take before it is over budget."
+impact = "additive"

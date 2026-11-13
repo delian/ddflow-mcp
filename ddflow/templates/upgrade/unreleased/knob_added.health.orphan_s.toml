@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.orphan_s"
+new = "300"
+why = "DX-health-orphan-wait: seconds a lane may show no progress while its newest live-run registry entry is finished (outcome recorded) or its process is gone with no outcome before the lane is ORPHAN_WAIT ('waiting on nothing')."
+impact = "additive"

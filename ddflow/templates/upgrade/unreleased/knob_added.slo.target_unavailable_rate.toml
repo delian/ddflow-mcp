@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_unavailable_rate"
+new = "0.25"
+why = "The unavailable target: the highest share of a gate's RAN verdicts that may be `unavailable` (a reviewer that could not run is never `passed`)"
+impact = "additive"

@@ -16,12 +16,11 @@ import json
 import os
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
+from ...adapters import templates as _tpl
 from ...infra import paths
 from .. import facts, modelreg, review_keys
 from ..lane_driver import Result, unavailable
@@ -150,12 +149,10 @@ def render(ep: Endpoint, harness: str) -> str | Result:
     if lay is None:
         return unavailable(f"harness {harness!r} has no private provider layout")
 
-    env = Environment(  # nosec B701 - JSON text for a config file, not HTML: escaping would corrupt it
-        loader=FileSystemLoader(str(paths.package_dir() / "templates")),
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    text = env.get_template(lay["template"]).render(
+    env = _tpl.DEFAULT
+    text = env.render_from(
+        paths.package_dir() / "templates",
+        lay["template"],
         schema=lay["schema"],
         provider=ep.provider,
         name=f"ddflow lane {ep.route}",
@@ -186,9 +183,31 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
     return target
 
 
-def launch_env(ep: Endpoint) -> dict[str, str]:
-    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read at launch)."""
-    return {ep.api_key_env: ep.api_key_env} if ep.api_key_env else {}
+def launch_env(ep: Endpoint, got: review_keys.KeyResult | None = None) -> dict[str, str]:
+    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read live
+    at launch, so a revoked variable refuses the launch instead of running stale). A key held
+    in a FILE has no source env name: its value travels only in `secret_env`, and `env` asks
+    for nothing live (the launcher refuses a missing source name, which would wrongly refuse
+    a file key whose variable is unset)."""
+    if not ep.api_key_env:
+        return {}
+    got = got if got is not None else resolve_key(ep)
+    if got.source == "file":
+        return {}
+    return {ep.api_key_env: ep.api_key_env}
+
+
+def secret_env(ep: Endpoint, got: review_keys.KeyResult | None = None) -> dict[str, str]:
+    """`LaunchSpec.secret_env` for the key: child variable -> the FILE-resolved VALUE. Only a
+    key read from its key file is snapshotted here, because it has no live source name to
+    read at launch; an env-sourced key is read live by `launch_env`, never snapshotted stale
+    (a revoked or rotated variable then refuses the launch or reads its live value)."""
+    if not ep.api_key_env:
+        return {}
+    got = got if got is not None else resolve_key(ep)
+    if got.source == "file":
+        return {ep.api_key_env: got.value}
+    return {}
 
 
 def resolve_key(ep: Endpoint) -> review_keys.KeyResult:
@@ -216,12 +235,17 @@ def probe_plan(ep: Endpoint, harness: str) -> Result:
 @dataclass(frozen=True)
 class Prepared:
     """What a launcher needs of an endpoint: pass ``home`` as `LaunchSpec.home`, ``env`` as
-    `LaunchSpec.env` and ``model`` to the harness's model flag."""
+    `LaunchSpec.env` (child variable -> SOURCE NAME), ``secret_env`` as
+    `LaunchSpec.secret_env` (a child variable -> resolved key VALUE) and ``model`` to the
+    harness's model flag."""
 
     endpoint: Endpoint
     home: Path
     config: Path
-    env: dict[str, str]
+    env: dict[str, str]  #: the key env var -> SOURCE NAME (the value is read live at launch)
+    secret_env: dict[str, str] = field(
+        repr=False
+    )  #: the key env var -> resolved key VALUE (a secret)
     model: str
     probe: Result  #: the live tool-call probe: `unavailable` until the operator runs it
 
@@ -254,7 +278,18 @@ def prepare(
     ep = resolve(cat, route, model, require_tools=require_tools)
     if isinstance(ep, Result):
         return ep
+    got = resolve_key(ep) if ep.api_key_env else None
+    if ep.api_key_env and not got:
+        return unavailable(got.reason or f"no API key: set ${ep.api_key_env} in the environment")
     cfg = write_private(ep, harness, home)
     if isinstance(cfg, Result):
         return cfg
-    return Prepared(ep, home, cfg, launch_env(ep), model_arg(ep), probe_plan(ep, harness))
+    return Prepared(
+        ep,
+        home,
+        cfg,
+        launch_env(ep, got),
+        secret_env(ep, got),
+        model_arg(ep),
+        probe_plan(ep, harness),
+    )

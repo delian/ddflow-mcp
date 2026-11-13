@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/core/schedule/_colocate.py:_MIN_CLUSTER" = 'a co-location cluster is a hint only at two or more items by definition; a structural fact of the union-find grouping, not a preference'

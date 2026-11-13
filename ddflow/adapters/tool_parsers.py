@@ -105,9 +105,10 @@ def parse_gitleaks(tool: str, output: str) -> list[Finding]:
     return out
 
 
-#: A pre-commit result line: ``<hook name>....Failed`` (the dots pad to the terminal width).
+#: A pre-commit result line: ``<hook name>....Failed`` (the dots pad to the terminal width;
+#: a very long hook name leaves only two of them, so no `{3,}` floor).
 _HOOK_LINE = re.compile(
-    r"^(?P<hook>[A-Za-z0-9_(\[].*?)\.{3,}(?:\(.*?\))?\s*(?P<state>Passed|Failed|Skipped)\s*(?:\(.*\))?$"
+    r"^(?P<hook>[A-Za-z0-9_(\[].*?)\.{2,}(?:\(.*?\))?\s*(?P<state>Passed|Failed|Skipped)\s*(?:\(.*\))?$"
 )
 
 

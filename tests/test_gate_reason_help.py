@@ -44,3 +44,18 @@ def test_mcp_show_says_it_accepts_bug_ids():
     spec = mcp.TOOLS["ddflow_show"]
     assert "bug" in spec["description"].lower()
     assert "bug" in spec["properties"]["id"][1].lower()
+
+
+def test_mcp_gate_schemas_name_why_reason_is_required():
+    """B80ea725095: an MCP caller of ddflow_gate recording partial/unavailable must see in the
+    schema that --reason is required for those outcomes, not skip's 'does not apply HERE' text
+    (Be097545791 fixed the CLI help; the MCP schema kept the skip-only framing)."""
+    from ddflow.surfaces.tools.family_schema import family_entry
+
+    direct = mcp.TOOLS["ddflow_gate_record"]["properties"]["reason"][1]
+    for outcome in ("failed", "unavailable", "partial", "skipped"):
+        assert outcome in direct, outcome
+
+    family = family_entry("ddflow_gate")["inputSchema"]["properties"]["reason"]["description"]
+    for outcome in ("failed", "unavailable", "partial", "skipped"):
+        assert outcome in family, outcome

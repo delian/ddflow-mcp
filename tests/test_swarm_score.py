@@ -9,6 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ddflow.config import Config
+from ddflow.services.lanes import capacity as C
 from ddflow.services.swarm import ledger as L
 from ddflow.services.swarm.score import (
     Item,
@@ -243,3 +244,23 @@ def test_the_item_author_family_wins_over_the_call_argument():
     items = [Item("one", author_family="A"), Item("two", author_family="B")]
     got = pull(lane, items, _world(), W, role="reviewer", author_family="A")
     assert got.item == "two"
+
+
+def test_conformance_level_below_the_floor_refuses_the_lane():
+    # B11d484ec15: conformance was honour-system — a lane whose measured level is below the
+    # floor was still eligible. A level below [swarm].conformance_min_level must refuse.
+    w = replace(W, conformance_min_level=2)
+    it = Item("x")
+    refused = refusals(it, Lane("a", "f", "m"), _world(), w)  # level defaults to 0: unmeasured
+    assert any("conformance level" in r for r in refused)
+    assert not refusals(it, replace(Lane("a", "f", "m"), level=2), _world(), w)
+
+
+def test_endpoint_pool_full_refuses_the_lane():
+    # B11d484ec15: three lanes could oversubscribe an endpoint — a lane whose endpoint pool
+    # has no free slot must be refused whatever its score.
+    it = Item("x")
+    full = (C.Headroom("ep-local", limit=2, busy=2, need=1),)
+    assert any("full" in r for r in refusals(it, Lane("a", "f", "m", pools=full), _world(), W))
+    room = (C.Headroom("ep-local", limit=2, busy=1, need=1),)
+    assert refusals(it, Lane("a", "f", "m", pools=room), _world(), W) == []

@@ -225,3 +225,29 @@ def test_a_request_queued_behind_a_waiter_is_a_wait_too(repo):
     assert code == 3
     graph = WG.wait_for_graph(_state(repo), _cfg(repo), time.time())
     assert graph["T3"] == ["T1"] and "T3" in graph["T4"], graph
+
+
+def test_a_narrowing_update_withdraws_a_stale_wait(repo):
+    """B-update-queue-wait-not-withdrawable: a queued refused widening is waiting for files
+    the agent then drops; the record must not linger as a false cycle (there was no
+    withdraw)."""
+    _two_holders(repo)
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", "--queue", agent=A)
+    assert "T1" in WG.standing(_state(repo), _cfg(repo), time.time())
+    run_cli(repo, "update", "T1", "--globs", "src/a.py", agent=A)
+    assert "T1" not in WG.standing(_state(repo), _cfg(repo), time.time())
+
+
+def test_a_new_withheld_ask_replaces_a_cancelled_wait_not_lingers_it(repo):
+    """grok-4.7 refutation probe: when a later ask takes its free subset and withholds a
+    NEW file, the OLD cancelled ask must not stay standing -- `register` replaces it with
+    the withheld ask, so the still-wanted file is the one the graph shows."""
+    _two_holders(repo)  # T1 (src/a.py), T2 (src/b.py)
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "t3", "--globs", "src/c.py", agent=A)[0] == 0
+    )
+    assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 0
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)  # refused (b.py held)
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/c.py,src/d.py", agent=A)
+    waiting = _state(repo).waiting["T1"]
+    assert list(waiting["globs"]) == ["src/c.py"], waiting  # the withheld ask, not b.py

@@ -35,6 +35,13 @@ def test_split_names_undeclared_and_untouched_ignoring_own_log():
     assert untouched == ["docs/**"]
 
 
+def test_split_drops_shared_globs():
+    # B38c3ac0f60: a shared, regenerated pin (README.md) is never the task's to declare,
+    # while a genuinely undeclared file beside it still is.
+    undeclared, _ = OG.split(["a/x.py", "README.md", "tests/t.py"], ["a/**"], shared=["README.md"])
+    assert undeclared == ["tests/t.py"]
+
+
 def test_directory_globs_are_narrow():
     assert OG.directory_globs(["tests/a.py", "tests/b.py", "README.md"]) == ["README.md", "tests/*"]
 
@@ -58,6 +65,33 @@ def test_undeclared_report_clean_off_and_unknown():
     )
     cfg.locks.undeclared_write = "off"
     assert OG.undeclared_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["z"]})) == ""
+
+
+def test_undeclared_report_drops_shared_globs():
+    # B38c3ac0f60: writing a shared, regenerated pin (README.md) must not be reported as
+    # "written outside the declared globs" -- it is never leased, unlike a real undeclared
+    # write next to it, which is still named.
+    st = _state(_task("T", ["a/**"]))
+    cfg = Config()
+    cfg.lease.shared_globs = ["README.md"]
+    only_shared = OG.undeclared_report(
+        st, cfg, "T", repo=REPO, read=_reader({"T": ["a/1", "README.md"]})
+    )
+    assert only_shared == ""  # a/1 is declared, README.md is shared
+    mixed = OG.undeclared_report(
+        st, cfg, "T", repo=REPO, read=_reader({"T": ["README.md", "tests/t.py"]})
+    )
+    assert "README.md" not in mixed
+    assert "tests/t.py" in mixed
+
+
+def test_untouched_report_shared_only_writes_say_nothing():
+    # B38c3ac0f60: when every declared glob went untouched and the only writes are shared
+    # pins, there is nothing to declare OR narrow -- never a degenerate `--globs ''`.
+    st = _state(_task("T", ["a/**"]))
+    cfg = Config()
+    cfg.lease.shared_globs = ["README.md"]
+    assert OG.untouched_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["README.md"]})) == ""
 
 
 def test_block_blocks_only_a_known_write_never_unknown():
@@ -150,7 +184,11 @@ def test_mcp_form_quotes_a_path_with_a_space():
 
 
 def test_a_comma_in_a_glob_uses_the_json_list_form():
-    assert """--globs '["a,b/*"]'""" in OG.update_call("T", [], ["a,b/*"])
+    call = OG.update_call("T", [], ["a,b/*"])
+    cli, mcp = call.split(" (MCP: ", 1)
+    assert """--globs '["a,b/*"]'""" in cli  # CLI half: the JSON list form
+    assert mcp.startswith("ddflow_task action=update id=T ")
+    assert """globs='["a,b/*"]'""" in mcp  # MCP half: the same JSON list form
 
 
 def test_the_json_list_form_round_trips_through_the_globs_parser():

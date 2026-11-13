@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "agent.onboarded"
+why = "An onboarding run put artifacts into the project for an agent: the install manifest that makes offboarding exact."
+impact = "additive"

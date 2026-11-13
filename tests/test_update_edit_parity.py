@@ -34,6 +34,7 @@ SAMPLE = {
     "landed_paths": ["lp/**"],
     "parent": "P2",
     "kind": "doc",
+    "set": ["a=b"],
 }
 
 
@@ -54,6 +55,9 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
         return O.refused("test", "stop here")
 
     monkeypatch.setattr(cli.A_ITEMS, "update", fake)
+    monkeypatch.setattr(
+        cli, "_guard_foreign_launch", lambda: cli.OK
+    )  # the cwd is tmp_path, not this lane's tree
     monkeypatch.chdir(tmp_path)
     argv = [
         "update", "T1", "--title", "t", "--body", "b", "--append-body", "n", "--needs", "a",
@@ -61,7 +65,7 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
         "--remove-tags", "y", "--globs", "g/**", "--add-globs", "h/**",
         "--remove-globs", "i/**", "--tags", "z", "--priority", "7",
         "--line", "v2", "--resources", "gpu:1", "--worktree", "/w", "--queue", "--landed", "abc123",
-        "--landed-paths", "lp/**", "--parent", "P2", "--kind", "doc",
+        "--landed-paths", "lp/**", "--parent", "P2", "--kind", "doc", "--set", "a=b",
     ]  # fmt: skip
     cli.main(argv)
     assert seen, "the CLI never reached the api"

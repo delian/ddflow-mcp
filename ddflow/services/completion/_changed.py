@@ -16,13 +16,26 @@ from .. import landed as LD
 from .. import testselect as TS
 
 
-def changed_paths(repo: Path, it) -> list[str] | None:
+def changed_paths(repo: Path, it, *, cache: dict | None = None) -> list[str] | None:
     """The paths the item changed: what landed (`landed_before..landed_after`), or before
     it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\". A landing restricted to the item's own
     paths (`update --landed-paths`, B738d7bbeab) reports only the range's changed files
     inside those, never the whole commit's; a restriction the range no longer answers
-    to is None (fail closed), never empty and never the whole commit."""
+    to is None (fail closed), never empty and never the whole commit.
 
+    ``cache`` is a per-scan memo keyed by item id (Bc52bf2ef41): a scan over many merged
+    items calls this once per verdict probe, so the diff and the default branch are asked
+    of git once per item, not once per probe."""
+    key = ("changed", it.id) if cache is not None else None
+    if key is not None and key in cache:
+        return cache[key]
+    paths = _read(repo, it, cache)
+    if key is not None:
+        cache[key] = paths
+    return paths
+
+
+def _read(repo: Path, it, cache: dict | None) -> list[str] | None:
     if it.landed_before and it.landed_after:
         paths = CH.changed_paths(
             repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
@@ -34,13 +47,24 @@ def changed_paths(repo: Path, it) -> list[str] | None:
             matched = sorted(p for p in paths if any(inside(p, g) for g in it.landed_paths))
             return matched if matched else None
         return paths
-    base = it.base or W.default_branch(repo)
+    base = it.base or _default_branch(repo, cache)
     found, may_cite = _unlanded_paths(repo, it, base)
     if found or not may_cite:
         return found
     # Landed by a plain git merge or a mixed commit, so the branch (if any) differs from the
     # base by nothing: the commits that cite the item, checked.
     return LD.cited_paths(repo, it, base) or found
+
+
+def _default_branch(repo: Path, cache: dict | None) -> str:
+    """The repository's default branch, remembered once per scan in ``cache``."""
+    key = ("base",) if cache is not None else None
+    if key is not None and key in cache:
+        return cache[key]
+    base = W.default_branch(repo)
+    if key is not None:
+        cache[key] = base
+    return base
 
 
 def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:

@@ -86,6 +86,67 @@ def test_silence_is_a_blocker_under_require_outcome(repo):
     assert any("never run and never skipped" in b for b in v.blockers), v.blockers
 
 
+def test_a_skipped_non_required_gate_is_not_a_coverage_gap(repo):
+    """Bb67dc543b6: only an UNSETTLED required gate counts as a coverage gap. A non-required
+    pipeline gate recorded `skipped` is a settled outcome, never a gap and never a "never ran"
+    note."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "dedupe",
+        "--outcome",
+        "skipped",
+        "--reason",
+        "nothing to dedupe",
+    )
+    v = _ask(repo, "T1")
+    assert "dedupe" not in v.coverage_gaps, v.coverage_gaps
+
+
+def test_a_required_skip_blocks_under_unavailable_is_failure(repo):
+    """Bb67dc543b6: with [gates].unavailable_is_failure on, a REQUIRED gate recorded `skipped`
+    blocks like a failure (the knob must not leave a skip as the one gap that slips through)."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "config", "gates.unavailable_is_failure", "true")
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "unit_tests",
+        "--outcome",
+        "skipped",
+        "--reason",
+        "merge removed the worktree",
+    )
+    v = _ask(repo, "T1")
+    assert any("coverage gap blocks" in b and "unit_tests" in b for b in v.blockers), v.blockers
+
+
+def test_the_coverage_note_names_a_required_skip_a_skip(repo):
+    """Bb67dc543b6: the coverage note calls a `skipped` required gate a skip, never a run."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "unit_tests",
+        "--outcome",
+        "skipped",
+        "--reason",
+        "merge removed the worktree",
+    )
+    v = _ask(repo, "T1")
+    assert "unit_tests skipped" in v.coverage_note, v.coverage_note
+
+
 def test_it_writes_nothing(repo):
     """`verdict` is a question. A question with a side effect cannot be asked twice."""
     run_cli(repo, "init")

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from ...config import Config
+from .. import fsio
 from .. import git as G
 from .. import proc as P
 from .. import worktree as _W
@@ -25,7 +26,7 @@ def _remove(path: Path) -> None:
         with contextlib.suppress(OSError):
             path.unlink(missing_ok=True)
     elif path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
+        fsio.rmtree_owned(path)
 
 
 def isolate_venv(root: Path, tree: Path) -> bool:

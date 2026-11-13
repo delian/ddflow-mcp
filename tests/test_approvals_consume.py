@@ -342,3 +342,18 @@ def test_complete_approval_request_reason_names_one_refusal(log):
         assert why.startswith("refusing: "), (approval, why)
         assert not why.startswith("refusing: refusing: "), (approval, why)
         assert blockers[0] in why, (approval, why)
+
+
+def test_operator_gate_owns_the_refusing_prefix_on_the_steering_refusal(log):
+    """B-consume-refusal-prefix-owner: `operator_gate` is the single owner of the
+    'refusing: ' prefix on every refused Decision, including the no-approval steering
+    message (`auto` False, no `--approval request`). That path used to come back
+    unprefixed, so callers recovered the refusal/prompt distinction from prose: config.set
+    passed it through verbatim while phase_complete sniffed `startswith('refusing: ')` --
+    the contract encoded two different ways. Now every refusal is prefixed exactly once
+    and callers pass the message through untouched."""
+    cfg = Config()
+    steer = C.operator_gate(log, cfg, _canon(), auto=False)
+    assert not steer.ok
+    assert steer.message.startswith("refusing: "), steer.message
+    assert not steer.message.startswith("refusing: refusing: "), steer.message

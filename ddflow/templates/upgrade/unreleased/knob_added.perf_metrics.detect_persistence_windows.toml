@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_persistence_windows"
+new = "2"
+why = "Perf drift detector (D-perf-metrics-answers): consecutive windows that must exceed before a finding."
+impact = "additive"

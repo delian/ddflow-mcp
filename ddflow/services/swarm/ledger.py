@@ -28,10 +28,10 @@ from typing import NamedTuple
 
 from ...config import Config
 from ...config_sections.agent import family_for
-from ...core import progress as PR
 from ...core.events import Event
 from ...core.model import State
 from ..metrics.facts import collect
+from .models import _author_model, _lease_models, _models
 
 #: A bug filed this long after an item completed still counts against its author (a week).
 BUG_WINDOW_S = 7 * 24 * 3600.0
@@ -102,43 +102,6 @@ class Ledger:
         return rows
 
 
-def _models(events: Sequence[Event]) -> dict[str, list[tuple[float, str]]]:
-    """agent -> [(time, model)] from ``session.started``, oldest first."""
-    out: dict[str, list[tuple[float, str]]] = {}
-    for ev in events:
-        d = ev.data if isinstance(ev.data, dict) else {}
-        if ev.kind == "session.started":  # a model-less session is a marker: it ends the old one
-            m = d.get("model") if isinstance(d.get("model"), str) else ""
-            out.setdefault(ev.agent, []).append((PR.epoch(ev.ts), m))
-    for rows in out.values():
-        rows.sort(key=lambda r: r[0])  # stable: equal times keep log order
-    return out
-
-
-def _lease_models(events: Sequence[Event]) -> dict[tuple[str, str], list[tuple[float, str]]]:
-    """(item, holder) -> [(time, model)] per ``lease.acquired``; "" when it carried none."""
-    out: dict[tuple[str, str], list[tuple[float, str]]] = {}
-    for ev in events:
-        d = ev.data if isinstance(ev.data, dict) else {}
-        if ev.kind == "lease.acquired":
-            m = d.get("model") if isinstance(d.get("model"), str) else ""
-            out.setdefault((ev.subject, str(d.get("holder") or ev.agent)), []).append(
-                (PR.epoch(ev.ts), m)
-            )
-    for rows in out.values():
-        rows.sort(key=lambda r: r[0])
-    return out
-
-
-def _author_model(item: str, agent: str, claim: float, sessions: dict, leases: dict) -> str:
-    """The model the author held at ``claim``: the lease's own, else their latest session's."""
-    held = [m for t, m in leases.get((item, agent), ()) if t <= claim]
-    if held and held[-1]:
-        return held[-1]
-    seen = [m for t, m in sessions.get(agent, ()) if t <= claim]
-    return seen[-1] if seen else ""
-
-
 def _kind(state: State, item: str, fallback: str) -> str:
     it = state.items.get(item)
     for tag in getattr(it, "tags", None) or ():
@@ -171,10 +134,17 @@ def build(
     since: float | None = None,
     bug_window_s: float = BUG_WINDOW_S,
     families: dict[str, str] | None = None,
+    sessions: dict[str, list[tuple[float, str]]] | None = None,
+    leases: dict[tuple[str, str], list[tuple[float, str]]] | None = None,
 ) -> Ledger:
-    """The ledger over items completed at or after ``since`` (None: the whole log)."""
+    """The ledger over items completed at or after ``since`` (None: the whole log). ``sessions``
+    and ``leases`` may be the caller's one fold of the log (``_models``/``_lease_models``), so the
+    whole ledger is built in a single pass alongside its other readers."""
     facts = collect(events, state, now, cfg)
-    sessions, leases = _models(events), _lease_models(events)
+    if sessions is None:
+        sessions = _models(events)
+    if leases is None:
+        leases = _lease_models(events)
     fam_map = families if families is not None else dict(getattr(cfg.agent, "families", {}) or {})
     gates: dict[str, list] = {}
     for o in facts.outcomes:

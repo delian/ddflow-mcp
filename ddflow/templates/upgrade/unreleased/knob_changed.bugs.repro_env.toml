@@ -1,0 +1,7 @@
+[[change]]
+kind = "knob_changed"
+key = "bugs.repro_env"
+old = "[\"DDFLOW_*\", \"CI\", \"CI_*\", \"GITHUB_*\", \"PYTEST_*\", \"CLAUDE*\", \"*GATE*\"]"
+new = "[\"DDFLOW_*\", \"CI\", \"CI_*\", \"GITHUB_*\", \"PYTEST_*\", \"CLAUDECODE\", \"CLAUDE_CODE_ENTRYPOINT\", \"*GATE*\"]"
+why = "The CLAUDE* wildcard recorded the Claude Code account/org UUIDs (CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID, CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID) and the messaging socket path into the committed repro bundle; none of their names is secret-named, so none was masked, and operator identity left the project without recorded consent (B6307b787dd, r-consent-outward). The default is narrowed to the two behaviour-explaining names."
+effect = "a reproduction bundle no longer records the Claude Code account/org UUIDs or the messaging socket path; CLAUDECODE and CLAUDE_CODE_ENTRYPOINT are still recorded"

@@ -25,7 +25,9 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
-from .baseline import cache_load, cache_signatures, cache_store
+from ..ci.failure_text import normalise as normalise_paths
+from ..flakes import LINE_CHARS
+from .baseline import cache_snapshot, cache_store
 from .testcmd import counts_of
 
 GATES = ("ci", "unit_tests")
@@ -51,6 +53,19 @@ ROUNDS = 3
 NOT_PYTEST = "the gate's command does not run pytest"
 _NOT_FOUND = re.compile(r"^ERROR: (?:file or directory )?not found: (.+)$", re.M)
 _PARAM = re.compile(r"^(.*?::[^\[]*)\[.*\]$")
+#: The memory address held in an object repr, and only that: `` at 0x...>``. A repr address is
+#: the one ``0x`` sequence that is BOTH preceded by `` at `` and followed by the repr's closing
+#: ``>``; a hex inside an assertion value (``assert got == 0x10``, ``assert '0x10>' == '0xff>'``)
+#: is not. Two runs of one test print a different ``0x...`` for the same object, so an
+#: address-only difference is the same failure, not a new offender (B9252d46a4b).
+_ADDR = re.compile(r"(?<=\bat )0x[0-9a-f]+(?=>)")
+
+
+def _norm(text: str) -> str:
+    """``text`` with a memory address in an object repr blanked to ``0x`` and the ci tree it ran
+    in blanked to ``<tree>`` (GM-ci-path-normalise): a hex inside an assertion value is left
+    alone, so a genuine value change still reads as a new offender."""
+    return _ADDR.sub("0x", normalise_paths(text))
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:
@@ -87,13 +102,25 @@ def on_base(
     # not the candidate's own merge-base with ``base`` (the fork point is older, so a test
     # ``base`` broke since the fork reads as a new failure there: B-ci-baseline-older-than-
     # candidate; B48c70b6773's earlier merge-base pin had this wrong).
-    known = cache_load(repo, sha, ttl_s, None, gdef.command)
-    cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
+    known, cached_sigs, whole = cache_snapshot(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
     # A cache entry measured before failure text was kept (old format, no text) has nothing to
     # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
-    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet).
-    todo = [i for i in ids if i not in known or (known.get(i) and i not in cached_sigs)]
+    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet). An entry whose text sits at
+    # the old cut-to-LINE_CHARS length is ambiguous -- the base's whole reason may differ past it
+    # or not -- so it is re-measured too, never guessed either way (B-baseline-red-hides-new
+    # -cause, the legacy-cache migration). A WHOLE text of exactly LINE_CHARS length is not the
+    # legacy shape though: its WHOLE marker keeps it cached so it is not re-run every gate
+    # execution (B60e9e09308).
+    todo = [
+        i
+        for i in ids
+        if i not in known
+        or (
+            known.get(i)
+            and (i not in cached_sigs or (len(cached_sigs[i]) == LINE_CHARS and i not in whole))
+        )
+    ]
     if not todo:
         return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
@@ -113,30 +140,85 @@ def _tally(
     onbase: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """What ``known`` says of ``ids``: red only when every one of them failed on the base with
-    the failure text the branch showed. A test the base also fails, but DIFFERENTLY, is a new
-    offender, not baseline (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to
-    ``different``, so ``still`` no longer covers it and ``red`` misses it."""
+    no id shown to differ (an id whose failure text is absent on either side is counted in
+    ``uncompared`` and still toward ``red``: "not different" then is an absence of evidence,
+    not a match). A test the base also fails, but DIFFERENTLY, is a new offender, not baseline
+    (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to ``different``, so ``still``
+    no longer covers it and ``red`` misses it."""
     different = [i for i in ids if known.get(i) and _differs(i, before, onbase)]
     still = [i for i in ids if known.get(i) and i not in different]
+    #: Ids whose failure text is missing on EITHER side: `_differs` returns "not different"
+    #: then (it never claims a new offender when the branch or the base text is unknown), so
+    #: "still failing" for one of these is an ABSENCE of evidence, not proof it failed the same
+    #: way. A decision that rests on the comparison being whole-vs-whole (an auto-accept of a
+    #: full selection whose reach cannot be told) must treat them as not compared (B0f41a2f1d6).
+    uncompared = [i for i in ids if not (before or {}).get(i) or not (onbase or {}).get(i)]
     return {"red": len(still) == len(ids), "still_failing": still, "different": different,
-            "unmeasured": [i for i in ids if i not in known]}  # fmt: skip
+            "unmeasured": [i for i in ids if i not in known], "uncompared": uncompared}  # fmt: skip
 
 
 def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:
     """Does the failure text the BRANCH showed for ``test_id`` differ from what the base showed?
-    Only when both are known and disagree: a base whose text is unknown (a cached id measured
-    before text was kept) never claims a new offender, and a branch whose text is unknown is
-    left to the id-only answer."""
+    A test the base also fails, but with a DIFFERENT full reason text, is a new offender, not
+    baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
+    cut), so two reasons that differ only past what the display used to cap to are told apart
+    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender.
+    A base text that is ambiguous (the legacy cut shape) is re-measured by ``on_base`` before it
+    reaches here, so this comparison is always whole-versus-whole."""
     base = (onbase or {}).get(test_id)
     if not base:
         return False
     branch = (before or {}).get(test_id)
-    return bool(branch) and branch != base
+    if not branch:
+        return False
+    return not _same_failure(branch, base)
+
+
+#: pytest cuts a long repr to a fixed length, ``head...tail`` (`_pytest._io.saferepr._ellipsize`).
+_ELLIPSIS = "..."
+_RUN = re.compile(r"\.{3,}")
+
+
+def _cut(text: str) -> tuple[int, int] | None:
+    """The span ``(first, last)`` of positions where the first ellipsis of ``text`` may start,
+    or None without one. A run of more than three dots is a cut next to a literal dot (the
+    head ends in ``.`` or the tail starts with one): the cut is one of its last-three windows."""
+    m = _RUN.search(text)
+    return (m.start(), m.end() - len(_ELLIPSIS)) if m else None
+
+
+def _same_failure(branch: str, base: str) -> bool:
+    """Whether two failure texts are one failure, tree paths and addresses blanked. pytest
+    ellipsizes a long repr by LENGTH (``head...tail``, each a fixed number of characters), and
+    the ci tree and the base's scratch tree have paths of different lengths, so the same
+    failure is cut at a different place once the paths are blanked. The RAW texts tell that
+    from a real change: a cut of one repr sits at the same raw position in both, so the heads
+    have the same raw length and so do the tails; only then the blanked head of one must be a
+    prefix of the other's and the blanked tail a suffix. Anything else differs: a changed
+    visible text is not read as a cut (B710b7cc84f). What the cut hides cannot be compared; the
+    few characters one head or tail shows beyond the other's (the root-length difference) are
+    the same loss, so a change confined to them is not seen."""
+    if _norm(branch) == _norm(base):
+        return True
+    cuts = [_cut(branch), _cut(base)]
+    if None in cuts or len(branch) != len(base):
+        return False
+    lo, hi = max(c[0] for c in cuts), min(c[1] for c in cuts)  # type: ignore[index]
+    if lo > hi:  # no one position is a cut in both
+        return False
+    k = lo
+    head_a, tail_a = _norm(branch[:k]), _norm(branch[k + len(_ELLIPSIS) :])
+    head_b, tail_b = _norm(base[:k]), _norm(base[k + len(_ELLIPSIS) :])
+    heads = head_a.startswith(head_b) or head_b.startswith(head_a)
+    tails = tail_a.endswith(tail_b) or tail_b.endswith(tail_a)
+    return heads and tails
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
-    """The branch's own failure text per id ({} when the evidence kept none): what
-    ``on_base`` compares against the base's text to spot a new offender in an already-red test."""
+    """The branch's own failure text per id ({} when the evidence kept none): what ``on_base``
+    compares against the base's text to spot a new offender in an already-red test. Each FAILED
+    reason is kept WHOLE so a new cause past the old display cap is told apart
+    (B-baseline-red-hides-new-cause)."""
     return dict(ev.get("failed_reasons") or {})
 
 

@@ -147,8 +147,22 @@ class SuggestingParser(argparse.ArgumentParser):
             if isinstance(a, argparse._SubParsersAction) and (
                 m := re.match(rf"argument {re.escape(a.dest)}: invalid choice: '([^']*)'", message)
             ):
-                message += _did_you_mean(m.group(1), list(a.choices))
+                # argparse's own error prints a usage line that lists every command (~3 KB)
+                # with the hint buried at the end (UX-typo-first). Say the hint first and
+                # point at --help, one line, instead of that dump.
+                self.exit(2, _short_invalid_command(self, m.group(1), list(a.choices)))
         super().error(glob_list_hint(message, self._argv))
+
+
+def _short_invalid_command(parser: SuggestingParser, word: str, candidates: list[str]) -> str:
+    """Two short lines for an unknown command word: the nearest command first, then where
+    the full list is. argparse's own error would print a usage line listing every command
+    (~3 KB) with the hint at the end (UX-typo-first)."""
+    hint = _did_you_mean(word, candidates)
+    head = f"{parser.prog}: '{word}' is not a command"
+    if hint:
+        head += ";" + hint
+    return f"{head}\nRun '{parser.prog} --help' to list the commands.\n"
 
 
 class _WordsRecorder(argparse._SubParsersAction):

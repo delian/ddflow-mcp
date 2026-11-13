@@ -11,6 +11,7 @@ from ....core import outcome as O
 from ....core.events import parse_changelog
 from ....core.model import fold
 from ....services import completion as CM
+from ....services import gate_accept as GA
 from ....services import leases as L
 from ....services import ledger as LG
 from ....services import progress_line as PL
@@ -20,16 +21,81 @@ from ....services.gates import skip_followup as SF
 from ..._base import _load_fresh
 from ...bug_reopen import refile_reported
 from .._common import _chore_base, _chore_event, _require
-from ..author import _author_event_identity, _author_model, _recorded_identity
+from ..author import (
+    _author_event_identity,
+    _author_model,
+    _recorded_identity,
+    _remember_declared_model,
+)
 from ..heartbeat import _commit_events, _inbox, _waiters
 from ..planning import plan_for
-from .approval import _ask_hint, _auto_complete_unavailable, _override_by_approval, _person_force
+from .approval import (
+    _ask_hint,
+    _auto_complete_unavailable,
+    _only_unavailable,
+    _override_by_approval,
+    _person_force,
+)
 from .checks import _failed_review, _na_map, _phase_suite, _refuted_extra, _umbrella_children
 from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
 
 
-def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
+def _closing_tail(hard: bool, agent: str, it, gates: list[str]) -> str:
+    """The close after the blockers: what lifts them. `gate_accept.person_only` names the route
+    for a person-only baseline-red partial ("Do NOT request an approval: ... `ddflow approve`"),
+    so the agent `_ask_hint` tail ("ask the operator to override these in chat") is dropped when
+    one of the unmet gates is that one (B-complete-refusal-contradicts-approval-advice)."""
+    if hard:
+        return "--force does not lift the review-gate blocker above."
+    if any(GA.person_only(it, g) for g in gates):
+        return "--force overrides, and the override is recorded."
+    return "--force overrides, and the override is recorded." + _ask_hint(agent)
+
+
+def _check_report(item: str, v, hard: list[str], it, agent: str) -> O.Outcome:
+    """The `--check` answer (B7372065218): the completion's verdict, read-only.
+
+    Exit 0 when nothing is unmet, 1 when conditions remain (and which policy would grant the
+    override), never a completion. `check_only` switches the MCP reply to the full data
+    (the blockers must reach the caller), the same marker the `add` dry run carries. ``hard``
+    (a failed review, an unmerged own branch) is never force-liftable, so it makes the check
+    report met too -- otherwise an item whose only remaining blocker is its unmerged branch
+    reads as "may complete" (exit 0) when a real completion would refuse."""
+    blockers = list(v.blockers)
+    not_in_blockers = [h for h in hard if h not in blockers]
+    data = {
+        "id": item,
+        "check_only": True,
+        "may_complete": not blockers and not hard,
+        "blockers": blockers,
+        "hard": list(hard),
+        "unmet_gates": list(v.unmet_gates),
+        "coverage_gaps": list(v.coverage_gaps),
+        "coverage_note": v.coverage_note,
+        "warnings": list(v.warnings),
+        "independence": v.independence,
+    }
+    if not blockers and not hard:
+        return O.ok("item.checked", **data)
+    lines = [f"{len(blockers) + len(not_in_blockers)} unmet condition(s) for {item}:"]
+    lines += [f"  - {b}" for b in blockers]
+    lines += [f"  - {h}" for h in not_in_blockers]
+    if hard:
+        lines.append(
+            "None of these is lifted by --force or an approval: satisfy them on the record."
+        )
+    elif _only_unavailable(v, it):
+        lines.append(
+            "What policy would grant it: the standing `complete_unavailable` rule answers a "
+            "completion whose only unmet required gates are unavailable/partial/skipped."
+        )
+    else:
+        lines.append(_closing_tail(False, agent, it, list(v.unmet_gates)))
+    return O.failed("item.checked", "\n".join(lines), **data)
+
+
+def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
@@ -44,8 +110,15 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     shell_cwd: Path | None = None,
     approval: str = "",
     lint_exempt: str = "",
+    check: bool = False,
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
+
+    ``check`` (B7372065218): a read-only preview of the same verdict a completion would
+    judge. It writes nothing and never completes: it prints the unmet conditions, the
+    approvals a person would have to give, and which standing policy would grant the
+    override. Exit 0 = nothing unmet, 1 = unmet conditions, 2 = could not run. The lone
+    `--regression-test` blocker is left in place (a check closes no bug).
 
     ``approval`` (RA-consume-sites-3): an agent may not use `--force`, but it may spend an
     operator's approval of exactly these unmet conditions (`--approval request` files the
@@ -86,6 +159,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         it if isinstance(it, O.Outcome) else L.contest_refusal(it, "item.completed", "completed")
     )
     if refusal is not None:
+        if check:
+            return O.nothing("item.checked", refusal.reason, check_only=True, id=item)
         return refusal
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
@@ -121,6 +196,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     v.blockers += [b for b in (_phase_suite(repo, cfg, log, st, it, agent),) if b]
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     hard += CM._own_branch_unmerged(st, cfg, it, repo)
+    if check:
+        return _check_report(item, v, hard, it, agent)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
@@ -144,8 +221,10 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         log, cfg, item, v, hard, force, approval, agent, base
     )
     if denied is not None:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return denied
     if hard and force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item}, and --force does not lift this:\n"
@@ -155,16 +234,13 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         )
     force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
             + f"\n\n`ddflow gate status {item}` shows the pipeline. "
-            + (
-                "--force does not lift the review-gate blocker above."
-                if hard
-                else "--force overrides, and the override is recorded." + _ask_hint(agent)
-            ),
+            + _closing_tail(hard, agent, it, v.unmet_gates),
             forced=False,
             **base,
         )
@@ -174,6 +250,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
 
         failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
         if failed is not None:
+            _remember_declared_model(st, log, cfg, model, model_source)
             return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks

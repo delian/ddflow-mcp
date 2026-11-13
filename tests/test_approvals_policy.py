@@ -87,7 +87,13 @@ def _only_unavailable_gate(repo, *outcomes):
         why = (
             "worktree gone before it could run"
             if outcome == "unavailable"
-            else ("a failing test" if outcome == "failed" else "ran partway")
+            else (
+                "worktree gone after the merge"
+                if outcome == "skipped"
+                else "a failing test"
+                if outcome == "failed"
+                else "ran partway"
+            )
         )
         assert _record(repo, "unit_tests", outcome, why) == 0
 
@@ -385,6 +391,63 @@ def test_a_routine_completion_auto_answers_only_an_unavailable_gate_end_to_end(r
     assert ev.data["approval"]["digest"]
 
 
+def test_a_routine_completion_auto_answers_a_skipped_gate_end_to_end(repo):
+    """Bb67dc543b6: a `skipped` required gate (recorded with a reason -- e.g. `unit_tests`
+    after a merge removed the worktree) is a coverage gap the standing `complete_unavailable`
+    rule answers, exactly like `unavailable`; it must not force an operator `complete.force`."""
+    _only_unavailable_repo(repo, "skipped")
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 0, (out, err)
+    ev = [e for e in EventLog(repo, "bot").read_all() if e.kind == "item.completed"][-1]
+    assert ev.data["approval"]["policy"] == "complete_unavailable"
+    assert ev.data["forced"] is True and ev.data["overridden"]
+
+
+def test_the_complete_unavailable_predicate_answers_a_skipped_gate(proj):
+    """The rule's own predicate (`_unavailable_unmet_only`) accepts a `skipped` required gate
+    the same way the completion site does, so the two cannot drift (Bb67dc543b6)."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(
+                gate="unit_tests", outcome="skipped", reason="merge removed it"
+            ),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is True
+
+
+def test_the_complete_unavailable_predicate_refuses_a_skip_that_masked_a_failure(proj):
+    """A `skipped` that replaced a FAILED run is a failure wearing a gap's outcome
+    (DX-skip-failed-gate): it must never be auto-answered, even though its latest outcome is
+    `skipped` (Bb67dc543b6, roborev)."""
+    from ddflow.core.records.gates import GateRecord, GateRun
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(gate="unit_tests", outcome="skipped", reason="skip"),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+        gate_history=[
+            GateRun(gate="unit_tests", outcome="failed"),
+            GateRun(gate="unit_tests", outcome="skipped"),
+        ],
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False
+
+
 def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):
     _only_unavailable_repo(repo, "failed")
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
@@ -429,6 +492,109 @@ def test_a_routine_completion_never_auto_answers_a_person_only_baseline_red_part
     assert code == 3, (out, err)
     assert "ddflow approve" in out + err
     assert _state(repo).items["T1"].state != "done"
+
+
+def _person_only_record():
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    def rec(auto):
+        base = {"red": True, "base": "main", "ids": ["tests/t.py::test_x"]}
+        if auto is not None:
+            base["auto"] = auto
+        return Item(
+            id="T1",
+            kind="task",
+            gates={
+                "unit_tests": GateRecord(
+                    gate="unit_tests",
+                    outcome="partial",
+                    reason="baseline-red: tests/t.py::test_x",
+                    evidence={"baseline": base},
+                )
+            },
+        )
+
+    return rec
+
+
+def test_accept_baseline_red_predicate_refuses_a_person_only_partial():
+    """B7657fc26be: `accept_baseline_red` reads the SAME `gate_accept.person_only` helper as
+    `complete_unavailable`: a measured baseline-red partial `gate run` did not auto-accept (its
+    failing tests are in a file the item changed or reaches, or the knob is off) is a person's
+    call and the standing rule must not answer it. A partial `gate run` DID auto-accept
+    (D-baseline-red-auto-accept) is unaffected."""
+    cfg = _cfg(policy=["accept_baseline_red"], policy_max_uses=99)
+    rec = _person_only_record()
+    when = PO.RULES["accept_baseline_red"].when
+    assert (
+        when(rec({"accepted": False, "why": "item reaches tests/t.py"}), "unit_tests", cfg) is False
+    )
+    assert when(rec(None), "unit_tests", cfg) is False  # measured before the auto path existed
+    assert when(rec({"accepted": True, "ids": ["tests/t.py::test_x"]}), "unit_tests", cfg) is True
+
+
+def test_an_agent_approve_is_not_accepted_by_policy_for_a_person_only_partial(repo, monkeypatch):
+    """B7657fc26be end to end: `ddflow approve T1 unit_tests` from an agent shell (harness
+    marker, no --agent) over a person-only baseline-red partial, with `accept_baseline_red` on
+    and the window open, is NOT accepted by `policy:accept_baseline_red`: it is refused and no
+    policy answer is recorded."""
+    _person_only_baseline_red(repo)
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(
+        cfg_path.read_text().replace(
+            'policy = ["complete_unavailable"]', 'policy = ["accept_baseline_red"]'
+        )
+    )
+    monkeypatch.setenv("CLAUDECODE", "1")
+    code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "agent tries")
+    assert code != 0, (out, err)
+    assert "ACCEPTED" not in out + err
+    answered = [
+        r
+        for r in asks_of(_state(repo)).values()
+        if r["answered_by"] == "policy:accept_baseline_red"
+    ]
+    assert answered == []
+
+
+def test_retry_rule_never_answers_a_person_only_partial_predicate():
+    """B1bc4733e43: the retry-threshold rule (`auto-after-retries`) spans `approve.partial` and
+    `complete.force` but must step aside, through `gate_accept.person_only`, when the target
+    names a measured baseline-red partial only a person accepts. A gate `gate run` auto-accepted
+    or a plain partial is not person-only and stays answerable."""
+    rec = _person_only_record()
+    po = rec({"accepted": False, "why": "item reaches tests/t.py"})
+    auto = rec({"accepted": True, "ids": ["tests/t.py::test_x"]})
+    assert PO.person_only_target(po, "approve.partial", "unit_tests") is True
+    assert PO.person_only_target(po, "complete.force", "ci,unit_tests") is True
+    assert PO.person_only_target(auto, "approve.partial", "unit_tests") is False
+    assert PO.person_only_target(po, "claim.force", "unit_tests") is False
+
+
+def test_an_agent_filing_approve_twice_is_not_auto_approved_for_a_person_only_partial(
+    repo, monkeypatch
+):
+    """B1bc4733e43 end to end: with `auto_approve_after_retries = 2` and NO window rule, an agent
+    shell (CLAUDECODE=1, no --agent) that runs `approve T1 unit_tests` over a person-only
+    baseline-red partial stays refused however many times it files; `policy:auto-after-retries`
+    never answers it."""
+    _person_only_baseline_red(repo)
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(
+        cfg_path.read_text().replace(
+            'policy = ["complete_unavailable"]', "policy = []\nauto_approve_after_retries = 2"
+        )
+    )
+    monkeypatch.setenv("CLAUDECODE", "1")
+    for _ in range(4):
+        code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "agent retries")
+        assert code != 0, (out, err)
+        assert "ACCEPTED" not in out + err
+    answered = [
+        r for r in asks_of(_state(repo)).values() if r["answered_by"] == "policy:auto-after-retries"
+    ]
+    assert answered == []
 
 
 def test_a_person_accepted_baseline_red_partial_is_not_refused_for_the_agent_complete(repo):

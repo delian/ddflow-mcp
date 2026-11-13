@@ -50,13 +50,13 @@ def test_schema_has_the_action_enum_and_the_union_of_the_members_arguments(famil
     assert schema.get("required") == (None if family in TOOLS else ["action"])
     action = schema["properties"]["action"]
     assert action["type"] == "string"
-    assert action["enum"] == list(members)
+    assert action["enum"] == list(F.FAMILIES[family].actions())
     union = {n for t in members.values() for n in TOOLS[t]["properties"]}
     if "action" in union:
         union = (union - {"action"}) | {"op"}
     union |= {"as_agent"} if any(not TOOLS[t].get("identify") for t in members.values()) else set()
     assert set(schema["properties"]) == union | {"action"}
-    for action_name in members:
+    for action_name in F.FAMILIES[family].actions():
         assert action_name in entry["description"]
 
 
@@ -86,7 +86,9 @@ def test_route_resolves_the_member_and_drops_the_action():
 def test_a_members_own_action_argument_is_op_in_its_family():
     assert not {t for t in TOOLS if "op" in TOOLS[t]["properties"]}
     owners = {t: F.placement(t) for t in TOOLS if "action" in TOOLS[t]["properties"]}
-    assert len(owners) == 5
+    assert (
+        len(owners) == 6
+    )  # `ddflow_perf` (action=perf) joined the `view` family (fix-B92ab2d8f54)
     for tool, (family, action) in owners.items():
         props = FS.family_entry(family)["inputSchema"]["properties"]
         assert props["action"]["enum"] and "op" in props
@@ -163,7 +165,14 @@ def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
     assert fams + singles < 0.6 * flat
     # measured 55,498 (the research estimated 53,312); the per-action `view` join grew the
     # bounded tail, not the flat surface.
-    assert fams + singles < 56_000
+    # 56_300 (raised, B470534f9fd): the `bug` family's pinned `reopen`/`tag` actions list two
+    # action clauses in the description and two enum values; the list measures 56,139 with them.
+    # 57_000 (raised, GM-surface-counts): the `suggest` (ddflow_lease), `lanes` (ddflow_view)
+    # and `research_add`/`research show` (ddflow_task) action clauses each add a per-action
+    # description clause and enum value; the list measures 56,774 with them.
+    # 59_000 (raised, B92ab2d8f54): the view family grew again (ddflow_perf joined);
+    # the list measures 58,178 on main.
+    assert fams + singles < 59_000
 
 
 def _flat(tool):
@@ -195,6 +204,29 @@ def test_bug_found_accepts_the_evidence_the_family_schema_advertises():
     assert not isinstance(r, str)
     assert r.tool == "ddflow_bug_found"
     assert r.args.get("evidence") == "probe"
+
+
+def test_bug_reopen_and_tag_are_offered_as_actions():
+    # B470534f9fd: the family advertised `reopen` and `reason` (from `bug invalid`) and
+    # `tag` (from `bug fixed`) in its union schema, but offered no `reopen` or `tag`
+    # ACTION, so a family-profile agent (the default `lean` profile) had no way to reopen
+    # or retag a bug through `ddflow_bug`.
+    actions = F.FAMILIES["ddflow_bug"].actions()
+    assert "reopen" in actions and "tag" in actions
+
+
+def test_action_reopen_routes_to_bug_invalid_with_the_selector_set():
+    r = FS.route("ddflow_bug", {"action": "reopen", "id": "Bx", "reason": "it was real"})
+    assert not isinstance(r, str)
+    assert r.tool == "ddflow_bug_invalid"
+    assert r.args == {"id": "Bx", "reason": "it was real", "reopen": True}
+
+
+def test_action_tag_routes_to_bug_fixed_with_the_selector_set():
+    r = FS.route("ddflow_bug", {"action": "tag", "id": "Bx", "add": "x"})
+    assert not isinstance(r, str)
+    assert r.tool == "ddflow_bug_fixed"
+    assert r.args == {"id": "Bx", "add": "x", "tag": True}
 
 
 def test_a_required_own_action_argument_is_listed_as_op_in_the_description(monkeypatch):

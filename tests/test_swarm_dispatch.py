@@ -24,7 +24,7 @@ from ddflow.services.lanes import launch_template as T
 from ddflow.services.lanes.launch_template import Template
 from ddflow.services.swarm import dispatch as D
 from ddflow.services.swarm import ledger as L
-from ddflow.services.swarm.score import Decision, Item, Lane, Live, World
+from ddflow.services.swarm.score import Decision, Item, Lane, Live, World, refusals
 from ddflow.services.swarm.score_config import Weights
 from ddflow.surfaces.declared.lifecycle import navigate as NAV
 from ddflow.surfaces.mcp import Server
@@ -384,6 +384,20 @@ def test_next_lane_without_a_template_is_unavailable(repo):
     assert "no template" in out.reason
 
 
+def test_next_lane_names_why_a_template_was_rejected(repo):
+    bad = TEMPLATES + (
+        '[template.bad]\nharness = "kilo"\nroute = "deepseek"\nfamily = "deepseek"\n'
+        "approved = true\nbogus_key = 1\n"
+    )
+    _queue(repo, tmp=bad)
+    out = api.next_lane(repo, lane="bad")
+    assert out.exit == 2
+    assert out.data["status"] == D.UNAVAILABLE
+    assert "no template" in out.reason
+    assert "bogus_key" in out.reason
+    assert "approved" not in out.reason
+
+
 def test_next_lane_needs_a_declared_trust_and_an_approval(repo):
     _queue(repo)
     out = api.next_lane(repo, lane="notrust")
@@ -432,7 +446,7 @@ def test_next_lane_judges_the_cap_plan_counts_with_a_worktree_limit(repo):
     assert api.claim(repo, "b", agent="other").exit == 0
     out = api.next_lane(repo, lane="ds")
     assert out.data["status"] == D.HOLD
-    assert "1 in flight of 1" in out.reason
+    assert "worktree limit reached: 1 in flight of 1" in out.reason
 
 
 def test_a_full_tree_cap_does_not_hold_an_item_that_takes_no_tree(repo):
@@ -521,3 +535,28 @@ def test_next_without_a_lane_is_the_queue_answer(repo):
     out = api.next_item(repo)
     assert "status" not in out.data
     assert [r["id"] for r in out.data["ready"]] == ["a"]
+
+
+def test_the_lane_sources_level_and_pools_reach_the_score():
+    # B11d484ec15 wiring: the scheduler threads a lane's measured conformance level and its
+    # endpoint pool headroom from its source into score.Lane, so refusals can enforce them.
+    from ddflow.services.lanes import capacity as C
+
+    lane = D.lane_of("x", _src(level=1, pools=(C.Headroom("ep-lan", 1, 1, 1),)))
+    reasons = refusals(Item("a"), lane, World(), replace(Weights(), conformance_min_level=2))
+    assert any("conformance level" in r for r in reasons)
+    assert any("full" in r for r in reasons)
+
+
+def test_the_pull_source_reads_the_conformance_store_and_pool(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    save(repo, Report("ds", 3, ()))
+    src = PL._source(repo, Config(), fold([]), "ds", 1000.0)
+    assert src.level == 3
+    assert any(h.pool == "ep-deepseek" for h in src.pools)

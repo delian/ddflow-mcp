@@ -197,7 +197,7 @@ EXPORT_KINDS = [
     "status",
     "worklog",
 ]
-TICKS = ["flow.sample", "merge_queue.integrator"]
+TICKS = ["flow.sample", "merge_queue.integrator", "swarm.launch"]
 SEARCH_SOURCES = [
     "records",
     "sessions",

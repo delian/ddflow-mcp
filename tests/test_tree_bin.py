@@ -60,3 +60,36 @@ def test_advice_falls_back_to_pythonpath_when_the_shim_cannot_be_written(tmp_pat
         TB.fsio, "atomic_write", lambda *a, **k: (_ for _ in ()).throw(OSError("ro"))
     )
     assert "export PYTHONPATH=" in TB.advice(tree)
+
+
+def test_with_shim_on_path_puts_the_shim_dir_first(tmp_path):
+    tree = _tree(tmp_path)
+    shim = TB.write_shim(tree)
+    env = TB.with_shim_on_path({"PATH": "/usr/bin:/bin"}, tree)
+    assert env["PATH"].split(":")[0] == str(shim.parent)
+    assert env["PATH"].endswith(":/usr/bin:/bin")
+
+
+def test_with_shim_on_path_is_a_noop_without_a_shim(tmp_path):
+    env = TB.with_shim_on_path({"PATH": "/usr/bin"}, tmp_path)
+    assert env == {"PATH": "/usr/bin"}
+
+
+def test_with_shim_on_path_keeps_the_inherited_path_when_none_is_given(tmp_path, monkeypatch):
+    tree = _tree(tmp_path)
+    shim = TB.write_shim(tree)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    env = TB.with_shim_on_path({"A": "1"}, tree)
+    assert env["PATH"].split(":")[0] == str(shim.parent)
+    assert env["PATH"].endswith(":/usr/bin:/bin")
+
+
+def test_a_gate_command_gets_the_trees_shim_first_on_path(tmp_path):
+    from ddflow.services import gates as G
+
+    tree = _tree(tmp_path)
+    shim = TB.write_shim(tree)
+    gdef = G.GateDef(id="t", command='printf "%s" "$PATH"')
+    outcome, ev = G.run_command_gate(gdef, tree)
+    assert outcome == "passed", ev
+    assert ev["tail"].split(":")[0] == str(shim.parent), ev["tail"]

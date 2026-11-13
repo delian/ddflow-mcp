@@ -15,9 +15,10 @@ from ...core.model import DONE, Item, Lease, State
 from ...core.schedule import capacities, plan_blocker, resource_shortfall
 from ...core.schedule import plan as _plan
 from ...infra.log import EventLog
+from .. import identity as _ID
 from .. import leasebreak as LB
 from .. import leases as _leases
-from .common import _clone_field, _fold, glob_clash
+from .common import _clone_field, _fold, clash_report, glob_clash, glob_clashes, optimistic_clashes
 from .model import LeaseError, Offer
 from .remote import _remote_drop, _remote_renew, _remote_take
 
@@ -134,12 +135,24 @@ def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
     )
 
 
+def _take_over(item_id: str, agent: str) -> str:
+    """The take-over route this caller is owed: an agent files ``--approval request`` (its
+    ``--force`` is dropped, so naming ``--force`` sends it to a flag that cannot work); a
+    person passes ``--force`` (Bbb8c158254)."""
+    return (
+        f"`ddflow claim {item_id} --approval request`"
+        if _ID.agent_marker(agent)
+        else f"`ddflow claim {item_id} --force`"
+    )
+
+
 def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller's offer
     log: EventLog,
     cfg: Config,
     item_id: str,
     *,
     holder: str = "",
+    agent: str = "",
     globs: list[str] | None = None,
     worktree: str = "",
     branch: str = "",
@@ -188,6 +201,10 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             )
 
         existing = it.lease
+        # An agent's `--force` is dropped at the API layer (its route is
+        # `--approval request`), so the take-over route named here is the one that applies
+        # to WHO is asking, never `--force` to an agent (Bbb8c158254).
+        take_over = _take_over(item_id, agent)
         if existing and existing.live(now, cfg.lease.grace_s):
             if existing.holder == holder:
                 _record_claimed_globs(log, it, globs, resources)
@@ -200,7 +217,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 if left >= 0
                 else f"{item_id}: {existing.holder}'s lease ran out {-left:.0f}s ago and is in "
                 f"its {cfg.lease.grace_s}s grace period; it can be taken over "
-                f"(`ddflow recover --item {item_id}`, then `ddflow claim {item_id} --force`) "
+                f"(`ddflow recover --item {item_id}`, then {take_over}) "
                 f"in {cfg.lease.grace_s + left:.0f}s",
                 holder=existing.holder,
                 item=item_id,
@@ -220,7 +237,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                     f"expiry was recorded at {existing.expired_at}: recover measured its "
                     f"tree (worktree {existing.worktree or '-'}) then, with nothing to "
                     f"salvage. Taking it over is deliberate, and safe as of that sweep: "
-                    f"`ddflow claim {item_id} --force` adopts the tree as it is now.",
+                    f"{take_over} adopts the tree as it is now.",
                     holder=existing.holder,
                     item=item_id,
                 )
@@ -229,7 +246,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 f"(worktree {existing.worktree or '-'}). It is NOT stolen automatically: "
                 f"a crashed agent's worktree often holds finished work. "
                 f"To take it over: `ddflow recover --item {item_id}`, then "
-                f"`ddflow claim {item_id} --force`.",
+                f"{take_over}.",
                 holder=existing.holder,
                 item=item_id,
             )
@@ -262,14 +279,19 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             clash = _break_idle(
                 log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke, pre
             )
+        clash, optimistic = _optimistic_or_none(
+            log, cfg, state, it, holder, mine, now, clash, force
+        )
         # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
         if clash and (not force or existing is not None):
-            other_id, lease, pair = clash
+            # `clash` is what `_break_idle` left standing (a non-breakable lease): the hint
+            # must name IT, while `glob_clashes` re-lists every live clash for the message.
+            other_id, lease, _pair = clash
+            named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
             raise LeaseError(
-                f"{item_id} writes {pair[0]!r} which overlaps {pair[1]!r} "
-                f"held by {lease.holder} on {other_id}"
+                f"{item_id} writes files another live lease holds: {named}"
                 + (
                     f". {item_id}'s lease lapsed and those files were claimed since: "
                     f"--force takes over the expired lease, not another live one: "
@@ -280,7 +302,12 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                         else ""
                     )
                     if existing is not None
-                    else ""
+                    else (
+                        f". Claim with `ddflow claim {item_id} --globs <files>` naming "
+                        "only the files your work really writes: the item's declared "
+                        "globs are refused only where another lease holds them, so a "
+                        "narrower set can be claimed at once."
+                    )
                 ),
                 holder=lease.holder,
                 item=item_id,
@@ -326,6 +353,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 "note": note,
                 "kind": it.kind,
                 "resources": wants,
+                "optimistic": optimistic,
                 **_clone_field(log, holder),
             },
         )
@@ -339,6 +367,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             globs=mine,
             note=note,
             resources=wants,
+            optimistic=optimistic,
         )
 
 
@@ -440,6 +469,30 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
         if broke is not None:
             broke.append({"item": other_id, "holder": lease.holder, "idle_s": round(v.idle_s, 1)})
     return None
+
+
+def _optimistic_or_none(
+    log: EventLog,
+    cfg: Config,
+    state: State,
+    it: Item,
+    holder: str,
+    mine: list[str],
+    now: float,
+    clash: tuple[str, Lease, tuple[str, str]] | None,
+    force: bool,
+) -> tuple[tuple[str, Lease, tuple[str, str]] | None, list[str]]:
+    """A PLAIN claim whose remaining clashes all merge cleanly is granted with those globs
+    recorded `optimistic` (DX-lease-hunk-optimistic); the first clash that stays exclusive --
+    a real conflict, a generated/pinned file, an unanswerable probe -- is returned, and
+    --force never goes optimistic (it is an explicit override, not a clean-merge finding).
+    """
+    if clash is None or force:
+        return clash, []
+    clashes, optimistic = optimistic_clashes(
+        log, cfg, state, it, holder, glob_clashes(state, cfg, it, holder, mine, now)
+    )
+    return (clashes[0] if clashes else None), optimistic
 
 
 def _alts(

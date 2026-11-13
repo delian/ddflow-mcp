@@ -72,6 +72,10 @@ class Knob:
     #: declaration `config --explain` shows.
     default_changed_in: str = ""
     default_was: Any = None
+    #: An operator-only knob may not be set by the committed `file` layer: a cloned
+    #: project's config cannot widen what a paired token may do (B-token-role-widened). It
+    #: is still settable from the local layer, the environment and `ddflow_configure`.
+    operator_only: bool = False
 
 
 #: Every knob declared through `knob()`, by "section.knob", in declaration order.
@@ -102,6 +106,7 @@ def knob(  # noqa: PLR0913 -- one keyword per declaration facet; the call sites 
     members: Callable[[Any], tuple[Any, list[str]]] | None = None,
     default_changed_in: str = "",
     default_was: Any = MISSING,
+    operator_only: bool = False,
 ) -> Any:
     """A dataclass field that carries its knob declaration (see the module docstring).
     `factory` for a mutable default (a list or dict), as `field(default_factory=...)`."""
@@ -134,6 +139,7 @@ def knob(  # noqa: PLR0913 -- one keyword per declaration facet; the call sites 
             members,
             default_changed_in,
             None if default_was is MISSING else default_was,
+            operator_only,
         )
     }
     if factory is not MISSING:
@@ -145,6 +151,17 @@ def declare(section: str) -> Callable[[type], type]:
     """Class decorator, above `@dataclass`: register each `knob()` field of `[section]`."""
 
     def register(cls: type) -> type:
+        tables = (SECTION_CLASSES, KNOB_DOCS, DECLARED, DECLARED_IN, RENAMED)
+        saved = [dict(t) for t in tables]
+        try:
+            return _register(cls)
+        except ValueError:  # a refused declaration leaves no half-registered section behind
+            for table, before in zip(tables, saved, strict=True):
+                table.clear()
+                table.update(before)
+            raise
+
+    def _register(cls: type) -> type:
         if section in SECTION_CLASSES:
             raise ValueError(
                 f"section {section} is declared twice ({SECTION_CLASSES[section].__module__} "

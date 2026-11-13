@@ -297,12 +297,15 @@ def test_a_deadlock_is_locked_and_apply_adds_the_ordering_edge(repo):
 
 def test_a_runaway_job_is_reported_and_its_process_is_never_signalled(repo):
     assert run_cli(repo, "init", agent=A)[0] == 0
+    run_cli(repo, "config", "health.runaway_s", "60", agent=A)
     run_cli(repo, "task", "add", "T1", "--title", "T1", "--globs", "src/a.py", agent=A)
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent=A)[0] == 0
     sleeper = subprocess.Popen(["sleep", "120"])
     try:
         assert run_cli(repo, "job", "add", "T1", "--pid", str(sleeper.pid), agent=A)[0] == 0
-        later = time.time() + 5 * 3600
+        # 120s is past runaway_s (60) but far inside the lease TTL (1800): the lane is
+        # still live, so the runaway is reported alone -- never crashed alongside it.
+        later = time.time() + 120
         out = health(repo, now=later, run=True, mode="apply")
         assert [(f["kind"], f["item"]) for f in out.data["findings"]] == [("runaway", "T1")]
         assert out.data["moves"] == []

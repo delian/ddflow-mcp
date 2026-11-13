@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import contextlib
 import re
-import tomllib
 from collections.abc import Iterator
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+
+from ..adapters.toml import TomlLibIo
 
 #: The git-ignored machine-local directory (decision D-no-own-services-local-dir).
 LOCAL_DIR = Path(".ddflow") / "local"
@@ -80,10 +81,10 @@ def has_conflict_markers(text: str) -> bool:
 def read_toml(path: Path) -> dict[str, Any]:
     """The TOML table in ``path``. Raises `ConfigConflict` when it holds merge-conflict
     markers (even where they sit inside a string and the text still parses), else whatever
-    `tomllib` raises for a file that is merely malformed."""
+    `TomlIo.loads` raises for a file that is merely malformed."""
     text = Path(path).read_text("utf-8")
     if has_conflict_markers(text):
         if _tolerate.get():
             return {}
         raise ConfigConflict(path)
-    return tomllib.loads(text)
+    return TomlLibIo().loads(text)

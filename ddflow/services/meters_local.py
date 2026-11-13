@@ -268,7 +268,7 @@ def _kilo_token_row(row: tuple) -> TokenRow | None:
     inp, out, reasoning, read, write = (_count(v) or None for v in figures)
     if not any((inp, out, reasoning, read, write)):
         return None
-    output = None if out is None and reasoning is None else (out or 0) + (reasoning or 0)
+    output = None if out is None else out + (reasoning or 0)
     return TokenRow(at / 1000, "", inp, output, read, write)
 
 

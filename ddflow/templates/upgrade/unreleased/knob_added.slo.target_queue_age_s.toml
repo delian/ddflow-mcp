@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_queue_age_s"
+new = "600.0"
+why = "The queue-age target: the p90 seconds an item waits ready-to-claimed"
+impact = "additive"

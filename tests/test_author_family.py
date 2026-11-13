@@ -36,9 +36,9 @@ def gd(repo, cfg):
 
 def test_agent_family_is_a_knob_with_env_and_default_off(monkeypatch):
     monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
-    assert Config().agent.family == ""
+    assert Config.load().agent.family == ""
     monkeypatch.setenv("DDFLOW_AGENT_FAMILY", "DeepSeek")
-    assert Config().agent.family == "DeepSeek"
+    assert Config.load().agent.family == "DeepSeek"
 
 
 def test_a_bare_family_name_is_that_family_and_a_model_id_is_not():

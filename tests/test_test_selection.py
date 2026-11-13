@@ -447,6 +447,17 @@ def test_the_repos_guards_are_selected_by_the_packages_they_govern(changed, want
     assert set(T.governed(root, [changed], GUARDS)) == want
 
 
+def test_the_adapter_modularity_guard_is_selected_by_the_adapters_tree_it_scans():
+    """B-select-misses-adapter-discovery-tests: a new adapter family module (
+    ddflow/adapters/fs.py) is found by scanning the package at run time (`ports.discover`),
+    so no import or name reaches tests/test_adapter_modularity.py; it declares GOVERNS, so a
+    change under the adapters tree still selects it (a selected ci must not pass while the
+    full run fails)."""
+    root = Path(__file__).resolve().parents[1]
+    got = set(T.governed(root, ["ddflow/adapters/fs.py"], ["tests/test_adapter_modularity.py"]))
+    assert got == {"tests/test_adapter_modularity.py"}
+
+
 def test_a_named_slow_test_is_not_deselected_by_the_projects_marker_filter(tmp_path):
     """Bug Bc332daa185: `addopts = -m 'not slow'` deselected a named @pytest.mark.slow
     regression test (exit 5, 'no tests ran'), so the bug could never be closed."""

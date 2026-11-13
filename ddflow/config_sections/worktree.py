@@ -67,6 +67,24 @@ class WorktreeConfig:
             else "must be an integer >= 0 (0 = sweep on every brief)"
         ),
     )
+    stash_retries: int = knob(
+        4,
+        doc="How many times a real merge into a tree with uncommitted tracked work is retried when git reports a transient pre-merge failure that merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read -- B-merge-stash-failed-transient). Each retry is the identical command; a merge already begun is never repeated.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "must be an integer >= 0"
+        ),
+    )
+    stash_retry_pause_s: float = knob(
+        0.25,
+        doc="The first pause (seconds) before retrying a transient pre-merge failure that merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read); the nth retry pauses `stash_retry_pause_s * 2**n` (B-merge-stash-failed-transient).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
     max_parallel: int = knob(
         0,
         doc="Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing. 0 (the default) means FOLLOW the schedule limit -- the adaptive or fixed number of items in flight (`schedule.parallel`) -- and is not unlimited: there is no unlimited setting, the schedule ceiling always bounds it. A nonzero value stays an independent hard cap on worktrees alone. Projects adopted before adaptive parallelism carry an explicit `max_parallel = 4`, which caps auto at 4 worktrees; `ddflow doctor` names it and the remedy `ddflow config --set worktree.max_parallel 0`.",

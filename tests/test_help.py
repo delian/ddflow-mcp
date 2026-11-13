@@ -224,6 +224,20 @@ def test_every_command_a_help_page_names_exists():
     assert not unknown, f"help pages name commands that do not exist: {unknown}"
 
 
+def test_workflow_needs_documents_the_add_refusal():
+    """`ddflow task add --needs` refuses an id that does not exist; the page used to
+    describe it as "treated as UNMET" (B8b9fc41f60), telling the reader the opposite of
+    what the command does."""
+    text = H.render_topic("workflow")
+    assert "refuses an id that does not exist" in text, (
+        "the workflow page must say the ADD path REFUSES an unknown --needs id"
+    )
+    assert "did you mean" in text, "the refusal's 'did you mean' hint is part of the answer"
+    assert "An id that does not exist is treated as" not in text, (
+        "the stale 'treated as unmet' description of --needs must be gone"
+    )
+
+
 def test_every_topic_has_a_shipped_page():
     for topic in H.TOPICS:
         assert (H.help_dir() / f"{topic}.md").is_file(), topic

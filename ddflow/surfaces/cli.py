@@ -21,12 +21,15 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from ..api import cap_blas_threads
 from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
 from ..api import surf_setup as SS
+from ..api.cmdlog import cmdlog, repo_root
+from ..api.guard_launch import guard_foreign_launch
 from ..api.refs import provide_upgrade_vocabulary
 from ..api.waves_auto import scope_of
 from ..config_sections._layers import tolerating_conflicts
@@ -61,7 +64,7 @@ from .render import (
     reset_command,
     set_command,
 )
-from .tools import TOOLS
+from .tools import TOOLS, families
 from .update_message import update_message
 from .vocabulary import provide
 
@@ -320,14 +323,38 @@ def build_parser() -> argparse.ArgumentParser:
 _NOTICES = Notices()
 
 
-# What the stale-reference scan (`doctor`) checks names against: this parser and the tool table.
-provide(parser=build_parser, tools=TOOLS)
+# What the stale-reference scan (`doctor`) checks names against: this parser, every tool.
+provide(parser=build_parser, tools=families.named_tools(TOOLS))
 provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names against
 
 
 #: The commands that still run over a conflicted config layer: the one that reports it and
 #: the one that explains what to do (B6b8d1f7a0f). The rest refuse with `ConfigConflict`.
 CONFLICT_SAFE = {("doctor",), ("help",)}
+
+
+def _cli_vocabulary(parser: argparse.ArgumentParser) -> tuple[set[str], set[str]]:
+    """The CLI's verb words and flag names, for `cmdlog`'s argv shape (`redact_argv` keeps
+    exactly those and placeholders everything else). Walked from the parser tree once."""
+    verbs: set[str] = set()
+    flags: set[str] = set()
+    seen: set[int] = set()
+    stack = [parser]
+    while stack:
+        p = stack.pop()
+        if id(p) in seen:
+            continue
+        seen.add(id(p))
+        for action in p._actions:
+            # A no-value switch (`--json`, `-h`, a store_true flag) never consumes the next
+            # token, so it is NOT offered to `redact_argv` as a "kept flag", which would read
+            # the word after it as its `<value>` and hide the verb it swallowed.
+            if action.nargs != 0:
+                flags.update(action.option_strings)
+            if isinstance(getattr(action, "choices", None), dict):  # a _SubParsersAction
+                verbs.update(action.choices)
+                stack.extend(action.choices.values())
+    return verbs, flags
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -337,17 +364,41 @@ def main(argv: list[str] | None = None) -> int:
     return run_quietly(_main, argv)
 
 
+def _guard_foreign_launch() -> int:
+    """Refuse to run when this process imported ddflow from a foreign lane's worktree.
+
+    Delegates to ``ddflow.api`` (surfaces reach infra/services only through api); the
+    guard itself lives in ``ddflow/api/guard_launch.py``.
+    """
+    return guard_foreign_launch()
+
+
 def _main(argv: list[str] | None = None) -> int:
+    guarded = _guard_foreign_launch()
+    if guarded != OK:
+        return guarded
     parser = build_parser()
-    args = parser.parse_args(argv)
+    typed = list(sys.argv[1:] if argv is None else argv)
+    verbs, flags = _cli_vocabulary(parser)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # argparse's error() exits 2 on a bad command line (usage to stderr, no body) before
+        # `remembered_streams` runs (B831b6afddc); --help/--version exit 0 with their own output.
+        if exc.code == NOTHING and "--json" in typed:
+            emit_json(refusal_body(NOTHING, "usage error", EXIT_NAMES.get(NOTHING, "failed")))
+        raise
     # What was typed, for the commands a refusal tells the caller to run instead.
-    args._argv = list(sys.argv[1:] if argv is None else argv)
+    args._argv = typed
     # An old command, group or flag name still works (D-compat): said once, on stderr, so
     # `--json` output stays parseable.
     for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     # The schema every object body of this run is tagged with (D-compat-json-views).
-    tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
+    tagged = set_command(
+        command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args),
+        getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd(),
+    )
     with remembered_streams() as (out, said):
         try:
             code = _run(args)
@@ -366,8 +417,42 @@ def _main(argv: list[str] | None = None) -> int:
         # nothing to do without printing one still answers the reason (Bac9d773a44).
         if getattr(args, "json", False) and code != 0 and not out.wrote:
             emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
+        _remember_command(args, typed, code, said.text, verbs, flags)
         reset_command(tagged)
         return code
+
+
+def _remember_command(
+    args: argparse.Namespace,
+    typed: list[str],
+    code: int,
+    said: str,
+    verbs: set[str],
+    flags: set[str],
+) -> None:
+    """DX-command-log: record this command (argv shape + exit code + stderr tail) in the
+    git-ignored .ddflow/local/cmdlog.jsonl, so a repro bundle can list the last N."""
+    try:
+        root = repo_root(
+            Path(getattr(args, "repo", None) or os.environ.get("DDFLOW_REPO") or Path.cwd())
+        )
+    except Exception:
+        try:
+            root = repo_root(Path.cwd())
+        except Exception:
+            # Neither the target nor the current directory is a git repository: there is no
+            # repo-local command log to append to, and writing one would leave a stray
+            # `.ddflow/` behind in a plain directory (Bd7c147dfb9).
+            return
+    if not (root / ".ddflow").is_dir():
+        # An unadopted repository: a read-only command must leave no `.ddflow/` behind.
+        return
+    try:
+        cmdlog.record(
+            root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags
+        )
+    except Exception:  # the log is best-effort; it must not change the command's exit code
+        pass
 
 
 def _run(args: argparse.Namespace) -> int:

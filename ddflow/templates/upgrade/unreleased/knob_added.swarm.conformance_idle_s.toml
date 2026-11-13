@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.conformance_idle_s"
-new = '5.0'
-why = "Lane conformance levels (SW-conformance): the pass thresholds and waits of a conformance run are knobs."
+new = '120.0'
+why = "Lane conformance levels (SW-conformance): the pass thresholds and waits of a conformance run are knobs; 120s lets a real lane's first stream line arrive before collection stops (kilo takes ~20s to load its MCP server; a 5s idle ended collection first: B72bcd17b4e)."
 impact = "additive"

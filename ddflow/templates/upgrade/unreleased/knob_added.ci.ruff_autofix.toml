@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "ci.ruff_autofix"
+new = 'true'
+why = "The ci gate auto-corrects ruff lint/format drift on an item's branch before it merges (Bci-ruff-format-check-ci-lint-*), so a file with drift cannot land."
+impact = "additive"

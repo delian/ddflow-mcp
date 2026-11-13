@@ -12,10 +12,12 @@ import argparse
 import re
 from pathlib import Path
 
+from readme_corpus import readme_corpus
+
 from ddflow.surfaces import cli, mcp
 from ddflow.surfaces.tools.families import FAMILIES
 
-README = (Path(__file__).resolve().parents[1] / "README.md").read_text("utf-8")
+README = readme_corpus()
 
 
 def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:

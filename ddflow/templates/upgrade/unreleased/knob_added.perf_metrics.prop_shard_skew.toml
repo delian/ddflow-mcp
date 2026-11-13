@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.prop_shard_skew"
+new = "0.9"
+why = "Test-suite proposals (PM-prop-tests): the slowest file's share of the floor at or above which the proposal is to shard it, not to raise the worker count."
+impact = "additive"

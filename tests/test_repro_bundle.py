@@ -74,7 +74,9 @@ def test_bug_carries_a_bundle_with_the_facts(proj, monkeypatch):
     assert got["config_deltas"]["bugs.phase"]["layer"] != "default"
     assert got["item"]["id"] == "T1" and "gates" in got["item"]
     assert "load_avg" in got["machine"] and "disk_free_mb" in got["machine"]
-    assert "unavailable" in got["commands"]  # no command log exists; the bundle says so
+    assert got["commands"]["last"], got[
+        "commands"
+    ]  # the fixture's `ddflow init` recorded to the log
     run = got["repro_cmd"]
     assert run["command"] == "uv run pytest tests/test_x.py"
     # DX-bug-repro-verify: the command is run AT FILING, in a scratch checkout of the
@@ -99,6 +101,37 @@ def test_secrets_in_env_and_config_are_redacted(proj, monkeypatch):
     for leaked in ("hunter2-not-for-logs", SECRET, "zebra-98765"):
         assert leaked not in text, leaked
     assert "REDACTED" in got["env"]["DDFLOW_NOTE"]
+
+
+def test_a_bundle_holds_no_claude_account_or_socket_identifier(proj, monkeypatch):
+    # B6307b787dd: the default [bugs].repro_env pattern "CLAUDE*" recorded the Claude Code
+    # account/org UUIDs and the messaging socket path -- operator identity leaving the
+    # project without consent (r-consent-outward) -- and none of their names is
+    # credential-named, so none was masked. The default is narrowed to the behaviour-
+    # explaining variables (D-debug-capabilities-2026-11-05: stop recording the account and
+    # org UUIDs), so those identifiers never enter the bundle at all.
+    acct = "acct-00000000-1111-2222-3333-444444444444"
+    org = "org-55555555-6666-7777-8888-999999999999"
+    sock = "/home/operator/.claude/bridge.sock"
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID", acct)
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID", org)
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_SOCKET", sock)
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "/usr/local/bin/claude")
+    monkeypatch.setenv("CLAUDECODE", "claude")
+    _, bug = _file(proj)
+    got = _bundle(proj, bug)
+    for name in (
+        "CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID",
+        "CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID",
+        "CLAUDE_CODE_BRIDGE_SOCKET",
+    ):
+        assert name not in got["env"], name
+    text = "".join(p.read_text() for p in (proj / ".ddflow" / "blobs").rglob("*.json"))
+    for leaked in (acct, org, sock):
+        assert leaked not in text, leaked
+    # the behaviour-explaining variables are still recorded
+    assert got["env"]["CLAUDECODE"] == "claude"
+    assert got["env"]["CLAUDE_CODE_ENTRYPOINT"] == "/usr/local/bin/claude"
 
 
 def test_capture_off_stores_nothing(proj):
@@ -203,7 +236,10 @@ def test_a_check_that_raises_degrades_the_evidence_not_the_filing(proj, monkeypa
 def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
     _, bug = _file(proj, repro_capture="basic")
     got = _bundle(proj, bug)
-    assert "recent_events" not in got and "recent_events" not in got["commands"]["unavailable"]
+    # The fixture's `ddflow init` wrote to the command log, so `commands` is the `last`
+    # list (not the note that would say "see recent_events"); a basic bundle carries no
+    # "recent_events" section to point at either.
+    assert "recent_events" not in got and "last" in got["commands"]
     _, bug = _file(proj, repro_capture="full")
     assert "recent_events" in _bundle(proj, bug)
 

@@ -41,6 +41,7 @@ def scratch_tree(
     under: Path | None = None,
     quiet: bool = False,
     claim: Callable[[Path], Path | None] | None = None,
+    deadline_s: float | None = None,
 ) -> Iterator[Scratch]:
     """A throwaway worktree of ``ref`` in ``root``'s repository: one place that makes it,
     removes it however the body ends and prunes the registry.
@@ -56,12 +57,17 @@ def scratch_tree(
     registers it (ci passes one that writes its sibling owner marker, so a sweep between
     the add and the claim can never see the tree unclaimed). The path it returns (the
     marker ci writes) is unlinked on exit, so a claim without a registration does not leak.
+
+    ``deadline_s`` bounds the `git worktree add` that checks ``ref`` out: past it git is
+    killed and ``add`` reports unavailable (a ``path`` of None); the throwaway tree is
+    still removed on exit.
     """
     root = Path(root)
     tmp = fsio.unused_dir(prefix, under)  # `worktree add` wants to create it
     claimed: Path | None = claim(tmp) if claim is not None else None
     args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
-    add = _W.git(root, *args, str(tmp), ref)
+    timeout = {} if deadline_s is None else {"timeout": deadline_s}
+    add = _W.git(root, *args, str(tmp), ref, **timeout)
     try:
         yield Scratch(tmp if add.ok else None, add)
     finally:

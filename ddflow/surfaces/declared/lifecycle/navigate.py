@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from shlex import quote
 
+from ....core.plain import plain
+from ....core.schedule import wave_of
+from ....core.tier import tier_of
 from ....views.output_caps import from_args as _cap
+from ....views.output_caps import lane_token as _lane_token
 from ..capflags import capped
 from ._shared import (
     AB,
@@ -27,46 +31,281 @@ from ._shared import (
 )
 
 
+def _tags(a) -> tuple[str, ...]:
+    """The `--tag` values plus `--wave N` as the ``wave:N`` tag (NV-next-tag-filter)."""
+    tags = [str(t) for t in (a.get("tag") or ())]
+    wave = a.get("wave")
+    if wave is not None and wave != "":
+        tags.append(f"wave:{int(wave)}")
+    return tuple(tags)
+
+
+#: The report states `next --state` lists (NV-next-state-filter): each is one of `next`'s
+#: sections -- the ready list, the cap-held ready items, the blocked rows, the ready upstream
+#: blocking dependencies, the running items, the interrupted ones (RUNNING with no live
+#: lease), the merged-not-completed ids and the items waiting on review.
+STATES = (
+    "interrupted",
+    "running",
+    "blocked",
+    "ready",
+    "merged",
+    "held",
+    "review",
+    "blocking_deps",
+)
+
+
+def _state_token(
+    state: str,
+    kind: str = "",
+    phase: str = "",
+    phase_only: bool = False,
+    tags: tuple[str, ...] = (),
+) -> str:
+    """The `command` token `output_caps` reads for `next --state`: it pages the state list.
+    Carries kind, phase and the tag filters (as `lane_token` does for the lane call), so a
+    cut list's next-page call keeps the whole selection."""
+    return (
+        f"next --state {state}"
+        + (f" --kind {kind}" if kind else "")
+        + (f" --phase {phase}" if phase else "")
+        + (" --phase-only" if phase_only else "")
+        + "".join(f" --tag {t}" for t in tags)
+    )
+
+
+def _item_row(i) -> dict:
+    """A plain item row in the ready-row shape (`wave`/`tier` beside the item's own fields)."""
+    row = plain(i)
+    row["wave"] = wave_of(i.tags)
+    if tier := tier_of(i.tags):
+        row["tier"] = tier
+    return row
+
+
+def _item_rows_of(data: dict, attr: str) -> list:
+    """`data`'s `_render.plan` `attr` item list (running, review) as ready-shaped rows."""
+    return [_item_row(i) for i in getattr(data["_render"]["plan"], attr)]
+
+
+def _interrupted_rows(data: dict) -> list:
+    """The RUNNING items with no live lease: `next`'s `interrupted` ids matched against the
+    running items (an `interrupted` note is "<id> is RUNNING with no live lease..."; ids
+    hold no spaces)."""
+    p = data["_render"]["plan"]
+    ids = {n.split(" ", 1)[0] for n in data.get("interrupted", [])}
+    return [_item_row(i) for i in p.running if i.id in ids]
+
+
+#: state -> the list `next`'s data holds for it: a data key, or a row-builder for the
+#: states whose rows `next` does not carry directly.
+_STATE_ROW_BUILDER = {
+    "ready": lambda d: d.get("ready", []),
+    "held": lambda d: d.get("held_by_cap", []),
+    "blocked": lambda d: d.get("blocked", []),
+    "blocking_deps": lambda d: d.get("blocking_deps", []),
+    "merged": lambda d: [{"item": i} for i in d.get("needs_complete", [])],
+    "running": lambda d: _item_rows_of(d, "running"),
+    "review": lambda d: _item_rows_of(d, "review"),
+    "interrupted": _interrupted_rows,
+}
+
+
+def _state_rows(out, state: str) -> list:
+    """The items of one report state, straight from `next`'s data or built as full rows."""
+    return _STATE_ROW_BUILDER[state](out.data) if state in _STATE_ROW_BUILDER else []
+
+
+def _state_answer(out, state: str, phase: str, tags: tuple[str, ...]):
+    """`out` reshaped to a state listing: the state echoed, its items, the count, and the
+    selection echoed under `filter`. An unknown `--phase`/`--tag` refusal stays the refusal;
+    an exit-0/exit-2 answer becomes the listing (an empty one is a result, not an error)."""
+    if out.exit not in (OK, NOTHING):
+        return out
+    rows = _state_rows(out, state)
+    out.data = {
+        "state": state,
+        "items": rows,
+        "count": len(rows),
+        "filter": {"state": state, "phase": phase, "tag": list(tags)},
+    }
+    out.exit = OK
+    return out
+
+
+def _state_row_lines(row: dict) -> list[str]:
+    """One list row: a blocked/merged row (`item`) as `item: reason — detail`, an item row
+    (`id`) as the ready list prints one, with globs and needs."""
+    if "item" in row:
+        parts = [row["item"]]
+        if row.get("reason"):
+            parts.append(row["reason"])
+        if row.get("detail"):
+            parts.append(row["detail"])
+        return ["  " + " — ".join(parts)]
+    lines = [f"  {row['id']}  {row.get('title', '')}"]
+    if row.get("globs"):
+        lines.append(f"      writes: {', '.join(row['globs'])}")
+    if row.get("needs"):
+        lines.append(f"      needs: {', '.join(row['needs'])}")
+    return lines
+
+
+def _state_text(out, a, ctx) -> str:
+    """The `next --state` text: the state's list, then the cap footer when the list was cut."""
+    d = out.data
+    head = {
+        "interrupted": "Interrupted",
+        "running": "Running",
+        "blocked": "Blocked",
+        "ready": "Ready",
+        "merged": "Merged, not completed",
+        "held": "Ready but held by the cap",
+        "review": "In review",
+        "blocking_deps": "Blocking dependencies",
+    }.get(d["state"], d["state"])
+    lines = [f"{head} ({d.get('count', len(d.get('items', [])))}):"]
+    for row in d.get("items", []):
+        lines.extend(_state_row_lines(row))
+    if note := d.get("_footer"):
+        lines.append(note)
+    return "\n".join(lines)
+
+
 def _next(repo, a, agent):
-    """`next`, or with `--lane` the pull answer for that lane."""
+    """`next`, or with `--lane` the pull answer for that lane, or with `--state` the list
+    of items in one report state."""
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
+    phase_only = bool(a.get("phase_only", False))
+    tags = _tags(a)
+    state = a.get("state", "") or ""
     if lane := a.get("lane", ""):
-        out = _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
-        return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
-    return _cap(repo, _api().next_item(repo, kind=kind, phase=phase, agent=agent), "next", a)
+        out = _api().next_lane(
+            repo,
+            lane=lane,
+            kind=kind,
+            phase=phase,
+            phase_only=phase_only,
+            agent=agent,
+            tags=tags,
+        )
+        token = _lane_token(
+            lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
+        )
+        return _cap(repo, out, token, a)  # its footer names the lane call
+    out = _api().next_item(
+        repo,
+        kind=kind,
+        phase=phase,
+        agent=agent,
+        phase_only=phase_only,
+        tags=tags,
+        ignore_cap=bool(a.get("ignore_cap", False)),
+    )
+    if state:
+        token = _state_token(
+            state,
+            "" if kind == _api().DEFAULT_NEXT_KIND else kind,
+            phase,
+            phase_only,
+            tags,
+        )
+        return _cap(repo, _state_answer(out, state, phase, tags), token, a)
+    return _cap(repo, out, "next", a)
 
 
 def _next_notes(out, a, ctx):
     """A pull answer says everything in its text; the queue's notes read its plan."""
+    if a.get("state"):
+        return ()
     return () if a.get("lane") else L.next_notes(out, a, ctx)
 
 
 def _next_text(out, a, ctx):
-    if not a.get("lane"):
-        return L.next_text(out, a, ctx)
-    if out.exit == OK:
-        d = out.data
-        return f"{d['lane']}: take {d['item']}\n  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
-    return f"{a['lane']}: {out.reason}"
+    if a.get("lane"):
+        if out.exit == OK:
+            d = out.data
+            return (
+                f"{d['lane']}: take {d['item']}\n"
+                f"  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
+            )
+        return f"{a['lane']}: {out.reason}"
+    if a.get("state"):
+        return _state_text(out, a, ctx)
+    return L.next_text(out, a, ctx)
 
 
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
-        summary="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
+        summary="what may start now (exit 2 = nothing ready or held, exit 1 = unknown --phase)",
         tool="ddflow_next",
         description="What may be started RIGHT NOW, and why the rest may not. Independent "
         "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
-        "it never means 'pick something anyway'.",
+        "it never means 'pick something anyway'. With `--phase`, ready upstream "
+        "blocking-dependencies are included by default (labelled); `--phase-only` "
+        "restores the in-phase-only slice.",
         call=_next,
         payload="",
         cli=CliPolicy(notes=_next_notes, human=_next_text),
         params=(
             Param(
                 "phase",
-                help="Restrict to one phase (the 'implement phase X' entry point).",
+                help="Restrict to one phase (the 'implement phase X' entry point). By default "
+                "the phase's ready blocking-dependencies are also returned, each labelled "
+                "`blocking_dependency`; `phase_only=true` hides them.",
                 cli_help="limit to this phase; exit 1 if it names no phase or item",
                 default="",
+            ),
+            Param(
+                "phase_only",
+                type="boolean",
+                help="With `--phase`: return the phase's own ready items only, hiding the "
+                "ready upstream blocking-dependencies shown by default.",
+                cli_help="with --phase: the phase's own ready items only (skip its ready "
+                "blocking-dependencies)",
+                default=False,
+            ),
+            Param(
+                "tag",
+                repeat=True,
+                help="Only items with this tag, e.g. wave:3; repeat: all must match.",
+                cli_help="only items carrying this tag (repeatable: all must match); "
+                "exit 1 if no item carries it",
+                default=None,
+            ),
+            Param(
+                "wave",
+                type="integer",
+                help="Shorthand for tag wave:N.",
+                cli_help="shorthand for --tag wave:N",
+                default=None,
+            ),
+            Param(
+                "ignore_cap",
+                type="boolean",
+                help="Offer items only the parallelism cap holds back as ready.",
+                cli_help="treat items held only by the parallelism cap as ready for this call",
+                default=False,
+            ),
+            Param(
+                "blocked",
+                type="boolean",
+                help="List every blocked item.",
+                cli_help="list every blocked item, dependency-blocked ones too (text view)",
+                default=False,
+            ),
+            Param(
+                "state",
+                help="List the items in one report state (interrupted, running, blocked, "
+                "ready, merged, held, review, blocking_deps). Echoed in --json under "
+                "`state` and `filter.state`; the list is cut with the same --full / "
+                "--cursor caps.",
+                cli_help="list the items in one report state: interrupted, running, "
+                "blocked, ready, merged, held, review or blocking_deps",
+                default="",
+                choices=STATES,
             ),
             Param(
                 "kind",
@@ -135,6 +374,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "role",
+                help="Render the project's rules for this role (phase-closer, fixer, researcher, reviewer) instead of the session pack; with for_agent, append them to the launch brief.",
+                cli_help="the project's rules for a role: phase-closer, fixer, researcher or reviewer (with --for-agent: appended to the launch brief)",
+                default="",
+            ),
+            Param(
                 "note",
                 help="",
                 cli_help="with --for-agent: the coordinator's note for this item",
@@ -200,7 +445,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded.",
+                help="Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded.",
                 cli_help="",
             ),
             Param(
@@ -329,6 +574,9 @@ COMMANDS: tuple[Command, ...] = (
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
             token=a.get("token", "") or "",
+            approval=a.get("approval", "") or "",
+            job=a.get("job", "") or "",
+            notify=a.get("notify", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -371,9 +619,30 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "approval",
+                help="Wait for an APPROVAL instead of an item or lease: an operator-approval request id, until the person answers it. Ready then means re-run the gated command with --approval ID.",
+                cli_help="wait for an operator-approval request id until it is answered; ready then means "
+                "re-run the gated command with --approval ID",
+                default="",
+            ),
+            Param(
+                "job",
+                help="Wait for a JOB instead of an item, lease or approval: the run handle a detached review (`ddflow review --detach`) returns, until its process is over and the round is recorded. Ready then means read the round (next_actions) and act on it.",
+                cli_help="wait for a job (a detached review's run handle) instead of an item, lease or "
+                "approval: until its process is over and its round is recorded",
+                default="",
+            ),
+            Param(
                 "token",
                 help="The resume token a bounded wait returned (`wake.token`): asks the same question again; item, phase, lease and globs given with it win.",
                 cli_help="resume token from an earlier wait",
+                default="",
+            ),
+            Param(
+                "notify",
+                help="Register how to reach this waiter when its wake fires, surfaced to the holder's release/complete (`woke`): '' = it polls `ddflow wait`; `send_message:<session-id>` = the harness session to resume (SendMessage); `watch:<url>` = an inbound URL to POST the wake to.",
+                cli_help="how to reach this waiter when its wake fires: empty (poll ddflow wait), "
+                "`send_message:<session-id>` (harness session to resume) or `watch:<url>` (inbound URL to post to)",
                 default="",
             ),
             Param(

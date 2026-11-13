@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import shlex
+import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,13 @@ from ._vet import (
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
+
+#: How many additional times recording a gate outcome is retried after the event-log lock
+#: times out, and the pause between attempts. Each attempt already waited the lock's own
+#: timeout, so these ride out a transient heartbeat holder without ever re-running the gate
+#: command (B054959b3c4).
+_RECORD_LOCK_RETRIES = 3
+_RECORD_LOCK_RETRY_S = 2.0
 
 
 def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
@@ -188,13 +197,48 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+_MAX_FAILED_IDS_SHOWN = 80  #: how many failing test ids a superseded run's refusal names
+
+
+def _found_text(result: str, ev: dict[str, Any]) -> str:
+    """What a finished-but-superseded run found, so its outcome is not lost
+    (B267a6b0b5e). The failing test ids are named too: the test ids are not a side
+    note, they are what an operator needs to fix, so they survive a supersede the way
+    the verdict does (B4ba4673c0a), with a note when there are more."""
+    found = [result.upper()]
+    body: list[str] = []
+    summary = ev.get("summary") or []
+    if summary and not isinstance(summary, str):
+        body.extend(str(s) for s in summary)
+    ids = ev.get("failed_tests") or []
+    if ids:
+        shown = ", ".join(str(t) for t in ids[:_MAX_FAILED_IDS_SHOWN])
+        body.append(
+            shown
+            if len(ids) <= _MAX_FAILED_IDS_SHOWN
+            else f"{shown} (and {len(ids) - _MAX_FAILED_IDS_SHOWN} more)"
+        )
+    if body:
+        found.append("; ".join(body))
+    return " ".join(found).strip()
+
+
 def _superseded_run(
-    repo: Path, agent: str, item: str, gate: str, started_on: str, started_at: str, cwd: Path
+    repo: Path,
+    agent: str,
+    item: str,
+    gate: str,
+    started_on: str,
+    started_at: str,
+    cwd: Path,
+    result: str = "",
+    ev: dict[str, Any] | None = None,
 ) -> str:
     """Why a finished run must not be recorded ("" when it may): it began on a commit that
     HEAD, or the gate's recorded outcome, has since moved past (B27a236a534). Recording it
     would put a verdict about old source over one about the new -- a stale FAILED over a
-    newer PASSED, which `complete` then refuses."""
+    newer PASSED, which `complete` then refuses. The refusal still says what the run found
+    (its verdict and summary lines), so the outcome is not lost (B267a6b0b5e)."""
     _log, _cfg, st = _load(repo, agent)
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
@@ -203,6 +247,7 @@ def _superseded_run(
     # repository, so ancestry is asked there (git cannot answer from a missing directory, and
     # "could not tell" keeps the record: Bcf22c7f7c8).
     asked = cwd if cwd.is_dir() else repo
+    found = f"; it found {_found_text(result, ev or {})}" if result else ""
     if (
         recorded
         and clock.epoch(rec.at) > clock.epoch(started_at)
@@ -213,7 +258,7 @@ def _superseded_run(
         return (
             f"{gate} ran on {G.head_of(started_on)}, but an outcome for "
             f"{G.head_of(recorded)} was recorded while it ran: its outcome is superseded "
-            f"and was not recorded. Re-run `ddflow gate run {item} {gate}` on the current commit."
+            f"and was not recorded{found}. Re-run `ddflow gate run {item} {gate}` on the current commit."
         )
     for newer, what in (
         (G.tree_identity(cwd), "the tree is now at"),
@@ -222,18 +267,18 @@ def _superseded_run(
         if newer and G.superseded_by(started_on, newer, asked, paths=(it.globs if it else None)):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
-                f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
+                f"its outcome is superseded and was not recorded{found}. Re-run `ddflow gate run "
                 f"{item} {gate}` on the current commit."
             )
     return ""
 
 
-def _mark_or_refuse_twin(repo, item, gate, started_on):
+def _mark_or_refuse_twin(repo, item, gate, started_on, expected_s=0):
     """Mark, then look, under one lock: of two runs started together the first to take it
     marks and sees no twin; the second sees the first's marker and refuses.
     Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live twin, or
     ``(None, None)`` when no marker could be written and no twin was seen."""
-    marker, twin = RUN.claim_started(repo, item, gate, started_on)
+    marker, twin = RUN.claim_started(repo, item, gate, started_on, expected_s=expected_s)
     if not twin:
         return marker, None
     return None, O.nothing(
@@ -245,6 +290,39 @@ def _mark_or_refuse_twin(repo, item, gate, started_on):
         outcome="",
         id=item,
     )
+
+
+def _merged_tree_run(repo: Path, it, cwd: Path | None):
+    """A context that yields a scratch checkout of the commit ``it`` merged as, for a command
+    gate whose worktree is gone and whose base stands nowhere on the merged tree (B80a4dafd02).
+
+    `merge` removes the worktree, and once the base has moved past the merge no checkout stands
+    at the merged tree, so `gate run` had nothing to run and recorded UNAVAILABLE. The merged
+    work is still a committed tree at `merged_sha`, so the gate runs there. Yields None when the
+    caller has a tree already, or the item is unmerged/a phase/its merged commit is not here --
+    then the caller's ordinary no-tree refusal answers instead."""
+    if (
+        cwd is not None
+        or not it.merged_sha
+        or it.kind == "phase"
+        or it.worktree  # a KEPT tree is a live checkout, judged by the kept-tree rules, not here
+        or not W.rev(repo, it.merged_sha)
+    ):
+        return nullcontext(None)
+    return W.scratch_tree(repo, it.merged_sha, detach=True, prefix="ddflow-merged.", quiet=True)
+
+
+def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
+    """(where a command gate runs, else None; the no-tree ``(reason, kept)``, else None).
+
+    ``made`` is the scratch checkout `_merged_tree_run` made of the merged commit, or None;
+    without one and without a live tree the gate has nowhere to run, and the no-tree reason
+    is returned for `run` to record. A helper so `run` never posts grade-D complexity."""
+    if cwd is not None:
+        return cwd, None
+    if made is not None and made.path is not None:
+        return made.path, None
+    return None, _no_tree_reason(repo, it, item, gate, held, force)
 
 
 def run(
@@ -315,50 +393,60 @@ def run(
     forced = bool(forced_by)
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
-    if cwd is None:
-        reason, kept = _no_tree_reason(repo, it, item, gate, held, force)
-        if not kept:
-            R.record_measured(
-                log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+    with _merged_tree_run(repo, it, cwd) as made:
+        cwd, no_tree = _resolve_tree(repo, it, item, gate, held, cwd, made, force)
+        if cwd is None:
+            reason, kept = no_tree
+            if not kept:
+                R.record_measured(
+                    log,
+                    cfg,
+                    repo,
+                    it,
+                    gate,
+                    "unavailable",
+                    reason=reason,
+                    gates=gates,
+                    forced=forced,
+                )
+            return O.nothing(
+                "gate.run",
+                reason,
+                gate=gate,
+                outcome=kept or "unavailable",
+                evidence={"reason": reason},
+                id=item,
             )
-        return O.nothing(
-            "gate.run",
-            reason,
-            gate=gate,
-            outcome=kept or "unavailable",
-            evidence={"reason": reason},
-            id=item,
+        repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
+        if repeated is not None:
+            return repeated
+        scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
+        if covered is not None:
+            return covered
+        started_on = G.tree_identity(cwd)
+        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, gdef.timeout_s)
+        if twin_refusal is not None:
+            return twin_refusal
+        started_at = clock.now_iso()
+        log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+        done = _guarded(
+            log,
+            cfg,
+            repo,
+            agent,
+            it,
+            item,
+            gate,
+            gdef=gdef,
+            gates=gates,
+            cwd=cwd,
+            scope=scope,
+            forced=forced,
+            rerun_failed=rerun_failed,
+            started_on=started_on,
+            started_at=started_at,
+            marker=marker,
         )
-    repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
-    if repeated is not None:
-        return repeated
-    scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
-    if covered is not None:
-        return covered
-    started_on = G.tree_identity(cwd)
-    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
-    if twin_refusal is not None:
-        return twin_refusal
-    started_at = clock.now_iso()
-    log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
-    done = _guarded(
-        log,
-        cfg,
-        repo,
-        agent,
-        it,
-        item,
-        gate,
-        gdef=gdef,
-        gates=gates,
-        cwd=cwd,
-        scope=scope,
-        forced=forced,
-        rerun_failed=rerun_failed,
-        started_on=started_on,
-        started_at=started_at,
-        marker=marker,
-    )
     if isinstance(done, O.Outcome):
         return done
     result, ev, reason = done
@@ -371,6 +459,31 @@ def run(
     if exit_code == O.FAIL:
         return O.failed("gate.run", reason or f"{gate} failed", **data)
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _record_unavailable_reliably(log, cfg, repo, it, gate, reason, evidence, gates, forced) -> bool:
+    """Record ``unavailable`` for a run whose outcome the event-log lock would not let it
+    write, retrying a bounded number of times so a transient lock holder does not lose a
+    detached run. Returns whether the outcome landed on the record (B054959b3c4)."""
+    for attempt in range(_RECORD_LOCK_RETRIES + 1):
+        try:
+            R.record_measured(
+                log,
+                cfg,
+                repo,
+                it,
+                gate,
+                "unavailable",
+                reason=reason,
+                evidence=evidence,
+                gates=gates,
+                forced=forced,
+            )
+            return True
+        except TimeoutError:
+            if attempt < _RECORD_LOCK_RETRIES:
+                time.sleep(_RECORD_LOCK_RETRY_S)
+    return False
 
 
 def _guarded(log, cfg, repo, agent, it, item, gate, **run):
@@ -406,6 +519,33 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
             forced=forced,
         )
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
+    except TimeoutError as err:
+        # The event-log lock could not be acquired to write the run's outcome, so the run
+        # would otherwise die with a raw traceback and no record at all (B054959b3c4).
+        reason = (
+            "the run's outcome could not be recorded: the event-log lock was not acquired "
+            f"in time ({err}). The gate stays unrecorded -- retry when the machine is less "
+            "loaded (see `ddflow doctor`)."
+        )
+        _log, _cfg, now = _load(repo, agent)
+        rec = now.items[item].gates.get(gate) if item in now.items else None
+        if _recorded_since(rec, started_at):
+            # Something was recorded while the run lived: that stands, as in the sweep.
+            return O.nothing("gate.run", reason, gate=gate, outcome="", evidence={}, id=item)
+        _record_unavailable_reliably(
+            log,
+            cfg,
+            repo,
+            it,
+            gate,
+            reason,
+            evidence={"started_tree_sha": started_on, "lock_timeout": str(err)},
+            gates=gates,
+            forced=forced,
+        )
+        return O.nothing(
+            "gate.run", reason, gate=gate, outcome="unavailable", evidence={"lock_timeout": str(err)}, id=item
+        )
     finally:
         RUN.clear_started(marker)
 
@@ -447,7 +587,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
     if scope is not None:
         ev.update(scope.evidence())
     ev["started_tree_sha"] = started_on
-    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd)
+    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd, result, ev)
     if stale:
         return O.refused("gate.run", stale, id=item, gate=gate, outcome="", evidence=ev)
 
@@ -512,6 +652,34 @@ def _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced) -> O.Out
     return O.ok("gate.run", gate=gate, outcome="passed", evidence=ev, id=it.id)
 
 
+def _ignored_approval_refusal(
+    approval: str, approval_stamp: dict, gate: str, item: str, outcome: str, refused
+):
+    """What `record` refuses when `--approval` turns out not to be spent, else ``refused``.
+
+    `--approval` (an id, or 'request') was dropped silently when nothing needed it (bug
+    Be2de070703): for a non-skip outcome an agent may record directly, a passed
+    `--approval` has nothing to approve, so refuse it and name the real route. The real
+    refusal `_agent_skip_refusal` already returned is kept first: a skip over a failed
+    review still needs the operator, so a passed-but-unspent `--approval` on THAT call is
+    not "no approval needed" and the real refusal must not be clobbered. Broken out of
+    ``record`` so its loop count stays under the complexity ratchet."""
+    if refused is not None:
+        return refused
+    if approval and not approval_stamp:
+        return O.refused(
+            "gate.record",
+            f"recording {gate} as {outcome} needs no operator's approval, so --approval "
+            "was ignored -- nothing was filed or spent. Record it directly (no approval is "
+            f"needed for it), or have the operator accept the recorded gate with "
+            f"`ddflow approve {item} {gate}`.",
+            id=item,
+            gate=gate,
+            outcome=outcome,
+        )
+    return None
+
+
 def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
     repo: Path,
     item: str,
@@ -552,6 +720,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
+    refused = _ignored_approval_refusal(approval, approval_stamp, gate, item, outcome, refused)
     if refused is not None:
         return refused
     # B97106be46a: a refused skip already says which case it is (the refusal names the

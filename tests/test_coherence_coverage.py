@@ -32,6 +32,7 @@ from conftest import run_cli
 from test_add_dedupe_cli import ADDS
 
 from ddflow.api import rules as R
+from ddflow.core import eventkinds as EK
 from ddflow.core.model import GATE_OUTCOMES, HANDLERS, fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces import cli
@@ -44,17 +45,9 @@ PKG = Path(__file__).resolve().parents[1] / "ddflow"
 GOVERNS = ("ddflow/api/**", "ddflow/surfaces/**", "ddflow/core/handlers/**")
 
 #: Event kinds that FILE a record whose text may repeat one already filed -> the API add
-#: function that runs the check for it.
-CHECKED: dict[str, str] = {
-    "task.added": "items.task_add",
-    "phase.added": "items.phase_add",
-    "bug.found": "knowledge.bug_found",
-    "lesson.recorded": "knowledge.lesson_add",
-    "decision.recorded": "decisions.decision_add",
-    "research.recorded": "knowledge.research_add",
-    "memory.recorded": "knowledge.memory_add",
-    "def.recorded": "defs.def_record",
-}
+#: function that runs the check for it. Derived from the event-kind declarations (`checked`
+#: rows): a new kind's classification is declared in its own file.
+CHECKED: dict[str, str] = dict(EK.checked(EK.EVENT_KINDS.values_list()))
 #: Checked kinds with no CLI add yet, and the test that files a near-copy through their API
 #: and expects the refusal (`test_add_dedupe_cli.ADDS` covers the others).
 API_ONLY_ADDS: dict[str, str] = {

@@ -93,6 +93,24 @@ def test_a_fresh_queue_offers_features_only_up_to_the_ordinary_share(log, cfg):
     assert _ready(p) == ["F1", "F2"] and p.capped == ["F3"]
 
 
+def test_a_cap_hold_says_a_named_claim_is_not_capped(log, cfg):
+    """B30f9d383ba: a cap-held item whose free slot went to a HIGHER-RANKED item (which may
+    have no lease) is listed as blocked while `claim <id>` never applies the cap to a NAMED
+    item; the detail must say a named claim grants it -- otherwise a lane cannot tell a wait
+    for a slot from an item it could claim right now."""
+    _queue(log, "F1", "F2", "F3", "F4")
+    _hold(log, "F1")
+    cfg.schedule.max_parallel_tasks = 2
+    cfg.schedule.reserved_slots = 0
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    goods = [b for b in p.blocked if b.item in ("F3", "F4")]
+    assert goods and p.capped == ["F3", "F4"]
+    why = goods[0].detail
+    # the free slot went to higher-ranked F2 (not "cap reached"): the branch the bug is about
+    assert "slot(s) free, offered to higher-ranked F2" in why, why
+    assert "not capped" in why and "grants it now" in why, why
+
+
 @pytest.mark.parametrize("tag", ["bug", "bugfix", "fix", "hotfix", "ddflow-gap"])
 def test_each_reserved_kind_of_tag_may_use_the_slot(log, cfg, tag):
     _queue(log, "F1", "F2")
@@ -327,6 +345,32 @@ def test_a_reservation_hold_does_not_blame_a_cap_that_was_not_reached(log, cfg):
     assert "1 held" not in p.summary() and "2 held by schedule.reserved_slots" in p.summary()
 
 
+def test_the_note_names_the_worktree_share_when_trees_bind_below_the_limit(log, cfg):
+    """DX-reserved-note-tree: with worktree.max_parallel tighter than the limit, the
+    reservation is a share of the TREE cap, and the summary names that share, not the
+    flight share ("1 of 8")."""
+    _queue(log, "F1", "F2")
+    _hold(log, "F1", worktree="/t/f1")
+    _reserve(cfg, cap=8)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert "1 of 2 worktree slot(s) reserved" in p.summary(), p.summary()
+    assert "1 of 8" not in p.summary(), p.summary()
+
+
+def test_the_note_names_the_flight_share_when_the_tree_cap_does_not_bind(log, cfg):
+    """DX-reserved-note-tree (roborev 4508): no-worktree leases keep the FLIGHT limit binding
+    even with a tighter worktree cap, so the note must name the flight share, not worktrees."""
+    _queue(log, "F1", "F2", "F3", "F4", "F5", "F6")
+    for n in ("F1", "F2", "F3", "F4", "F5", "F6"):
+        _hold(log, n, worktree="")
+    _reserve(cfg, cap=8, reserved=2)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert "worktree slot(s)" not in p.reserved_note, p.reserved_note
+    assert "2 of 8 slot(s) reserved" in p.reserved_note, p.reserved_note
+
+
 def test_the_cap_note_names_both_when_both_held_something(log, cfg):
     """F3 meets a free slot that is reserved; fix-A then takes it, and F4 meets a full cap."""
     log.append("phase.added", "P", {"title": "phase"})
@@ -412,7 +456,9 @@ def test_next_with_nothing_ready_still_says_it(repo):
     assert api.lifecycle.claim(repo, "F1", no_worktree=True, agent="x").ok
     assert api.lifecycle.claim(repo, "F2", no_worktree=True, agent="y").ok
     code, out, _err = run_cli(repo, "next")
-    assert code == 2
+    # Operator ruling 2026-11-12 (D-next-view-rulings-2026-11-12): items held only by the cap
+    # or a reserved slot are unblocked work, so exit 0 with a held section, not 2.
+    assert code == 0
     assert "1 of 3 slot(s) reserved" in out and "F3" in out, out
 
 

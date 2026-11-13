@@ -28,8 +28,9 @@ def _setup(repo: Path, tmp_path: Path) -> None:
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat | grep '^+')\n"
-        'case "$in" in *FINDME-B*) printf \'FINDING MEDIUM y.py:1\\nsecond problem\\n\\n'
+        'case "$in" in *FINDME-H*) printf \'FINDING HIGH z.py:1\\nnew high problem\\n\\n'
         "STATUS: FINDINGS 1\\n';; "
+        "*FINDME-B*) printf 'FINDING MEDIUM y.py:1\\nsecond problem\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )
@@ -83,19 +84,19 @@ def test_failed_gate_with_confirmed_findings_and_no_delta_round_is_refused(repo,
 def test_a_delta_round_that_did_not_raise_the_finding_again_clears_it(repo, tmp_path):
     _setup(repo, tmp_path)
     _failed_and_confirmed(repo)
-    # fix #1, and the next change draws a NEW finding: the gate stays failed, #1 is answered
+    # fix #1, and the next change draws a NEW HIGH finding: the gate stays failed, #1 is answered
     _commit(repo, "x.py", "x = 1\n")
-    _commit(repo, "y.py", "y = 1  # FINDME-B\n")
+    _commit(repo, "z.py", "z = 1  # FINDME-H\n")
     out = api.review(repo, gate="critic", item="T1", branch="feat")
     assert out.data["outcome"] == "failed", out.data
     ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
     assert len(ev["delta_raised"]) == 1 and ev["findings"] == 2, ev
-    t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="y.py is wrong")
+    t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="z.py is wrong")
     assert t.exit == 0, t.reason
     _, text = _complete(repo)
     assert BLOCKER in text and "confirmed finding(s) " in text, text
     # the second finding gets its own delta round that does not raise it
-    _commit(repo, "y.py", "y = 1\n")
+    _commit(repo, "z.py", "z = 1\n")
     api.review(repo, gate="critic", item="T1", branch="feat")
     _, text = _complete(repo)
     assert BLOCKER not in text, text
@@ -173,6 +174,51 @@ def test_a_confirmed_finding_a_later_full_round_dropped_still_needs_a_delta(repo
     t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="y.py is fine")
     assert t.exit == 0, t.reason
     assert BLOCKER in _complete(repo)[1]
+
+
+def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_it(repo, tmp_path):
+    """Bug B-tk-delta-round-empty: the fix for a confirmed finding IS the reviewed head
+    (R2, a full re-review, reviewed the tip that already carries the fix), so a `--delta`
+    re-checks nothing (`_unchanged_delta`). It used to answer "stays failed" and merge
+    refused forever: a delta round that would re-check the fix is impossible because the
+    delta is empty. The reviewed head already covers the tip, so the finding is settled."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 raises #1, confirmed
+    _commit(repo, "x.py", "x = 1\n")  # the fix
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # a MEDIUM nit: below the HIGH floor
+    out = api.review(
+        repo, gate="critic", item="T1", branch="feat", full=True
+    )  # R2: reviewed head = fix
+    assert out.data["outcome"] == "failed", out.data  # confirmed #1 still has no delta round
+    t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="the nit is fine")
+    assert t.exit == 0, t.reason
+    assert BLOCKER in _complete(repo)[1]
+    out2 = api.review(repo, gate="critic", item="T1", branch="feat")  # delta_default -> empty delta
+    assert BLOCKER not in _complete(repo)[1], out2.data
+
+
+def test_a_mix_of_one_dropped_and_one_carried_confirmed_finding_releases_nothing(repo, tmp_path):
+    """The robustness the reviewers found on B-tk-delta-round-empty: `_dropped_unrechecked`
+    must release the gate only when EVERY unrechecked confirmed finding was dropped by the
+    latest record; a mix (one dropped, another still carried) releases nothing or an unfixed
+    defect would merge."""
+    import ddflow.api.review.triaging as TR
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 raises #1, confirmed at x.py
+    _commit(repo, "x.py", "x = 1\n")  # fixes #1
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # a new MEDIUM below the HIGH floor
+    out = api.review(
+        repo, gate="critic", item="T1", branch="feat", full=True
+    )  # drops #1, raises #B
+    assert out.data["outcome"] == "failed", out.data
+    # the new finding is confirmed too (its fix is not made): still carried by the latest record
+    t = api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="to fix y.py")
+    assert t.exit == 0, t.reason
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert TR._dropped_unrechecked(st.items["T1"], "critic") == [], (
+        "one confirmed dropped, another still carried: nothing releases"
+    )
 
 
 def test_any_gate_with_a_reviewer_counts_not_only_different_family_ones(repo, tmp_path):

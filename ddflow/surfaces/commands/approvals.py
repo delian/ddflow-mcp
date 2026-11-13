@@ -21,6 +21,7 @@ PAYLOADS = {
     "attest": ("id",),
     "approve": ("id", "outcome"),
     "deny": ("id", "outcome"),
+    "answer": ("id", "outcome"),
     "revoke": ("id",),
     "withdraw": ("id",),
 }
@@ -94,6 +95,11 @@ def cmd_approvals_deny(a, c: Ctx) -> int:
         c.repo, a.id, digest=_digest_or_ask(c, a.id, a.digest or ""), agent=c.requested_agent
     )
     return _finish(c, out, "deny")
+
+
+def cmd_approvals_answer(a, c: Ctx) -> int:
+    out = AA.approvals_answer(c.repo, a.id, text=a.text or "", agent=c.requested_agent)
+    return _finish(c, out, "answer")
 
 
 def cmd_approvals_revoke(a, c: Ctx) -> int:

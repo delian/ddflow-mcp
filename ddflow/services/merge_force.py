@@ -14,12 +14,19 @@ from typing import Any
 from ..core.digest import content_digest
 from . import approval as AP
 from . import completion as CM
+from . import gate_accept as GA
+from . import logblobs as LB
 from .approvals import consume as CN
 from .approvals.canon import Canon
 
 VERB = "merge.force"
 #: The merge gate is the one this very merge records, so it is never "unmet" by the merge.
 _SELF = "merge"
+#: said when the gate run recorded no reason of its own (a measurement made before the automatic acceptance)
+NO_REASON = (
+    "the gate run recorded no reason: check [gates].baseline_red_auto, or re-run the gate "
+    "(the measurement may predate the automatic acceptance)"
+)
 
 
 @dataclass
@@ -29,12 +36,18 @@ class Assessment:
     mode: str = "warn"
     #: gate -> its recorded outcome (or "not run"), only the unmet required ones
     unmet: dict[str, str] = field(default_factory=dict)
+    #: gate -> recorded outcome, the unmet required gates that are a MEASURED baseline-red
+    #: partial only a person accepts (`gate_accept.person_only`). `complete` refuses these on
+    #: a landed item whose tree is gone, so `warn` mode may not land them either (B0eca409559).
+    person_only: dict[str, str] = field(default_factory=dict)
+    #: gate -> why ddflow did not accept that person-only partial itself (`baseline.auto.why`)
+    why: dict[str, str] = field(default_factory=dict)
     #: gate -> recorded outcome ("" when never run), every gate that has a record or is required
     states: dict[str, str] = field(default_factory=dict)
 
     @property
     def refuses(self) -> bool:
-        return self.mode == "refuse" and bool(self.unmet)
+        return bool(self.person_only) or (self.mode == "refuse" and bool(self.unmet))
 
     def awaiting(self) -> list[str]:
         return [f"{g}={o}" for g, o in self.unmet.items()]
@@ -51,7 +64,29 @@ def assess(repo: Path, cfg: Any, st: Any, item: str) -> Assessment:
     it = st.items[item]
     v = CM.verdict(st, cfg, item, repo=repo)
     unmet = {g: it.gate_outcome(g) or "not run" for g in v.unmet_gates if g != _SELF}
-    return Assessment(mode=mode_of(cfg), unmet=unmet, states=gate_states(it, unmet))
+    person_only = {
+        g: it.gate_outcome(g) or "not run"
+        for g in v.unmet_gates
+        if g != _SELF and GA.person_only(it, g)
+    }
+    return Assessment(
+        mode=mode_of(cfg),
+        unmet=unmet,
+        person_only=person_only,
+        why=why_not_accepted(it, person_only),
+        states=gate_states(it, unmet),
+    )
+
+
+def why_not_accepted(it: Any, gates: Any) -> dict[str, str]:
+    """gate -> the reason the automatic acceptance (D-baseline-red-auto-accept) did not take that
+    measured baseline-red partial, from the gate run's own evidence ("" when it recorded none)."""
+    out: dict[str, str] = {}
+    for g in gates:
+        rec = it.gates.get(g)
+        base = LB.full((rec.evidence or {}) if rec else {}).get("baseline") or {}
+        out[g] = str((base.get("auto") or {}).get("why") or NO_REASON)
+    return out
 
 
 def gate_states(it: Any, extra: Any = ()) -> dict[str, str]:
@@ -72,6 +107,19 @@ def warning(item: str, a: Assessment) -> str:
 
 def refusal(item: str, a: Assessment, *, by_agent: bool) -> str:
     """The refusal of `refuse` mode with no `--force`: names the gates and the next call."""
+    if a.person_only:
+        names = ", ".join(f"{g}={o}" for g, o in a.person_only.items())
+        rest = ", ".join(f"{g}={o}" for g, o in a.unmet.items() if g not in a.person_only)
+        more = f" (also unsettled: {rest})" if rest else ""
+        reasons = "; ".join(f"{g}: {w}" for g, w in a.why.items() if w)
+        more += f". Not accepted automatically because {reasons}" if reasons else ""
+        return (
+            f"cannot merge {item}: a required gate is a measured baseline-red partial only a "
+            f"person accepts, and `complete` would refuse the same partial once {item} is "
+            f"landed -- its tree is gone, so re-running the gate would measure nothing: {names}"
+            f"{more}. Fix what it names and re-run the gate before merging (a person may still "
+            f"`ddflow approve {item} <gate>` to accept it)."
+        )
     nxt = (
         f"`ddflow merge {item} --force --approval request` (an agent: the operator answers in chat)"
         if by_agent

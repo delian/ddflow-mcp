@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow.core.tier import tier_of, unknown_tiers
 from ddflow.services import adopt as AD
@@ -76,7 +77,7 @@ def test_driver_and_readme_say_advisory():
         AD._region_body(AD._driver_region(rel), (ROOT / rel).read_text())
         == (ROOT / "ddflow/templates/drivers/implement-phase.md").read_text()
     )
-    assert "### Model-tier hint (advisory)" in (ROOT / "README.md").read_text()
+    assert "### Model-tier hint (advisory)" in readme_corpus()
 
 
 def test_unknown_tier_notes_skip_removed_and_finished_items():

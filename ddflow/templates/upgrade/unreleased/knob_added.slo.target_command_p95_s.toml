@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_command_p95_s"
+new = "2.0"
+why = "The command-latency target: the p95 wall seconds of a brief or claim command on the host"
+impact = "additive"

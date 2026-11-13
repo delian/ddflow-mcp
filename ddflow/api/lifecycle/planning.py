@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 PURPOSES: tuple[str, ...] = ("offer", "view", "structure")
 
 
-def plan_for(
+def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brief`/`wait` share
     repo: Path,
     log,
     cfg: Config,
@@ -45,6 +45,8 @@ def plan_for(
     agent: str = "",
     now: float | None = None,
     events: Callable[[], Sequence[Event]] | Sequence[Event] | None = None,
+    phase_only: bool = False,
+    tags: Sequence[str] = (),
 ) -> Plan:
     """The ready set for ``purpose``, computed with the caller's identity (``agent``, else
     the configured id, else the log's), the reservation hold and the parallelism limit."""
@@ -62,6 +64,43 @@ def plan_for(
         agent=me,
         hold=_reservation_hold(repo, st, cfg, me, now),
         parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
+        with_deps=bool(phase) and not phase_only,
+        tags=tags,
+    )
+
+
+def plan_for_offer(
+    repo: Path,
+    log,
+    cfg: Config,
+    st: State,
+    *,
+    kind: str,
+    phase: str,
+    agent: str,
+    now: float | None = None,
+    phase_only: bool = False,
+    tags: Sequence[str] = (),
+) -> Plan:
+    """The ``purpose="offer"`` plan ``next`` and ``pull`` must agree on, in one copy.
+
+    Both ``ready.next_`` and ``pull.next_lane`` build the offer an agent acts on; the
+    answer is one line at each site, so the `duplicate_code_clusters` ratchet does not
+    count the same 12-line call twice. ``now`` is optional because ``next_`` lets the
+    planner take its own absent clock as "now".
+    """
+    return plan_for(
+        repo,
+        log,
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=phase,
+        agent=agent,
+        now=now,
+        phase_only=phase_only,
+        tags=tags,
     )
 
 

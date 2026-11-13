@@ -255,11 +255,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "action",
-                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value with status, source, tool version and date (read-only); harness_add (skeleton into .ddflow/local/harnesses), harness_lint, harness_test (offline conformance), harness_probe (reports what it would run, never runs it); model_show: a catalog row with provenance.",
+                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value and control-plane fact with status, source, tool version and date (read-only); harness_add (skeleton into .ddflow/local/harnesses), harness_lint, harness_test (offline conformance), harness_probe (reports what it would run, never runs it); model_show: a catalog row with provenance.",
             ),
             Param(
                 "harness",
-                help="harness_show / harness_doctor / harness_facts / harness_add / harness_lint / harness_test / harness_probe / run: the agent's descriptor id.",
+                help="harness_show / harness_doctor / harness_facts / harness_add / harness_lint / harness_test / harness_probe / run: the agent's descriptor id, or a control plane id for harness_facts.",
             ),
             Param("family", help="harness_add: the lineage whose conventions it shares."),
             Param("title", help="harness_add: the product's display name."),

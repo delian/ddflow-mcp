@@ -3,43 +3,74 @@
 [[kind]]
 name = "cadence.ran"
 doc = "A periodic whole-repo pass ran, with its result."
+fields = { "evidence" = ["dict"], "result" = ["str"] }
+text = ["evidence", "result"]
+exempt = "a machine observation or run record, not authored text"
 
 [[kind]]
 name = "gate.failed"
 doc = "A gate ran and failed."
+fields = { "by" = ["str"], "evidence" = ["dict"], "gate" = ["str"], "kind" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+lookup = { "by" = "an agent id", "gate" = "a gate name", "kind" = "a kind word" }
 
 [[kind]]
 name = "gate.out_of_order"
 doc = "A gate outcome was recorded ahead of the gates before it."
+fields = { "ahead" = ["list"], "gate" = ["str"], "policy" = ["str"] }
+lookup = { "ahead" = "gate names", "gate" = "a gate name", "policy" = "a policy word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "gate.partial"
 doc = "A gate ran in part."
+fields = { "by" = ["str"], "evidence" = ["dict"], "gate" = ["str"], "outcome" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+lookup = { "by" = "an agent id", "gate" = "a gate name", "outcome" = "an outcome word" }
 
 [[kind]]
 name = "gate.passed"
 doc = "A gate passed."
+fields = { "by" = ["str"], "evidence" = ["dict"], "gate" = ["str"], "kind" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+lookup = { "by" = "an agent id", "gate" = "a gate name", "kind" = "a kind word" }
 
 [[kind]]
 name = "gate.skipped"
 doc = "A gate was skipped, with the reason."
+fields = { "by" = ["str"], "evidence" = ["dict"], "gate" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+lookup = { "by" = "an agent id", "gate" = "a gate name" }
 
 [[kind]]
 name = "gate.started"
 doc = "A gate's run began."
+fields = { "gate" = ["str"] }
+lookup = { "gate" = "a gate name" }
 
 [[kind]]
 name = "gate.unavailable"
 doc = "A gate could not run; never a pass."
+fields = { "by" = ["str"], "evidence" = ["dict"], "gate" = ["str"], "reason" = ["str"] }
+text = ["evidence", "reason"]
+lookup = { "by" = "an agent id", "gate" = "a gate name" }
 
 [[kind]]
 name = "review.triaged"
 doc = "A review finding was triaged."
+fields = { "digest" = ["str"], "finding" = ["int"], "gate" = ["str"], "location" = ["str"], "probe" = ["str"], "severity" = ["str"], "title" = ["str"], "verdict" = ["str"] }
+text = ["title", "probe"]
+lookup = { "gate" = "a gate name", "location" = "file:line, a lookup", "severity" = "a severity word", "verdict" = "a verdict word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "reviewer.approved"
 doc = "A reviewer was approved for use."
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "reviewer.configured"
 doc = "A reviewer was configured."
+fields = { "digest" = ["str"], "kind" = ["str"], "person" = ["bool"], "user" = ["str"] }
+lookup = { "kind" = "a kind word", "user" = "a user id" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.report_default_window"
+new = "\"28d\""
+why = "Perf report (PM-report-surfaces): the time window a perf report measures when none is given, a duration back (7d, 12h) or a date YYYY-MM-DD."
+impact = "additive"

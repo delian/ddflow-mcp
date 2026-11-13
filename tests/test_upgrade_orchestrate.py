@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow import api as A
 from ddflow.api._base import _load
@@ -470,7 +471,7 @@ def test_mcp_reports_each_step_as_progress(project, monkeypatch) -> None:
 
 def test_help_topic_and_readme_section_exist() -> None:
     root = Path(__file__).parent.parent
-    readme = (root / "README.md").read_text()
+    readme = readme_corpus()
     assert "### Upgrading ddflow" in readme
     for mode in ("--check", "--status", "--history", "--resume", "--restore", "--self"):
         assert mode in readme

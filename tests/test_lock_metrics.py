@@ -199,7 +199,7 @@ def test_git_probes_read_files_and_conflicts_through_infra_git(tmp_path):
     (tmp_path / ".ddflow" / "e").write_text("x")
     _git(tmp_path, "add", "-f", "."), _git(tmp_path, "commit", "-qm", "main")
     main = _git(tmp_path, "rev-parse", "HEAD")
-    p = GitProbes(tmp_path)
+    p = GitProbes(tmp_path, 30, "2.38")
     assert p.files(base, main) == ["f.txt"]  # ddflow's own state is not a written file
     assert p.conflicts(main, side) is True and p.conflicts(base, side) is False
     assert p.conflicts(main, "0" * 40) is None and p.files("", main) is None
@@ -347,3 +347,30 @@ def test_a_merge_at_the_instant_the_lease_ends_belongs_to_that_lease():
     cfg.metrics.min_samples = 1
     w = M.run(log.events, st, cfg, now, view="locks", probes=Fake(files, {})).metrics["waits"]
     assert w["classified"] == 1 and w["false_serialization"]["spans"] == 1
+
+
+def test_gitprobes_conflicts_routes_through_the_probe(monkeypatch):
+    """GitProbes.conflicts delegates to probe.run so the two cannot drift (clean->False,
+    conflict->True, unavailable->None); the empty-ref guard short-circuits before any git call."""
+    from ddflow.services import probe as P
+    from ddflow.services.metrics import lockgit
+
+    def fake_run(repo, item, against, *, timeout_s, min_git="2.38"):
+        fake_run.calls.append((item, against, timeout_s, min_git))
+        return P.Probe(fake_run.verdict, P.MERGE_TREE, (), item, against)
+
+    fake_run.calls = []
+    monkeypatch.setattr(lockgit, "probe_run", fake_run)
+    gp = lockgit.GitProbes(Path("."), timeout_s=7, min_git="2.43")
+
+    fake_run.verdict = P.CLEAN
+    assert gp.conflicts("b", "h") is False
+    fake_run.verdict = P.CONFLICT
+    assert gp.conflicts("b", "h") is True
+    fake_run.verdict = P.UNAVAILABLE
+    assert gp.conflicts("b", "h") is None
+    assert fake_run.calls == [("b", "h", 7, "2.43")] * 3
+
+    fake_run.calls = []
+    assert gp.conflicts("", "h") is None and gp.conflicts("b", "") is None
+    assert fake_run.calls == []  # no refs: never touched git

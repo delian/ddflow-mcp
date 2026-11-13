@@ -127,7 +127,7 @@ def _unknown_keys(raw: dict[str, Any]) -> list[str]:
     return out
 
 
-def _three_valued(raw: dict[str, Any]) -> tuple[list[str], list[str]]:
+def _three_valued(raw: dict[str, Any], *, shipped: bool = False) -> tuple[list[str], list[str]]:
     problems: list[str] = []
     warns: list[str] = []
     ver = raw.get("verified")
@@ -137,7 +137,12 @@ def _three_valued(raw: dict[str, Any]) -> tuple[list[str], list[str]]:
         node = raw.get(s)
         if isinstance(node, dict) and node.get("none") is True and s in listed:
             problems.append(f"[{s}] says none = true but [verified].unverified lists it")
-        if node is None and s not in listed:
+        # A section left out entirely is the NOT VERIFIED third state (harnessfacts: absent
+        # sections are NOT VERIFIED and listed only on request). A SHIPPED descriptor leaves its
+        # later (v2) sections out until a vendor's docs verify them, so warn only while a local
+        # descriptor is being authored, where the nudge keeps [verified].unverified in sync
+        # (Bd5961564d8).
+        if node is None and s not in listed and not shipped:
             warns.append(f"[{s}] is left out but not listed under [verified].unverified")
     if raw.get("family") == PLACEHOLDER:
         warns.append(f"family is the placeholder {PLACEHOLDER!r}")
@@ -154,7 +159,8 @@ def harness_lint(repo: Path, target: str) -> O.Outcome:
     except tomllib.TOMLDecodeError as exc:
         return O.failed("harness_lint", _clean(f"{path.name}: {exc}"), problems=[str(exc)])
     problems = _unknown_keys(raw)
-    extra, warns = _three_valued(raw)
+    shipped = path.resolve().parent == HR.HARNESS_DIR.resolve()
+    extra, warns = _three_valued(raw, shipped=shipped)
     problems += extra
     if "mcp" not in raw:
         problems.append("[mcp] is required (path and shape)")

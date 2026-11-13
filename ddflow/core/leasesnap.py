@@ -127,6 +127,8 @@ def _lease(v: Any) -> dict[str, Any]:
 def _stamp(stamp: Any) -> list[str]:
     if not (isinstance(stamp, list) and all(isinstance(x, str) for x in stamp)):
         raise ValueError(stamp)
+    if len(stamp) != len(CONFIG_FILES):  # one entry per config file; a wrong length is malformed
+        raise ValueError(stamp)
     return stamp
 
 

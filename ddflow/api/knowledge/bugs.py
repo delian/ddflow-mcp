@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
+from posixpath import normpath
 from typing import Any
 
 import ddflow.api._dedupe as DD
 
+from ...adapters import git as GIT
 from ...core import globspec as GS
 from ...core import ids as IDS
 from ...core import outcome as O
@@ -55,6 +58,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     test: str = "",
     repro_cmd: str = "",
     repro_capture: str = "",
+    evidence: str = "",
     tags: str | list[str] = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
@@ -73,7 +77,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
+    summary = " ".join(summary.split())
+    bad = _bug_fields_problem(summary, scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
     tag_list, bad_tags = found_tags(tags)
@@ -100,6 +105,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     extra = {k: v for k, v in said if v}
     if globs:
         extra["globs"] = GS.parse(globs)
+    if evidence:
+        extra["found_evidence"] = evidence
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
@@ -166,6 +173,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     more: dict[str, Any] = {"offer": offer} if offer else {}
     more["fix_task"] = fix["fix_task"] or (prior.fix_task if prior else "")
     more["fix_task_filed"] = fix["filed"]
+    more["glob_warnings"] = fix.get("glob_warnings", [])
     more["repro"] = repro.get("repro", {})
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
@@ -195,13 +203,16 @@ def _fix_task_of(st, cfg, item: str, bug_id: str):
 
 def _open_phase_of(st, item: str) -> str:
     """The nearest OPEN phase at or above ``item``, or "". A finished phase does not take
-    new work: a task filed under it would sit open beneath a phase that says done."""
+    new work (a task filed under it would sit open beneath a phase that says done), and
+    a phase with ``needs`` of its own does not either: a bug fix task is a `no-deps`
+    leaf, and sitting beneath a phase whose needs it inherits would hold it behind
+    unrelated phases (B53cff7c735). Both fall back to the standing bugs phase."""
 
     it = st.items.get(item) if item else None
     if it is None or it.removed:
         return ""
     for node in (it, *st.ancestors(item)):
-        if node.kind == "phase" and not node.terminal and not node.removed:
+        if node.kind == "phase" and not node.terminal and not node.removed and not node.needs:
             return node.id
     return ""
 
@@ -277,6 +288,34 @@ def _bugs_parent(log, cfg, st) -> tuple[str, str]:
     return parent, phase_made
 
 
+def missing_loud(root: Path, globs: list[str]) -> list[str]:
+    """One warning per literal glob that names no TRACKED file (Bf839186cee): a fix task filed
+    with such a glob holds a lease on a path nobody writes, while the file the reporter
+    really means stays unprotected, and `bug found` used to let the wrong scope stand
+    silently. A TRACKED file is the scope however the worktree stands, and a wildcard
+    pattern is not a warning (a new file behind it cannot be told from a typo). Whether the
+    path happens to exist on disk is not the test: a stray untracked file is a wrong scope
+    too, and a tracked file deleted from the worktree is still its path. Loud, never a
+    refusal: an explicit scope may still name a file the fix creates."""
+    tracked: list[str] = GIT.files(root, "tracked") or []
+    root_posix = root.resolve().as_posix().rstrip("/")
+    out: list[str] = []
+    for raw in dict.fromkeys(globs):
+        if not raw or any(c in raw for c in "*?["):
+            continue  # a pattern: a new file behind it cannot be told from a typo
+        rel = normpath(raw)
+        if rel.startswith(root_posix + "/"):
+            rel = rel[len(root_posix) + 1 :]  # a host-absolute path inside the repo
+        elif rel.startswith("/"):
+            rel = rel.lstrip("/")  # a leading slash anchors to the repo root (`existing_globs`)
+        if rel in tracked:
+            continue  # a tracked file IS the scope, however the path is spelled
+        near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
+        hint = f"; nearest: {', '.join(near)}" if near else ""
+        out.append(f"{raw!r} names no tracked file{hint}")
+    return out
+
+
 def _file_fix_task(
     log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
 ) -> dict[str, Any]:
@@ -284,9 +323,12 @@ def _file_fix_task(
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it) and `no-deps` (no needs of its own, so none is a
-    decision and not an omission, r-task-phase-needs-wave), under the standing `[bugs] phase`
-    (made on first use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first
-    open or absent one, by id convention only) -- carrying ``globs`` (verbatim) or the bug's
+    decision and not an omission, r-task-phase-needs-wave), under the item's own OPEN phase
+    -- the nearest open phase at or above the found item, which the fix blocks (Be8ca1270a5,
+    r-task-phase-needs-wave) -- else (a stray bug, a removed source, a finished phase) the
+    standing `[bugs] phase` (made on first use; once it is done, its follow-up `<phase>-2`,
+    `-3`, ... -- the first open or absent one, by id convention only) -- carrying ``globs``
+    (verbatim) or the bug's
     own found scope (the files its text
     names plus the tests pinning them; past `[bugs].named_scope_at` named files, the item's
     that exist in the tree; a ddflow-scoped bug never takes the found scope), the item's
@@ -298,16 +340,19 @@ def _file_fix_task(
 
     tid = _fix_task_id(st, cfg, bug_id, item)
     if _has_fix_task(st, cfg, bug_id, item):
-        return {"fix_task": tid, "filed": False, "phase_made": ""}
+        return {"fix_task": tid, "filed": False, "phase_made": "", "glob_warnings": []}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase,
-    # else its follow-up -- never the item's own phase, which the fix would hold open
-    # (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb); `--item` says where the bug was
-    # found, not which phase carries the fix. That is the rule's "say why not": a bug blocks
-    # no feature phase.
+    # globs are what makes a feature on them wait. The parent is the item's own OPEN phase
+    # (`_open_phase_of`): a bug found while working an item blocks that item's phase, so its
+    # fix belongs there (r-task-phase-needs-wave), and `carry no hold` keeps it from stalling
+    # the phase (D-old-work-behind-core-docs-accepted). A finished phase, a removed source or
+    # a stray bug (no `--item`) has no such phase and falls back to the standing bugs phase.
     src = st.items.get(item) if item else None
-    parent, phase_made = _bugs_parent(log, cfg, st)
+    parent = _open_phase_of(st, item) if item else ""
+    phase_made = ""
+    if not parent:
+        parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
@@ -330,6 +375,7 @@ def _file_fix_task(
         tool_bug=scope == "ddflow",
         named_scope_at=cfg.bugs.named_scope_at,
     )
+    warnings = missing_loud(log.root, kept) if globs else []
     if dropped:
         body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
     draft = TaskDraft(
@@ -353,7 +399,7 @@ def _file_fix_task(
     )
     if not added.ok:  # the globs were checked by the caller; an id has no colon
         raise ValueError(added.problem)
-    return {"fix_task": tid, "filed": True, "phase_made": phase_made}
+    return {"fix_task": tid, "filed": True, "phase_made": phase_made, "glob_warnings": warnings}
 
 
 def _live(st, item: str) -> bool:
@@ -490,8 +536,10 @@ def _link(st, task: str) -> dict[str, str]:
     return {"task": task, "state": it.state if it is not None and not it.removed else "missing"}
 
 
-def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
-    """Why `bug found`'s optional fields cannot be recorded, or ""."""
+def _bug_fields_problem(summary: str, scope: str, severity: str, globs: str) -> str:
+    """Why `bug found`'s fields cannot be recorded, or ""."""
+    if not summary:
+        return "a bug needs a summary: pass one line saying what is wrong"
     if scope and scope not in BUG_SCOPES:
         return f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}"
     if severity and severity not in BUG_SEVERITIES:

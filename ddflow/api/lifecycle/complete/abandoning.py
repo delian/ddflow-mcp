@@ -12,6 +12,7 @@ from ....core.model import DONE, REVIEW, fold
 from ....core.stuck import stuck_edges_to
 from ....services import leases as L
 from ....services.gates import skip_followup as SF
+from ... import items as _items
 from ..._base import _load_fresh
 from .._common import _require
 from .dispose import _dispose
@@ -26,6 +27,16 @@ def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
     )
 
 
+def _drop_needed_edges(repo: Path, item: str, stranded, agent: str) -> O.Outcome | None:
+    """Drop the edge to ``item`` from every live item that still needs it, or the outcome
+    of the first drop that fails (``None`` when every drop landed)."""
+    for dep_id, _ in stranded:
+        out = _items.update(repo, dep_id, _items.ItemEdit(remove_needs=[item]), agent=agent)
+        if out.exit != O.OK:
+            return out
+    return None
+
+
 def abandon(
     repo: Path,
     item: str,
@@ -33,6 +44,7 @@ def abandon(
     reason: str = "",
     force: bool = False,
     repoint_to: str = "",
+    drop_edges: bool = False,
     agent: str = "",
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
@@ -72,6 +84,20 @@ def abandon(
         repointed = [e["id"] for e in moved.data.get("edits", [])]
         st = fold(log.read_all(), strict=False)
     stranded = stuck_edges_to(st, item)
+    if stranded and not repoint_to and not drop_edges:
+        names = ", ".join(i for i, _ in stranded)
+        return _abandon_refused(
+            item,
+            reason,
+            f"{item} is still needed by {names}. Re-point them to another id "
+            f"(--repoint-to ID) or drop the edge to the abandoned item (--drop-edges), "
+            f"so none is left waiting on it.",
+        )
+    if drop_edges:
+        failed = _drop_needed_edges(repo, item, stranded, agent)
+        if failed is not None:
+            return failed
+        stranded = []
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     SF.settle(log, st, cfg, item)
     if it.lease:

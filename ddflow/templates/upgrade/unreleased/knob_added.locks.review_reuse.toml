@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.review_reuse"
+new = '"off"'
+why = "Whether a recorded review may be reused after the tree it covered moved: off never reuses; disjoint keeps the review when the item's own change is unchanged (git patch-id --stable) and main's changes are disjoint from the reviewed files (LK-review-reuse)."
+impact = "additive"

@@ -31,8 +31,26 @@ BUDGET = int(
 
 
 def git(repo: Path, *args: str) -> None:
+    """Run git in ``repo`` without inheriting the developer's git config. A global
+    ``commit.gpgsign`` (no signing key) would fail the fixture commit, and a global
+    ``core.excludesfile`` would silently drop fixture files (bug Beb7591cc4a): the two ``-c``
+    pins outrank every config FILE (user, global, XDG, system) and name those two offenders.
+    """
     subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t.invalid", *args],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.excludesfile=",
+            *args,
+        ],
         check=True,
         capture_output=True,
     )

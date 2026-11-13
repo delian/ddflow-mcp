@@ -27,6 +27,7 @@ from ...services import landed as LD
 from ...services import leases as L
 from ...services import waiting as WG
 from ..lifecycle.claim import _worktree_held_by
+from ..record_update import item_set, update_record
 
 
 @dataclass
@@ -78,6 +79,9 @@ class ItemEdit:
     #: inside ``--landed``'s changed files, then recorded; `changed_paths` reports only
     #: those. May be recorded alone later, against the range already on record.
     landed_paths: list[str] | None = None
+    #: ``field=value`` items: a record of another kind's own fields (a lesson's ``why``, a
+    #: bug's ``severity``) and, over MCP, ``add_tags=a,b`` style list edits (DX-update-universal).
+    set: list[str] | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -96,6 +100,10 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     with log.transaction():
         st = L._fold(log)
         it = st.items.get(item)
+        if it is None:
+            other = update_record(repo, item, edit, agent=agent)
+            if other is not None:
+                return other
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
             return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
@@ -174,10 +182,8 @@ def _landed_paths_fields(
     return {"landed_paths": paths}
 
 
-def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
-    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
-    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
-    plans many edits before recording any (DX-task-fold)."""
+def _early_refusal(cfg, st, it, edit: ItemEdit) -> O.Outcome | None:
+    """The refusal for a bad or frozen line, or a ``--set`` a work item does not take."""
     if edit.line:
         bad = _bad_line(cfg, edit.line)
         if bad:
@@ -186,7 +192,17 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
         moved = _line_frozen(st, it)
         if moved:
             return O.refused("item.updated", moved, id=it.id)
+    if edit.set and (why := item_set(it.family, it.id, edit)):
+        return O.refused("item.updated", why, id=it.id)
+    return None
 
+
+def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
+    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
+    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
+    plans many edits before recording any (DX-task-fold)."""
+    if (early := _early_refusal(cfg, st, it, edit)) is not None:
+        return early
     fields = _edit_fields(edit)
     if edit.append_body:
         base = it.body if edit.body is None else edit.body
@@ -366,7 +382,21 @@ def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
     lease = it.lease
     if lease is not None and lease.live(time.time(), cfg.lease.grace_s):
         L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
-    log.append("worktree.adopted", it.id, {"path": stored, "branch": branch, "base": ""})
+    # The fork the rebound branch left its base at: what git says they last shared, when it
+    # answers. Without it a landing from the rebound tree has no fork to reconcile against and
+    # fails closed as `unknown` even when nothing overlapped.
+    base = it.base or cfg.worktree.base_ref or W.default_branch(log.root)
+    fork = W.git(log.root, "merge-base", base, branch)
+    log.append(
+        "worktree.adopted",
+        it.id,
+        {
+            "path": stored,
+            "branch": branch,
+            "base": "",
+            "base_sha": fork.out.strip() if fork.ok else "",
+        },
+    )
     return {"worktree": stored, "branch": branch}
 
 
@@ -433,6 +463,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
+            _withdraw_stale_wait(log, it, lease, globs, withheld)
     overtook = (
         _overtaken_waiters(log, cfg, _held_globs(it), accepted)
         if globs is not None and lease is not None
@@ -452,6 +483,21 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         else [],
         tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
+
+
+def _withdraw_stale_wait(log, it, lease, globs: list[str] | None, withheld: list[str]) -> None:
+    """Remove a stale prior wait after a successful glob retarget.
+
+    A successful `--globs` retarget is the caller deciding the ask differently: a refused
+    widening made earlier is abandoned, or `standing` reads it as a cycle forever. A
+    just-`withheld` ask is not stale -- the caller still wants those files -- so it stays
+    (B-update-queue-wait-not-withdrawable).
+    """
+    if globs is None or withheld:
+        return
+    waiting = L._fold(log).waiting.get(it.id)
+    if waiting and waiting.get("globs"):
+        WG.withdraw(log, it.id, lease.holder, lease.event, time.time())
 
 
 def _overtaken_waiters(

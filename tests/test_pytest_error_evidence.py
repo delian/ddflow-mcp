@@ -103,3 +103,13 @@ def test_an_error_after_more_failures_than_the_cap_is_still_listed():
     )
     assert TID in ev["errored_tests"] and TID in ev["failed_tests"]
     assert ev["failed_tests_more"] == 5
+
+
+def test_an_error_reason_longer_than_line_chars_is_kept_whole():
+    """B60e9e09308: an ERROR reason is kept WHOLE (as a FAILED reason is), not capped to
+    ``LINE_CHARS``; capping hid an errored cause past the cap and made a capped reason read as
+    ``verified whole`` in the baseline cache."""
+    long_reason = "RuntimeError: " + "x" * F.LINE_CHARS + "-tail"
+    ev = F.failure_evidence(f"ERROR t.py::test_z - {long_reason}\n")
+    assert ev["errored_tests"] == ["t.py::test_z"]
+    assert ev["failed_reasons"]["t.py::test_z"] == long_reason  # whole, not cut at the cap

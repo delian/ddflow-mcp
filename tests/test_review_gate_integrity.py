@@ -16,6 +16,7 @@ gate is refused unless `--reviewer-model` says it IS the reviewer.
 
 from __future__ import annotations
 
+import json
 import stat
 import sys
 from pathlib import Path
@@ -48,6 +49,14 @@ def _item(repo: Path) -> Path:
 
 def _gate(repo: Path, gate: str):
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates[gate]
+
+
+def _fold(repo: Path):
+    return fold(EventLog(repo).read_all(), strict=False).items
+
+
+def _json_worktree(out: str) -> str:
+    return json.loads(out)["worktree"]
 
 
 # --- B1ed2b4fde6 -------------------------------------------------------------------
@@ -112,6 +121,95 @@ def test_an_older_branch_commit_is_recorded_with_a_warning(repo):
     assert code == OK, out + err
     assert "older" in err
     assert _gate(repo, "standards").evidence["reviewed_sha"] == old
+
+
+def test_a_reworked_merged_items_prior_landing_is_accepted_and_an_unrelated_ancestor_is_not(repo):
+    # A merged item re-claimed for gates only: `item.reworked` clears merged_sha and leaves a
+    # fresh tree at base (0 commits ahead). The gate must accept the item's PRIOR landing, and
+    # must NOT accept any unrelated ancestor of the base (B600455cc2a).
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="impl")
+    assert code == OK, out + err
+    tree = Path(_json_worktree(out))
+    (tree / "a.py").write_text("A = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "add a")
+    code, out, err = run_cli(repo, "merge", "T1", agent="impl")
+    assert code == OK, out + err
+    prior = _fold(repo)["T1"].merged_sha
+    assert prior, "the merge records a merged_sha"
+    unrelated = _git(repo, "rev-list", "--max-parents=0", "HEAD")  # the root, never T1's landing
+    # Re-claim: opens the stale merge and preserves the prior landing on `reopened_merge`.
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="impl")
+    assert code == OK, out + err
+    it = _fold(repo)["T1"]
+    assert it.merged_sha == "", "the merge is reopened"
+    assert it.reopened_merge == prior, "the prior landing survives the rework"
+    # implement passes over the now-empty branch: the work is the prior landing.
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "implement",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "e",
+        agent="impl",
+    )
+    assert code == OK, "implement must not refuse the reworked item: " + out + err
+    # an unrelated ancestor of the base is still refused as the reviewed sha.
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--evidence",
+        "roborev job 1",
+        "--reviewed-sha",
+        unrelated,
+        agent="impl",
+    )
+    assert code == REFUSED, out + err
+    # the prior landing is accepted.
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--evidence",
+        "roborev job 1",
+        "--reviewed-sha",
+        prior,
+        agent="impl",
+    )
+    assert code == OK, out + err
+    assert _gate(repo, "standards").evidence["reviewed_sha"] == prior
+    # A NEW commit on the branch means the prior landing is no longer what would merge: it
+    # is refused again (the empty-branch waiver applies only with 0 commits ahead).
+    rework_tree = (repo / _fold(repo)["T1"].worktree).resolve()
+    (rework_tree / "b.py").write_text("B = 1\n")
+    _git(rework_tree, "add", "b.py")
+    _git(rework_tree, "commit", "-qm", "new work")
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--evidence",
+        "roborev job 1",
+        "--reviewed-sha",
+        prior,
+        agent="impl",
+    )
+    assert code == REFUSED, out + err
 
 
 def test_the_standards_prompt_says_to_pass_an_explicit_sha():

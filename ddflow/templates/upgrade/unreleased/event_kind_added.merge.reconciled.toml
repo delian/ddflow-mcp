@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "merge.reconciled"
+why = "A landing touched files another item changed since this one forked; complete is refused until the affected tests pass on the reconciled tree. (D-lease-hold-limit-r2.)"
+impact = "additive"

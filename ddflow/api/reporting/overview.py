@@ -172,17 +172,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
         ],
-        # A task RUNNING with no live lease is offered as ready -- someone must resume it
-        # -- but never silently: its worktree may hold uncommitted work. `next` and
-        # `brief` say so; so does this (roborev, job 897).
-        "ready_now": [
-            {
-                "id": t.id,
-                "title": t.title,
-                **({"interrupted": True} if t.state == "running" else {}),
-            }
-            for t in p.ready
-        ],
+        # `p.ready` holds no RUNNING item: an interrupted one (RUNNING, no live lease) is
+        # reported under `in_flight` and in `interrupted` below, which says to `recover` it
+        # (Bcec3b3229f). Its worktree may hold uncommitted work.
+        "ready_now": [{"id": t.id, "title": t.title} for t in p.ready],
         "interrupted": p.interrupted,
         "held_by_cap": [{"id": t.id, "title": t.title} for t in capped],
         "cap": p.cap_note if capped else "",
@@ -261,7 +254,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
                 "verb": r["verb"],
                 "agent": r["requested_by"],
                 "digest": r["digest"],
-                "answer": f"ddflow approvals approve {r['id']}",
+                "answer": V.answer_form(r),
             }
             for r in approvals
         ]

@@ -27,6 +27,7 @@ catches `OSError` keeps working, and each keeps the text urllib gave it:
 from __future__ import annotations
 
 import http.client
+import ipaddress
 import socket
 import ssl
 import urllib.error
@@ -162,6 +163,31 @@ def require_http_url(url: str) -> None:
         raise HttpSchemeError(f"not a valid address: {exc}") from exc
     if scheme not in ("http", "https"):
         raise HttpSchemeError(f"only http(s) addresses; refusing {scheme!r}")
+
+
+def local_endpoint(base_url: str) -> bool:
+    """``True`` when ``base_url`` names a private/loopback/link-local address or host.
+
+    Lives here (not a caller) so ``urllib.parse`` stays home in this module: the
+    ``http-home`` import contract forbids every other module importing it."""
+
+    try:
+        host = (urllib.parse.urlparse(base_url).hostname or "").lower()
+    except ValueError:  # e.g. an unterminated IPv6 literal: not a local endpoint
+        return False
+    if not host:
+        return False
+    # A literal address first: global means public, anything else (private/loopback/
+    # link-local, or IPv6) reads from `is_global` so a global IPv6 literal is public.
+    try:
+        return not ipaddress.ip_address(host).is_global
+    except ValueError:
+        pass
+    # A hostname: a single label (localhost, ollama, vllm) is never a public internet
+    # host, and a dotted name in a local pseudo-TLD is not routable beyond the machine.
+    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
+        return True
+    return False
 
 
 class _Tracked:

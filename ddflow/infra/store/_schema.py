@@ -15,7 +15,6 @@ from ...core import textsim
 from ..log import EventLog
 from ._fingerprint import (
     _SEARCH_COLS,
-    INDEX_TOUCH_S,
     SCHEMA,
     _capability_tables,
 )
@@ -213,5 +212,5 @@ class _SchemaMixin:
         when it was BUILT, and `_collect_stale_indexes` of another checkout would take a
         long-lived reader's index for an abandoned one."""
         with contextlib.suppress(OSError):
-            if time.time() - self.path.stat().st_mtime > INDEX_TOUCH_S:
+            if time.time() - self.path.stat().st_mtime > self.cfg.store.index_touch_s:
                 os.utime(self.path)

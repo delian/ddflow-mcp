@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/completion_selfcheck.py:TIMEOUT_S" = 'ceiling on one doctor probe of the completion engine (a process start plus the parser build), so the check can never hang the doctor; not a workload setting'

@@ -27,7 +27,7 @@ from ddflow.adapters import ports as P
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 PORTS_PATH = PKG / "adapters" / "ports.py"
-BASELINES = PKG.parent / "tests" / "ports_without_fake"
+BASELINES = PKG.parent / "tests" / "guard_baselines" / "ports_without_fake"
 
 
 def _ports() -> dict[str, type]:
@@ -208,21 +208,28 @@ def test_every_adapter_module_is_under_twenty_kib(path: Path):
 
 
 def test_a_single_adapter_family_has_no_name_and_a_multi_adapter_family_has_one():
-    """`name` is the registry's key, so only a family with SEVERAL adapters carries it:
-    `Forge` is the worked example (`Registry[Forge]`, keyed by name); every other family has
-    one default implementation, and a second one is a bug, not a registry entry."""
+    """`name` is the registry's key, so only a family with SEVERAL adapters carries it, as a
+    declared member of its port. `name` is data, and a `@runtime_checkable` port refuses a
+    data member, so the multi-adapter ports ARE the ports that are not `@runtime_checkable`
+    -- discovered, not listed: `Forge` is the worked example, not the only one."""
     ports = _ports()
-    assert "name" in ports["Forge"].__annotations__, "Forge must declare `name`"
-    for family in sorted(set(ports) - {"Forge"}):
-        assert "name" not in ports[family].__annotations__, (
-            f"{family} is a single-adapter family; a `name` there invites a registry with "
-            "one entry."
-        )
+    for family, cls in sorted(ports.items()):
+        multi = not getattr(cls, "_is_runtime_protocol", False)
+        if multi:
+            assert "name" in cls.__annotations__, (
+                f"{family}: a multi-adapter family (its port is not `@runtime_checkable`) "
+                "must declare `name` as its registry key."
+            )
+        else:
+            assert "name" not in cls.__annotations__, (
+                f"{family} is a single-adapter family; a `name` there invites a registry "
+                "with one entry."
+            )
 
 
 #: The ceiling the baseline may never exceed: the ports still without a fake when the ratchet
 #: began. A SHRINK-ONLY ratchet (D-unify 4): a fake lands with the task that migrates its
-#: home and its file in `tests/ports_without_fake/` is deleted in the same
+#: home and its file in `tests/guard_baselines/ports_without_fake/` is deleted in the same
 #: change; a file for any other port fails here, so a new port cannot be excused.
 _CEILING = frozenset({"Proc", "Git", "Fsio", "Toml", "Forge"})
 
@@ -247,15 +254,21 @@ def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
     )
     assert not (baseline & have), (
         f"{sorted(baseline & have)} now have a fake: delete their files in "
-        "tests/ports_without_fake/ so the ratchet shrinks."
+        "tests/guard_baselines/ports_without_fake/ so the ratchet shrinks."
     )
     assert have <= ports, f"a fake for no port: {sorted(have - ports)}"
 
 
 @pytest.mark.parametrize("name", sorted(F.FAKES))
 def test_a_registered_fake_satisfies_its_runtime_checkable_port(name: str):
-    assert isinstance(F.FAKES[name](), _ports()[name]), f"Fake{name} does not satisfy {name}"
-    assert issubclass(F.FAKES[name], _ports()[name]), "the `@port` marker must not break issubclass"
+    port = _ports()[name]
+    if not getattr(port, "_is_runtime_protocol", False):
+        # A multi-adapter port (it declares `name`) is not @runtime_checkable, so isinstance
+        # and issubclass of it raise TypeError; its fake is a nominal subclass instead.
+        assert port in F.FAKES[name].__mro__, f"Fake{name} is not a nominal {name} subclass"
+        return
+    assert isinstance(F.FAKES[name](), port), f"Fake{name} does not satisfy {name}"
+    assert issubclass(F.FAKES[name], port), "the `@port` marker must not break issubclass"
 
 
 def test_the_fakes_are_shipped_in_the_adapters_package():

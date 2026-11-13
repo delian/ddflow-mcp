@@ -39,9 +39,12 @@ def _harness_parsers(s: argparse._SubParsersAction) -> None:
     hxd.add_argument("id", nargs="?", default="", help="one agent (default: every adopted one)")
     hxd.set_defaults(fn=cmd_harness)
     hxf = hx_s.add_parser(
-        "facts", help="every descriptor value with its status, source, tool version and date"
+        "facts",
+        help="every descriptor value and control-plane fact with status, source, tool version and date",
     )
-    hxf.add_argument("--agent", default="", help="one agent (default: all)")
+    hxf.add_argument(
+        "--agent", default="", help="an agent descriptor or control plane (default: all)"
+    )
     hxf.add_argument("--unverified", action="store_true", help="only leads, and sections left out")
     hxf.set_defaults(fn=cmd_harness)
     hxa = hx_s.add_parser(

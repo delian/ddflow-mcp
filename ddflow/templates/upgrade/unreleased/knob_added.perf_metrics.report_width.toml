@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.report_width"
+new = "76"
+why = "Perf report (PM-report-surfaces): the width in characters the text/markdown renderer keeps every line within, terminal and chat alike."
+impact = "additive"

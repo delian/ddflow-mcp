@@ -11,6 +11,7 @@ from typing import Any
 from ..infra import worktree as W
 from ..services import testscope as TSC
 from ..services import testselect as TS
+from ..services.bug_globs import exercised_scope
 from ..services.gates import baseline as BL
 from ..services.gates import baseline_red as BR
 from ..services.gates.defs import load_gates
@@ -89,7 +90,11 @@ def _not_red(
     plain = [i for i in ids if i not in blind and i not in still and i not in set(changed)]
     if plain or changed:
         found["new_failures"] = (plain + changed)[: BR.SHOWN * 4]
-        return result, (why + "; " if why else "") + _new_reason(base, plain, changed, blind)
+        return (
+            result,
+            (why + "; " if why else "")
+            + _new_reason(base, found.get("base_sha", ""), plain, changed, blind),
+        )
     if not blind:
         return result, why
     shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
@@ -100,18 +105,24 @@ def _not_red(
     return "unavailable", reason
 
 
-def _new_reason(base: str, plain: list[str], changed: list[str], blind: set[str]) -> str:
+def _new_reason(
+    base: str, base_sha: str, plain: list[str], changed: list[str], blind: set[str]
+) -> str:
     """The reason text for ids the base does not fail as it does here: ``plain`` are not failing
-    there, ``changed`` fail there too but differently (a new offender in an already-red test)."""
+    there, ``changed`` fail there too but differently (a new offender in an already-red test).
+    ``base_sha`` is the commit actually measured, named beside ``base`` because ``base`` is a
+    moving branch: by the time the reason is read the live tip may have changed, so the bare
+    branch name no longer says which commit the comparison tested (B7c0121c0c4)."""
+    where = f"{base} ({base_sha[:8]})" if base_sha else base
     parts: list[str] = []
     if plain:
         parts.append(
-            f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
+            f"new failure(s) not failing on {where}: {', '.join(plain[: BR.SHOWN])}"
             f"{' ...' if len(plain) > BR.SHOWN else ''}"
         )
     if changed:
         parts.append(
-            f"new offender(s) in an already-red test (fails on {base} too, but "
+            f"new offender(s) in an already-red test (fails on {where} too, but "
             f"differently): {', '.join(changed[: BR.SHOWN])}"
             f"{' ...' if len(changed) > BR.SHOWN else ''}"
         )
@@ -158,6 +169,7 @@ def _file(
         agent=agent,
         severity="high",
         tags="baseline-red",
+        globs=_fix_globs(repo, ids),
         summary=(
             f"{found['base']} ({sha[:8]}) is red: {', '.join(ids)} fail on it as well as in "
             f"{item}'s {gate} gate (baseline-red)"
@@ -169,6 +181,14 @@ def _file(
     # "" that reads as "bug not filed" with nothing to act on (B-baseline-bug-not-filed-silently).
     found["not_filed"] = out.reason
     return ""
+
+
+def _fix_globs(repo: Path, ids: list[str]) -> list[str]:
+    """The fix task's globs: the source files the failing tests exercise plus the failing
+    test files themselves (where the regression test lands) -- not the finding item's own
+    globs, which are the test files only and left main-red fix tasks ineditable (B83543b98f4)."""
+    tests = sorted({i.partition("::")[0] for i in ids})
+    return sorted(set(exercised_scope(repo, ids)) | {t for t in tests if t})
 
 
 def _linked(repo: Path, agent: str, ids: list[str]) -> str:
@@ -215,18 +235,21 @@ def _probe_and_ids(
 
 
 def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:
-    """Every failing id of the ci run: the whole list `ci run` kept aside for this commit, else
-    the evidence's own when it was not cut ([] when the list is cut and no file holds it)."""
-    sha = str((ev.get("ci_scope") or {}).get("sha") or "")
-    return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
+    """Every failing id of the ci run: the whole list the run kept aside as a committed blob
+    (linked from ``failing_ids``), else the evidence's own when it was not cut ([] when the
+    list is cut and no blob holds it)."""
+    return BL.read_full(repo, ev.get("failing_ids")) or (
+        capped if not ev.get("failed_tests_more") else []
+    )
 
 
 def _unit_ids(repo, ev: dict[str, Any], capped: list[str]) -> list[str]:
     """Every failing id of a unit_tests run whose list was cut: the whole list the run kept
-    aside for its own tree (``runner.run_command_gate``), else the evidence's own when it was
-    not cut ([] when the list is cut and no file holds it)."""
-    sha = str(ev.get("tree_sha") or "")
-    return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
+    aside for its own tree (linked from ``failing_ids``), else the evidence's own when it was
+    not cut ([] when the list is cut and no blob holds it)."""
+    return BL.read_full(repo, ev.get("failing_ids")) or (
+        capped if not ev.get("failed_tests_more") else []
+    )
 
 
 def _unit_tests_def(repo, cfg):

@@ -49,6 +49,12 @@ class Lease:
     #: claiming under ONE name are rivals only when both say which clone they are
     #: (B36aa4c8ee5).
     clone: str = ""
+    #: Globs granted OPTIMISTICALLY (DX-lease-hunk-optimistic): a live holder already
+    #: overlaps them but a clean `git merge-tree` probe said the two branches merge
+    #: cleanly, so this lease and that holder's stand together and the merge rebases the
+    #: second instead of waiting. Generated/pinned (shared) files and real conflicts are
+    #: never here.
+    optimistic: list[str] = field(default_factory=list)
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         """Past its TTL plus grace, by the clock alone. Ask `live` to decide anything: a
@@ -179,6 +185,12 @@ class Item:
     merged_sha: str = ""
     #: The branch tip that `merge` landed: what proves a squash, which leaves no ancestry.
     merged_head: str = ""
+    #: The merged sha a re-claim reopened (`item.reworked`), when this item is the rework
+    #: of one that had already merged. The rework clears `merged_sha` so the fresh tree at
+    #: base re-merges from scratch, but the PRIOR landing stays here so the gates that need
+    #: it -- `implement` (no commit ahead) and `standards` (`--reviewed-sha`) -- can accept
+    #: the already-landed work instead of refusing an empty branch (B600455cc2a).
+    reopened_merge: str = field(default="", metadata={"omit_empty": True})
     #: Optional `item.completed` `changelog` {category, line, skip}; {} when none was given.
     changelog: dict[str, Any] = field(default_factory=dict)
     #: The branch the worktree forked from. Recorded because under gitflow and stacking it
@@ -217,6 +229,12 @@ class Item:
     #: code does not force the full task pipeline on a docs-only item. Each glob was
     #: verified inside the item's declared globs and inside the range's changed files.
     landed_paths: list[str] = field(default_factory=list, metadata={"omit_empty": True})
+    #: `merge.reconciled`: this item's landing touched files another item changed since
+    #: this one branched, so complete is refused until the affected tests pass on the
+    #: reconciled tree (D-lease-hold-limit-r2). {} when the merge landed clean over nothing.
+    #: Holds {files, base, main, at}: `at` is the reconcile event's timestamp, so a test pass
+    #: recorded before the reconcile (a stale pre-merge run) never clears the guard.
+    reconciled: dict[str, Any] = field(default_factory=dict, metadata={"omit_empty": True})
 
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
@@ -248,6 +266,10 @@ class Item:
     #: docs/todo.md:41". ddflow does not invent completion, so when it records some it
     #: records who said so.
     completion_evidence: str = ""
+    #: The author identity the completion recorded (`author_model`, or `author_family` when the
+    #: author declared a family only). It lives in the completion event; folding it makes it
+    #: a field a `record.corrected` can replace when it was recorded wrongly.
+    author_model: str = ""
     #: B191. Rival DEFINITIONS: `<kind>.added` events for this id from different clones,
     #: each {"event", "agent", "lamport", "ts", "title", "body", "data"}. One log refuses
     #: a second add of a live id, so a rival can only arrive by a merge -- and the fold

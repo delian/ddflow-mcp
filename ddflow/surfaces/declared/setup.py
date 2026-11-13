@@ -26,6 +26,7 @@ def doctor_history_kwargs(a):
     return {
         "accept_lost_events": bool(getattr(a, "accept_lost_events", False)),
         "accept_history": bool(getattr(a, "accept_history", False)),
+        "fix_stale_globs": bool(getattr(a, "fix_stale_globs", False)),
         "history": (
             str(getattr(a, "history_reason", "") or ""),
             str(getattr(a, "history_note", "") or ""),
@@ -162,6 +163,11 @@ COMMANDS: tuple[Command, ...] = (
                 "refresh_docs",
                 type="boolean",
                 help="rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the agents' native rules from this ddflow's templates; leaves MCP launches, hooks and command files alone (what `doctor` points to when drivers lag)",
+            ),
+            Param(
+                "plan",
+                type="boolean",
+                help="with --refresh-docs: report what it would rewrite without writing anything (a diff/plan mode)",
             ),
         ),
     ),
@@ -379,6 +385,11 @@ COMMANDS: tuple[Command, ...] = (
                 "accept_history",
                 type="boolean",
                 help="Acknowledge history that cannot be mended in an append-only log (an event edited by a secret scrub, a Lamport clock regression): records the findings now open as accepted, with who and why (needs a reason). A person accepts directly; an agent passes approval=request, the person answers in chat, and the agent re-runs with the approval id. doctor then reports them as accepted notes; a changed or new finding is a PROBLEM again",
+            ),
+            Param(
+                "fix_stale_globs",
+                type="boolean",
+                help="rewrite the stale package glob of every unfinished item to its package path (a module that became a package left `x.py` globs covering none of the package's files), and retarget each live lease; B-stale-globs-after-split-wave",
             ),
             Param(
                 "history_reason",

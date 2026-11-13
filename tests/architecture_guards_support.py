@@ -37,14 +37,14 @@ BASELINES = ROOT / "tests" / "guard_baselines"
 
 #: The one module each pattern belongs in. Sites there are the interface, not a violation.
 HOMES: dict[str, frozenset[str]] = {
-    "subprocess_calls": frozenset({"ddflow.infra.proc", "ddflow.infra.git"}),
-    "git_argv": frozenset({"ddflow.infra.git"}),
+    "subprocess_calls": frozenset({"ddflow.adapters.proc", "ddflow.adapters.proc_server"}),
+    "git_argv": frozenset({"ddflow.adapters.git"}),
     "write_text": frozenset({"ddflow.infra.fsio"}),
-    "tempfile": frozenset({"ddflow.infra.fsio"}),
-    "os_replace": frozenset({"ddflow.infra.fsio", "ddflow.adapters.fs"}),
-    "fcntl": frozenset({"ddflow.infra.fsio"}),
-    "hashlib": frozenset({"ddflow.core.digest"}),
-    "tomlkit": frozenset({"ddflow.infra.tomlcfg"}),
+    "tempfile": frozenset({"ddflow.adapters.fsio"}),
+    "os_replace": frozenset({"ddflow.adapters.fsio", "ddflow.adapters.fs"}),
+    "fcntl": frozenset({"ddflow.adapters.fsio"}),
+    "hashlib": frozenset({"ddflow.adapters.digest"}),
+    "tomlkit": frozenset({"ddflow.adapters.toml"}),
     "time_parse": frozenset({"ddflow.core.clock"}),
 }
 
@@ -93,6 +93,38 @@ _PROCESS_CALLS = frozenset(
         "ddflow.infra.proc.popen",
     }
 )
+
+
+#: pathlib CALLS whose result is a `Path` -- the constructor and the methods that return
+#: one, deterministically, so `_resolve` types them `pathlib.Path` and a `.replace` on the
+#: result (``Path("a").replace(dst)``, or a chain ``p.replace(a).replace(b)``) is counted as
+#: an atomic rename, not just `os.replace`. The set is only the pathlib API by name; a
+#: `Path` held in a variable whose type an AST visit cannot resolve (a parameter, `self.path`)
+#: is out of reach, and is enforced by routing the rename through `replace_path` instead.
+_PATH_RESULT = frozenset(
+    {
+        "pathlib.Path",
+        "pathlib.PurePath",
+        "pathlib.Path.with_name",
+        "pathlib.Path.with_suffix",
+        "pathlib.Path.with_stem",
+        "pathlib.Path.with_segments",
+        "pathlib.Path.rename",
+        "pathlib.Path.replace",
+        "pathlib.Path.resolve",
+        "pathlib.Path.absolute",
+        "pathlib.Path.expanduser",
+        "pathlib.Path.relative_to",
+        "pathlib.Path.readlink",
+        "pathlib.Path.joinpath",
+        "pathlib.Path.cwd",
+        "pathlib.Path.home",
+    }
+)
+
+#: pathlib ATTRIBUTE whose value is a `Path` (a property, not a call, so it is not in
+#: `_PATH_RESULT`): ``Path("a").parent.replace(dst)`` is a `Path.replace` too.
+_PATH_ATTRS = frozenset({"parent", "parents"})
 
 
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
@@ -145,7 +177,15 @@ class _Sites(ast.NodeVisitor):
             return None
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
+            if base == "pathlib.Path" and node.attr in _PATH_ATTRS:
+                return "pathlib.Path"
             return f"{base}.{node.attr}" if base else None
+        if isinstance(node, ast.Call):
+            return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return "pathlib.Path" if self._resolve(node.left) == "pathlib.Path" else None
+        if isinstance(node, ast.Subscript):
+            return "pathlib.Path" if self._resolve(node.value) == "pathlib.Path" else None
         return None
 
     # -- imports --------------------------------------------------------------------
@@ -197,7 +237,7 @@ class _Sites(ast.NodeVisitor):
         name = self._resolve(node.func)
         if name in _PROCESS_CALLS:
             self.sites["subprocess_calls"].append(node.lineno)
-        if name == "os.replace":
+        if name in ("os.replace", "pathlib.Path.replace"):
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)

@@ -19,7 +19,7 @@ from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..declared.mutation_params import mutation_of
-from ..declared.records import BUG_INVALID_FIELDS, file_tasks_call
+from ..declared.records import BUG_FIXED_FIELDS, BUG_INVALID_FIELDS, file_tasks_call
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
@@ -357,19 +357,16 @@ def _bug_fixed(a, c: Ctx) -> int:
         )
     if out.data.get("landed"):
         tail += f"\n  fix landed in {out.data['landed'][:12]}" + _fix_task_tail(out.data)
+    dups = out.data.get("open_duplicates") or []
+    if dups:
+        tail += (
+            f"\n  open duplicates linked to {a.id}: {', '.join(dups)} -- close each explicitly "
+            f"(`ddflow bug duplicate <id> --of {a.id}`, its own `bug fixed`, or `bug invalid`)"
+        )
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
-        out.body(
-            (
-                "id",
-                "landed",
-                "regression_verified",
-                "regression_verify",
-                "lesson_captured",
-                "lesson_capture",
-            )
-        ),
+        out.body(BUG_FIXED_FIELDS),
     )
     return OK
 
@@ -477,6 +474,12 @@ def _where(d: dict) -> str:
     return f" in session {d['session']} ({label})"
 
 
+def _on_item(d: dict) -> str:
+    """' on item ID' for a note attached to an item; '' when the caller named none."""
+    item = d.get("item") or ""
+    return f" on item {item}" if item else ""
+
+
 def cmd_session(a, c: Ctx) -> int:
     if a.session_cmd == "start":
         out = A.session_start(
@@ -513,7 +516,7 @@ def cmd_session(a, c: Ctx) -> int:
                 out.body(("redactions", "session", "how")),
             )
         else:
-            c.out(f"noted{where}", out.body(("session", "how")))
+            c.out(f"noted{_on_item(out.data)}{where}", out.body(("session", "how", "item")))
         return OK
     if a.session_cmd == "adopt-orphans":
         out = A.session_adopt_orphans(c.repo, agent=c.requested_agent)

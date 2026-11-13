@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.burn_rate_window_s"
+new = "2592000"
+why = "The burn-rate window in seconds over which queue age and CI false-red are extrapolated to a time-to-exhaustion (a 30-day budget viewed per hour)."
+impact = "additive"

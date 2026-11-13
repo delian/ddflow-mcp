@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...adapters.proc import current_pid
 from ...core import flow as F
 from ...core import outcome as O
 from ...core.admission import new_file_globs
@@ -17,38 +18,36 @@ from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
+from ...services import identity as ID
 from ...services import leases as LS
 from ...services import merge_force as MF
-from ...services import pins_dirt as PD
-from ...services import pins_merge as PM
+from ...services import mergequeue as MQ
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
-    stands_in,
 )
 from ...services.enforce import SELF_MANAGED
-from ...services.gates import failed_gate as OC
-from ...services.gates import failed_review as GO
 from ...services.gates import measured as GM
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
+from .merge_landing import (
+    _ci_fields,
+    _commit_shards_before_merge,
+    _dispose_tree,
+    _failed_landing_outcome,
+    _gate_blockers,
+    _kept_reason,
+    _landing_refusal,
+    _record_landing,
+    _release_at_merge,
+    _say_awaiting,
+    _say_pins,
+    _scope_fields,
+    _when,
+)
 from .merge_refresh import _refresh_documents
-
-
-def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
-    """Say which pins the merge left stale or never re-recorded."""
-    for line in PM.merge_lines(PM.merge_report(repo, cfg)):
-        say(line)
-
-
-def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
-    """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
-    are free for a waiter, whose `wait` reads the release as ready, and `complete` needs no
-    lease. Kept when `[lease].release_at_merge` is off or a hotfix back-merge failed (it needs
-    its files to retry). Only reached after a landing, so a failed merge keeps the lease."""
-    return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
 
 
 def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, agent: str):
@@ -87,43 +86,17 @@ def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
 
 
-def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
-    """A refusal when the branch was forked from one line's base and would land on another's,
-    carrying the first line's history along (RESEARCH R17 review)."""
-    if it.base and it.base not in (wt.base, remote_base) and FS.stacked_on(st, it) is None:
-        return O.refused(
-            "worktree.merged",
-            f"{item}'s branch was forked from {it.base!r} but would land on {wt.base!r}. "
-            f"Merging would carry {it.base}'s history into {wt.base}. Re-file the work on "
-            f"the line it was forked for, or port it.",
-            id=item,
-            sha="",
-            dirty=[],
-        )
-    return None
-
-
-def _when(cond: Any, **fields: Any) -> dict[str, Any]:
-    """``fields`` when ``cond`` is truthy, else nothing: an optional part of a result."""
-    return fields if cond else {}
-
-
-def _kept_reason(kept: str, landed_note: str, back_failed: list[str]) -> str:
-    """Why the tree was kept and what went wrong after the landing, as one line."""
-    failed = ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else ""
-    return "; ".join(filter(None, [kept, landed_note, failed]))
-
-
-def _say_awaiting(say, item: str, gates) -> None:
-    """Say which required gates the landing left unsettled (`[merge].require_gates`)."""
-    if gates.unmet:
-        say(MF.warning(item, gates))
-
-
-def _ci_fields(ci_after: dict) -> dict:
-    """`ci` is kept for readers of the old key; it is the BASE's post-merge check, never the ci
-    gate (Bb55340e14b): `gate_states` has the gate."""
-    return {"ci": ci_after, "post_merge_check": ci_after} if ci_after else {}
+def _queued_by_holder(repo: Path, item: str, held) -> bool:
+    """The merge queue's integrator lands an entry its own holder put in line: that request is
+    the holder's consent to end their lease at the landing. Read off the queue itself, never
+    off an argument a caller names: the entry must be the one the integrator is running now,
+    queued by the lease's holder, and THIS process must be that integrator (the one that holds
+    the integrator lock), so a peer landing in the same window is still refused."""
+    entry = MQ.get(repo, item)
+    if entry is None or entry.state != MQ.RUNNING or entry.agent != held.holder:
+        return False
+    running = MQ.holder(repo)
+    return running is not None and running["pid"] == current_pid()
 
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
@@ -133,6 +106,74 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             "merge.forced",
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
+        )
+
+
+def _record_reconciled(
+    repo, cfg, log, it, item: str, landed_before: str, landed_after: str, branch_head: str
+) -> None:
+    """Record `merge.reconciled` when this landing touched a file another item changed since
+    this item forked: the reconcile-at-merge safety net of D-lease-hold-limit-r2. Complete is
+    then refused until the affected tests pass on the reconciled tree, unless
+    `[lease].reconcile_tests = off`. A clean landing over nothing records nothing."""
+    if cfg.lease.reconcile_tests == "off":
+        return
+    fork = it.base_sha or landed_before
+    mine = CH.changed_paths(repo, fork, tip=branch_head, include=("committed",), fork=True)
+    if mine is None:
+        # git could not tell what this item changed (a lost rev, a shallow tree): fail CLOSED
+        # with a reconcile whose empty file list still blocks, so an unreconciled overlap is
+        # never silently skipped when the probe cannot answer.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": [], "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    if not mine:
+        return
+    if not it.base_sha:
+        # No recorded fork (a located/resumed worktree records no base_sha, or an imported
+        # item never had one): what `main` changed since this item REALLY forked is
+        # unanswerable, and `fork` fell back to `landed_before`, so the `moved` probe below
+        # would compare `landed_before` with itself and read empty. Fail CLOSED -- reconcile
+        # over MY files with `unknown`, so an overlapping merge is never silently skipped
+        # when the fork is unknown.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    # The overlap trigger is "this landing touched a file `main` changed since this item
+    # forked" -- another item merged since the fork, OR a main-into-branch conflict resoved at
+    # sync (a direct `main` commit touching a file this branch also touched). Both are the one
+    # set `mine ∩ moved`, where `moved` is what `landed_before` did since `fork`; a direct
+    # `main` commit is a `moved` file with no `merged_sha`, so it no longer slips past a
+    # per-item loop.
+    moved = CH.changed_paths(repo, fork, tip=landed_before, include=("committed",), fork=True)
+    if moved is None:
+        # git could not tell what `main` changed since the fork: fail CLOSED by reconciling
+        # over MY files, so an unanswerable probe still holds complete for a reconciled test.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    files = sorted(set(mine) & set(moved))
+    if files:
+        # A file the branch already carries exactly as `main` had it (main merged into the
+        # branch, then this landing fast-forwarded) was reconciled before landing, not by it.
+        # Only a file whose branch tip still differs from `main` before the landing counts.
+        diverging = W.git(repo, "diff", "--name-only", landed_before, branch_head, "--", *files)
+        if diverging.ok:
+            files = sorted(set(files) & set(diverging.out.splitlines()))
+    if files:
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": files, "base": landed_before, "main": landed_after},
         )
 
 
@@ -146,22 +187,6 @@ def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: s
         return stamp
     spent = MF.spend(log, cfg, item, gates, pending)
     return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
-
-
-def _commit_shards_before_merge(log, cfg, item: str) -> None:
-    """Commit the primary's uncommitted event shards before the git merge, unless the
-    strategy is a fast-forward: landing them on the target drifts it past the branch's fork
-    and makes ``git merge --ff-only`` report diverged branches instead of landing
-    (B83b4102c08). For ff-only the shards are committed after the landing, on the
-    fast-forwarded target, by the post-merge `commit_at` in `merge`."""
-    if cfg.worktree.merge_strategy != "ff-only":
-        EC.commit_at(log, cfg, "merge", f"merge {item}")
-
-
-def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
-    """The first failed-gate blocker that stops ``item`` landing, or ""."""
-    found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
-    return (found or OC.failed_ci_blockers(st, cfg, item) or [""])[0]
 
 
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
@@ -213,6 +238,36 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
+    held = LS.foreign_live_lease(log, cfg, item, caller=agent)
+    if held is not None:
+        # Bddda807b51: before any git action, like contest_refusal. The lease it ends at
+        # merge is the current holder's, so a non-holder landing it would release the
+        # holder's live lease and delete their worktree under a running process.
+        who = held.holder
+        return O.refused(
+            "worktree.merged",
+            f"cannot merge {item}: it is leased by {who} and the lease is live; "
+            "merging releases their lease and removes their worktree. Ask them, wait "
+            "for the lease to lapse, or release it first.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
+    if ID.is_agent(agent):
+        held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
+        if held is not None and not _queued_by_holder(repo, item, held):
+            # A same-clone peer agent's live lease: refuse like a foreign one (the
+            # operator recovering a crashed agent's item is exempt -- not is_agent).
+            who = held.holder
+            return O.refused(
+                "worktree.merged",
+                f"cannot merge {item}: it is leased by {who} and the lease is live; "
+                "merging releases their lease and removes their worktree. Ask them, "
+                "wait for the lease to lapse, or release it first.",
+                id=item,
+                sha="",
+                dirty=[],
+            )
     if blocked := _gate_blockers(repo, cfg, st, item):
         # D-failed-review-gate (B85841c0846): landing work whose review failed and was
         # never re-reviewed ships it unreviewed; DX-skip-failed-gate: nor a failed ci.
@@ -226,61 +281,36 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if isinstance(source, O.Outcome):
         return source
     wt, dirty, outside = source
-    if W.unreadable(dirty):
-        # Not a file list: git could not read the tree at all. Commit-or---allow-dirty is
-        # the wrong advice, and --allow-dirty must not land a tree nobody can see
-        # (Bb2f7566528). `dirty` stays a list of paths.
-        return O.refused(
-            "worktree.merged",
-            f"could not read the worktree {wt.path}: {dirty[0][len(W.UNREADABLE) :]}. "
-            f"Repair it (its .git file, permissions) or `ddflow recover`; nothing was "
-            f"merged.",
-            id=item,
-            dirty=[],
-            # Unknown, not clean: as `outside_globs_unknown`, so a caller reading `dirty`
-            # alone never takes an unread tree for an empty one.
-            dirty_unknown=True,
-            path=str(wt.path),
-        )
-    if dirty and not allow_dirty:
-        # LISTED, not just counted: half the time these are build artefacts the project
-        # forgot to gitignore, and half the time they are a source file the agent never
-        # `git add`-ed -- which would be silently dropped from the merge. The caller can
-        # only tell which by seeing the names.
-        return O.refused(
-            "worktree.merged",
-            f"{len(dirty)} uncommitted file(s) in {wt.path} would NOT be included in "
-            f"the merge.\n\nCommit them, add them to .gitignore if they are build "
-            f"output, or pass --allow-dirty to merge without them.",
-            id=item,
-            dirty=list(dirty),
-            path=str(wt.path),
-        )
-    empty = None if allow_empty else _lands_nothing(repo, it, wt)
-    if empty is not None:
-        return empty
-    remote_base = f"{cfg.flow.remote}/{wt.base}"
-    if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
-        return wrong
-    if cfg.flow.integration == "pr":
-        if borrowed:
-            return O.refused(
-                "worktree.merged",
-                f"{item} was claimed without a worktree, and a pull request is opened from "
-                f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
-                f"or claim {item} with a worktree.",
-                id=item,
-                sha="",
-                dirty=[],
-            )
-        return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
-    # Last of the refusals: an agent's approval is only checked here, so no refusal above is
-    # its cost; it is spent (MF.spend) only after the git landing below actually landed.
+    if (
+        refusal := _landing_refusal(repo, cfg, st, it, wt, dirty, item, allow_dirty, allow_empty)
+    ) is not None:
+        return refusal
+    # The require_gates check runs for EVERY integration mode (Bc6c07dfe52): under `pr` it
+    # must still refuse (mode `refuse`) or name the unmet gates (mode `warn`) instead of
+    # opening a request past them. An agent's approval is only checked here; the non-PR path
+    # spends it after the git landing below actually landed.
     gates, forced_by, pending_approval, over = _override(
         repo, cfg, log, st, item, force, approval, agent
     )
     if over is not None:
         return over
+    if cfg.flow.integration == "pr":
+        return _open_request_outcome(
+            repo,
+            cfg,
+            log,
+            it,
+            wt,
+            item,
+            gates,
+            forced_by,
+            pending_approval,
+            agent,
+            borrowed=borrowed,
+            message=message,
+            model=model,
+            dirty=dirty,
+        )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -305,51 +335,85 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     landed_note = _landed_note(repo, wt, landed_before, branch_head, r)
-    if not r.ok and not landed_note:
-        # A merge that was tried and failed is a merge-gate outcome: the log-derived
-        # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
-        if r.attempted:  # a refused precondition says nothing about this branch
-            GM.record_merge(
-                log,
-                cfg,
-                repo,
-                it,
-                "failed",
-                gates=G.load_gates(repo, cfg),
-                tree=None if borrowed else wt.path,
-                reason=(r.err or r.out or "merge failed")[:500],
-                evidence={"branch": wt.branch, "git_exit": r.code},
-            )
-        out = O.Outcome(
-            kind="worktree.merged",
-            data={"id": item, "sha": "", "dirty": []},
-            exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
-            reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
+    if (
+        failed := _failed_landing_outcome(
+            repo, cfg, log, it, wt, item, landed_note, r, borrowed=borrowed
         )
-        return out
+    ) is not None:
+        return failed
     # What the base now points at: the landing. Falls back to the branch head only if
     # the base cannot be read back, which a merge that just succeeded makes unlikely.
     landed_after = W.rev(repo, wt.base)
     sha = landed_after or branch_head
-    log.append(
-        "worktree.merged",
+    _record_landing(
+        log,
         item,
-        {
-            "sha": sha,
-            "branch_head": branch_head,
-            "branch": wt.branch,
-            # The target's range this merge added -- what a cherry-pick port re-applies.
-            "landed_before": landed_before,
-            "landed_after": landed_after,
-            # Each gate's real state when it landed (Bb55340e14b), not the post-merge check's.
-            "gates": gates.states,
-            # Landed from a branch the item does not own (claimed --no-worktree).
-            **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
-        },
+        wt,
+        gates,
+        borrowed=borrowed,
+        outside=outside,
+        sha=sha,
+        branch_head=branch_head,
+        landed_before=landed_before,
+        landed_after=landed_after,
     )
-    # Spend an agent's approval only now, once the landing landed: a person's `--force` and a
-    # standing-policy answer have no approval to spend (pending_approval == ""), and a failed
-    # landing returned above before reaching here (B527b0a518c).
+    _record_reconciled(repo, cfg, log, it, item, landed_before, landed_after, branch_head)
+    return _finish_merge(
+        repo,
+        cfg,
+        log,
+        st,
+        it,
+        wt,
+        item,
+        gates,
+        forced_by,
+        pending_approval,
+        agent=agent,
+        borrowed=borrowed,
+        keep=keep,
+        outside=outside,
+        dirty=dirty,
+        refreshed=refreshed,
+        sha=sha,
+        branch_head=branch_head,
+        landed_note=landed_note,
+        merge_since=merge_since,
+        callers=(called_from, shell_cwd),
+        on_progress=on_progress,
+    )
+
+
+def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; the tail spends them
+    repo: Path,
+    cfg,
+    log,
+    st,
+    it,
+    wt,
+    item: str,
+    gates,
+    forced_by,
+    pending_approval: str,
+    *,
+    agent: str,
+    borrowed: bool,
+    keep: bool,
+    outside,
+    dirty,
+    refreshed,
+    sha: str,
+    branch_head: str,
+    landed_note: str,
+    merge_since: str,
+    callers,
+    on_progress,
+) -> O.Outcome:
+    """Everything after the landing is recorded: spend the approval, back-merge a hotfix,
+    record the merge gate, run the post-merge check and commit the events."""
+    # Spend an agent's approval only now, once the landing landed: a person's `--force` and
+    # a standing-policy answer have no approval to spend (pending_approval == ""), and a
+    # failed landing returned above before reaching here (B527b0a518c).
     forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
     _record_forced(log, item, sha, gates, forced_by, agent)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
@@ -374,7 +438,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
     )
     removed_tree, kept_reason = _dispose_tree(
-        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
+        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=callers
     )
     kept_reason = _kept_reason(kept_reason, landed_note, back_failed)
 
@@ -454,57 +518,6 @@ def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: 
         f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
         f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
     )
-
-
-def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
-    """A refusal when ``wt.branch`` has no commits its target lacks; else None.
-
-    Landing it would record the item merged while nothing reached the target -- which
-    is what an item bound to the WRONG tree did: its bound branch was empty, the work
-    sat on another branch, and `merge` exited 0 (Bec8d5228c9, D-sticky-binding-remedy).
-    Not refused when git cannot answer (`W.is_merged` is then False): that is for
-    `W.merge` to report. ``wt.branch`` is the branch that would land: an item with a tree
-    of its own refuses `--branch` earlier (`_what_to_land`), and a borrowed branch IS
-    the one named, already asked the same question by `_branch_to_land`.
-    """
-    if not W.is_merged(repo, wt.branch, wt.base):
-        return None
-    return O.refused(
-        "worktree.merged",
-        f"{wt.branch!r} has no commits ahead of {wt.base!r}: merging it would land "
-        f"nothing and record {it.id} merged. If {it.id}'s work is on another tree, bind "
-        f"the item to it -- `ddflow update {it.id} --worktree <path>` -- and merge again; "
-        f"if there is truly nothing to land, pass --allow-empty.",
-        id=it.id,
-        sha="",
-        dirty=[],
-        branch=wt.branch,
-    )
-
-
-def _dispose_tree(
-    repo: Path, cfg, log, it, wt: W.Worktree, *, borrowed: bool, keep: bool, callers
-) -> tuple[bool, str]:
-    """(removed, why it was kept) for a landed item's tree.
-
-    NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it is
-    the caller's, or whoever's has that branch checked out. Nor the one the caller stands
-    in: its shell would be left in a deleted directory (B1172da8c35).
-    """
-    if borrowed:
-        return False, f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
-    if it.adopted:
-        return False, f"worktree {wt.path} kept: adopted, not created by ddflow."
-    if not cfg.worktree.remove_on_merge or keep:
-        return False, ""
-    if stands_in(wt.path, *callers):
-        return False, (
-            f"worktree {wt.path} kept: you are standing in it, and removing it would leave "
-            f"your shell in a deleted directory. cd {W.repo_root(repo)} -- `ddflow cleanup "
-            f"--apply` removes the tree once {it.id} is complete."
-        )
-    gone = dispose_tree(repo, cfg, log, wt, item=it)
-    return (True, "") if gone.removed else (False, gone.why)
 
 
 def _what_to_land(
@@ -600,19 +613,6 @@ def _branch_to_land(
     return branch
 
 
-def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
-    """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
-    beside it -- true when git could not list the landing's paths, false when it did, null
-    when nothing was listed (``listed=False``: an item landing its own worktree, whose globs
-    are its lease) -- so an empty list is never read as a clean scope that nobody checked
-    (B4e42502034)."""
-    if not listed:
-        return {"outside_globs": [], "outside_globs_unknown": None}
-    if outside is None:
-        return {"outside_globs": [], "outside_globs_unknown": True}
-    return {"outside_globs": outside, "outside_globs_unknown": False}
-
-
 def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
@@ -643,6 +643,50 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
+
+
+def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
+    repo: Path,
+    cfg,
+    log,
+    it,
+    wt,
+    item: str,
+    gates,
+    forced_by,
+    pending_approval: str,
+    agent: str,
+    *,
+    borrowed: bool,
+    message: str,
+    model: str,
+    dirty: list[str],
+) -> O.Outcome:
+    """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
+    opening a request past unsettled required gates is never silently skipped. A forced
+    request spends the approval and records a `merge.forced` event only when the request
+    actually opened (the branch head is the proposed landing, `pr sync` lands it)."""
+    if borrowed:  # claimed --no-worktree
+        return O.refused(
+            "worktree.merged",
+            f"{item} was claimed without a worktree, and a pull request is opened from "
+            f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
+            f"or claim {item} with a worktree.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
+    req = _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
+    if req.exit != 0:
+        return req  # a refused/unavailable open is not an override to record
+    if gates.unmet:
+        req.data["awaiting_gates"] = list(gates.awaiting())
+    if forced_by is not None:
+        if pending_approval:
+            forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
+        _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
+        req.data["forced"] = True
+    return req
 
 
 def _open_request(

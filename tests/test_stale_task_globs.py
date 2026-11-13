@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from conftest import run_cli
 from helpers import git_quiet as _git
+from helpers import item_of
 
 TRACKED = ["pkg/mod/__init__.py", "pkg/mod/a.py", "pkg/other.py", "tests/test_x.py"]
 
@@ -61,3 +62,75 @@ def test_doctor_says_so_when_git_cannot_list_the_files(repo, monkeypatch):
     assert H._stale_glob_notes(repo, fold(log.read_all())) == [
         "stale task globs not checked: git could not list the tracked files"
     ]
+
+
+def test_claim_corrects_a_glob_whose_module_is_now_a_package(repo):
+    """Claiming an item whose `x.py` glob names a now-package `x/` corrects it to the
+    package path, on the item and on the lease (B-stale-globs-after-split-wave)."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    assert (
+        run_cli(
+            repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py"
+        )[0]
+        == 0
+    )
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")
+    assert code == 0, out + err
+    assert "pkg/mod/" in out + err, out + err
+    it = item_of(repo, "T1")
+    assert it.globs == ["pkg/mod/"], it.globs
+    assert it.lease.globs == ["pkg/mod/"], it.lease.globs
+
+
+def test_doctor_fix_stale_globs_rewrites_every_stale_item(repo):
+    """`ddflow doctor --fix-stale-globs` rewrites the stale package glob of EVERY open item
+    at once (B-stale-globs-after-split-wave): a claim corrects the item it leases, this
+    corrects the ones that just sit there."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    for tid in ("T1", "T2"):
+        code, _out, err = run_cli(
+            repo, "task", "add", tid, "--phase", "P1", "--title", tid, "--globs", "pkg/mod.py"
+        )
+        assert code == 0, err
+    code, out, err = run_cli(repo, "doctor", "--fix-stale-globs")
+    assert code == 0, out + err
+    assert item_of(repo, "T1").globs == ["pkg/mod/"]
+    assert item_of(repo, "T2").globs == ["pkg/mod/"]
+    assert "T1" in out + err and "T2" in out + err, out + err
+
+
+def test_doctor_fix_stale_globs_retargets_a_live_lease(repo):
+    """`ddflow doctor --fix-stale-globs` retargets the LIVE lease of a claimed item back to
+    the package path, not just the unclaimed items (B-stale-globs-after-split-wave)."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    assert (
+        run_cli(
+            repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py"
+        )[0]
+        == 0
+    )
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")[0] == 0
+    # The claim path already corrected the lease; put a stale glob back on the live lease.
+    assert run_cli(repo, "update", "T1", "--globs", "pkg/mod.py")[0] == 0
+    assert item_of(repo, "T1").lease.globs == ["pkg/mod.py"]
+    code, out, err = run_cli(repo, "doctor", "--fix-stale-globs")
+    assert code == 0, out + err
+    assert item_of(repo, "T1").lease.globs == ["pkg/mod/"], item_of(repo, "T1").lease.globs

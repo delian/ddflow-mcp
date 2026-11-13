@@ -9,7 +9,6 @@ and builds on ``model``/``stranded``.
 from __future__ import annotations
 
 import contextlib
-import shutil
 import sys
 import time
 from collections.abc import Iterator
@@ -17,6 +16,7 @@ from pathlib import Path
 
 from ...config import Config
 from ...core.model import fold
+from ...infra import fsio
 from ...infra import worktree as W
 from ...infra.log import EventLog
 from .. import ci as CI
@@ -54,7 +54,7 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
             return False
         # The directory BEFORE the prune: a prune only drops a registration whose tree is
         # already gone, so a half-freed directory would keep its entry to find again.
-        shutil.rmtree(t.path, ignore_errors=True)
+        fsio.rmtree_owned(t.path)
         try:
             CI.owner_marker(Path(t.path)).unlink(missing_ok=True)
         except OSError:

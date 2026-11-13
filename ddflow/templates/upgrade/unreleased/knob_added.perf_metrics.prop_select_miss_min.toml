@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.prop_select_miss_min"
+new = "2"
+why = "Test-suite proposals (PM-prop-tests): fewest full-run failures a selection would have missed before widening is proposed."
+impact = "additive"

@@ -147,7 +147,7 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
             "watch", "timeout must be a finite number >= 0 and poll a finite number > 0 seconds"
         )
     log, cfg, st = _load(repo, agent)
-    cap = float(cfg.lease.wait_cap_s)
+    cap = min(float(cfg.wait.max_call_seconds), float(cfg.lease.wait_cap_s))
     if timeout > cap:
         (on_progress or (lambda _m: None))(
             f"watching at most {cap:g}s at a time; resume with the token"

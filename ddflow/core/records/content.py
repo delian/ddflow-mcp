@@ -54,6 +54,11 @@ class Bug:
     invalid_at: str = ""
     invalid_reason: str = ""
     evidence: str = ""
+    #: `bug found --evidence` (the MCP tool's agent-supplied "what showed the bug"):
+    #: stored, never run. Kept apart from `evidence` (the `bug invalid` probe that showed
+    #: the finding FALSE): the two claim different things and a found-evidence must not be
+    #: dropped when a later invalid closure records its own probe.
+    found_evidence: str = ""
     #: Optional, from `bug found --title/--severity/--scope`; an old event carries none
     #: and folds to "" (scope: `project`, the default).
     title: str = ""
@@ -433,6 +438,10 @@ class Session:
     #: `session end --summary`: what the session did, in its own words (B194). The last
     #: non-empty one wins, so a bare `session.ended` never blanks it.
     summary: str = ""
+    #: How it ended: `ended` (a hook or the agent said so) or `interrupted` (a later session
+    #: found it dead); "" while open. `last_active` is when it last wrote (interrupted only).
+    how: str = ""
+    last_active: str = ""
 
 
 @dataclass(frozen=True)

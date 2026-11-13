@@ -14,6 +14,7 @@ from helpers import git as _git
 
 from ddflow.api import cirun as A
 from ddflow.config import Config
+from ddflow.core.model import GateRecord, Item
 from ddflow.services import ci as CI
 from ddflow.services import testscope as TSC
 
@@ -107,13 +108,15 @@ def test_a_green_run_reports_every_stage_and_keeps_its_why(branch, stubs):
 
 
 def _item(outcome, scope):
-    ci = NS(outcome=outcome, evidence={"ci_scope": {"scope": scope}} if scope else {})
-    return NS(kind="task", promote_to="", fixes=["B1"], base="main", gates={"ci": ci})
+    """A real `Item`, so a field the readers learn later is already there."""
+    ci = GateRecord("ci", outcome=outcome, evidence={"ci_scope": {"scope": scope}} if scope else {})
+    return Item(id="T1", kind="task", fixes=["B1"], base="main", gates={"ci": ci})
 
 
 def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monkeypatch, tmp_path):
     picked = NS(scope="selected", why="x", command="pytest t.py", tests=[], changed_lines=3)
     monkeypatch.setattr(TSC, "changed_lines", lambda tree, base: 3)
+    monkeypatch.setattr(TSC, "changed_paths", lambda repo, it: None)
     monkeypatch.setattr(TSC, "_selected", lambda *a, **kw: (picked, kw)[0])
     monkeypatch.setattr(TSC.W, "repo_root", lambda t: tmp_path)
     monkeypatch.setattr(TSC.W, "default_branch", lambda r: "main")
@@ -124,6 +127,37 @@ def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monke
     assert got is picked  # its own selection, not Scope("full", "the ci gate is failed ...")
     full = TSC.unit_tests_scope(cfg, NS(bugs={}), _item("failed", "full"), "pytest", tmp_path)
     assert full.scope == "full" and "ci gate is failed" in full.why
+
+
+def test_covered_by_a_full_ci_needs_a_pytest_summary(monkeypatch, tmp_path):
+    """B847e0494de: a ci recorded scope=full whose test hook ran no pytest (no changed file in
+    its pre-commit range) covers nothing, so the unit_tests gate runs the whole suite itself; a
+    full run WITH a pytest summary still covers it."""
+    monkeypatch.setattr(TSC, "changed_lines", lambda tree, base: 3)
+    monkeypatch.setattr(TSC.W, "repo_root", lambda t: tmp_path)
+    monkeypatch.setattr(TSC.W, "default_branch", lambda r: "main")
+    monkeypatch.setattr(TSC, "effective_pipeline", lambda repo, cfg, it: ["ci"])
+    monkeypatch.setattr(TSC, "_ci_not_passed_here", lambda cfg, it, tree: "")
+    cfg = Config()
+    cfg.gates.unit_tests_scope = "selected"
+
+    def _it(evidence):
+        return NS(
+            kind="task",
+            promote_to="",
+            fixes=["B1"],
+            base="main",
+            gates={"ci": NS(outcome="passed", evidence=evidence)},
+        )
+
+    no_summary = TSC.unit_tests_scope(
+        cfg, NS(bugs={}), _it({"ci_scope": {"scope": "full", "sha": "abc123"}}), "pytest", tmp_path
+    )
+    assert no_summary.scope == "full" and "no pytest summary" in no_summary.why
+    with_summary = _it({"ci_scope": {"scope": "full", "sha": "abc123"}, "summary": ["1 passed"]})
+    assert (
+        TSC.unit_tests_scope(cfg, NS(bugs={}), with_summary, "pytest", tmp_path).scope == "covered"
+    )
 
 
 def test_a_hook_stage_that_could_not_start_is_not_called_failed(branch, stubs, monkeypatch):

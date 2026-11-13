@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_log_events_per_item"
+new = "30.0"
+why = "The log-growth target: the most committed log events one completed item may add"
+impact = "additive"

@@ -29,18 +29,23 @@ from ...config import Config
 from ...core import ids as IDS
 from ...core.admission import is_shared
 from ...core.model import Item, State
+from ...core.records.gates import GateOutcome
 from ...infra import worktree as W
 from .. import chore as CO
 from .. import gate_accept as GA
 from .. import gates as G
+from .. import logblobs as LB
 from .. import observed_globs as OG
 from .. import review_exclude as RX
 from ..cadence import phase_overdue
-from ..docsonly import diff_is_docs_only
+from ..docsonly import diff_is_docs_only, diff_is_trivial
 from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
+from ..gates.stale_why import StaleNote
+from ..gates.testcmd import coverage_of
+from ..review_reuse import DELTA, classify, own_patch_id, shown_names
 from ._changed import changed_paths
 
 
@@ -83,6 +88,10 @@ class Verdict:
     #: Set when the item is a chore (`services.chore`): why it needs no reviewer. Recorded
     #: on the completion event with the approval it rests on.
     chore: str = ""
+    #: Set when the item's ACTUAL diff is trivial (format-only/docs/comment, Bbd88c54354):
+    #: the no-behavior-change declaration, recorded on the completion event so the excused
+    #: review + full-ci gates are accounted for rather than silently absent.
+    trivial: str = ""
 
     @property
     def may_complete(self) -> bool:
@@ -226,6 +235,7 @@ def needs_independent_reviewer(
         and it.kind == "task"
         and not it.promote_to
         and not diff_is_docs_only(it, cfg, paths)
+        and not diff_is_trivial(it, cfg, repo, paths)
         and not (
             not reviewed
             and repo is not None
@@ -256,18 +266,122 @@ def _independence(
     return why, []
 
 
-def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
-    """Why this item may or may not complete. Reads only; writes nothing."""
+def _skipped_gaps(it, missing) -> list[str]:
+    """The unsettled required gates recorded `skipped` -- the skip-shaped coverage gaps
+    (Bb67dc543b6). Filtered through `missing` (the `_unsettled` set), so a settled non-required
+    skip is never one. The `skipped` word is `GateOutcome.SKIPPED.value`, the third name of
+    `COVERAGE_GAP_OUTCOMES` (the other two reach `coverage_gaps` via `GateStatus.unavailable`).
+    Extracted so `verdict` stays under the complexity limit."""
+    return [g for g in missing if it.gate_outcome(g) == GateOutcome.SKIPPED.value]
+
+
+def _coverage_gap_blocker(cfg, gaps) -> str:
+    """The blocker when `[gates].unavailable_is_failure` is on: a coverage gap of ANY kind
+    (`unavailable`, `partial` or a required `skipped`) blocks like a failure. Takes the verdict's
+    `coverage_gaps` (the ONE spelling, never a rebuild) so the knob cannot drift from the gap set
+    the completion site records (roborev on Bb67dc543b6). `skipped` is only IN that set when it
+    is a required gate that did not settle (Bb67dc543b6)."""
+    if cfg.gates.unavailable_is_failure and gaps:
+        return (
+            f"a coverage gap blocks like a failure: {', '.join(gaps)} "
+            f"([gates].unavailable_is_failure is on)"
+        )
+    return ""
+
+
+def _reconciled_blocker(cfg: Config, it: Item) -> str:
+    """When merge reconciled files another item changed since this one forked, complete is
+    refused until the tests pass on the reconciled tree (D-lease-hold-limit-r2); "" when
+    nothing is owed, the guard is off, or a pass already sits on the record."""
+    if cfg.lease.reconcile_tests == "off":
+        return ""
+    files = it.reconciled.get("files", []) if it.reconciled else []
+    unknown = bool(it.reconciled.get("unknown")) if it.reconciled else False
+    if not files and not unknown:
+        return ""
+    reconciled_at = it.reconciled.get("at") or ""
+    reconciled_main = (it.reconciled.get("main") or "")[:12]
+
+    def names_reconciled_tree(rec) -> bool:
+        # A stamp at or after `at` is not proof the run was ON the reconciled tree: a pass
+        # recorded after the reconcile can still be a stale pre-merge checkout. `tree_sha` is
+        # the run's OWN word for where it ran ("<commit-sha-prefix>+<status>"), so only a run
+        # whose HEAD starts with the reconciled commit sat on the reconciled tree; anything
+        # else (a different commit, or no `tree_sha`) is not proof and the guard stays closed.
+        # The note is free text and never evidence of WHERE the run ran (a path name is a
+        # substring of other names), so it is not consulted.
+        ev = rec.evidence or {}
+        sha = str(ev.get("tree_sha", "") or "")
+        return bool(sha) and bool(reconciled_main) and sha.startswith(reconciled_main)
+
+    def passed_on_reconciled_tree(gate: str) -> bool:
+        # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
+        # the suite on the RECONCILED tree, so only a gate recorded at or after `at` counts.
+        # A reconcile with no stamp cannot prove any pass is post-reconcile: fail closed.
+        if not reconciled_at:
+            return False
+        rec = it.gates.get(gate)
+        return (
+            bool(rec)
+            and rec.outcome == GateOutcome.PASSED
+            and rec.at >= reconciled_at
+            and names_reconciled_tree(rec)
+        )
+
+    passed = passed_on_reconciled_tree("unit_tests")
+    if cfg.lease.reconcile_tests != "full":
+        passed = passed or passed_on_reconciled_tree("ci")
+    if passed:
+        return ""
+    base = (it.reconciled.get("base") or "")[:12]
+    main = (it.reconciled.get("main") or "")[:12]
+    scope = "full suite" if cfg.lease.reconcile_tests == "full" else "affected tests"
+    if unknown:
+        return (
+            f"merge could not read the changed files (git could not answer, base {base}, main "
+            f"{main}): the {scope} must pass on the reconciled tree before complete "
+            f"(`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+        )
+    named = ", ".join(files[:8])
+    return (
+        f"merge reconciled {named} that another item changed since this one forked "
+        f"(base {base}, main {main}): the {scope} must pass on the reconciled tree before "
+        f"complete (`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+    )
+
+
+def _push_reconciled_blocker(cfg: Config, it: Item, blockers: list[str]) -> None:
+    """Append `_reconciled_blocker`'s answer when it answers (keeps `verdict` under its
+    complexity cap: the branch lives here, not in the caller)."""
+    if blocker := _reconciled_blocker(cfg, it):
+        blockers.append(blocker)
+
+
+def verdict(
+    state: State,
+    cfg: Config,
+    item_id: str,
+    *,
+    repo: Path,
+    model: str = "",
+    cache: dict | None = None,
+) -> Verdict:
+    """Why this item may or may not complete. Reads only; writes nothing.
+
+    ``cache`` is a per-scan memo shared across every item a scan weighs (recover's
+    `_note_landed`, Bc52bf2ef41): the diff each probe below reads is derived once per item,
+    not once per probe."""
     it = state.items.get(item_id)
     if it is None or it.removed:
         return Verdict(item=item_id, blockers=[f"no such item {item_id!r}"])
 
     gdefs = G.load_gates(repo, cfg)
     # The actual diff, not the declared globs, decides whether a gate is out of scope.
-    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it))
+    s = G.status(
+        state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it, cache=cache), repo=repo
+    )
     v = Verdict(
         item=item_id,
-        coverage_gaps=list(s.unavailable),
         kind=it.kind,
         na_evidence=[f"{g}: {why}" for g, why in s.not_applicable.items()],
     )
@@ -276,11 +390,17 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # A chore (D-chore-class) is judged on the paths it ACTUALLY changed and a person's
     # approval of the chore list -- never on its tag. It is excused the gates it skipped
     # on the record, even a required one, and the reviewer.
-    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
+    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it, cache=cache))
     v.warnings += why_not
 
     missing = _unsettled(cfg, it, excused, s, required, state)
     v.unmet_gates = missing
+    # Coverage gaps are the unmet required gates that did not pass but are on the record:
+    # `unavailable`/`partial` (the whole `s.unavailable` set) AND a `skipped` required gate
+    # (Bb67dc543b6, filtered through the SAME `_unsettled` set, so a non-required skip that
+    # legitimately settled is never a gap). The standing `complete_unavailable` rule answers a
+    # routine completion over any of them alike. `_coverage_note` separates the three kinds.
+    v.coverage_gaps = list(s.unavailable) + _skipped_gaps(it, missing)
     v.warnings += _accepted_warnings(state, it, s, required, missing, cfg)
     if missing:
         v.blockers.append(
@@ -289,6 +409,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             + ")"
             + "".join(GA.next_step(it, item_id, g) for g in missing if GA.next_step(it, item_id, g))
         )
+    _push_reconciled_blocker(cfg, it, v.blockers)
 
     # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
     # an umbrella too, and completing it while its children are open marks work
@@ -356,32 +477,37 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"it from required."
         )
 
-    if cfg.gates.unavailable_is_failure and s.unavailable:
-        v.blockers.append(
-            f"gate(s) could not run: {', '.join(s.unavailable)} "
-            f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
-        )
+    if blocker := _coverage_gap_blocker(cfg, v.coverage_gaps):
+        v.blockers.append(blocker)
 
     v.independence, no_reviewer = _independence(
-        state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it, cache=cache), repo
     )
     v.blockers += no_reviewer
 
-    if s.unavailable:
-        v.coverage_note = _coverage_note(it, s.unavailable)
+    if v.coverage_gaps:
+        v.coverage_note = _coverage_note(it, v.coverage_gaps)
 
-    readme = readme_report(state, cfg, item_id, repo=repo)
+    readme = readme_report(state, cfg, item_id, repo=repo, cache=cache)
     if readme:
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
 
-    OG.add_notice(v, state, cfg, item_id, repo)
+    own = changed_paths(repo, it, cache=cache)
+    OG.add_notice(v, state, cfg, item_id, repo, read=(lambda _repo, _it: own))
 
     cwd, landed = _tree_being_completed(repo, it)
-    own = changed_paths(repo, it)
+    v.trivial = _trivial_declaration(it, cfg, repo, own)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
     for note in refine_stale_notes(
-        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
+        stale,
+        it,
+        cwd,
+        landed,
+        own,
+        cfg.review.triage_ignore_globs,
+        cfg.review.doc_globs,
+        cfg.locks.review_reuse,
     ):
         if note.unverified:
             v.warnings.append(
@@ -389,11 +515,69 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
                 f"not be checked — {note.why}. Re-run it if that matters."
             )
             continue
+        if note.reused:
+            v.warnings.append(
+                f"{note.gate} review reused ([locks].review_reuse = "
+                f"{cfg.locks.review_reuse}): {note.reused}."
+            )
+            continue
         v.warnings.append(
             f"{note.gate} passed on a different tree than the one you are completing — "
             f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
+
+
+def _reuse_note(
+    note: StaleNote,
+    recorded: dict,
+    changed: list[str],
+    entries,
+    own_id: str,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> StaleNote:
+    """A review gate's note under `[locks].review_reuse` = disjoint: kept (``reused`` carries the
+    reason), narrowed to the overlapping files (a delta), or the note as it was when git cannot
+    tell (fail closed). Extracted so `refine_stale_notes` stays under the complexity ratchet."""
+    decision = classify(recorded, changed, entries, own_id, ignore, docs)
+    if decision.verdict == DELTA:
+        return replace(note, why=decision.why)
+    if decision.verdict != "keep":
+        return note
+    return StaleNote(note.gate, "", reused=decision.why)
+
+
+def _refine_disjoint(
+    notes: list,
+    it: Item,
+    cwd: Path,
+    landed: str,
+    changed: list[str] | None,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> list:
+    """The `[locks].review_reuse` = disjoint classification of the stale notes: kept (``reused``
+    carries why), narrowed to the overlapping files (a delta), or the note as it was when git
+    cannot tell (fail closed). A separate function so `refine_stale_notes` stays below the
+    complexity ratchet."""
+    tip = landed if landed and landed != "HEAD" else (getattr(it, "branch", "") or "HEAD")
+    own_id = own_patch_id(cwd, getattr(it, "base", "") or W.default_branch(cwd), tip, changed or [])
+    entries = None
+    out = []
+    for note in notes:
+        rec = it.gates.get(note.gate)
+        recorded = (LB.full(rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        if note.unverified or not isinstance(recorded, dict):
+            out.append(note)
+            continue
+        if entries is None:
+            entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
+        if entries is None:
+            out.append(note)
+            continue
+        out.append(_reuse_note(note, recorded, changed, entries, own_id, ignore, docs))
+    return out
 
 
 def refine_stale_notes(
@@ -404,6 +588,7 @@ def refine_stale_notes(
     changed: list[str] | None,
     ignore: Sequence[str] = (),
     docs: Sequence[str] = (),
+    reuse: str = "off",
 ):
     """Narrow the "passed on a different tree" notes of review gates to the item's own paths
     (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
@@ -413,12 +598,20 @@ def refine_stale_notes(
     set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
     did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) and a file
     matching ``docs`` (`[review].doc_globs`: wording, bug Bb89ff23f21) are not a difference, as
-    they are not at triage."""
+    they are not at triage.
+
+    ``reuse`` is `[locks].review_reuse` (default `off`): `disjoint` also classifies a dropped
+    note as a reuse -- the item's own change is unchanged (`git patch-id --stable`) and the
+    files main changed are disjoint from the reviewed files, so the review is KEPT and returned
+    as a note with ``reused`` set (record why); an overlap returns the note narrowed to the
+    overlapping files (a delta); anything git cannot tell keeps the note whole (fail closed)."""
+    if reuse == "disjoint":
+        return _refine_disjoint(notes, it, cwd, landed, changed, ignore, docs)
     entries = None
     out = []
     for note in notes:
         rec = it.gates.get(note.gate)
-        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        recorded = (LB.full(rec.evidence or {}).get("reviewed_paths") if rec else None) or None
         if note.unverified or not isinstance(recorded, dict) or changed is None:
             out.append(note)
             continue
@@ -436,11 +629,28 @@ def refine_stale_notes(
             and not ignorable(p, recorded, ignore, docs, gone)
         )
         if moved:
-            shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
             out.append(
-                replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
+                replace(
+                    note,
+                    why=f"the files it reviewed or this item changes differ: {shown_names(moved)}",
+                )
             )
     return out
+
+
+def _trivial_declaration(it, cfg, repo, own) -> str:
+    """The no-behavior-change declaration for a TRIVIAL diff (Bbd88c54354), or "".
+
+    Kept a function, not an inline `if`, so `verdict`'s cyclomatic complexity does not grow:
+    a trivial change (format-only/docs/comment) excuses the cross-family review (rubber_duck +
+    critic) and the whole-suite ci; the record carries this note so those gates are accounted
+    for rather than silently absent."""
+    if diff_is_trivial(it, cfg, repo, own):
+        return (
+            "no behavior change: the diff is format-only/docs/comment, so rubber_duck, "
+            "critic and ci are excused and unit_tests runs the scoped tests"
+        )
+    return ""
 
 
 def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> list[str]:
@@ -516,7 +726,9 @@ README_REMEDY = (
 )
 
 
-def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str:
+def readme_report(
+    state: State, cfg: Config, item_id: str, *, repo: Path, cache: dict | None = None
+) -> str:
     """The "README not updated" report when a task's diff changed code and not the README;
     `README_UNKNOWN` when git cannot say what changed; else "".
 
@@ -538,10 +750,10 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     docs = it.gates.get("docs")
     if docs and (
         (docs.outcome == "skipped" and docs.reason)
-        or (docs.outcome == "passed" and (docs.evidence or {}).get("note"))
+        or (docs.outcome == "passed" and LB.full(docs.evidence or {}).get("note"))
     ):
         return ""
-    changed = changed_paths(repo, it)
+    changed = changed_paths(repo, it, cache=cache)
     if changed is None:
         return README_UNKNOWN
     code = [
@@ -586,17 +798,24 @@ def _is_test_or_doc_path(path: str) -> bool:
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
-    """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
-    one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
-    ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
-    its `coverage`; a `partial_exits` gate has none, and says "coverage unknown"."""
-    never = [g for g in gaps if it.gate_outcome(g) != "partial"]
+    """Say what each gap IS. ``gaps`` holds `unavailable`, `partial` and `skipped` gates
+    (Verdict.coverage_gaps), and one sentence for all of them called a critic that
+    reviewed 3 of 6 chunks one that "never ran" -- erasing the half it did
+    (B72dd4dde17). A reviewer's partial evidence carries its `coverage`; a
+    `partial_exits` gate has none, and its runner's own counts (from the summary lines)
+    stand in for it (bug B-gate-status-partial-did-not-run). A skipped gate is named a
+    skip, never a run (Bb67dc543b6)."""
+    never = [g for g in gaps if it.gate_outcome(g) not in ("partial", "skipped")]
+    skipped = [g for g in gaps if it.gate_outcome(g) == "skipped"]
     parts = [f"{', '.join(never)} never ran"] if never else []
+    parts += [f"{', '.join(skipped)} skipped"] if skipped else []
     for g in gaps:
         if it.gate_outcome(g) == "partial":
             # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the
             # most important one to show.
             coverage = it.gates[g].evidence.get("coverage")
+            if coverage is None or coverage == "":
+                coverage = coverage_of(it.gates[g].evidence or {})
             figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
             parts.append(f"{g} ran only partially (coverage{figure})")
     return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."

@@ -252,3 +252,69 @@ def test_a_same_family_finding_does_not_block_when_cross_family_is_clean(repo, t
         "findings": 1,
         "note": "a cross-family reviewer passed clean",
     }, ev
+
+
+def _setup_panel_high_finding_cross_family_clean(repo: Path, tmp_path: Path) -> None:
+    """The panel of bug B65e2f0333d: four reviewers -- kimi (moonshot), lan-deepseek
+    (deepseek, the author's own family), gemini (google) and grok (xai). The same-family
+    reviewer raises a HIGH (plus a MEDIUM and a LOW) while the three cross-family reviewers
+    -- kimi (moonshot), gemini (google) and grok (xai) -- come back clean, so the gate is
+    recorded passed on the clean cross-family round. The
+    same-family panel member's findings must survive that pass -- recorded, digest-stamped
+    and attributed -- not vanish into the job log alone."""
+    same = tmp_path / "rsame"
+    same.write_text(
+        "#!/bin/sh\ncat > /dev/null\n"
+        "printf 'FINDING HIGH x.py:1\\nfirst problem\\n\\n"
+        "FINDING MEDIUM y.py:1\\nsecond problem\\n\\n"
+        "FINDING LOW z.py:1\\nthird problem\\n\\n"
+        "STATUS: FINDINGS 3\\n'\n"
+    )
+    same.chmod(same.stat().st_mode | stat.S_IXUSR)
+    same = str(same)
+    kimi = _reviewer(tmp_path / "rkimi")
+    xai = _reviewer(tmp_path / "rxai")
+    google = _reviewer(tmp_path / "rgoogle")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        '[agent]\nfamily = "deepseek"\n'
+        f'[[reviewer]]\nname = "same"\nkind = "command"\ncommand = "{same}"\n'
+        'model = "deepseek-chat"\nfamily = "deepseek"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "kimi"\nkind = "command"\ncommand = "{kimi}"\n'
+        'model = "kimi-k3"\nfamily = "moonshot"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "grok"\nkind = "command"\ncommand = "{xai}"\n'
+        'model = "grok-4.7"\nfamily = "xai"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "gemini"\nkind = "command"\ncommand = "{google}"\n'
+        'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+
+def test_a_panel_members_findings_survive_a_pass_on_a_clean_round(repo, tmp_path):
+    """The regression for bug B65e2f0333d: when a gate is recorded passed on a clean
+    cross-family round, a same-family panel member's findings (a HIGH among them) must
+    still be recorded -- digest-stamped and attributed to its reviewer -- so they can be
+    triaged and seen in gate status. On the unfixed code the discounted finding was
+    dropped from the record and survived only in the job log, so `chunk_findings` below
+    held nothing from the panel member and the tricky assertion failed."""
+    _setup_panel_high_finding_cross_family_clean(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.exit == 0, out.reason
+    assert out.data["outcome"] == "passed", out.data
+    ev = _ev(repo)
+    assert ev["same_family_discounted"] == {
+        "findings": 3,
+        "note": "a cross-family reviewer passed clean",
+    }, ev
+    # The same-family panel member's findings are not lost: every one stays on the record,
+    # digest-stamped and carrying its raiser's family, so triage can still address them.
+    kept = ev["chunk_findings"]
+    assert {f["severity"] for f in kept} >= {"HIGH", "MEDIUM", "LOW"}, kept
+    assert all(f["digest"] and f["family"] == "deepseek" for f in kept), kept

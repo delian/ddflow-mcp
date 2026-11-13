@@ -21,9 +21,10 @@ from typing import TYPE_CHECKING, Any
 from ..core import globspec as GS
 from ..core import schedule as SCH
 from ..core.defaults import DEFAULT_PRIORITY
-from ..core.model import WORK_KINDS, Item
+from ..core.model import DONE, WORK_KINDS, Item
 from . import leases as L
 from . import priority as P
+from . import wiring as W
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -42,6 +43,7 @@ _FIELDS = (
     "priority",
     "line",
     "kind",
+    "adds",
 )
 
 
@@ -125,6 +127,9 @@ class TaskDraft:
     line: str | None = None
     #: A work kind other than a plain task ("doc", ...); None writes nothing: a task.
     kind: str | None = None
+    #: The feature classes this item introduces (`knob`, `event`, `command`), whose wiring
+    #: files join its globs (`services.wiring`). None writes nothing: a task that adds none.
+    adds: list[str] | None = None
     #: Fields only some callers write: `fixes`, `promote_from`, `port_of`, `source` ...
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -160,6 +165,7 @@ def problem_of(draft: TaskDraft) -> str:
         or GS.problem(draft.globs or [])
         or SCH.problem(draft.resources or [])
         or _bad_kind(draft.kind)
+        or _bad_adds(draft.adds)
     )
 
 
@@ -182,11 +188,44 @@ def _bad_kind(kind: str | None) -> str:
     return f"unknown kind {kind!r}: task add makes {', '.join(WORK_KINDS)}."
 
 
+def _bad_adds(adds: list[str] | None) -> str:
+    """Why ``adds`` cannot name what this item introduces, or "" (none, or a feature class)."""
+    return W.problem(adds)
+
+
 def missing_parent(st: State, parent: str | None) -> str:
     """Why ``parent`` cannot hold a new task, or ""."""
     if parent and parent not in st.items:
         return f"no such parent {parent!r}. Add the phase or task first."
     return ""
+
+
+def closed_phase_parent(
+    st: State, parent: str | None, *, readd: bool = False, item: str = ""
+) -> str:
+    """Why a NEW open task under ``parent`` is REFUSED, or "" (bug B86e99de0c6): a
+    truly-closed phase -- one the importer wrote (or `phase close`d), which reports done
+    with ``imported`` authority -- cannot take an open task, or the task would sit beneath
+    a closed phase. The operator re-opens it first (`ddflow verify --reopen <phase>`); a
+    phase completed normally re-opens on its own when it gains an open task (see
+    ``handlers.items._reopen_done_parent``).
+
+    A ``readd`` that restores a still-settled task is NOT refused: it adds no open work
+    under the phase, so it may land beneath a closed phase without violating the invariant.
+    """
+    if not parent:
+        return ""
+    holder = st.items.get(parent)
+    if holder is None or holder.kind != "phase" or holder.state != DONE:
+        return ""
+    if holder.id not in st.imported_done:
+        return ""
+    if readd and (existing := st.items.get(item)) is not None and existing.terminal:
+        return ""
+    return (
+        f"phase {parent!r} is closed (imported): re-open it before filing a task under "
+        f"it (`ddflow verify --reopen {parent}`)"
+    )
 
 
 def unknown_needs(st: State, needs: list[str] | None) -> str:
@@ -222,6 +261,19 @@ def release_umbrella(
     return True
 
 
+def _validation_refusal(st: State, draft: TaskDraft, readd: bool) -> Added | None:
+    """The ``got refused / failed`` for a draft that cannot be filed, or None when the id,
+    globs, kind, or parent are all acceptable. Broken out of ``add_task`` so the closed-
+    phase refusal and the shape checks live beside it here, in one loop count."""
+    closed = closed_phase_parent(st, draft.parent, readd=readd, item=draft.id)
+    if closed:
+        return Added(draft.id, closed, refused=True)
+    bad = problem_of(draft) or missing_parent(st, draft.parent)
+    if bad:
+        return Added(draft.id, bad)
+    return None
+
+
 def add_task(
     log: EventLog,
     st: State,
@@ -246,9 +298,9 @@ def add_task(
     """
     if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
-    bad = problem_of(draft) or missing_parent(st, draft.parent)
-    if bad:
-        return Added(draft.id, bad)
+    refused = _validation_refusal(st, draft, readd)
+    if refused is not None:
+        return refused
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)
@@ -256,6 +308,11 @@ def add_task(
         banded = P.band(cfg, draft.id, draft.tags or [])
         if banded != DEFAULT_PRIORITY:
             draft = replace(draft, priority=banded)
+    # A feature item declares what it adds (`adds`): its globs grow the wiring files
+    # that introduction touches, so the lease covers them before the first write
+    # (`services.wiring`, B-item-globs-omit-wiring-files).
+    if draft.adds:
+        draft = replace(draft, globs=W.expand(draft.globs, draft.adds))
     data = draft.data()
     if not isinstance(dedupe, str):
         data.update(dedupe.fields)

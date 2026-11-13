@@ -6,6 +6,7 @@ takes the MCP entry (D-unify 4). Read-only: it appends no event and starts no pr
 
 from __future__ import annotations
 
+from ...core.metrics import VIEWS
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
@@ -37,6 +38,16 @@ COMMANDS: tuple[Command, ...] = (
             "falsifiers tripped, with the call that switches back to strict locking. "
             "view=swarm: the baseline a lane fleet must beat: merged items per hour, rework rate, "
             "agent-hours per item, critical-path slack. "
+            "view=tiny: one-line versions of the summary figures. "
+            "view=paths: each item's workflow path (process vs record steps) and the burst union of "
+            "concurrent process time. view=variants: the directly-follows gate graph, top variants, "
+            "burst overlap, superseded passes and out-of-order runs. "
+            "view=slo: the service-level indicators ddflow tracks for itself. "
+            "view=batch: the size-bucket tables behind batched gates (review runs and minutes "
+            "by changed lines, findings per run, findings confirmed/refuted by size, lock wait). "
+            "view=suitewaste: why whole-suite runs happen (first run on a code tree, reruns on an "
+            "equal tree, after a baseline-red verdict, unplaced) with runs, suite and queue minutes "
+            "and the avoidable share. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -53,20 +64,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages, locks or swarm.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks or swarm",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm, slo, batch or suitewaste",
                 positional=True,
                 nargs="?",
-                choices=(
-                    "summary",
-                    "forecast",
-                    "retro",
-                    "skips",
-                    "lanes",
-                    "stages",
-                    "locks",
-                    "swarm",
-                ),
+                choices=VIEWS,
                 default=None,
             ),
             Param(

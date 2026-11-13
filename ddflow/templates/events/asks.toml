@@ -3,19 +3,36 @@
 [[kind]]
 name = "ask.answered"
 doc = "A question put to a person was answered."
+fields = { "answer" = ["str"], "by" = ["str"], "code_presented" = ["str"], "coded" = ["bool"], "digest" = ["str"], "human" = ["bool"], "id" = ["str"], "level" = ["int"], "outcome" = ["str"], "policy" = ["bool"], "proof" = ["str"], "role" = ["str"], "source" = ["str"], "via" = ["str"] }
+text = ["answer"]
+lookup = { "by" = "an actor id, the audit trail's who", "code_presented" = "the raw, already-spent one-time code (re-hashed by verdict to compare)", "level" = "a number", "outcome" = "the word or choice an answer is compared with", "policy" = "a flag: a standing rule answered, not a person", "proof" = "a channel's own evidence id, compared with the record it names", "role" = "a role name", "source" = "an actor source word", "via" = "a channel word" }
+exempt = "a question or approval put to a person and its outcome: the asker's text is compared by the asker, not here (services.ask)"
 
 [[kind]]
 name = "ask.expired"
 doc = "A question went unanswered past its expiry."
+fields = { "by" = ["str"], "id" = ["str"] }
+lookup = { "by" = "an actor id, the audit trail's who" }
+exempt = "a question or approval put to a person and its outcome: the asker's text is compared by the asker, not here (services.ask)"
 
 [[kind]]
 name = "ask.requested"
 doc = "A question or approval was put to a person."
+fields = { "bot_answerable" = ["bool"], "canon" = ["str"], "code_hash" = ["str"], "digest" = ["str"], "expires_at" = ["str"], "id" = ["str"], "min_level" = ["int"], "options" = ["list"], "subject" = ["str"], "text" = ["str"], "tier" = ["str"], "type" = ["str"], "use_ttl_s" = ["int"], "uses" = ["int"], "verb" = ["str"] }
+text = ["text"]
+lookup = { "canon" = "the canonical command record, compared by its digest", "code_hash" = "a hash that is compared", "expires_at" = "a time that is compared", "min_level" = "a number", "options" = "the choices an answer is compared with", "tier" = "a tier word", "type" = "a kind word", "use_ttl_s" = "a number", "uses" = "a number", "verb" = "a gated-command verb word" }
+exempt = "a question or approval put to a person and its outcome: the asker's text is compared by the asker, not here (services.ask)"
 
 [[kind]]
 name = "ask.withdrawn"
 doc = "The asker withdrew a question before it was answered."
+fields = { "by" = ["str"], "id" = ["str"], "revoked" = ["bool"] }
+lookup = { "by" = "an actor id, the audit trail's who" }
+exempt = "a question or approval put to a person and its outcome: the asker's text is compared by the asker, not here (services.ask)"
 
 [[kind]]
 name = "ask.consumed"
 doc = "An agent spent one use of a person's approval on the exact command it was for."
+fields = { "by" = ["str"], "digest" = ["str"], "effect" = ["str"], "grade" = ["str"], "id" = ["str"], "verb" = ["str"] }
+lookup = { "by" = "an agent id, the audit trail's who", "effect" = "an event id compared with the effect it stamped", "grade" = "an approval grade word such as L2-typed", "verb" = "a gated-command verb word" }
+exempt = "a question or approval put to a person and its outcome: the asker's text is compared by the asker, not here (services.ask)"

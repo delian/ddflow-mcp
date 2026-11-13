@@ -264,34 +264,38 @@ def test_at_skip_names_the_same_peer_in_its_next_call(pair: Path) -> None:
 
 
 def test_a_scratch_merge_past_the_deadline_is_unavailable(pair: Path, monkeypatch) -> None:
-    import time
+    """LK-probe-scratch-deadline: past probe_timeout_s the scratch merge's git is killed in
+    place (no worker thread), and the probe is unavailable with git's own timed-out answer.
+    ``ci.merge_tree`` carries the deadline into the ``git merge``, so a merge that overruns
+    ``timeout_s`` does not let the CLI outlive the probe."""
+    from ddflow.infra import worktree as W
 
     monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+    real = W.git
 
-    def slow(*a, **kw):
-        time.sleep(1.5)
-        return PR.Probe(PR.CLEAN, PR.SCRATCH)
+    def git(path, *args, **kw):
+        if args and args[0] == "-c" and "merge" in args:
+            t = kw.get("timeout")
+            assert t is not None and 0 < t <= 1, (
+                "ci.merge_tree must carry the deadline into `git merge`"
+            )
+            return PR.G.GitResult(
+                PR.G.UNAVAILABLE,
+                "",
+                "git merge timed out after 1s",
+                unavailable=True,
+                timed_out=True,
+            )
+        return real(path, *args, **kw)
 
-    monkeypatch.setattr(PR, "_scratch_merge", slow)
-    p = PR.run(pair, "ddflow/clean", "main", timeout_s=0.2)
-    assert p.result == PR.UNAVAILABLE and "scratch merge took over" in p.reason
+    monkeypatch.setattr(W, "git", git)
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=1)
+    assert p.result == PR.UNAVAILABLE and "timed out" in p.reason
 
 
-def test_known_limit_the_scratch_worker_outlives_the_deadline(pair: Path, monkeypatch) -> None:
-    """Findings 18/19, filed as LK-probe-scratch-deadline: the probe answers unavailable at
-    probe_timeout_s, but the scratch merge (no deadline in ci.merge_tree) runs on to its end."""
-    import threading
-    import time
-
+def test_a_scratch_merge_under_the_deadline_is_still_clean(pair: Path, monkeypatch) -> None:
+    """The deadline bounds, it does not shorten: a merge-then-wait inside ``timeout_s`` still
+    comes back clean, and the deadline is passed through for the caller that set it."""
     monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
-    done = threading.Event()
-
-    def slow(*a, **kw):
-        time.sleep(0.8)
-        done.set()
-        return PR.Probe(PR.CLEAN, PR.SCRATCH)
-
-    monkeypatch.setattr(PR, "_scratch_merge", slow)
-    p = PR.run(pair, "ddflow/clean", "main", timeout_s=0.1)
-    assert p.result == PR.UNAVAILABLE and not done.is_set()  # answered, worker still running
-    assert done.wait(5)  # and it does finish on its own
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=TIMEOUT)
+    assert (p.result, p.method) == (PR.CLEAN, PR.SCRATCH)

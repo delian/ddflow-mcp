@@ -23,6 +23,7 @@ from ddflow.services.swarm import score
 from ddflow.services.swarm import seedpack as SP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conftest import run_cli
 from lanes_fixture import T0, Log
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
@@ -95,6 +96,24 @@ def state(*approved: T.Template, plugin=True, extra_tasks=(), live=()):
 def cat(tmp_path):
     t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
     (tmp_path / "models.toml").write_text(t)
+    return modelreg.load(local_dir=tmp_path)
+
+
+def cat_unverified(tmp_path):
+    """The example catalog AS SHIPPED: the lane route's tool_call fact is `unverified`
+    (its note says it becomes verified only after the live probe)."""
+    (tmp_path / "models.toml").write_text(EXAMPLE.read_text())
+    return modelreg.load(local_dir=tmp_path)
+
+
+def cat_route(tmp_path, model):
+    """A catalog whose lane route serves ``model``. The shipped `families.toml` already maps
+    a family id to its vendor (claude -> anthropic, deepseek -> deepseek); this puts the
+    route the template names behind the model, so the lane scores under that vendor."""
+    (tmp_path / "models.toml").write_text(
+        "[route.lan-vllm]\n"
+        f'endpoint = {{ v = {{ kind = "openai", base_url = "http://h:8000/v1", model = "{model}", api_key_env = "LAN_ENDPOINT_KEY" }}, s = "verified", d = "2026-10-30" }}\n'
+    )
     return modelreg.load(local_dir=tmp_path)
 
 
@@ -184,6 +203,33 @@ def test_an_agent_made_grant_or_an_edited_template_is_not_approved():
     assert not T.approved(state(t), tpl(budget_usd=3.0)).ok  # edited after approval
 
 
+def test_consent_names_the_working_approve_command():
+    """B8647b69e06: `consent.how` must name a command that can actually record the grant --
+    `ddflow lanes approve <name>` -- not `ddflow approvals request` (which has no subject or
+    digest argument, so no person could ever follow it and `approved()` never passes)."""
+    got = T.consent(tpl()).how
+    assert f"ddflow lanes approve {tpl().name}" in got
+    assert "approvals request" not in got
+
+
+def test_lanes_approve_is_wired_to_the_person_only_act(repo, tmp_path):
+    """`ddflow lanes approve <name>` is the missing caller of `launch_template.approve`
+    (B8647b69e06). Before the fix `approve` was not a lane view, so argparse refused the
+    word itself; now the route reaches the approval engine, which refuses the agent identity
+    ``run_cli`` inherits (exit 3, a person's act). A person at their own terminal makes the
+    same call and `launch_template.approve` records the grant at the current digest."""
+    run_cli(repo, "init")
+    tmp = tmp_path / "lane-templates.toml"
+    tmp.write_text(
+        '[template.ds]\nharness="kilo"\nroute="r"\nfamily="deepseek"\n'
+        "budget_usd=1.0\ntrust=1\nprice_in=1.0\nprice_out=2.0\n"
+    )
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[swarm]\nlaunch_templates_file = '{tmp}'\n")
+    code, out, err = run_cli(repo, "lanes", "approve", "ds")
+    assert code == 3 and "person's act" in err, (out, err)  # routed; refused for an agent
+
+
 # --- launch: refusals start nothing -----------------------------------------------------------
 
 
@@ -234,11 +280,42 @@ def test_scheduler_constraints_apply(tmp_path, tree):
     req.cfg.swarm.max_lanes = 1
     live = score.World(live=(score.Live("Y-1", ("src/y/*",), "claude"),))
     assert any("max_lanes" in x for x in LN.launch(replace(req, world=live)).reasons)
+    req = request(
+        tmp_path,
+        tree,
+        cat=cat_route(tmp_path, "deepseek-chat"),
+    )
     req.cfg.swarm.family_cap = 1
     same = score.World(live=(score.Live("Y-1", ("src/y/*",), "deepseek"),))
     assert any("family_cap" in x for x in LN.launch(replace(req, world=same)).reasons)
     clash = score.World(live=(score.Live("Y-1", ("src/a/*.py",), "claude"),))
     assert any("overlap" in x for x in LN.launch(replace(req, world=clash)).reasons)
+
+
+def test_family_cap_counts_the_catalog_vendor_not_the_template_family_id(tmp_path, tree):
+    """B60ff757d13: score the lane under the catalog VENDOR, not the template's family id.
+
+    A template for family id ``claude`` (vendor ``anthropic``) must count an existing
+    ``anthropic`` live lane against family_cap; scoring it under ``claude`` would see the two
+    as different families and undercount (independence could also compare claude with
+    anthropic as different)."""
+    req = request(
+        tmp_path,
+        tree,
+        t=tpl(family="claude"),
+        st=state(tpl(family="claude")),
+        cat=cat_route(tmp_path, "claude-sonnet"),
+    )
+    req.cfg.swarm.family_cap = 1
+    same = score.World(live=(score.Live("Y-1", ("src/y/*",), "anthropic"),))
+    assert any("family_cap" in x for x in LN.launch(replace(req, world=same)).reasons)
+
+
+def test_a_lane_whose_estimate_exceeds_the_catalog_window_is_refused(tmp_path, tree):
+    """Launch scores the same lane as dispatch, so the catalog window is enforced here too
+    (the lane's served window is a hard constraint for the item it starts)."""
+    r = LN.launch(request(tmp_path, tree, est_in=100_000))
+    assert isinstance(r, LN.Refused) and any("exceeds window" in x for x in r.reasons)
 
 
 def test_hook_plugin_consent_is_asked_and_leaves_no_files(tmp_path, tree):
@@ -312,6 +389,18 @@ def test_a_binary_of_another_harness_than_the_approved_one_is_refused(tmp_path, 
     assert not (tmp_path / "record.json").exists()
 
 
+def test_a_probe_route_with_unverified_tool_calls_launches(tmp_path, tree):
+    """Bc64f9048f5: a route whose tool_call is only `unverified` must still launch —
+    the launch IS the live probe that verifies it. launch() refuses it today because
+    it calls prepare() on its require_tools=True default while its own slot checks
+    already resolve the endpoint with require_tools=False."""
+    req = request(tmp_path, tree, cat=cat_unverified(tmp_path))
+    r = LN.launch(req)
+    assert isinstance(r, LN.Launched), r
+    r.driver.stop(r.handle)
+    LN.OC.cleanup(tree[2])
+
+
 def test_hostile_template_values_are_notes_not_crashes_or_loopholes(tmp_path):
     head = 'harness="kilo"\nroute="r"\nfamily="f"\n'
     f = tmp_path / "t.toml"
@@ -357,3 +446,26 @@ def test_unpriced_template_and_negative_prices_and_bare_tables(tmp_path):
     got, notes = T.load(tmp_path / "t.toml")
     assert got == {} and any("x: harness is empty" in n for n in notes)
     assert any("y: " in n and "negative" in n for n in notes)
+
+
+def test_launch_reads_the_conformance_store_and_endpoint_pool(tmp_path, tree):
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    root = tree[0]
+    assert LN.conformance_level(root, "lane-7") == 0
+    save(root, Report("lane-7", 3, ()))
+    assert LN.conformance_level(root, "lane-7") == 3
+    pools = LN.endpoint_pools(cat(tmp_path), "lan-vllm", "", 1, tmp_path / "slots")
+    assert pools and pools[0].pool == "ep-lan-vllm" and pools[0].limit == 2
+
+
+def test_conformance_level_expires_after_max_age(tmp_path, tree):
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    root = tree[0]
+    save(root, Report("lane-7", 3, (), at=1000.0))
+    assert LN.conformance_level(root, "lane-7", max_age_s=30, now=1000.0) == 3
+    assert LN.conformance_level(root, "lane-7", max_age_s=0, now=999999.0) == 3
+    assert LN.conformance_level(root, "lane-7", max_age_s=30, now=2000.0) == 0

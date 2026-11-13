@@ -173,7 +173,25 @@ WAIT = Command(
             "path/glob (until no other agent's live lease covers it); a bare wait returns the "
             "first ready item at once",
         ),
+        Param(
+            "approval",
+            default="",
+            help="wait for an operator-approval request id until it is answered; ready then means "
+            "re-run the gated command with --approval ID",
+        ),
+        Param(
+            "job",
+            default="",
+            help="wait for a job (a detached review's run handle) instead of an item, lease or "
+            "approval: until its process is over and its round is recorded",
+        ),
         Param("token", default="", help="resume token from an earlier wait"),
+        Param(
+            "notify",
+            default="",
+            help="how to reach this waiter when its wake fires: empty (poll ddflow wait), "
+            "`send_message:<session-id>` (harness session to resume) or `watch:<url>` (inbound URL to post to)",
+        ),
         Param(
             "timeout",
             type="number",

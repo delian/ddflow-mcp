@@ -401,3 +401,31 @@ def test_the_refusal_names_the_one_supported_command(forked):
     _land(repo, "AGENTS.md", "# rules v2\n")
     r = _commit_in(wt)
     assert r.returncode != 0 and "ddflow sync --keep-local" in r.stderr, r.stderr
+
+
+def test_the_stale_rules_remedy_names_the_item_when_the_tree_is_the_items_worktree(repo):
+    """B-sync-remedy-not-an-item-worktree: the stale-rules remedy names the item. The bare
+    `ddflow sync --keep-local` resolves the item from the tree the caller stands in, which a
+    CLI caller whose identity does not match the tree's derived one fails to answer from;
+    `ddflow sync T1 --keep-local` names the item and needs no tree detection, so it works from
+    anywhere. FAILS before the fix (the message was always bare). The named command itself is
+    exercised by `ddflow sync`'s own tests (tests/test_sync_command.py)."""
+    from helpers import items_of
+
+    from ddflow.api import lifecycle as A
+    from ddflow.infra import worktree as W
+
+    run_cli(repo, "init")
+    _config(repo)
+    _write(repo, "AGENTS.md", "# rules v1\n")
+    _git(repo, "add", "-A")
+    assert _git(repo, "commit", "-qm", "scaffold", "--no-verify").returncode == 0
+    code, out, err = run_cli(repo, "task", "add", "T1", "--title", "T1", "--globs", "src/")
+    assert code == 0, out + err
+    out = A.claim(repo, "T1", agent="agent-sync")
+    assert out.ok, out.reason
+    wt = W.load_path(repo, items_of(repo)["T1"].worktree)
+
+    _land(repo, "AGENTS.md", "# rules v2\n")
+    code, msg = E.check_drift(repo, _cfg(), here=wt)
+    assert code == 1 and "ddflow sync T1 --keep-local" in msg, msg

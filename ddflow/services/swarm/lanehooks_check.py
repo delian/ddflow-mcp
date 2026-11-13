@@ -20,10 +20,10 @@ import argparse
 import json
 import os
 import sys
-import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...core import leasesnap as hooksnap
 from ...core.bookkeeping import SELF_MANAGED
 from ...core.globs import inside
@@ -70,7 +70,7 @@ def _mine(repo: Path, agent: str) -> tuple[list[str], list[str]]:
     if snap.status != hooksnap.OK:
         raise SnapshotUnusable(snap.note)
     globs: list[str] = []
-    for lease in snap.live_for(agent, time.time()):
+    for lease in snap.live_for(agent, CLOCK.wall()):
         globs.extend(lease.get("globs", []))
     return globs, snap.shared
 
@@ -88,7 +88,7 @@ def _holder(repo: Path, agent: str, rel: str) -> str:
         snap = hooksnap.read(repo)
         if snap.status != hooksnap.OK:
             return ""
-        now = time.time()
+        now = CLOCK.wall()
         for lz in snap.leases.values():
             if lz.get("holder") == agent:
                 continue
@@ -114,8 +114,7 @@ def _first_holder(repo: Path, agent: str, bad: list[str]) -> tuple[str, str]:
 
 #: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
 OPTIONS = (
-    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), send a suggestion "
-    "(`ddflow suggest ...` / MCP `ddflow_suggest`), or open a task "
+    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), or open a task "
     "(`ddflow task add ...` / MCP `ddflow_task action=add`)"
 )
 

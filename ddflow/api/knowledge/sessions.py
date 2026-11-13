@@ -78,7 +78,7 @@ def session_note(
     log, cfg, _st = _load(repo, agent)
     sid, how = S.resolve(log, session)
     S.note(log, cfg, sid, text, item=item)
-    return O.ok("session.note", session=sid, how=how)
+    return O.ok("session.note", session=sid, how=how, item=item or "")
 
 
 def session_message(

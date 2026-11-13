@@ -444,19 +444,44 @@ def test_a_victim_blocked_on_two_leases_is_told_to_wait_for_both():
     assert "`ddflow wait --item b1`" in c.remedy and "`ddflow wait --item b2`" in c.remedy
 
 
-def test_commands_for_a_hyphen_id_reach_the_item_through_the_real_parser(repo):
+def test_creating_a_hyphen_id_is_refused_and_a_valid_id_drives_end_to_end(repo):
     assert run_cli(repo, "init", agent=A)[0] == 0
+    # A leading hyphen is refused at creation (B-item-id-leading-hyphen): the id would
+    # then be parsed as an option by every command that names it. A remedy line still
+    # protects a hyphen id that is already in the queue (recovered/legacy): Drop routes
+    # it after `--` and wait uses `--item=` (pinned in the tests that follow). Drive an
+    # id the adders accept end to end through the real parser here.
     add = ("task", "add", "--title", "t", "--globs", "a.py,b.py", "--", "-x")
-    assert run_cli(repo, *add, agent=A)[0] == 0
-    assert run_cli(repo, "claim", "--no-worktree", "--", "-x", agent=A)[0] == 0
-    update = LW.Drop("-x", ("a.py",), ("b.py",)).command()
+    _, _, err = run_cli(repo, *add, agent=A)
+    assert "may not start with a hyphen" in err
+    good = ("task", "add", "--title", "t", "--globs", "a.py,b.py", "--", "x")
+    assert run_cli(repo, *good, agent=A)[0] == 0
+    assert run_cli(repo, "claim", "--no-worktree", "--", "x", agent=A)[0] == 0
+    update = LW.Drop("x", ("a.py",), ("b.py",)).command()
     assert run_cli(repo, *shlex.split(update)[1:], agent=A)[0] == 0
-    show = json.loads(run_cli(repo, "--json", "show", "--", "-x", agent=A)[1])
+    show = json.loads(run_cli(repo, "--json", "show", "--", "x", agent=A)[1])
     assert show["globs"] == ["b.py"]
-    release = LW.Drop("-x", ("b.py",), ()).command()
+    release = LW.Drop("x", ("b.py",), ()).command()
     assert run_cli(repo, *shlex.split(release)[1:], agent=A)[0] == 0
-    show = json.loads(run_cli(repo, "--json", "show", "--", "-x", agent=A)[1])
+    show = json.loads(run_cli(repo, "--json", "show", "--", "x", agent=A)[1])
     assert show["state"] == "open"
+
+
+def test_a_drop_for_a_hyphen_id_routes_it_past_the_option_parser():
+    assert shlex.split(LW.Drop("-x", ("a.py",), ("b.py",)).command()) == [
+        "ddflow",
+        "update",
+        "--globs",
+        "b.py",
+        "--",
+        "-x",
+    ]
+    assert shlex.split(LW.Drop("-x", ("b.py",), ()).command()) == [
+        "ddflow",
+        "release",
+        "--",
+        "-x",
+    ]
 
 
 def test_the_wait_in_a_remedy_keeps_a_hyphen_id_a_value():

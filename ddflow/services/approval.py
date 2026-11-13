@@ -30,6 +30,7 @@ from typing import Any
 from ..core.digest import content_digest
 from ..core.model import fold
 from ..infra import hostinfo as H
+from .approvals import hints
 from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401  (their home is services.identity)
 
 
@@ -41,9 +42,7 @@ def refusal(why: str) -> str:
     """The one refusal of an approval asked for under an agent identity."""
     return (
         f"refusing: approving is a person's act, and this command runs under an agent "
-        f"identity ({why}). Run it from your own terminal, or ask the operator over chat: where the "
-        "command takes `--approval`, re-run it with `--approval request` (or the refusal names "
-        "the request id) and the operator answers in chat."
+        f"identity ({why}). " + hints.route()
     )
 
 

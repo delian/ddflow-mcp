@@ -30,6 +30,7 @@ class Weights:
     family_cap: int = 3
     hedge_max: int = 1
     default_min_trust: int = 0
+    conformance_min_level: int = 0
     explore_share: float = 0.10
     explore_min_n: int = 5
     bug_window_s: float = 7 * 24 * 3600.0
@@ -51,6 +52,7 @@ class Weights:
             family_cap=sw.family_cap,
             hedge_max=sw.hedge_max,
             default_min_trust=sw.default_min_trust,
+            conformance_min_level=sw.conformance_min_level,
             explore_share=sw.explore_share,
             explore_min_n=sw.explore_min_n,
             bug_window_s=sw.bug_window_s,

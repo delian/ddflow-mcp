@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "store.index_touch_s"
+new = "86400.0"
+why = "An index in use is touched (its mtime refreshed) at most this often, so 'last used' is not 'last rebuilt' and stale_index_days of silence really is disuse. Was INDEX_TOUCH_S in ddflow/infra/store/_fingerprint.py."
+impact = "additive"

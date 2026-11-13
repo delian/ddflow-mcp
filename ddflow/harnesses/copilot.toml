@@ -17,11 +17,15 @@ claude_md = "yes"
 [hooks]
 style = "copilot"
 file = ".github/hooks/ddflow.json"
-normalizer = "copilot"
-emitter = "copilot"
+emitter = "additional_context"
 block = "json"
 session_id = "sessionId"
 inject = ["session_start"]
+
+[hooks.fields]
+session = ["sessionId", "session_id"]
+prompt = ["prompt", "initialPrompt"]
+tool = ["toolName", "tool_name"]
 
 [hooks.events]
 session_start = "sessionStart"
@@ -54,3 +58,4 @@ date = "2026-10-09"
 sources = ["https://docs.github.com/en/copilot/reference/hooks-reference"]
 record = "R-hx-copilot"
 unverified = ["session id env var", "MCP prompts as commands"]
+

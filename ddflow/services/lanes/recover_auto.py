@@ -114,7 +114,12 @@ def decisions(rows, *, adopted_items: dict[str, bool] | None = None) -> list[Rec
     out: list[RecoverAuto] = []
     adopted_items = adopted_items or {}
     for r in rows:
-        adopted = bool(r.get("adopted") or adopted_items.get(r["item"]))
+        if "adopted" in r:
+            # A row's own flag wins even when it is falsy: measured not-adopted is a
+            # real answer, not an omission to paper over with the caller's fallback.
+            adopted = bool(r["adopted"])
+        else:
+            adopted = bool(adopted_items.get(r["item"]))
         out.append(
             decide(
                 r["item"],

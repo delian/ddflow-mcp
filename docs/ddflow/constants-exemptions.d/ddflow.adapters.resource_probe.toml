@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/adapters/resource_probe.py:_STAT_REST_MIN" = 'structural /proc/<pid>/stat field count: the split rest must hold at least 22 fields so the RSS index (21) exists (a /proc format fact, not a preference)'

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "worktree.stash_retries"
+new = "4"
+why = "How many times a real merge into a tree with uncommitted tracked work is retried when git reports a transient pre-merge failure that merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read -- B-merge-stash-failed-transient). Each retry is the identical command; a merge already begun is never repeated."
+impact = "additive"

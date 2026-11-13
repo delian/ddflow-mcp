@@ -23,5 +23,5 @@ def effective_pipeline(repo: Path | None, cfg: Config, item: Item) -> list[str]:
     if repo is None:
         return base
     return pipeline_by_diff(
-        item, cfg, base, lambda: changed_paths(repo, item), kind_pipeline(cfg, "doc")
+        item, cfg, base, lambda: changed_paths(repo, item), kind_pipeline(cfg, "doc"), repo=repo
     )[0]

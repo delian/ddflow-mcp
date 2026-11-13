@@ -42,7 +42,7 @@ def _claimed(repo: Path) -> Path:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
-    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="bot")
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])
     (tree / "a.py").write_text("x = 1\n")
@@ -97,6 +97,39 @@ def test_the_merge_record_carries_each_gates_real_state(repo):
     # the post-merge check of the base has its own name, apart from the ci GATE above
     if "ci" in out.data:
         assert out.data["post_merge_check"] == out.data["ci"]
+
+
+def test_warn_mode_still_refuses_a_person_only_baseline_red_partial(repo):
+    """B0eca409559: `[merge].require_gates=warn` landed a measured baseline-red partial only a
+    person accepts (`gate_accept.person_only`), and `complete` then refused the SAME partial on
+    the landed item -- whose tree was gone, so the fix-and-rerun remedy was impossible. Merge
+    must run the same acceptance check as complete and refuse first."""
+    tree = _claimed(repo)
+    EventLog(repo, "ddflow-gate-run").append(
+        "gate.partial",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "by": "ddflow",
+            "reason": "baseline-red: tests/test_x.py::test_x, bug B1",
+            "evidence": {
+                "baseline": {
+                    "red": True,
+                    "base": "main",
+                    "ids": ["tests/test_x.py::test_x"],
+                    "auto": {
+                        "accepted": False,
+                        "why": "failing test file(s) the item changed or reaches: tests/test_x.py",
+                    },
+                }
+            },
+        },
+    )
+    out = _merge(repo)
+    assert out.exit == 3, out.reason
+    assert "baseline-red" in out.reason
+    assert not _events(repo, "worktree.merged")
+    assert (tree / "a.py").exists()
 
 
 def test_refuse_without_force_names_the_gates_and_the_next_call(repo, refuse):
@@ -276,3 +309,20 @@ def test_authorise_needs_nothing_when_nothing_refuses():
         "",
         "",
     )
+
+
+def test_pr_mode_still_refuses_unsettled_gates_before_opening_a_request(repo, refuse, monkeypatch):
+    """Bc6c07dfe52: [merge].require_gates=refuse must refuse even under [flow].integration=pr,
+    before `_open_request` opens a request past the unsettled gates (which, unfixed, returned
+    through the PR branch ahead of the require_gates check)."""
+    from importlib import import_module
+
+    M = import_module("ddflow.api.lifecycle.merge")
+    _claimed(repo)
+    run_cli(repo, "config", "flow.integration", "pr")
+    reached = []
+    monkeypatch.setattr(M, "_open_request", lambda *a, **k: reached.append(1) or "REACHED")
+    out = _merge(repo)
+    assert out.exit == 3, out.reason
+    assert "require_gates = refuse" in out.reason
+    assert not reached  # the request path must never be entered

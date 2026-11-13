@@ -31,6 +31,40 @@ def slug_of(decision_id: str) -> str:
     return re.sub(r"-r\d+$", "", re.sub(r"^D-", "", decision_id))
 
 
+def _default_rel(it, decision_id: str) -> str:
+    """The doc path: the id's `<slug>.md` when a glob covers it, else a single literal
+    ``.md`` glob under ``DOC_DIR`` the task names, else the slug.
+
+    A task that globs `docs/ddflow/decisions/answers.md` must land there, not at the
+    id's `<slug>.md`, which the globs do not cover (B502b06b881). A pattern glob
+    (`*.md`) is left to `inside()`, and never written literally."""
+    prefix = DOC_DIR.rstrip("/") + "/"
+    named = f"{DOC_DIR}/{slug_of(decision_id)}.md"
+    if any(inside(named, g) for g in it.globs):
+        return named
+    docs = [g for g in it.globs if g.startswith(prefix) and g.endswith(".md") and _literal(g)]
+    return docs[0] if len(docs) == 1 else named
+
+
+def _literal(glob: str) -> bool:
+    """A single concrete path, not a pattern: no `*?[` magic (`inside` matches those)."""
+    return not any(c in glob for c in "*?[")
+
+
+def _append_block(existing: str, block: str) -> str:
+    """``block`` appended below ``existing``, which is never deleted, only extended.
+
+    Idempotent for the one retry that is real: a refused commit before the write handed
+    over, re-run with the same decision and body. Then ``existing`` already ends with
+    ``block`` and is returned unchanged instead of being written below itself."""
+    existing = existing.rstrip("\n")
+    if not existing:
+        return block
+    if existing.endswith(block.rstrip("\n")):
+        return existing + "\n"
+    return existing + "\n\n" + block
+
+
 def render(item: str, d) -> str:
     """The decision document: the record restated, the log staying the source of truth."""
     head = f"{d.status} · decided by {d.decided_by or 'unrecorded'}"
@@ -91,7 +125,7 @@ def _check(repo, cfg, st, item: str, decision_id: str, path: str):
         return O.refused(KIND, f"{decision_id} is not in force ({d.status})", item=item)
     if not it.lease or not it.worktree:
         return O.refused(KIND, f"claim {item} first: the document is written under its lease")
-    rel = path or f"{DOC_DIR}/{slug_of(decision_id)}.md"
+    rel = path or _default_rel(it, decision_id)
     if not any(inside(rel, g) for g in it.globs):
         return O.refused(
             KIND,
@@ -132,9 +166,15 @@ def decide(
     path: str = "",
     model: str = "",
     agent: str = "",
+    append: bool = False,
+    body: str = "",
     called_from: Path | None = None,
 ) -> O.Outcome:
-    """Write the document for ``decision_id``, then land and complete decide task ``item``."""
+    """Write the document for ``decision_id``, then land and complete decide task ``item``.
+
+    ``append`` keeps a document that already exists (a proposal drafted before the decision)
+    instead of replacing it; ``body`` adds the operator's own words (a Q-and-A table, say) that
+    would otherwise need a second merge on a completed item."""
     _log, cfg, st = _load(repo, agent)
     got = _check(repo, cfg, st, item, decision_id, path)
     if isinstance(got, O.Outcome):
@@ -143,7 +183,12 @@ def decide(
     wt = W.Worktree(item=item, path=W.load_path(repo, it.worktree), branch=it.branch, base=it.base)
     target = wt.path / rel
     target.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(target, render(item, d))
+    block = render(item, d)
+    if body:
+        block = block.rstrip("\n") + "\n\n" + body.strip() + "\n"
+    if append and target.exists():
+        block = _append_block(target.read_text(), block)
+    replace_text(target, block)
     made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
     if not made.ok and "nothing to commit" not in (made.out + made.err):
         return O.failed(KIND, (made.err or made.out).strip(), item=item)

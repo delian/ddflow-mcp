@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_ci_false_red_rate"
+new = "0.1"
+why = "The CI false-red target: the highest share of merges that produce a red-main finding (a bug filed against the item within `[metrics] lock_red_main_window_s` of the merge) that is not a real regression. It gets a burn-rate view with queue age: a red CI is a capacity burn."
+impact = "additive"

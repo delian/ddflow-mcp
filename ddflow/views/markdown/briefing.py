@@ -25,7 +25,7 @@ from ...services.gates import (
     required_gates,
 )
 from ...services.pipeline_diff import effective_pipeline
-from .report import _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
+from .report import _CAPPED, _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
 
 
 def _own_recovery(bands: dict[str, list], item: str) -> list:
@@ -55,9 +55,10 @@ def _brief_recovery(
     item: str = "",
 ) -> list[str]:
     """The RESUME block: the recoverable entries, with what was interrupted and whether
-    ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
-    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
-    lines THIS call appended (not the lines ``out`` already held: duck #1).
+    ddflow has resumed it -- reserved from the section-trimming pass, but capped to half the
+    budget by `brief()` (B027549013a), which names the overflow here with a `ddflow recover`
+    note (folded B-res-brief-recovery-link). Returns only the lines THIS call appended (not
+    the lines ``out`` already held: duck #1).
 
     When a brief is ABOUT one item AND that item is itself among the recoverable
     entries, the item's own entry renders FIRST and every OTHER entry collapses to one
@@ -68,9 +69,16 @@ def _brief_recovery(
     start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
+    capped = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
         band = recovery_band(r)
-        if band is not None:
+        if band is _CAPPED:
+            # Past the measurement cap, after every higher-signal tree was measured: it is
+            # still unknown (may hold uncommitted work, never clean), so it must NOT read
+            # "nothing to salvage" -- but it is also not the "could not be measured" alarm.
+            # Counted as its own note, and `recover` measures every tree.
+            capped += 1
+        elif band is not None:
             bands[band].append(r)
         else:
             quiet += 1
@@ -79,9 +87,16 @@ def _brief_recovery(
         if quiet
         else ""
     )
+    capped_note = (
+        f"{capped} tree(s) past the measurement cap (unmeasured — may hold uncommitted "
+        f"work): `ddflow recover` measures them."
+        if capped
+        else ""
+    )
+    quiet_notes = [n for n in (count, capped_note) if n]
     if not any(bands.values()):
-        if count:
-            out += [f"_{count}_", ""]
+        for note in quiet_notes:
+            out += [f"_{note}_", ""]
         return out[start:]
     out += [
         "## ⚠ RESUME: recoverable work found",
@@ -110,8 +125,8 @@ def _brief_recovery(
             if len(band) > _RECOVERY_SHOWN:
                 more = len(band) - _RECOVERY_SHOWN
                 out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
-    if count:
-        out.append(f"- _{count}_")
+    for note in quiet_notes:
+        out.append(f"- _{note}_")
     out.append("")
     return out[start:]
 
@@ -682,8 +697,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
 
     Ordered by what an agent must not miss: anything needing rescue first, then what
     it is doing, then what it may do next, then the lessons that bear on it. The RESUME
-    slice (recoverable work) is RESERVED and never cut by the budget; when the rest does
-    not fit, each section is cut to its share of the budget
+    slice (recoverable work) is reserved from the section-trimming pass but capped to half
+    the budget (``B027549013a``), with the overflow named by a ``ddflow recover`` note;
+    when the rest does not fit, each section is cut to its share of the budget
     (``_SECTION_SHARE``, B1472311a63) and says what it left out and where it is; what a
     short section does not use goes to the ones after it, head first, so the
     safety-critical head still survives a squeeze -- and no section ahead of them can
@@ -731,4 +747,24 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     )
     # The RESUME slice opens the pack, before even its own heading line (duck #2): a
     # session that starts after a crash must see recoverable work in the first line.
+    # B027549013a: the slice is reserved from the budget, but BOUNDED to half of it -- the
+    # bound the reports block keeps -- so a focused brief on a busy repo's per-band list of
+    # OTHER crashes cannot starve the item's own Current/decisions/lessons down to nothing.
+    # (The charter is separately clamped by CH.block's own reserve.) `ddflow recover` lists
+    # every entry beyond the bound.
+    bound = max(_SECTION_FLOOR, budget * 2)
+    if len("\n".join(reserved)) > bound:
+        kept: list[str] = []
+        used = 0
+        for line in reserved:
+            if used + len(line) + 1 > bound:
+                break
+            kept.append(line)
+            used += len(line) + 1
+        kept.append("")
+        kept.append(
+            "_more recoverable entries past the slice's bound: `ddflow recover` lists them._"
+        )
+        kept.append("")
+        reserved = kept
     return _assemble(reserved + head, sections, budget * 4, note, charter, item)

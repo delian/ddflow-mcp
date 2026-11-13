@@ -35,7 +35,6 @@ from ._fingerprint import _SEARCH_COLS as _SEARCH_COLS
 from ._fingerprint import FOLD_REV as FOLD_REV
 from ._fingerprint import INDEX_MAX_FILES as INDEX_MAX_FILES
 from ._fingerprint import INDEX_MAX_MB as INDEX_MAX_MB
-from ._fingerprint import INDEX_TOUCH_S as INDEX_TOUCH_S
 from ._fingerprint import META_MARK as META_MARK
 from ._fingerprint import META_SHARD_DIGESTS as META_SHARD_DIGESTS
 from ._fingerprint import MIN_FINGERPRINT_SOURCES as MIN_FINGERPRINT_SOURCES
@@ -43,7 +42,6 @@ from ._fingerprint import MIN_TERM_CHARS as MIN_TERM_CHARS
 from ._fingerprint import REBUILD_LOCK_TIMEOUT_S as REBUILD_LOCK_TIMEOUT_S
 from ._fingerprint import REBUILD_TEMP_MAX_AGE_S as REBUILD_TEMP_MAX_AGE_S
 from ._fingerprint import SCHEMA as SCHEMA
-from ._fingerprint import STALE_INDEX_DAYS as STALE_INDEX_DAYS
 from ._fingerprint import _capability_tables as _capability_tables
 from ._fingerprint import _environmental as _environmental
 from ._fingerprint import _has_fts5 as _has_fts5
@@ -95,7 +93,6 @@ __all__ = [
     "FOLD_REV",
     "INDEX_MAX_FILES",
     "INDEX_MAX_MB",
-    "INDEX_TOUCH_S",
     "META_MARK",
     "META_SHARD_DIGESTS",
     "MIN_FINGERPRINT_SOURCES",
@@ -104,7 +101,6 @@ __all__ = [
     "REBUILD_TEMP_MAX_AGE_S",
     "RECALL_SOURCES",
     "SCHEMA",
-    "STALE_INDEX_DAYS",
     "EventLog",
     "Store",
     "code_fingerprint",

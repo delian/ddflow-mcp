@@ -46,6 +46,10 @@ useDefault = true
     # names them in task bodies, and the generic-api-key rule reads one that follows an
     # `api` word as the key. The `.N-` slice part is what no credential format has.
     '''^[A-Za-z]+(?:-[A-Za-z0-9]+)+\.[0-9]+(?:-[A-Za-z0-9]+)+[.,;:]?$''',
+    # ddflow's own decision id that follows the `auth-token` inside its neighbour
+    # `D-auth-token-defaults` in a recorded-decision list: a specific value, not the id
+    # shape, because no regex separates a decision slug from a credential shape safely.
+    '''^D-swarm-pilot-2026-11-05[.,;:]?$''',
   ]
   # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
   # It does not appear in ddflow's history, and if it ever does, this scan must fire.
@@ -61,6 +65,19 @@ useDefault = true
   targetRules = ["sourcegraph-access-token"]
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^[0-9a-f]{40}$''']
+
+
+[[allowlists]]
+  # The committed docs quote git commit shas too (RESEARCH.md reproduces a `ddflow ci run`
+  # that names one), and mention sourcegraph elsewhere in the same file: the rule's keyword
+  # prefilter is per file, so the sha reads as a token. Scoped to ONE rule, ONLY the
+  # committed docs, ONLY a bare 40-hex value: a real `sgp_`-prefixed token, or a bare hex
+  # string outside `docs/`, still fires.
+  description = "40-hex git shas in the committed docs are not sourcegraph tokens"
+  targetRules = ["sourcegraph-access-token"]
+  condition = "AND"
+  paths = ['''^docs/''']
   regexes = ['''^[0-9a-f]{40}$''']
 
 [[allowlists]]
@@ -101,3 +118,75 @@ useDefault = true
   # Unmistakably filler; named per value, so a real key captured the same way still fires.
   description = "Sequential-filler example key quoted in a committed event-log critic finding"
   regexes = ['''^1234567890Abcdefghij$''']
+
+[[allowlists]]
+  # tests/test_perf_remote.py names a container fingerprint fixture `key="abcdef012345"`
+  # (sequential hex -- a machine-class digest shape, obviously filler, recycled across the
+  # four .container/.bare/.vm/.unavailable assertions). The generic-api-key rule read it as
+  # the key after the `key` keyword and failed CI on the PM-remote push. Named by value,
+  # not by digest shape or path, so a key-shaped value in the same `key=` slot still fires.
+  description = "Container fingerprint fixture in the perf-remote tests"
+  regexes = ['''^abcdef012345$''']
+
+[[allowlists]]
+  # The committed event-log shard lane-hard.jsonl quotes the canonical RFC 7518 EXAMPLE
+  # JWT (`{"alg":"none"}`, `{"sub":"alice"}`, no signature) while a `gate.failed` record
+  # for the AU-redact-shapes bug explains why the JWT redaction shape matches or does not.
+  # It is a documented example, not a credential. Named by exact value, exactly the jwt
+  # rule, exactly the event-log shard files: a JWT with any other subject still fires.
+  description = "Canonical alg=none/sub=alice example JWT quoted in a committed event-log detail"
+  targetRules = ["jwt"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJhbGljZSJ9\.$''']
+
+[[allowlists]]
+  # The committed event-log shard lane-hard.jsonl quotes ddflow's synthetic gitlab PAT
+  # filler sample (`glpat-` plus the "Fk3Zq9Lm" filler body, itself built at run time in
+  # tests/test_secret_shapes_table.py) while a critic finding for the AU-redact-shapes work
+  # argues the provider-sample test misses a changed first character. It is synthetic
+  # filler, not a credential. Named by exact value, exactly the gitlab-pat rule, exactly
+  # the event-log shard files: a real `glpat-` token anywhere else still fires.
+  description = "Synthetic gitlab PAT filler sample quoted in a committed event-log detail"
+  targetRules = ["gitlab-pat"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^glpat-Xk3Zq9LmFk3Zq9LmFk3Z$''']
+
+
+[[allowlists]]
+  # tests/test_critic_findings.py proves the redactor removes a WHOLE PEM block, so it
+  # builds one. The block is not a key: its body is the single 30-character line
+  # `MIIEow...` + `secretbodyhere`, which spells its own filler, is far too short for any
+  # RSA private key, and is not decodable DER. The private-key rule reads the BEGIN/END
+  # frame and flags it anyway. The rule's secret is the SOURCE TEXT of the three adjacent
+  # Python string literals (so the regex carries their `\n"` joins), found by running the
+  # scanner on the file.
+  # Scoped to ONE rule, ONE file, and the WHOLE block (anchored frame and body): a PEM block
+  # in any other file, or a different body in this one, still fires.
+  description = "the placeholder PEM block in the redaction test is not a private key"
+  targetRules = ["private-key"]
+  condition = "AND"
+  paths = ['''^tests/test_critic_findings\.py$''']
+  regexes = ['''^-----BEGIN RSA PRIVATE KEY-----\\n"\s*"MIIEowIBAAKCAQEAsecretbodyhere\\n"\s*"-----END RSA PRIVATE KEY-----$''']
+
+[[allowlists]]
+  # ddflow stamps its own resultcache digest into every gate record as `cache_key`
+  # (ddflow/services/gates/runner.py: `ev["cache_key"] = rc_key[:16]` — the 16-hex prefix of
+  # the resultcache key over code+command+environment; ddflow/services/resultcache.py builds
+  # the same value). The `key` keyword makes the generic-api-key rule read that digest as a
+  # credential, but it is a truncated hash digest of ddflow's own code/command/environment,
+  # never a key, and every value is a bare 16-hex string. Scoped to ONE rule, ONLY the
+  # committed event logs, ONLY a bare 16-hex value: a real key pasted into an event shard, or
+  # a value of any other shape in one, still fires.
+  description = "the cache_key resultcache digest in ddflow's committed gate records is not an API key"
+  targetRules = ["generic-api-key"]
+  condition = "AND"
+  # regexTarget "match" is the anchor that keeps this from over-broadening: it pins the hit
+  # to the full `cache_key":"…"` fragment (the field name AND the 16-hex value it wraps),
+  # because the generic-api-key rule's keyword prefilter is what reads a digest as a key. A
+  # real 16-hex token recorded under any other key (api_key, token, secret, …) is not the
+  # `cache_key` fragment, so it still fires.
+  regexTarget = "match"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^cache_key":"[0-9a-f]{16}"$''']

@@ -600,13 +600,12 @@
           harness wrote, never from the agent's word. Tier T2 only. It cannot show
           that a person (not a script holding the session) answered or that the
           transcript was not edited by the agent's own user; `ddflow doctor` says so.
-      approvals.transcript_dirs = ['~/.claude/projects']   [default]
-          Where the harness channel looks for session transcripts that hold the answer
-          to an approval question (default ~/.claude/projects). Each entry is either a
-          directory of Claude Code `*.jsonl` transcripts or a SQLite database file
-          (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is
-          also read when it exists. Only transcripts modified since the request was
-          filed are read.
+      approvals.transcript_dirs = []   [default]
+          Extra session-transcript paths the harness channel reads for an approval
+          answer, added to each harness descriptor's `[transcripts].root` (the
+          directories of session transcripts and SQLite stores the harness writes;
+          Kilo's default store is read when it exists). Only transcripts modified
+          since the request was filed are read.
       approvals.expiry_warn_s = 600   [default]
           How many seconds before the end of its use window `ddflow approvals log`
           starts to say an approved-but-unspent request will expire unused (default
@@ -703,13 +702,19 @@
           engine's own writes, so it has no approval route. A person at a terminal is
           unaffected. An agent's edit of this knob is a `config.set`, which needs a
           person's approval.
+      baseline.keep = 14   [default]
+          Days the baseline store keeps a measured base sha (`.ddflow/local/baseline-
+          store/`, git-ignored, per project). An entry older than this is pruned the
+          next time the store is written; a base sha not in the store is measured once
+          under the suite lock and stored. 0 keeps nothing: every run measures the
+          base again.
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
-          `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
-          (never the found item's own phase, which it would hold open), carrying the
-          bug's own found scope (the files its summary names plus the tests pinning
-          them) unless `--globs` says otherwise -- and the item's inherited globs when
-          the bug names more than `named_scope_at` files -- and linked to the bug.
+          `fix-<bug id>`, tagged as a bug fix, under the found item's own OPEN phase
+          (Be8ca1270a5) instead of the standing `[bugs] phase`, carrying the bug's own
+          found scope (the files its summary names plus the tests pinning them) unless
+          `--globs` says otherwise -- and the item's inherited globs when the bug
+          names more than `named_scope_at` files -- and linked to the bug.
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
@@ -719,8 +724,9 @@
           fix task that fixes no other bug, that task is the fix and nothing new is
           filed. `false`: bugs are flat records, as before.
       bugs.phase = 'bugs'   [default]
-          The standing phase (default `bugs`) every fix task is filed under, whatever
-          item the bug names. Made on first use, with the title `Bugs`.
+          The standing phase (default `bugs`) every fix task is filed under when the
+          found item has no open phase of its own. Made on first use, with the title
+          `Bugs`.
       bugs.lint_checks = ['ruff', '(CI: Lint)', 'format', 'bandit', '(CI: Static security scan)']   [default]
           Substrings (case-insensitive) that make a CI-filed bug one with no test to
           write (a lint or static-scan check): `ddflow bug fixed <Bci-...> --lint-
@@ -770,11 +776,16 @@
           How many times `bug found --repro-cmd CMD` reruns the command at filing
           (default 1), and thus whether the bug's sighting was confirmed: the bundle
           records `reproduced yes|no`, `runs` and `failures`.
-      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDE*', '*GATE*']   [default]
+      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', '*GATE*']   [default]
           Environment variable name patterns (fnmatch) whose values a reproduction
           bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and
-          the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN,
-          SECRET, PASSWORD, ...) is recorded as set, never with its value.
+          the gate runner's. The Claude Code entry is the two behaviour-explaining
+          names (which CLI and entrypoint) rather than `CLAUDE*`: the wildcard
+          recorded the account/org UUIDs and the messaging socket path -- operator
+          identity leaving the project without consent, and none of their names is
+          secret-named so none was masked (B6307b787dd). A variable whose name says it
+          holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never
+          with its value.
       bugs.repro_redact_extra = []   [default]
           More redaction regexes applied to a reproduction bundle, IN ADDITION to
           `[session] redact_patterns` and `redact_extra`.
@@ -847,6 +858,19 @@
           The branch merged into the task's branch before the checks run, so an
           interaction with what the base has become is tested (a parallel merge's
           effect). Empty (default): the repository's default branch.
+      ci.ruff_autofix = True   [default]
+          Whether the `ci` gate auto-corrects ruff lint/format drift it finds on an
+          item's branch before it can merge. When a `ddflow ci run` for an item fails
+          on the PRE-COMMIT ruff hooks (`ruff check`, `ruff format --check`) and this
+          is on, the run also runs `ruff check --fix` then `ruff format` over the
+          changed Python files in the item's own worktree and records the corrections
+          (``reformatted``/``fixed`` files) in the gate evidence; the gate stays
+          failed until the agent commits them and re-runs, so a file with drift cannot
+          reach the merge (the recurring `git push` pre-commit failure, Bci-ruff-
+          format-check-ci-lint-*). Ruff is run as `uv run ruff` when the project has a
+          `uv.lock` (the pinned venv the `repo: local` hooks use), else as `ruff` when
+          it is on PATH; with neither the correction is recorded unavailable. false:
+          only report the failure.
       ci.pins_precheck = True   [default]
           Before the default CI command runs, check the project's pinned outputs
           (`ddflow pins regenerate --check`, the recipes in `[pins].recipes_file`) in
@@ -1350,6 +1374,18 @@
           anyway; `--local` says the same thing out loud, and a committed value is
           written by editing `.ddflow/config.toml` by hand. Keyed as plain dotted keys
           like the shipped table; a refusal names the first entry that is not one.
+      eta.window_days = 30.0   [default]
+          How many days the derived duration tables look back over, measured at each
+          item's completion. Completions outside it supply no sample; shorten it to
+          read the recent trend, widen it to smooth a thin log.
+      eta.min_samples = 10   [default]
+          Fewest samples a derived ETA figure may rest on. Under it every figure is
+          'insufficient data' (never a number, the sample count is named), so a
+          prediction never rests on noise.
+      eta.coverage_bar = 0.8   [default]
+          The fraction of true completions the 10-90 interval must cover for the
+          estimate to be trusted (R-eta-prediction's shipping bar, operator
+          2026-10-31). Below it the range is still shown, labelled low confidence.
       evaluation.max_miss_rate = 0.0   [default]
           The share (0-1) of planted faults a workflow may miss in the shared
           evaluation harness and still be enabled by default. 0 (default): it must
@@ -1404,6 +1440,13 @@
           mean a security issue, default ["security", "secbug"]). Unknown keys in an
           [export.<doc>] table are skipped with a warning (and ignored in this map
           form), so a newer release's keys do not stop an older checkout.
+      fasttrack.tiny_cold_max_source_lines = 10   [default]
+          Most source lines (insertions plus deletions, tests/docs/generated pins and
+          README not counted) a completed change may have and still be called tiny-
+          cold. `ddflow metrics tiny` buckets an item by the changed lines its gate
+          evidence recorded; the file-count limits a tiny-cold change also bounds are
+          declared by FT-guard, whose numstat probe the metrics view reports as not-
+          measured until it is wired.
       flow.model = 'trunk'   [default]
           'trunk' (default): every task branches from and lands on one base branch —
           today's behaviour. 'gitflow': tasks branch from `develop_branch` as feature/
@@ -1550,6 +1593,19 @@
           and offered like any other work -- continuous delivery to, say, pre-
           production. Empty by default, because a deploy is the operator's call; list
           only the environments where it should happen without one.
+      flow.pr_body_template = ''   [default]
+          Path to the template that renders a pull request's description (`integration
+          = "pr"`). Empty (default): `.ddflow/prompts/pr_body.md` if the project has
+          one, else the shipped template, which lists every gate with its outcome, the
+          review rounds and triage, the bugs fixed with their regression tests.
+          Placeholders come from recorded data only, and the finished text is secret-
+          redacted before it goes to the forge. `ddflow prompts eject pr_body` writes
+          an editable copy.
+      flow.pr_body_cell_max = 200   [default]
+          Longest one cell of the pull-request description's gate table, in characters
+          after escaping; a longer gate note is cut with an ellipsis (the full reason
+          stays in the log, `ddflow gate list`). Bounds the outward text
+          (`pr_body_template`).
       flow.version_files = {}   [default]
           Files `version cut` bumps, as path -> regex with exactly ONE capture group,
           the version text (e.g. `[flow.version_files]` `'pyproject.toml' = '^version
@@ -1980,6 +2036,12 @@
           been renewed for this many seconds is CRASHED, minutes before the lease TTL
           lapses. Only a holder that declared its identity can be seen to die; others
           fall back to the lease TTL. 0 turns the check off.
+      health.orphan_s = 300   [default]
+          A lane that has shown no progress for this many seconds while its newest
+          live-run registry entry (a gate, review, ci or pins run) is already finished
+          -- the outcome recorded -- or whose process is gone with no recorded
+          outcome, is ORPHAN_WAIT: it is 'waiting on nothing' and the finding names
+          the log and the command to rerun. 0 turns the check off.
       health.mode_idle = 'inherit'   [default]
           The mode for an idle lane (nudge): 'inherit' (default) takes [health].mode;
           otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind
@@ -2028,6 +2090,15 @@
           is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      health.mode_orphan_wait = 'inherit'   [default]
+          The mode for a lane waiting on nothing (a run that ended or died with no
+          outcome): 'inherit' (default) takes [health].mode; otherwise 'off',
+          'propose' or 'apply' as for mode, for this finding kind alone. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'propose', the strictest (a finding is reported, never
+          acted on, by a typo); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
@@ -2328,6 +2399,14 @@
           How many moves `ddflow lanes advise` prints, most urgent first (stopped
           lanes with unfinished work, then glob stalls, then idle lanes beside ready
           work).
+      lanes.idle_s = 1800   [default]
+          Seconds a lane holding a lease may go without writing an event or
+          heartbeating before `ddflow lanes --coordinator` flags it `idle`. 0 flags
+          none.
+      lanes.coordinator_max_rows = 15   [default]
+          Most rows each section of `ddflow lanes --coordinator` (suites, holders,
+          approvals, ready phases, chain) prints; the cut says how many more there
+          are. 0 prints every row.
       lanes.brief_notes = 3   [default]
           How many of a lane's most recent session notes `ddflow lanes brief` quotes,
           fenced as data, under 'Previous run'. 0 quotes none.
@@ -2473,6 +2552,17 @@
           waiter must say so (`ddflow claim --break`), so breaking another agent's
           lease is always a deliberate, attributed act. On: any plain claim of a
           contended, idle lease breaks it.
+      lease.reconcile_tests = 'affected'   [default]
+          When this item's merge reconciled files another item changed since this one
+          branched (recorded as merge.reconciled), complete is refused until the tests
+          have passed on the reconciled tree: 'affected' runs the tests the reconciled
+          files select, 'full' the whole suite, 'off' turns the reconcile guard off.
+          D-lease-hold-limit-r2, D-gate-economy-r3. An unrecognised value in a config
+          file is warned about, reported by `doctor` and falls back to 'full', the
+          strictest (run the whole suite, never the narrower affected set); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       lease.inbox_max_chars = 2000   [default]
           Longest message a lane's inbox (`ddflow session message`) keeps, in
           characters; the rest is cut and marked. Messages are untrusted text shown to
@@ -2538,9 +2628,11 @@
       lease.scan_view_trees_max = 16   [default]
           The most worktrees a read-only view (`status`, `brief`) measures for the
           recovery report. Each measured tree is a `git status` process, so a log with
-          126 stale leases made `status` spawn hundreds; a tree beyond the cap is
-          reported as NOT MEASURED -- treated as holding work, never as clean -- and
-          `ddflow recover` always measures every one. 0 measures none in a view.
+          126 stale leases made `status` spawn hundreds; the trees are ranked by their
+          unmerged-commit signal first, and a tree beyond the cap is still treated as
+          holding work by `recover` and `status` (never as clean) while the brief
+          counts it quietly -- `ddflow recover` always measures every one. 0 measures
+          none in a view.
       lease.scan_view_verdicts_max = 0   [default]
           The most merged-but-unfinished items for which a read-only view (`status`,
           `brief`) weighs the full completion (what `complete` would still want),
@@ -2686,6 +2778,35 @@
           (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe
           fall back to a scratch merge in a throwaway worktree, slower and the same
           answer.
+      locks.optimistic = False   [default]
+          Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's
+          globs overlap a live holder's on a non-generated file, run the `git merge-
+          tree` conflict probe between the holder's branch and the claimant's branch.
+          A clean merge conflates the two branches' disjoint hunks, so the claim is
+          GRANTED and the overlapping files are recorded `optimistic` on the lease
+          (the merge then rebases, re-running pin regeneration, instead of waiting); a
+          real conflict or a probe that could not run keeps the exclusive-lease
+          refusal (D-lease-overlap-only-by-break). Generated/pinned files
+          ([lease].shared_globs, append-only and export targets) stay exclusive. Off
+          (default) keeps the plain refusal. Change it for the project (`ddflow config
+          locks.optimistic ...`), for this machine (add --local), per run
+          (DDFLOW_LOCKS_OPTIMISTIC), or over MCP with `ddflow_configure`.
+      locks.review_reuse = 'off'   [default]
+          Whether a recorded review may be REUSED after the tree it covered moved
+          (main merged in or a rebase) instead of running it whole (LK-review-reuse).
+          'off' (default, until measured) never reuses: a review whose recorded tree
+          no longer matches is re-reviewed. 'disjoint' classifies each review gate
+          with `git patch-id --stable` of the item's own change plus disjoint changed
+          files -- when the item's own change is unchanged and the files main changed
+          are disjoint from the files the reviewer saw, the review is kept and the
+          reason recorded; when they overlap, only the overlapping files are re-
+          reviewed as a delta; anything git cannot tell invalidates (fail closed,
+          never a guess). Measured by the wrong-keep rate (a kept review followed by a
+          finding on the same files). An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'off', the strictest (reuse is
+          off: a tree that moved invalidates the review); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
@@ -2985,6 +3106,20 @@
           aborts a call that stays silent for its window (30 s in a probe), so a quiet
           gate would be cut off even though its worker finishes. 0 sends none beyond a
           tool's own per-line progress. Read per call.
+      mcp.init_snapshot_max_age_s = 300.0   [default]
+          `initialize` and `server/discover` answer from the cached interface snapshot
+          (`.ddflow/local/mcp-interface.json`, written by a server after a handshake
+          it rendered) when it is fresh: written by this ddflow version, for this
+          connection's tool tier and interface digest, and at most this many seconds
+          old. The instruction template is then not rendered, so the handshake costs
+          milliseconds instead of seconds; the queue, companion and rules lines of the
+          instruction text are those of the handshake that wrote the snapshot, so they
+          may lag by up to this many seconds until the handshake text is made byte-
+          stable (B-mcp-instructions-volatile-prefix), which is why the default is
+          short; the volatile upgrade notice is said on the first tool result instead
+          of in the handshake. A snapshot that is not fresh, or is unreadable, is
+          ignored and the handshake is rendered live (and the snapshot rewritten). 0
+          turns it off: every handshake is rendered live. Read once per connection.
       memory.max_chars = 280   [default]
           Longest memory `ddflow memory add` accepts. A memory is ONE operational fact
           ('this box has 8 H200s'); something longer is a lesson or a journal entry,
@@ -3004,14 +3139,16 @@
           refused and names the unmet gates; a person passes `--force`, an agent
           passes `--force --approval ID` (an operator approval bound to that exact
           command, single-use, not spent by a refused call) and the landing is
-          recorded as a `merge.forced` event naming the gates it overrode. A failed
-          review or failed ci gate refuses in both modes. An agent's edit of this knob
-          is a `config.set`, which needs a person's approval. An unrecognised value in
-          a config file is warned about, reported by `doctor` and falls back to
-          'refuse', the strictest (a merge with unsettled required gates needs --force
-          and an approval); `config --set`, `ddflow_configure` and the environment
-          refuse it, and so does loading ddflow's own source tree, where the file and
-          the code are one commit.
+          recorded as a `merge.forced` event naming the gates it overrode. Under
+          `[flow].integration = pr` the same check runs before the request opens
+          (Bc6c07dfe52): `refuse` refuses opening it and `warn` opens it naming the
+          unmet gates. A failed review or failed ci gate refuses in both modes. An
+          agent's edit of this knob is a `config.set`, which needs a person's
+          approval. An unrecognised value in a config file is warned about, reported
+          by `doctor` and falls back to 'refuse', the strictest (a merge with
+          unsettled required gates needs --force and an approval); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate
@@ -3068,6 +3205,15 @@
       metrics.top = 5   [default]
           How many rows `ddflow metrics skips` lists for the reasons given per gate
           and for the agents who skip.
+      metrics.runs_window_days = 30   [default]
+          The time window the runs-to-merge view measures merged items over, in days
+          back from now: an item completed before it does not count. A duration the
+          operator narrows to see the recent trend, or widens to smooth a thin log.
+      metrics.outlier_runs = 0   [default]
+          The outlier flag: a merged item whose run count reaches this many is
+          labelled an outlier in the runs-to-merge report instead of silently widening
+          the phase's average. 0 turns the flag off (r-safe-by-default). The label
+          changes no count.
       metrics.forecast_runs = 1000   [default]
           Bootstrap draws behind `ddflow metrics forecast`: each draws one observed
           duration per link of the critical path and sums them. More draws smooth the
@@ -3121,6 +3267,56 @@
           mode under another name.
       metrics.lock_revert_value = 'strict'   [default]
           The value of `lock_revert_key` that is the strict mode.
+      notify.channel = 'terminal'   [default]
+          Where notifications go. 'terminal' writes to the operator's terminal; each
+          other choice ('email', 'n8n', 'openclaw', 'slack', 'teams', 'webhook') is
+          one network channel, reaches outward (r-consent-outward), and needs a grant
+          before any adapter will send. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'terminal', the
+          strictest (a typo across clones is local, never a network send); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      notify.ask_channel = 'harness'   [default]
+          Where questions and approvals go. 'harness' is the in-band agent chat; each
+          other choice ('email', 'n8n', 'openclaw', 'slack', 'teams', 'webhook') is
+          one network channel and needs a grant first. An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to
+          'harness', the strictest (a typo across clones stays local, never a network
+          send); `config --set`, `ddflow_configure` and the environment refuse it, and
+          so does loading ddflow's own source tree, where the file and the code are
+          one commit.
+      notify.endpoints = {}   [default]
+          Adapter -> its whole hook URL. A URL here in a committed layer makes that
+          adapter unavailable.
+      notify.token_env = {}   [default]
+          Adapter -> the variable holding its token (a secret; keep it in the local
+          layer).
+      notify.send_timeout_s = 10.0   [default]
+          How long one notification send may take (a webhook POST, a mail exchange, a
+          desktop command) before it is dropped.
+      notify.ask_timeout_s = 300.0   [default]
+          How long the terminal waits for one line of an answer before it gives up
+          that attempt.
+      notify.ask_attempts = 3   [default]
+          Unusable answers the terminal takes before it gives up on a question.
+      notify.email_host = ''   [default]
+          The SMTP host mail is sent through (an address here in a committed layer
+          makes the email adapter unavailable).
+      notify.email_port = 587   [default]
+          The SMTP port.
+      notify.email_from = ''   [default]
+          The envelope sender (an address here in a committed layer makes the email
+          adapter unavailable).
+      notify.email_to = ''   [default]
+          The recipient (an address here in a committed layer makes the email adapter
+          unavailable).
+      notify.email_user = ''   [default]
+          The SMTP login (a secret; keep it in the local layer).
+      notify.email_password_env = ''   [default]
+          The variable holding the SMTP password.
+      notify.email_tls = True   [default]
+          STARTTLS on the SMTP connection; a host that cannot do it fails the send.
       output.max_rows = 50   [default]
           Rows a list shows by default in `board`, `doctor`, `recover`, `next` and
           `status` (CLI and MCP, text and `--json`). The rest is counted: the answer
@@ -3129,12 +3325,14 @@
           false.
       output.max_chars = 30000   [default]
           Characters a default answer of those commands may hold (text and serialised
-          `--json` alike; about 4 characters a token, so 30000 is roughly 7500 tokens,
-          well under the 25000-token cap an MCP client puts on a tool result). A
-          `--json` body that carries both prose and rows (`board`) gives each half. A
-          longer answer is cut on a line boundary and ends in a footer; a `--json`
-          body first loses rows until it fits and keeps its schema, adding `truncated`
-          and `next`. 0 lifts the character cap, unless `allow_full` is false.
+          `--json` alike; about 4 characters a token for ASCII text only, so 30000 is
+          roughly 7500 tokens of English; non-ASCII prose costs more, see
+          `non_ascii_weight`; well under the 25000-token cap an MCP client puts on a
+          tool result). A `--json` body that carries both prose and rows (`board`)
+          gives each half. A longer answer is cut on a line boundary and ends in a
+          footer; a `--json` body first loses rows until it fits and keeps its schema,
+          adding `truncated` and `next`. 0 lifts the character cap, unless
+          `allow_full` is false.
       output.non_ascii_weight = 4   [default]
           How many characters of `max_chars` one non-ASCII character of prose costs. A
           character count is only a token estimate for ASCII: 30000 characters
@@ -3152,6 +3350,126 @@
           enforced lock: ddflow has no organisation layer yet, so the local layer or
           `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at
           a terminal asking for everything gets everything.
+      output.json_envelope = False   [default]
+          Answer a `--json` command whose body is a bare array (`progress`, `loops`,
+          ...) as `{"schema": "<command>@<n>", "rows": [...]}` instead, so every
+          `--json` body carries a schema id and version (MP-schema-all). Off by
+          default: the bare array is the shape callers index today and stays so
+          (D-compat); no schema version is bumped for it. An object body, a refusal
+          body and the MCP bodies are the same either way.
+      perf_metrics.ring_max_bytes = 2000000   [default]
+          Most bytes one raw-sample ring (`.ddflow/local/perf/<series>.jsonl`) keeps;
+          when a series exceeds it the oldest samples are dropped first (flowstate
+          precedent). Raw detail only -- rollups and aggregates are committed.
+      perf_metrics.ring_max_age_s = 604800   [default]
+          Seconds a raw sample stays in the local ring before the store trims it.
+      perf_metrics.aggregate_min_samples = 3   [default]
+          Fewest samples a daily aggregate needs before its p50/p90/max are reported;
+          below it the count is reported and the percentiles are None, never zero.
+      perf_metrics.detect_min_samples = 8   [default]
+          Fewest samples a series needs before the regression detector will call a
+          change; a smaller window says not-enough-data, never an alert.
+      perf_metrics.detect_relative_threshold = 0.2   [default]
+          The relative step a drift detector must exceed to fire -- the change is at
+          least this fraction above the baseline median (D-perf-metrics-answers
+          default +20%).
+      perf_metrics.detect_absolute_floor_s = 5.0   [default]
+          The absolute step (seconds) a drift detector must also exceed; a +20% change
+          smaller than this is noise, so microseconds do not alert.
+      perf_metrics.detect_persistence_windows = 2   [default]
+          How many consecutive windows must exceed both thresholds before a change
+          becomes a finding (a one-window spike is not a regression).
+      perf_metrics.detect_creep_alpha = 0.1   [default]
+          The EWMA alpha for slow creep that a fixed threshold never sees (1% a week
+          is invisible step-wise); the detector flags an EWMA that drifted past the
+          relative threshold across the window.
+      perf_metrics.detect_creep_threshold = 0.1   [default]
+          The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
+          never catches 1% a week; the creep bar does, accumulated over the window).
+      perf_metrics.flaky_window_s = 604800   [default]
+          The rolling window the flaky-rate view (services/perf/flakyrate.py) measures
+          flake counts and quarantine proposals over; a flake older than this does not
+          count.
+      perf_metrics.flaky_quarantine_after = 3   [default]
+          Flake count of one test within flaky_window_s at which the rate view
+          proposes a quarantine (B-sched-flaky owns the lane; PM-flaky only measures
+          and proposes).
+      perf_metrics.flaky_quarantine_expiry_s = 2592000   [default]
+          Seconds a quarantine proposal stays open (its expiry); after this the test
+          is re-evaluated rather than quarantined forever.
+      perf_metrics.flaky_retry_cost_s = 60.0   [default]
+          Estimated wall seconds one failed->rerun cycle costs; the rate view
+          multiplies flakes in the window by this for retry cost (the flake log stores
+          no per-retry duration).
+      perf_metrics.budget_gate_p90_s = 180.0   [default]
+          A gate wall-time budget: the p90 seconds one gate may take in a window
+          before it is over budget (PM-budgets). The floor only tightens; raising it
+          is a recorded decision.
+      perf_metrics.budget_test_file_s = 120.0   [default]
+          A per-test-file budget: the seconds one test file's serial run may take
+          before the file is a split candidate (PM-budgets). The floor only tightens;
+          raising it is a recorded decision.
+      perf_metrics.budget_stage_lease_wait_s = 120.0   [default]
+          A lease-wait budget: the seconds an item may wait for a refused claim's
+          lease before the wait is a finding (PM-budgets). Only goes down; raising it
+          is a recorded decision.
+      perf_metrics.budget_stage_merge_wait_s = 120.0   [default]
+          A merge-wait budget: the seconds a landed branch may wait to be picked up
+          before the wait is a finding (PM-budgets). Only goes down; raising it is a
+          recorded decision.
+      perf_metrics.budget_breach_min_samples = 3   [default]
+          Fewest samples a series needs before its p90 is compared to a budget; below
+          it the check is not-enough-data, never a false clear (PM-budgets).
+      perf_metrics.budget_severity = 'warn'   [default]
+          What a budget breach does: 'warn' files a finding only; 'block' also refuses
+          and names the next call (split the file, see the slowest tests, raise with a
+          recorded reason). Ships warn (r-safe-by-default). An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to 'warn',
+          the strictest (a budget stays a finding, never a surprise refusal); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      perf_metrics.prop_min_observations = 3   [default]
+          Fewest observed cap values a parallel-cap proposal needs before it will
+          advise a cap (PM-prop-flow); below it the proposal is not-enough-data, never
+          a zero.
+      perf_metrics.prop_marginal_gain = 0.25   [default]
+          The fraction of the wall clock one more agent must save before its extra
+          parallelism is paid back (PM-prop-flow); below it the cap before it is the
+          proposed parallel cap.
+      perf_metrics.prop_batch_dominance = 2.0   [default]
+          The suite-lock wait as a multiple of the gate run that triggers a batch-
+          gates proposal (PM-prop-flow).
+      perf_metrics.prop_retire_payback = 2.0   [default]
+          The multiple of what a stage buys back that its wait must reach before a
+          retire-stage proposal fires (PM-prop-flow).
+      perf_metrics.prop_split_share = 0.5   [default]
+          The fraction of the critical-path floor one test file's serial run must
+          exceed before it is a split candidate, WHEN the file is also over the size
+          rule (PM-prop-tests). The floor only tightens; raising it is a recorded
+          decision.
+      perf_metrics.prop_shard_skew = 0.9   [default]
+          The slowest file's share of the critical-path floor at or above which the
+          test suite is skewed enough that the proposal is to SHARD the slowest file,
+          not to raise the worker count (PM-prop-tests).
+      perf_metrics.prop_select_miss_min = 2   [default]
+          Fewest full-run failures a selection would not have run, in a set of
+          selection runs, before the report proposes widening the selection (PM-prop-
+          tests).
+      perf_metrics.prop_select_min_runs = 3   [default]
+          Fewest selection runs over which misses are counted before a selection new
+          claim is honest (PM-prop-tests); below it the claim is not-enough-data,
+          never a zero.
+      perf_metrics.report_default_window = '28d'   [default]
+          The time window a perf report measures when none is given: a duration back
+          (7d, 12h) or a date YYYY-MM-DD (parse_since).
+      perf_metrics.report_max_rows = 20   [default]
+          Most rows the perf report's text/markdown renderer shows per section; the
+          cut line names the omitted count and says the json holds every row (PM-
+          report-surfaces).
+      perf_metrics.report_width = 76   [default]
+          The width in characters the perf report's text/markdown renderer keeps every
+          line within (terminal and chat alike).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
@@ -3239,6 +3557,69 @@
           file is named like an existing sibling (or exists under that name
           elsewhere). It is a warning, never a refusal: the claim is made and the plan
           check keeps its exit code. `false`: no such check.
+      premerge.enabled = True   [default]
+          Whether the pre-merge check runs. Only the operator turns it off: an agent's
+          config write is refused. Off, merge behaves as it did before the check
+          existed.
+      premerge.stages = ['pre-commit']   [default]
+          The pre-commit stages whose hooks run, each as `pre-commit run --files
+          <changed> --hook-stage <stage>`. Add `pre-push` for the project's push-time
+          hooks; their test-running hooks stay off (the item's own tests run through
+          `test_command`).
+      premerge.budget_s = 120   [default]
+          Seconds the whole check may take. A step still running at the deadline is
+          stopped and recorded `unavailable` (never passed), and the steps after it
+          are not started.
+      premerge.on_unavailable = 'unavailable'   [default]
+          What the check does when a hook cannot run (pre-commit or a hook's tool
+          missing, a hook repository not cached and no network, the budget spent).
+          'unavailable' (default): that step is recorded unavailable, never passed,
+          and the merge goes on. 'refuse': an unavailable step refuses like a failed
+          one. A hook that ran and failed refuses in both modes, and a force flag
+          never lifts it. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'refuse', the strictest (a hook that
+          could not run refuses the merge); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
+      premerge.fix = True   [default]
+          Apply the fixes hooks make (formatting, import order, trailing whitespace)
+          to the item's OWN changed files and commit them to the item's branch,
+          listing the files. Off, a hook that would rewrite a file is reported as
+          failed and the tree is left as it was. A file the item did not change is
+          never touched, never committed.
+      premerge.commit_fixes = True   [default]
+          Commit the fixes (see `fix`) to the item's branch as one normal commit
+          naming the files. Off, the fixes are applied and left uncommitted in the
+          tree, listed as such: the hooks re-run on them, and a merge then refuses the
+          dirty tree until the author commits.
+      premerge.max_fix_rounds = 1   [default]
+          How many times fixes are committed and the hooks re-run. A hook that still
+          rewrites a file after the last round ends failed, naming the file.
+      premerge.precommit_command = 'pre-commit'   [default]
+          The pre-commit executable. Not found: the hook step is recorded unavailable.
+          ddflow never installs it.
+      premerge.skip_hooks = []   [default]
+          Hook ids left out of the run (the SKIP of pre-commit), for a hook too slow
+          or too wide for a merge. A skipped hook is listed as skipped, never as
+          passed.
+      premerge.generic_hooks = True   [default]
+          When the project has no .pre-commit-config.yaml, run the built-in generic
+          set on the changed files: trailing whitespace, final newline, merge-conflict
+          markers, private-key header, oversized file, and ruff check and format for
+          Python files. Off, such a project gets no hook step.
+      premerge.large_file_kb = 500   [default]
+          The size above which the generic set refuses a changed file, in kilobytes.
+      premerge.test_command = 'python -m pytest -q -x'   [default]
+          The command run with the item's changed or added test files appended; never
+          the whole suite. No such file: the step is skipped, not passed. A command
+          that is not found records the step unavailable.
+      prices.limit = {}   [default]
+          USD a model may spend per reset window, by model id (or subscription id). A
+          model with no value here (and no inherited value) has no limit on record:
+          routing treats that UNKNOWN, never headroom.
+      prices.reset = {}   [default]
+          The reset cadence per model id, e.g. "1d", "1mo"; empty value means the
+          section default "1mo".
       prompts.review_system = ''   [default]
           Path to the reviewer's system prompt template, replacing the shipped one.
           `ddflow prompts eject` writes an editable copy into .ddflow/prompts/ to
@@ -3350,6 +3731,29 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      records.correct_digest_chars = 12   [default]
+          Characters of the SHA-256 digest `ddflow correct` keeps in a correction's
+          audit entry when a digest is asked for (`correct_digest_old`,
+          `correct_digest_new`). At most the width of the hash.
+      records.correct_min_digest_chars = 8   [default]
+          A value shorter than this many characters gets no digest even when one is
+          asked for: the digest of a short value (a password, a token) lets anyone
+          holding the log confirm a guess.
+      records.correct_digest_old = False   [default]
+          Keep a digest of the OLD value in a correction's audit entry. Off by
+          default: the log cannot tell a secret from a typo, and a digest of a low-
+          entropy value lets a guess be confirmed. `ddflow correct --secret` keeps it
+          off whatever this says. The old text itself stays in the log until a scrub,
+          with or without a digest.
+      records.correct_digest_new = False   [default]
+          Keep a digest of the NEW value in a correction's audit entry. Off by
+          default, for the reason `correct_digest_old` gives; `ddflow correct
+          --secret` keeps it off whatever this says.
+      records.correct_reason_max_chars = 500   [default]
+          Longest reason `ddflow correct` accepts. The reason says why the value was
+          wrong, never what it was: a long one is usually the old text pasted in.
+      records.correct_max_fields = 8   [default]
+          Most fields one `ddflow correct` may replace in one event.
       reinstruct.enabled = True   [default]
           Whether tool results may carry a short footer naming what this project has
           left undone. The instruction block is delivered once at connect; after a
@@ -3380,6 +3784,36 @@
           unannounced change stops the release); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      resultcache.enabled = True   [default]
+          Whether a `ci` or `unit_tests` command gate reuses a recorded result for the
+          same code tree, command and environment instead of running again. The key is
+          the tree of tracked files minus `.ddflow/` and `[gates].doc_globs` documents
+          (a dirty tree by its content), the gate, the resolved command, the Python
+          version, the dependency lock files and the variables of `env_vars`; a change
+          to any of them misses. Only `passed` and `failed` are stored, a `failed` hit
+          is reported failed, an entry that does not read back whole is a miss, and
+          the cache is per project, never shared across projects or users. The hit is
+          recorded with the evidence 'cached from run X'. false runs every gate.
+      resultcache.keep_days = 14   [default]
+          Days an entry of the result cache is kept; older entries are removed when
+          the cache is written. At least 1.
+      resultcache.max_mb = 64   [default]
+          Most megabytes the result cache of a project may hold; past it the oldest
+          entries are removed first when the cache is written. At least 1.
+      resultcache.reuse_failed = False   [default]
+          Whether a stored `failed` result is served again for the same key (reported
+          failed, never passed). Off by default: a rerun of a failed gate on an
+          unchanged tree is how a flake is told from a real failure (`gate run
+          --rerun-failed`, the flake log), and a served failure would hide it. A
+          `failed` result is stored either way.
+      resultcache.probe_commands = ['pytest --version', 'uv --version']   [default]
+          Commands whose output is part of the cache key, so a different tool version
+          never hits: each is run (10 s limit) and its output hashed once per process;
+          one that cannot run counts as 'unavailable' in the key. Add the tools your
+          gates use (`ruff --version`, `node --version`).
+      resultcache.env_vars = []   [default]
+          Names of environment variables whose values are part of the cache key (a
+          variable that changes what the tests do). Empty by default.
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
@@ -3579,6 +4013,24 @@
           project (`ddflow config review.degraded_cooldown_s 1800`), for this machine
           (add --local), per run (DDFLOW_REVIEW_DEGRADED_COOLDOWN_S), or over MCP with
           `ddflow_configure`.
+      roles.budget_tokens = 600   [default]
+          Most tokens (about four characters each) a role pack may take; a longer pack
+          is cut at a line boundary and says so. 0 means no cap.
+      roles.phase_closer_rules = []   [default]
+          The phase-closer role pack: one line per rule, a plain sentence or
+          `rule:<id>` (the title of that rule record). Empty (the default): the
+          packaged pack, ddflow/templates/roles/phase-closer.txt. A non-empty list
+          replaces it, in any config layer.
+      roles.fixer_rules = []   [default]
+          The fixer role pack: one line per rule, a plain sentence or `rule:<id>`.
+          Empty (the default): the packaged pack, ddflow/templates/roles/fixer.txt.
+      roles.researcher_rules = []   [default]
+          The researcher role pack: one line per rule, a plain sentence or
+          `rule:<id>`. Empty (the default): the packaged pack,
+          ddflow/templates/roles/researcher.txt.
+      roles.reviewer_rules = []   [default]
+          The reviewer role pack: one line per rule, a plain sentence or `rule:<id>`.
+          Empty (the default): the packaged pack, ddflow/templates/roles/reviewer.txt.
       rules.max_rules = 200   [default]
           Maximum number of rules a project may define. Prevents sprawl; enforced on
           rule creation.
@@ -3915,6 +4367,27 @@
           hook hands it back after compaction. The hook gets no summary from Claude
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
+      session.agent_rotate_tokens = 250000   [default]
+          Context tokens past which a lane agent should rotate instead of growing:
+          `ddflow doctor`, `ddflow health` and the wake brief name it and the steep
+          climb in cache-rewrite and reread cost each heartbeat then. An agent past it
+          finishes its item, writes the hand-off note into the item's evidence and
+          stops; the lead starts a fresh agent whose first call is `ddflow brief`. 0
+          turns the hint off. The advisory number, not the mechanism: DDflow never
+          stops an agent on its own (only the harness/operator does); the auto-compact
+          window below is the alternative a running session can still honour.
+      session.claude_autocompact_window = 0   [default]
+          The Claude Code auto-compact window, in tokens, as the alternative to lane
+          rotation: set it to put `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the harness's
+          environment so a long lane agent compacts instead of rotating (D-TE-Q2).
+          100000-1000000, as the Claude Code docs spell the range; 0 leaves the
+          harness default untouched (DDflow cannot flip a harness's environment, so
+          this is the value the lead puts there; `ddflow doctor` names it).
+      session.claude_autocompact_pct_override = 0   [default]
+          `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, in percent, alongside
+          `claude_autocompact_window`: it LOWS the window only (Claude Code honours it
+          as a percentage override, never a raise). 0 leaves the harness default
+          untouched.
       session.agent_brief_max_chars = 9000   [default]
           Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief
           `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the
@@ -3983,6 +4456,103 @@
           commands and rules that hold only here (how to run the full test suite, a
           forbidden path). The standard text stays in one place; this is the project's
           addition to it.
+      slo.target_command_p95_s = 2.0   [default]
+          The command-latency target: the p95 wall seconds of a brief or claim command
+          on the host. Bound from the perf store's per-command samples; below the
+          sample floor it is not-collected, never zero (PM-sampler supplies the
+          samples).
+      slo.target_gate_p90_s = 300.0   [default]
+          The gate-latency target: the p90 wall seconds one gate run may take. A gate
+          whose p90 exceeds this in the window is over target.
+      slo.target_queue_age_s = 600.0   [default]
+          The queue-age target: the p90 seconds an item waits ready-to-claimed. This
+          is the SLI that gets a burn-rate view (its window is long and its signal
+          monotone).
+      slo.target_unavailable_rate = 0.25   [default]
+          The unavailable target: the highest share of a gate's RAN verdicts that may
+          be `unavailable` (a reviewer that could not run is never `passed`). A skip
+          is not a pass and is excluded from the rate. One quarter is the contract, so
+          `ci` at ~11 percent is comfortably inside it.
+      slo.target_stuck_lanes = 2   [default]
+          The stuck-lane target: the most live lanes that may be idle past `[lanes]`
+          hold without activity before the SLI is over target. A lane that never
+          released and never renewed is waste, not progress.
+      slo.target_ci_false_red_rate = 0.1   [default]
+          The CI false-red target: the highest share of merges that produce a red-main
+          finding (a bug filed against the item within `[metrics]
+          lock_red_main_window_s` of the merge) that is not a real regression. It gets
+          a burn-rate view with queue age: a red CI is a capacity burn.
+      slo.target_log_events_per_item = 30.0   [default]
+          The log-growth target: the most committed log events one completed item may
+          add. Growth that tracks item count is healthy; growth that tracks retries is
+          rework.
+      slo.target_review_finding_rate = 0.6   [default]
+          The review-finding signal: the share of critic and rubber_duck rounds that
+          raise a finding. It is a review-quality SIGNAL, not an outage target -- the
+          SLO report shows it but never turns it into a breach (a gate that fails
+          55-57 percent is doing its job, not down).
+      slo.burn_rate_window_s = 2592000   [default]
+          The burn-rate window in seconds over which queue age and CI false-red are
+          extrapolated to a time-to-exhaustion (a 30-day budget viewed per hour).
+      slo.burn_rate_exhaust_s = 3600.0   [default]
+          The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is
+          flagged `burning`: the budget is on track to be spent within this horizon.
+          The report only flags; it never refuses (r-safe-by-default).
+      store.stale_index_days = 7.0   [default]
+          How long an index built by OTHER code (a different fingerprint, or the pre-
+          fingerprint `index.db`) is kept after its last write before a rebuild
+          garbage-collects it. Worktrees on different ddflow versions each keep their
+          own index meanwhile (D-compat).
+      store.index_touch_s = 86400.0   [default]
+          An index in use is `touch`ed (its mtime refreshed) at most this often, so
+          its mtime means 'last used', not 'last rebuilt', and `stale_index_days` of
+          silence really is disuse.
+      suites.max_concurrent = 0   [default]
+          How many full test suites may run at once on this host, counted across every
+          project and agent of the user. 0 (default) derives it from the core count:
+          cores // `cores_per_suite`, at least `[ci].max_concurrent_suites` (which
+          stays the floor), at least 1. A positive value is used as it is. Whatever
+          the cap, a second suite is held back while the host load is over
+          `load_ceiling_per_core`.
+      suites.cores_per_suite = 96   [default]
+          Cores one full suite is budgeted, for the derived cap of `max_concurrent`: a
+          192-core host admits two, a 64-core host one. At least 1.
+      suites.load_ceiling_per_core = 0.35   [default]
+          The one-minute load average per core above which a suite waits for another
+          that is already running (six suites at once reached 0.28 to 0.44 per core
+          and starved each other against the per-test timeout). The wait says why and
+          shows the load. A suite that is the only one running is never held back by
+          it: the load is then not from another suite. The wait is queue time: the
+          per-test timeout starts at admission, never earlier. An unreadable load
+          never blocks.
+      suites.load_poll_s = 2.0   [default]
+          Seconds between two readings of the host load by a suite waiting for
+          admission (the queue itself is polled more often). 0 reads it at every poll;
+          at most 600.
+      suites.max_wait_factor = 3.0   [default]
+          The aging bound of the suite queue: a waiting run that has waited this many
+          times its own predicted cost goes first, whatever the class or cost of the
+          others, so a long run is never starved by short ones or by higher classes.
+          Must be above 0.
+      suites.agent_share = 0.5   [default]
+          The most of the waiting suite runs one agent may lead, as a share of the
+          queue (rounded up, at least one): the agent's other runs wait behind
+          everybody else's, never dropped. A lone agent keeps its own order. Between 0
+          and 1.
+      suites.default_cost_s = 600.0   [default]
+          The predicted cost, in seconds, of a suite run no measurement of its kind
+          exists for yet: it orders the run among others and sets when it counts as
+          overdue. A finished run teaches its kind's cost (the median of the newest
+          `cost_runs`).
+      suites.cost_runs = 20   [default]
+          How many of the newest measured runs of one kind (its gate and scope) the
+          predicted cost is the median of. At least 1.
+      suites.class_patterns = {'red_main': ['fix-Bmain-red', 'main-red', 'red-main'], 'integrator': ['merge[ _-]?queue', 'queue run', 'integrator'], 'phase': ['^P-', 'phase[ _-]?(close|suite)'], 'baseline': ['baseline']}   [default]
+          How a suite run's class is read from its holder label when its caller names
+          none: regular expressions per class (red_main, integrator, phase, baseline;
+          anything else is an item run). Classes go first in that order: a fix of red
+          main and the merge-queue integrator, then a phase's closing run, then an
+          item's run, then a baseline measurement.
       swarm.w_critical = 3.0   [default]
           Weight of the critical-path term in the dispatch score: an item on the
           longest dependency chain is offered before one with slack. Zero ignores the
@@ -4026,6 +4596,10 @@
           Trust tier a lane needs for an item that names none. A lane's tier is
           whatever the operator grants it; a lane below the item's tier is refused,
           whatever its score.
+      swarm.conformance_min_level = 0   [default]
+          Measured conformance level a lane needs before the scheduler offers it a
+          real item (a lane at level 0 has never passed a conformance run, so its tier
+          is only its own word). Zero does not enforce conformance.
       swarm.explore_share = 0.1   [default]
           Share of picks spent on under-measured (family, model) pairs (D-swarm-
           answers Q10). Zero turns exploration off.
@@ -4041,12 +4615,16 @@
       swarm.conformance_min_calls = 5   [default]
           Fewest tool calls a conformance run must see before accuracy is judged;
           fewer is `unavailable`, never passed.
-      swarm.conformance_idle_s = 5.0   [default]
+      swarm.conformance_idle_s = 120.0   [default]
           Seconds of silence after which a conformance run stops collecting a lane's
-          events.
-      swarm.conformance_lease_wait_s = 10.0   [default]
+          events. Long enough for a real lane's first stream line (kilo takes ~20s to
+          load its MCP server and plugins before the first event; a 5s idle ended
+          collection before any event: B72bcd17b4e).
+      swarm.conformance_lease_wait_s = 90.0   [default]
           Seconds a lane is given to stop after its lease is revoked in a conformance
-          run; a lane still working after that fails the lease level.
+          run; a lane still working after that fails the lease level. Long enough for
+          a real revocation to reach the lane (measured 8.5-14.1s: a 10s wait failed 3
+          of 5 runs, B72bcd17b4e).
       swarm.conformance_tools = ['brief', 'next', 'claim', 'heartbeat', 'show', 'help', 'identify', 'merge', 'complete', 'task', 'memory', 'gate', 'bug', 'session', 'rule', 'view']   [default]
           The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes
           are ignored) a lane's tool calls are judged against in a conformance run.
@@ -4092,6 +4670,55 @@
       swarm.launch_max_budget_usd = 5.0   [default]
           Ceiling on any template's `budget_usd`: a launch from a template that asks
           for more is refused, whatever its approval. Zero removes the ceiling.
+      swarm.remote_exclude = ['.ddflow', '.env', '**/.env']   [default]
+          Relative path globs a remote lane's working tree never carries in its
+          bundle: ddflow's own event log, secrets and env files stay on the host. What
+          the outbound commit leaves out is
+          `ddflow.services.swarm.remote.Knobs.exclude`.
+      swarm.remote_bundle_max_bytes = 104857600   [default]
+          Biggest outbound bundle the host sends, in bytes (default 100 MiB). The
+          returned bundle cap is its own knob (`remote_return_max_bytes`).
+      swarm.remote_return_max_bytes = 52428800   [default]
+          Biggest returned bundle back to the host, in bytes (default 50 MiB).
+      swarm.remote_return_max_commits = 200   [default]
+          Most commits a returned branch, bundle or import carries; one past the cap
+          is refused.
+      swarm.remote_git_timeout_s = 120   [default]
+          How long one remote git command may run, in seconds.
+      swarm.remote_scan_max_blob_bytes = 1048576   [default]
+          Biggest file blob the outbound scan inspects, in bytes: the tree with a file
+          OVER this many bytes is refused. The return refuses anything its scan
+          inspects over this ceiling.
+      swarm.remote_scan_batch_files = 64   [default]
+          At most this many blobs of `remote_scan_max_blob_bytes` the scan holds in
+          memory at once.
+      swarm.remote_branch_prefix = 'swarm/remote/'   [default]
+          Branch refs the remote work is stored under on the host.
+      swarm.remote_seed_name = 'SEED.md'   [default]
+          Name of the seed pack file inside the outbound bundle.
+      swarm.remote_proposals_max = 5   [default]
+          Most proposal the return reports at once.
+      swarm.remote_proposal_chars = 400   [default]
+          Longest one proposal in characters before it is cut.
+      swarm.remote_proposals_max_bytes = 65536   [default]
+          Longest whole return reply in bytes at once, proposals included.
+      swarm.remote_ssh_argv = ['ssh']   [default]
+          The ssh binary and flags, `ssh` by default; a different ssh binary's path
+          goes here.
+      swarm.remote_ssh_timeout_s = 60   [default]
+          How long one ssh command may run, in seconds, before the remote reads it as
+          not finishing.
+      swarm.remote_ssh_connect_timeout_s = 15   [default]
+          How long ssh may keep trying to connect before it gives up, on its own
+          budget.
+      swarm.remote_copy_timeout_s = 600   [default]
+          How long one copy in or out may run before the remote reads it as does not
+          finish.
+      swarm.remote_lanes_root = 'ddflow-lanes'   [default]
+          Directory under the remote home lanes live; a first segment names the lane.
+      swarm.remote_detail_chars = 200   [default]
+          Longest one line of remote stderr a report keeps before the cut: enough to
+          ask nicely.
       triggers.max_fires_per_hour = 10   [default]
           How many times triggers may fire, counted across EVERY trigger, in any
           rolling hour (default 10). A met condition past it is recorded as
@@ -4272,6 +4899,19 @@
           installing to the operator); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      upstream_gh.error_max = 400   [default]
+          Characters of a `gh` error message kept when an `Unavailable`/`GhError` is
+          raised (`str(exc)[:error_max]`), so a failure report never outgrows a log
+          line before the caller redacts it.
+      wait.max_call_seconds = 240   [default]
+          Longest ONE `ddflow wait` (or `watch`) call blocks before it returns a
+          still-waiting result the caller re-invokes, so a single call never outlives
+          this bound and the caller's heartbeat rides on the next call (D-TE-Q3: the
+          240 s cap applies always, not only as fallback). A 5-minute subagent prompt
+          cache stays warm under it, and ten minutes waited as one call costs ~4x
+          three short calls. `[lease].wait_cap_s` is the hard ceiling that sits below
+          the client's idle abort; whichever is shorter wins, and a caller's own
+          `--max-s` can still shorten a call (never lengthen it past this cap).
       waves.auto_stamp = True   [default]
           Keep the derived `wave:N` tags (wave 0 = no open prerequisite, task-level or
           inherited; wave N = 1 + the highest wave among open prerequisites) current
@@ -4335,6 +4975,16 @@
           The time of the last sweep is a local stamp (`.ddflow/local/sweep-
           finished.last`); losing it only brings the next sweep forward. 0 sweeps on
           every brief, as before.
+      worktree.stash_retries = 4   [default]
+          How many times a real merge into a tree with uncommitted tracked work is
+          retried when git reports a transient pre-merge failure that merged nothing
+          (`fatal: stash failed`, or a lost `MERGE_MSG` read -- B-merge-stash-failed-
+          transient). Each retry is the identical command; a merge already begun is
+          never repeated.
+      worktree.stash_retry_pause_s = 0.25   [default]
+          The first pause (seconds) before retrying a transient pre-merge failure that
+          merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read); the nth
+          retry pauses `stash_retry_pause_s * 2**n` (B-merge-stash-failed-transient).
       worktree.max_parallel = 0   [default]
           Ceiling on simultaneously active task worktrees. Guards disk and CPU; the
           scheduler queues beyond it rather than refusing. 0 (the default) means
@@ -4391,9 +5041,11 @@
     0,
     '''
       Ready (1 ready, 0 running, 1 blocked):
+        [wave:unstamped]
         T2  Grammar
             writes: src/parse.py
-        (blocked) T3: deps — T2 is open
+            needs: T1
+        1 blocked on dependencies (`ddflow next --blocked` lists them)
   
     ''',
   )

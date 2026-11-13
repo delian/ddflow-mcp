@@ -22,7 +22,9 @@ def _flag_paragraph() -> str:
 def test_the_runbook_names_every_kind_of_entry_recover_flags():
     """One phrase per band `recover` flags (`views.markdown.recovery_band`); a band added
     there without a phrase here fails, so the runbook cannot silently fall behind
-    (roborev 1507)."""
+    (roborev 1507). ``_CAPPED`` is the ONE view-only band: `recover` never meets one
+    (`scan(view=False)` never sets `budget_capped`), so it needs no `!!` phrase -- it is
+    asserted here only so a budget-capped entry is exercised, not vacuum."""
     from ddflow.services.leases import Recovery
     from ddflow.views import markdown as M
 
@@ -37,6 +39,17 @@ def test_the_runbook_names_every_kind_of_entry_recover_flags():
         for k in ("expired_lease", "orphan_worktree", "stale_running")
         for s in (True, False, None)
     } - {None}
+    # `_CAPPED` is view-only: a budget-capped entry bands there, and only there.
+    capped = M.recovery_band(
+        Recovery(
+            item="x",
+            holder="h",
+            kind="orphan_worktree",
+            salvageable=None,
+            budget_capped=True,
+        )
+    )
+    assert capped == M._CAPPED
     assert bands == set(phrase), f"a band without a runbook phrase: {bands - set(phrase)}"
     para = _flag_paragraph()
     for band in bands:

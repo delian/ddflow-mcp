@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+from ..core import record_fields as RF
 from .overlay import OverlayError, OverlayLoader
 from .prompts import Template, TemplateError, builtin_dir, render
 
@@ -34,6 +35,7 @@ TOPICS: dict[str, str] = {
     "manual": "the full workflow the MCP charter summarises: reporting, review rules, companion tools",
     "workflow": "the loop: pick work, claim it, satisfy its gates, land it",
     "import": "adopting a project that already has history",
+    "onboard": "onboarding an existing project: each stage, what it proposes, what --apply does",
     "gates": "what a gate is, which are agent gates, and proving one can fail",
     "parallel": "several agents at once: worktrees, leases, conflict refusal",
     "memory": "what the project remembers, and how to ask it",
@@ -46,6 +48,8 @@ TOPICS: dict[str, str] = {
     "verify": "checking that a done task is really done, and what to do when it is not",
     "lanes": "which agents are working, their state, their brief, and what to do next",
     "metrics": "cycle time, review rounds, waits, forecast and retro, derived from the log",
+    "viewers": "list and show: tasks, phases, bugs, research, sessions and the log, on CLI and MCP",
+    "update": "ddflow update: the same edit operations on every record kind, from one catalogue",
     "upgrade": "newer releases, upgrading it and the project, watching and resuming an upgrade",
 }
 
@@ -84,6 +88,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "task",
             "split",
             "update",
+            "correct",
             "resolve",
             "remove",
             "import",
@@ -254,5 +259,18 @@ def render_index(repo: Path | None = None, *, tools: Iterable[str] = ()) -> str:
     return render(_page("index", repo), topics=topics, inventory=inventory, tool_count=len(tools))
 
 
+def update_kinds() -> str:
+    """What `ddflow update` accepts per kind, read from the catalogue (`core.record_fields`): the
+    help text, the CLI and the MCP parameters cannot disagree about it."""
+    rows = [f"  {kd.kind:<9} {kd.accepts()}" for kd in RF.KINDS.values()]
+    rows += [
+        f"  {n:<9} (declared as a data kind: its own declaration lists the fields)"
+        for n in RF.DATA_KIND_NAMES
+    ]
+    return "\n".join(rows)
+
+
 def render_topic(name: str, repo: Path | None = None) -> str:
+    if name == "update":
+        return render(resolve_topic(name, repo), update_kinds=update_kinds())
     return render(resolve_topic(name, repo))

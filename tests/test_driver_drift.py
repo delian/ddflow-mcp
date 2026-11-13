@@ -142,3 +142,45 @@ def test_claude_delta_carries_the_goal_wave_contract():
     assert stamp is not None and stamp.sha == content_digest(view, length=MANAGED_DIGEST_LEN), (
         "the claude docs view stamp does not certify its own body (regenerate the view)"
     )
+
+
+def test_claude_delta_carries_the_lane_context_caps_section():
+    """Bug B420810120e: the TE-context-caps lane-rotation section landed in the docs view only,
+    so the template the docs view is diffed against lacked it, `adopt --refresh-docs` (no plan
+    mode) would rewrite the doc from the template and lose the section. The template must carry
+    it, and the docs view must match (so it is no longer flagged as hand-edited)."""
+    text = (ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md").read_text()
+    assert "Lane context caps (TE-context-caps)" in text, "the claude delta lacks the caps section"
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW" in text, (
+        "the claude delta lacks the compact-window vars"
+    )
+    assert "session.claude_autocompact_window" in text, (
+        "the claude delta lacks the compact-window knob"
+    )
+    assert "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=1h" in text, (
+        "the claude delta lacks the subagent ttl"
+    )
+    view = AD._region_body(AD._driver_region(DELTA), (ROOT / DELTA).read_text())
+    assert view == text, "the claude docs view was not regenerated from the template"
+    region = AD._driver_region(DELTA)
+    stamp = region.stamp((ROOT / DELTA).read_text())
+    assert stamp is not None and stamp.sha == content_digest(view, length=MANAGED_DIGEST_LEN), (
+        "the claude docs view stamp does not certify its own body"
+    )
+
+
+def test_refresh_docs_plan_reports_without_writing(repo):
+    """Bug B420810120e: `adopt --refresh-docs` had no plan/dry-run mode, so previewing what it
+    would rewrite meant running it. `--plan` reports the changes (a current doc is a no-op,
+    a drifted one is a rewrite) and writes nothing."""
+    _adopted(repo)
+    fresh = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
+    assert fresh.returncode == 0, fresh.stderr
+    assert "is current" in fresh.stdout, "a current doc must read as a no-op, not a rewrite"
+    _lag(repo)
+    lagged = {rel: (repo / rel).read_bytes() for rel in (DRIVER, DELTA)}
+    p = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
+    assert p.returncode == 0, p.stderr
+    assert "would" in p.stdout, "the plan names what it would change"
+    for rel, data in lagged.items():
+        assert (repo / rel).read_bytes() == data, f"{rel} must not be written by --plan"

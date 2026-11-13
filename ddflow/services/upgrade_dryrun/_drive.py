@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -25,7 +24,7 @@ def _rehearse(opt: Options) -> tuple[Report, Rehearsal]:
         return rehearsal.run(), rehearsal
     finally:
         if ours and not opt.keep:
-            shutil.rmtree(work, ignore_errors=True)
+            fsio.rmtree_owned(work)
 
 
 def diag_directory(opt: Options) -> Path:

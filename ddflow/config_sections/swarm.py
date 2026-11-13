@@ -124,6 +124,11 @@ class SwarmConfig:
         doc="Trust tier a lane needs for an item that names none. A lane's tier is whatever the operator grants it; a lane below the item's tier is refused, whatever its score.",
         check=_count,
     )
+    conformance_min_level: int = knob(
+        0,
+        doc="Measured conformance level a lane needs before the scheduler offers it a real item (a lane at level 0 has never passed a conformance run, so its tier is only its own word). Zero does not enforce conformance.",
+        check=_count,
+    )
     explore_share: float = knob(
         0.10,
         doc="Share of picks spent on under-measured (family, model) pairs (D-swarm-answers Q10). Zero turns exploration off.",
@@ -150,13 +155,13 @@ class SwarmConfig:
         check=_count,
     )
     conformance_idle_s: float = knob(
-        5.0,
-        doc="Seconds of silence after which a conformance run stops collecting a lane's events.",
+        120.0,
+        doc="Seconds of silence after which a conformance run stops collecting a lane's events. Long enough for a real lane's first stream line (kilo takes ~20s to load its MCP server and plugins before the first event; a 5s idle ended collection before any event: B72bcd17b4e).",
         check=_positive,
     )
     conformance_lease_wait_s: float = knob(
-        10.0,
-        doc="Seconds a lane is given to stop after its lease is revoked in a conformance run; a lane still working after that fails the lease level.",
+        90.0,
+        doc="Seconds a lane is given to stop after its lease is revoked in a conformance run; a lane still working after that fails the lease level. Long enough for a real revocation to reach the lane (measured 8.5-14.1s: a 10s wait failed 3 of 5 runs, B72bcd17b4e).",
         check=_positive,
     )
     conformance_tools: list[str] = knob(
@@ -244,4 +249,90 @@ class SwarmConfig:
         5.0,
         doc="Ceiling on any template's `budget_usd`: a launch from a template that asks for more is refused, whatever its approval. Zero removes the ceiling.",
         check=_nonneg,
+    )
+    remote_exclude: list[str] = knob(
+        factory=lambda: [".ddflow", ".env", "**/.env"],
+        doc="Relative path globs a remote lane's working tree never carries in its bundle: ddflow's own event log, secrets and env files stay on the host. What the outbound commit leaves out is `ddflow.services.swarm.remote.Knobs.exclude`.",
+    )
+    remote_bundle_max_bytes: int = knob(
+        104857600,
+        doc="Biggest outbound bundle the host sends, in bytes (default 100 MiB). The returned bundle cap is its own knob (`remote_return_max_bytes`).",
+        check=_positive_int,
+    )
+    remote_return_max_bytes: int = knob(
+        52428800,
+        doc="Biggest returned bundle back to the host, in bytes (default 50 MiB).",
+        check=_positive_int,
+    )
+    remote_return_max_commits: int = knob(
+        200,
+        doc="Most commits a returned branch, bundle or import carries; one past the cap is refused.",
+        check=_count,
+    )
+    remote_git_timeout_s: int = knob(
+        120,
+        doc="How long one remote git command may run, in seconds.",
+        check=_positive,
+    )
+    remote_scan_max_blob_bytes: int = knob(
+        1048576,
+        doc="Biggest file blob the outbound scan inspects, in bytes: the tree with a file OVER this many bytes is refused. The return refuses anything its scan inspects over this ceiling.",
+        check=_positive_int,
+    )
+    remote_scan_batch_files: int = knob(
+        64,
+        doc="At most this many blobs of `remote_scan_max_blob_bytes` the scan holds in memory at once.",
+        check=_positive_int,
+    )
+    remote_branch_prefix: str = knob(
+        "swarm/remote/",
+        doc="Branch refs the remote work is stored under on the host.",
+    )
+    remote_seed_name: str = knob(
+        "SEED.md",
+        doc="Name of the seed pack file inside the outbound bundle.",
+    )
+    remote_proposals_max: int = knob(
+        5,
+        doc="Most proposal the return reports at once.",
+        check=_count,
+    )
+    remote_proposal_chars: int = knob(
+        400,
+        doc="Longest one proposal in characters before it is cut.",
+        check=_count,
+    )
+    remote_proposals_max_bytes: int = knob(
+        65536,
+        doc="Longest whole return reply in bytes at once, proposals included.",
+        check=_positive_int,
+    )
+    remote_ssh_argv: list[str] = knob(
+        factory=lambda: ["ssh"],
+        doc="The ssh binary and flags, `ssh` by default; a different ssh binary's path goes here.",
+    )
+    remote_ssh_timeout_s: int = knob(
+        60,
+        doc="How long one ssh command may run, in seconds, before the remote reads it as not finishing.",
+        check=_positive,
+    )
+    remote_ssh_connect_timeout_s: int = knob(
+        15,
+        doc="How long ssh may keep trying to connect before it gives up, on its own budget.",
+        check=_positive,
+    )
+    remote_copy_timeout_s: int = knob(
+        600,
+        doc="How long one copy in or out may run before the remote reads it as does not finish.",
+        check=_positive,
+    )
+    remote_lanes_root: str = knob(
+        "ddflow-lanes",
+        doc="Directory under the remote home lanes live; a first segment names the lane.",
+        check=lambda v: "" if isinstance(v, str) and v else "a path",
+    )
+    remote_detail_chars: int = knob(
+        200,
+        doc="Longest one line of remote stderr a report keeps before the cut: enough to ask nicely.",
+        check=_count,
     )

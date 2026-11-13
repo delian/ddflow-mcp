@@ -3,15 +3,25 @@
 [[kind]]
 name = "phase.removed"
 doc = "A phase was removed."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "phase.updated"
 doc = "A phase's title or body changed."
+fields = { "body" = ["str"], "title" = ["str"] }
+text = ["body", "title"]
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "task.removed"
 doc = "A task was removed."
+fields = { "reason" = ["str"] }
+text = ["reason"]
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "task.updated"
 doc = "A task's fields changed."
+fields = { "body" = ["str"], "globs" = ["list"], "needs" = ["list"], "parent" = ["str"], "priority" = ["int"], "resources" = ["list"], "tags" = ["list"], "title" = ["str"] }
+text = ["body", "title"]
+exempt = "changes or closes an existing record (same id); the add was checked"

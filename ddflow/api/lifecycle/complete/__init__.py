@@ -39,6 +39,7 @@ _SUBMODULE_OF = {
     "complete": "finish",
     "fold": "finish",
     "_complete_umbrellas_above": "finish",
+    "_closing_tail": "finish",
     "block": "queue_ops",
     "remove": "queue_ops",
     "unblock": "queue_ops",

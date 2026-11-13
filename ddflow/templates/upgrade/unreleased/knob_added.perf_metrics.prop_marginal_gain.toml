@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.prop_marginal_gain"
+new = "0.25"
+why = "Flow proposals (PM-prop-flow): fraction of the wall clock one more agent must save to be paid back."
+impact = "additive"
