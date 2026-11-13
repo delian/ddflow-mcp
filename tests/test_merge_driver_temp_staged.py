@@ -52,7 +52,8 @@ def test_a_staged_git_merge_temp_file_is_unstaged_instead_of_refused(repo, cfg, 
 
 def test_a_merge_file_prefixed_non_temp_path_is_still_refused(repo, cfg, monkeypatch):
     # `.merge_file_payload` is not git's mkstemp temp name (no six-char tail), so the
-    # narrowed predicate must still refuse it outside the owner's src/* lease.
+    # narrowed predicate must still refuse it outside the owner's src/* lease, and the
+    # unstage must NOT drop it (only git's own temp files are unstage targets).
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
     (tree / ".merge_file_payload").write_text("payload\n")
@@ -61,6 +62,7 @@ def test_a_merge_file_prefixed_non_temp_path_is_still_refused(repo, cfg, monkeyp
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1
     assert ".merge_file_payload" in msg
+    assert ".merge_file_payload" in _staged_names(tree)
 
 
 def test_a_temp_file_whose_reset_fails_is_reported_not_silently_waived(repo, cfg, monkeypatch):
