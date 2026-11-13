@@ -18,8 +18,8 @@ import subprocess
 import pytest
 
 from ddflow.surfaces import mcp as M
-from ddflow.surfaces.mcp import _serve as _S
 from ddflow.surfaces.mcp import SERVER_INFO, SUPPORTED_PROTOCOLS, Server, serve
+from ddflow.surfaces.mcp import _serve as _S
 
 MODERN = "2026-07-28"
 SERVER_KEY = "io.modelcontextprotocol/serverInfo"
