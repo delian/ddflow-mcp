@@ -341,10 +341,11 @@ def _record_gate_started(log, item, gate, forced) -> str | None:
             )
             return None
         except TimeoutError as exc:
-            if _GATE_START_LOCK_RETRY_S <= 0 or time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 return str(exc) or "the events.lock stayed held past the retry bound"
             print(f"ddflow gate run: waiting to record the run start -- {exc}; retrying", file=sys.stderr)
-            time.sleep(5.0)
+            time.sleep(min(5.0, remaining))
 
 
 def run(

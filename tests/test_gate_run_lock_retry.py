@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -58,7 +59,9 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
 
     p = _hold(repo / ".ddflow" / "events.lock")
     try:
+        t0 = time.monotonic()
         result = _run.run(repo, "T1", "ci", agent="a1")
+        elapsed = time.monotonic() - t0
     finally:
         p.kill()
         p.wait()
@@ -67,6 +70,9 @@ def test_gate_run_retries_a_held_events_lock_and_stops_cleanly(
     assert "could not record its start" in result.reason
     assert result.data["outcome"] == ""
     assert not ran.exists()  # it gave up BEFORE its command ever started
+    # It retried for most of the bound (one timed-out acquire, then a wait), not a single
+    # acquire that gave up at once: two acquire windows plus a wait roughly the 3s bound.
+    assert elapsed >= 2.0
     # Retried visibly before giving up: the note names the lock and that it is retrying.
     assert "waiting to record the run start" in capsys.readouterr().err
 
@@ -111,5 +117,8 @@ def test_a_running_gate_does_not_hold_the_events_lock(repo, tmp_path):
         with _flock(repo / ".ddflow" / "events.lock", 5):
             pass
     finally:
-        p.kill()
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         p.wait(timeout=30)
