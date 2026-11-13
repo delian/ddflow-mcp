@@ -98,6 +98,16 @@ def test_review_rounds_count_run_verdicts_of_a_review_gate():
     assert table.rounds.samples_summary["n"] == 1
 
 
+def test_no_review_run_gives_no_round_sample_not_a_zero():
+    log = Log()
+    log.task("N", "n.py")
+    log.claim("a1", "N", T0, "n.py")
+    log.complete("a1", "N", T0 + H)  # no review verdicts
+    table = ED.build(facts_of(log)[0], Config().eta)
+    assert table.rounds.gate == ""
+    assert table.rounds.samples == []
+
+
 def test_lease_wait_is_first_wait_signal_to_first_claim():
     log = Log()
     log.task("W", "w.py")
