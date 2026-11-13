@@ -1,5 +1,5 @@
 rule:r-unavailable-not-pass
 rule:r-evidence-over-assertion
 rule:r-never-trust-reports
-Bug first: file the bug before the fix, and write the fail-before regression test first so it fails against the unfixed code
+Tests first: file the bug, then write the regression test that fails against the unfixed code, then fix it
 One item per branch: fix one bug in one worktree; a second bug is a second claim

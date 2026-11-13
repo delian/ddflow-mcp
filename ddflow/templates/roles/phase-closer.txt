@@ -1,9 +1,10 @@
 rule:r-unavailable-not-pass
-rule:r-evidence-over-assertion
 rule:r-never-trust-reports
 rule:r-approval-chat-channel
-Relay approvals through the operator's chat, never over SSH
-Test first: run the scoped unit_tests gate before merge; a bug stays open without a test that fails against the unfixed code (L84da9761de)
-Name each ratchet offender by its id in the failing line, never a bare count
-Run the detached suite recipe so a cut never kills a long review gate
-Hold for the docs wave, and push main only when the operator says so (D-queue-holds-docs-wave-kept, D-push-operator-says)
+rule:r-log-is-the-state
+Tests first: fix the failing suite before claiming more, and the closer's own tests pin what closed
+Ratchet offenders by name: name each ratchet offender by its id in the failing guard line
+Read the event log as the single source of truth with its derives, never a second tracker
+Run the detached suite recipe with the maximum timeout (21600s), so a cut never kills a long gate
+Relay approvals through the operator's chat only; one pins recipe per approval
+Honor the docs-wave stop: hold for the docs wave and never push main unless the operator says so (D-push-operator-says)

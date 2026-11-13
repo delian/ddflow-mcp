@@ -19,12 +19,12 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 #: The checklist a coordinator otherwise retypes, each keyword the closer's brief must carry.
 _CLOSER_CHECKLIST = (
-    "Test first",
-    "ratchet offender",
+    "Tests first",
+    "ratchet",
     "detached suite",
     "Relay approvals",  # relay approvals
     "docs wave",
-    "operator says so",  # no push
+    "never push",  # no push
 )
 
 
