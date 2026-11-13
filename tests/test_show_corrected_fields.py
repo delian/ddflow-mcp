@@ -78,24 +78,31 @@ def test_an_uncorrected_task_shows_no_marker(proj):
     assert "corrected" not in _show(proj, "T1")
 
 
-def test_a_secret_correction_shows_the_marker_and_no_values(proj, monkeypatch):
-    _correct(proj, "T1", "body", SECRET, "pasted a key", "--secret")
-    out = _show(proj, "T1", "--history")
-    assert "corrected body" in out and "pasted a key" in out
-    assert SECRET not in _show(proj, "T1", "--json") + out
-    data = json.loads(_show(proj, "T1", "--json"))
-    for row in data["corrections"][0]["fields"]:
-        assert row["old"] == "" and row["new"] == ""
+def test_a_secret_correction_shows_the_marker_and_no_values(proj):
+    """The old body was a leaked key: the correction replaces it, and no view carries a digest
+    of either value."""
+    _correct(proj, "T1", "body", "[redacted]", "pasted a key", "--secret")
+    for args in ((), ("--history",), ("--json",)):
+        out = _show(proj, "T1", *args)
+        assert "first body" not in out and SECRET not in out
+    assert "corrected body" in _show(proj, "T1") and "pasted a key" in _show(proj, "T1")
+    rows = json.loads(_show(proj, "T1", "--json"))["corrections"][0]["fields"]
+    assert rows and rows[0]["field"] == "body"
+    assert all(r["old"] == "" and r["new"] == "" for r in rows)
 
 
-def test_digests_appear_only_when_the_knobs_are_on(proj):
+def test_digests_are_off_by_default_and_on_with_the_knob(proj):
+    _correct(proj, "T1", "body", "second body text", "default knobs")
+    rows = json.loads(_show(proj, "T1", "--json"))["corrections"][0]["fields"]
+    assert rows and rows[0]["old"] == "" and rows[0]["new"] == ""
     with (proj / ".ddflow" / "config.toml").open("a") as f:
         f.write("\n[records]\ncorrect_digest_new = true\ncorrect_min_digest_chars = 1\n")
-    _correct(proj, "T1", "body", "second body text", "refined")
+    _correct(proj, "T1", "body", "third body text", "knob on")
     data = json.loads(_show(proj, "T1", "--json"))
-    row = data["corrections"][0]["fields"][0]
+    row = data["corrections"][1]["fields"][0]
     assert row["field"] == "body" and row["new"] and not row["old"]
-    assert "second body text" not in json.dumps(data["corrections"])
+    assert "third body text" not in json.dumps(data["corrections"])
+    assert "(new " in _show(proj, "T1", "--history")
 
 
 def test_history_lists_every_correction_in_order(proj):
@@ -148,4 +155,6 @@ def test_the_mcp_show_carries_the_same_fields(proj):
     )
     body = json.loads(reply["result"]["content"][0]["text"])
     assert body["author_model"] == "model-right"
-    assert body["corrections"][0]["reason"] == "fix"
+    entry = body["corrections"][0]
+    assert entry["reason"] == "fix" and entry["by"] and entry["at"]
+    assert entry["fields"] and entry["fields"][0]["field"] == "author_model"
