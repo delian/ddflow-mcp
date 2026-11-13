@@ -1,0 +1,16 @@
+[stack]
+name = "rust"
+title = "Rust (cargo)"
+detect = ["Cargo.toml"]
+priority = 50
+lock_files = ["Cargo.lock"]
+comment_tokens = ["//", "/*"]
+import_extractor = "regex:^\\s*(?:pub\\s+)?use\\s+([\\w:]+)"
+dead_tool = "cargo-udeps"
+dep_tool = "cargo-audit"
+
+[commands]
+build = "cargo build --locked"
+smoke = "cargo check --locked --all-targets"
+lock_check = "cargo fetch --locked"
+test = "cargo test --locked"

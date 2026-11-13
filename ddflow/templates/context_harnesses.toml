@@ -95,3 +95,5 @@ note = "unknown"
 note = "unknown"
 [harness.vscode]
 note = "unknown; see copilot for the Copilot extension"
+[harness.vibe]
+note = "unknown"
