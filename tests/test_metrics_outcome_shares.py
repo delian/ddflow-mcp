@@ -55,12 +55,20 @@ def test_pass_and_partial_are_shares_of_every_verdict_not_just_passed_partial():
     45%, not 10% and 90%)."""
     log = Log()
     i = 0
-    for verdict, n in (("passed", 1), ("partial", 9), ("failed", 10), ("skipped", 1), ("unavailable", 1)):
+    for verdict, n in (
+        ("passed", 1),
+        ("partial", 9),
+        ("failed", 10),
+        ("skipped", 1),
+        ("unavailable", 1),
+    ):
         for _ in range(n):
             tid = f"T{i:02d}"
             log.task(tid, f"f{i}.py")
             log.claim("a1", tid, T0 + i * 3600, f"f{i}.py")
-            log.add(f"gate.{verdict}", tid, "a1", T0 + i * 3600 + 100, gate="ci", by="a1", evidence={})
+            log.add(
+                f"gate.{verdict}", tid, "a1", T0 + i * 3600 + 100, gate="ci", by="a1", evidence={}
+            )
             log.complete("a1", tid, T0 + i * 3600 + 600)
             i += 1
     ci = {r["group"]: r for r in run(log).metrics["outcomes"]}["ci"]
