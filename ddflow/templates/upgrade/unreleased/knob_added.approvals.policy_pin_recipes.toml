@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.policy_pin_recipes"
+new = '["readme-knobs", "default-toml", "golden-snapshots", "result-schemas"]'
+why = "The pin recipes the standing rule pins_regenerate (off by default) may answer for: an agent's pins regenerate --only <recipe> is approved once per recipe and work item, for these generated-file recipes only."

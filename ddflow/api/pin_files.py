@@ -19,6 +19,7 @@ from ..services import pins_merge as PM
 from ..services import pins_written as PW
 from ..services.approvals import class_states as APCS
 from ..services.approvals import consume as CN
+from ..services.approvals import policy as PO
 from ..services.approvals.canon import Canon
 from ._base import _load
 
@@ -173,7 +174,7 @@ def _regenerate_tail(
         and not after_merge
     ):
         bad = _regenerate_approval(
-            primary, agent=agent, before=before, only=only, approval=approval
+            primary, repo, agent=agent, before=before, only=only, approval=approval
         )
         if isinstance(bad, O.Outcome):
             return bad
@@ -211,12 +212,33 @@ def _after_merge_note(primary: Path, repo: Path, cfg, before, watched, *, check:
     return O.ok("pins", note=note)
 
 
-def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approval: str):
+def _recipe_untouched(primary: Path, repo: Path, cfg, only: str) -> bool:
+    """Is recipe ``only`` here the primary checkout's own definition, and the recipes file
+    unmodified in ``repo``? The standing rule `pins_regenerate` answers only for a recipe whose
+    commands the agent has not edited (a changed `regen` runs whatever it says)."""
+    try:
+        mine = {r.name: r for r in PN.load_recipes(repo, cfg)}.get(only)
+        trusted = {r.name: r for r in PN.load_recipes(primary, cfg)}.get(only)
+    except ValueError:
+        return False
+    dirty = G.run(repo, "status", "--porcelain", "--", cfg.pins.recipes_file)
+    return mine is not None and mine == trusted and dirty.ok and not dirty.out.strip()
+
+
+def _regenerate_approval(
+    primary: Path, repo: Path, *, agent: str, before, only: str, approval: str
+):
     """The pins-are-stale class route (verb pins.regenerate): consume an operator approval of
     re-recording ``before`` with ``only`` (``approval`` = request or id), else a person."""
     log, cfg, _st = _load(primary, agent)
     if not AP.agent_marker(agent):
         return O.refused("pins", "--approval is an agent's route; a person re-records directly")
+    if (
+        not approval
+        and PO.PINS_RULE_ID in cfg.approvals.policy
+        and not _recipe_untouched(primary, repo, cfg, only)
+    ):
+        approval = CN.REQUEST  # an edited recipe is never answered by a standing rule: a person is
     canon = Canon(
         verb="pins.regenerate",
         agent=log.agent_id,

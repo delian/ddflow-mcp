@@ -57,9 +57,40 @@ shows who asked, who answered, by which channel and level, what was spent and wh
 target), bounded by the standing window (`standing_window_s`, at most 24 hours, over
 `standing_verbs`), recorded as `policy:<rule>` and never as you, and reported in `approvals log` and
 `doctor`. They cover T2 only: a rule is never applied to a verb that needs more than L1.
+`pins_regenerate` is the one rule for a command, not a gate: an agent's `ddflow pins regenerate
+--only <recipe>` is approved once per recipe and work item, for the recipes in
+`policy_pin_recipes` only (default readme-knobs, default-toml, golden-snapshots, result-schemas: the
+generated files). It needs three things from you, in the machine-local layer
+(`.ddflow/local/config.toml`): `policy` listing `pins_regenerate`, `standing_verbs` listing
+`pins.regenerate` (it is not in the default list), and a recipe whose files all sit inside
+`[lease].shared_globs`. A recipe not on the list, a bare `pins regenerate` (every recipe), a recipe
+whose definition in the agent's tree differs from the primary checkout's, an agent that does not
+hold exactly one live work item, `--approval request` and a second use all ask you as before.
 `auto_approve_after_retries` answers the next filing after N refused ones and notifies you. Relayed
 consent (an agent's `--yes --reason "the operator said so"`) still works for a few operations until
 you list them in `require_approval`; each use is warned about.
+
+**A list in a lower layer REPLACES the list above it; it does not add to it.** A machine-local
+`policy = ["pins_regenerate"]` over a project file that lists four rules turns those four OFF.
+Name every rule you want, in the layer you set it, for example:
+
+```toml
+[approvals]
+policy = ["complete_unavailable", "claim_unavailable", "skip_after_unavailable", "accept_baseline_red", "pins_regenerate"]
+standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "approve.partial", "pins.regenerate"]
+```
+
+`standing_verbs` replaces its list the same way. An id no rule is registered for (`pins_regenerate`
+on a ddflow older than this one) is accepted by the config load and does nothing: no rule runs for it
+and nothing is refused or warned.
+
+Switch it on, once (a prompt to your agent, which runs these; as an agent it files a `config.set`
+approval for you): "let agents regenerate the generated pin files without asking me". That is
+`ddflow config --local --set approvals.policy '["pins_regenerate"]'` and
+`ddflow config --local --set approvals.standing_verbs '["complete.force","claim.force","gate.skip.failed_review","approve.partial","pins.regenerate"]'`
+(over MCP: `ddflow_configure` with the same key and value); change the list with
+`approvals.policy_pin_recipes`. Each use is `policy:pins_regenerate` in `ddflow approvals log` and
+`doctor`. The rule has a standing window of its own (`standing_window_s`, opened by its first use and extended by each later one): its uses never open or extend the window of `complete.force` and the other rules, and the window choice in a chat answer is not offered for it.
 
 ## Limits, stated plainly
 

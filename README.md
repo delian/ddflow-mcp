@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=28f2b7f44d22 -->
-<details><summary>All 757 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=77eb990c11b4 -->
+<details><summary>All 758 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -914,6 +914,7 @@ long default is left to `ddflow config --explain`.
 | `approvals.expiry_warn_s` | `600` |  |
 | `approvals.policy` | `[]` |  |
 | `approvals.policy_max_uses` | `1` |  |
+| `approvals.policy_pin_recipes` | (long: see `ddflow config --explain`) |  |
 | `approvals.policy_unavailable_runs` | `3` |  |
 | `approvals.auto_approve_after_retries` | `0` |  |
 | `approvals.standing_window_s` | `3600` |  |

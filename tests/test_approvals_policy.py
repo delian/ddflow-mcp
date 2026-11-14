@@ -145,9 +145,17 @@ def test_a_rule_approves_nothing_but_its_own_verb_and_unknown_ids_do_nothing(pro
         "accept_baseline_red",
         "complete_unavailable",
         "claim_unavailable",
+        "pins_regenerate",
     }
     assert all(
-        r.verb in {"gate.skip.failed_review", "approve.partial", "complete.force", "claim.force"}
+        r.verb
+        in {
+            "gate.skip.failed_review",
+            "approve.partial",
+            "complete.force",
+            "claim.force",
+            "pins.regenerate",
+        }
         for r in PO.RULES.values()
     )
 

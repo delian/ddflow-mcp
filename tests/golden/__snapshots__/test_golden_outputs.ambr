@@ -659,12 +659,16 @@
           whose reviewer was recorded unavailable `policy_unavailable_runs` times),
           `accept_baseline_red` (an agent may accept a partial that ddflow measured
           baseline-red), `complete_unavailable` (an agent may complete an item whose
-          unmet condition is an unavailable tool/gate) and `claim_unavailable` (an
-          agent may claim an item held by a vanished holder). Every rule auto-approves
-          only while the standing window `standing_window_s` is open, at most
-          `policy_max_uses` times per item and target, and every use is recorded as an
-          approval answered by `policy:<id>`, never by a person. An agent's edit of
-          this knob is a `config.set`, which needs a person's approval.
+          unmet condition is an unavailable tool/gate) `claim_unavailable` (an agent
+          may claim an item held by a vanished holder) and `pins_regenerate` (an agent
+          may re-record ONE generated pin recipe named in `policy_pin_recipes`, once
+          per recipe and work item; it also needs `pins.regenerate` in
+          `standing_verbs`, which is off by default, and it never answers `--approval
+          request`). Every rule auto-approves only while the standing window
+          `standing_window_s` is open, at most `policy_max_uses` times per item and
+          target, and every use is recorded as an approval answered by `policy:<id>`,
+          never by a person. An agent's edit of this knob is a `config.set`, which
+          needs a person's approval.
       approvals.policy_max_uses = 1   [default]
           How many times one standing rule may approve the SAME item and target
           (default 1): the cap is counted per item+target, so a backlog of DISTINCT
@@ -674,6 +678,19 @@
           a person. An explicit `--approval request` is ALWAYS reserved for a person
           (never answered by a standing rule, never counted against this cap),
           whatever the window or the cap say.
+      approvals.policy_pin_recipes = ['readme-knobs', 'default-toml', 'golden-snapshots', 'result-schemas']   [default]
+          The pin recipes the standing rule `pins_regenerate` may answer for (default
+          the four generated-file recipes: readme-knobs, default-toml, golden-
+          snapshots, result-schemas), by the name in `[pins].recipes_file`: an agent's
+          `ddflow pins regenerate --only <recipe>` is then approved without a person,
+          once per recipe and work item. Nothing else is covered: not a recipe missing
+          here, not a bare `pins regenerate` (every recipe), not a recipe with a file
+          outside `[lease].shared_globs`, not one whose definition in the working tree
+          differs from the primary checkout's. Never list a recipe that rewrites hand-
+          written files. The rule itself must be switched on (`policy`) and
+          `pins.regenerate` added to `standing_verbs`, both by the operator in the
+          machine-local layer; an agent's edit of this knob is a `config.set`, which
+          needs a person's approval.
       approvals.policy_unavailable_runs = 3   [default]
           How many recorded `unavailable` runs of a review gate the rule
           `skip_after_unavailable` needs before it lets an agent skip that gate's
@@ -714,9 +731,12 @@
           gated -- `skip_after_unavailable`, `accept_baseline_red`,
           `complete_unavailable` and `claim_unavailable` all fire only while the
           window is outstanding, so auto-approval of the whole class stops the instant
-          it lapses. A non-generic site has no standing rule, so listing one of its
-          verbs here does nothing. An agent's edit of this knob is a `config.set`,
-          which needs a person's approval.
+          it lapses. `pins.regenerate` is also accepted here, off by default: it
+          scopes the standing rule `pins_regenerate` (it has a standing window of its
+          own: its uses never open or extend the window of the generic rules). A site
+          without a standing rule has none, so listing one of its verbs here does
+          nothing. An agent's edit of this knob is a `config.set`, which needs a
+          person's approval.
       approvals.accept_chat_for_t3 = False   [default]
           Let a person approve a tier-3 act (such as trusting a command reviewer) by
           TYPING `approve ID DIGEST` in the agent's chat (default false;
