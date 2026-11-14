@@ -351,7 +351,7 @@ def record(
         # One lock for the append and the trim: lanes on one machine write this file at
         # once, and a trim that read before another's append would drop that row.
         with fsio.file_lock(path.with_name(path.name + ".lock"), timeout_s=5):
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
             try:
                 data = "".join(lines).encode("utf-8")
                 while data:
