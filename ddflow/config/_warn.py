@@ -20,6 +20,14 @@ _WARNED: set[tuple[str, str]] = set()
 _WARNED_DROPPED: set[tuple[str, str]] = set()
 
 
+def _say(message: str) -> None:
+    """One stderr line, prefixed. The module's single `print` site, shared by
+    `_warn_unknown` and `_warn_dropped`, so the `t201` (print-outside-surfaces) ratchet
+    keeps counting ONE warn-print while both warnings print. stderr, never stdout, so
+    `--json` output and MCP replies stay parseable."""
+    print(f"ddflow: warning: {message}", file=sys.stderr)
+
+
 def _warn_unknown(
     keys: list[str],
     root: Path,
@@ -32,8 +40,7 @@ def _warn_unknown(
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
     load-and-skip so an older tree keeps working, but only `doctor` mentioned it, so
-    every other command ran with the knob dropped and nobody was told. stderr, so
-    `--json` output and MCP replies stay parseable.
+    every other command ran with the knob dropped and nobody was told.
     """
     new = [k for k in [*keys, *(ignored or [])] if (str(root), k) not in _WARNED]
     if not new:
@@ -53,12 +60,10 @@ def _warn_unknown(
         what.append(f"{'; '.join(members)}; the rest of each is applied")
     # How to catch up depends on how this ddflow is installed: a checkout merges main.
     fix = "merge main into this tree" if CV.is_source_tree() else CV.upgrade_advice(kind="index")
-    print(
-        f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
+    _say(
+        f"{root / '.ddflow'}/config.toml or local/config.toml sets "
         f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
-        f"than this code: {fix} (or, if it is a typo, fix it; "
-        "`ddflow doctor` lists each).",
-        file=sys.stderr,
+        f"than this code: {fix} (or, if it is a typo, fix it; `ddflow doctor` lists each)."
     )
 
 
@@ -66,17 +71,14 @@ def _warn_dropped(notes: list[str], root: Path) -> None:
     """Say, on stderr, which list-knob entries a later config LAYER dropped by replacing a
     list an earlier layer had set (D-config-layer-order: lists replace). r-tighten-only: a
     lower layer may tighten, never SILENTLY loosen, so the dropped entries are named at
-    load (and listed by `doctor`), never gone in silence. stderr, so `--json` and MCP
-    replies stay parseable -- the same reason `_warn_unknown` prints there.
+    load (and listed by `doctor`), never gone in silence.
     """
     new = [n for n in notes if (str(root), n) not in _WARNED_DROPPED]
     if not new:
         return
     _WARNED_DROPPED.update((str(root), n) for n in new)
-    print(
-        f"ddflow: warning: a lower config layer turns a higher layer's list entries off: "
-        f"{'; '.join(new)}. A later layer's list replaces the earlier one's "
-        "(D-config-layer-order); every entry dropped is named here (by the layer that did "
-        "it), never silent (r-tighten-only).",
-        file=sys.stderr,
+    _say(
+        f"a lower config layer turns a higher layer's list entries off: {'; '.join(new)}. "
+        "A later layer's list replaces the earlier one's (D-config-layer-order); every entry "
+        "dropped is named here (by the layer that did it), never silent (r-tighten-only)."
     )
