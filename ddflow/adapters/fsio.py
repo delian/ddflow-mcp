@@ -281,7 +281,7 @@ def _link_exclusive(
         raise
     except OSError:
         pass
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if want is not None else 0o666)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(raw)
