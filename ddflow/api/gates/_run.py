@@ -600,7 +600,12 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
             forced=forced,
         )
         return O.nothing(
-            "gate.run", reason, gate=gate, outcome="unavailable", evidence={"lock_timeout": str(err)}, id=item
+            "gate.run",
+            reason,
+            gate=gate,
+            outcome="unavailable",
+            evidence={"lock_timeout": str(err)},
+            id=item,
         )
     finally:
         RUN.clear_started(marker)
