@@ -679,6 +679,56 @@ def test_a_later_standing_fire_reopens_a_window_the_opening_fire_has_lapsed(
     assert got.ok and got.stamp["via"] == "policy"
 
 
+def test_the_window_choice_reopens_a_lapsed_window(proj, monkeypatch):
+    """B6e5e17ccda: ``window_start`` anchored ONLY on the latest policy fire, so once
+    ``standing_window_s`` passed with no fire the window was closed for good and no operator
+    action re-opened it. Answering with the standing-window choice (``approvals attest`` of the
+    window option) re-opens the window, so the operator can re-arm a lapsed window and the
+    standing rules fire again."""
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99, standing_window_s=120)
+    first = C.operator_gate(log, cfg, canon)
+    assert first.ok  # the opening fire opens the window, anchored now
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
+    after = C.operator_gate(log, cfg, canon)
+    assert not after.ok and after.ask_id  # lapsed: a person is asked
+
+    # The operator answers THAT ask with the standing-window choice: it re-opens the window,
+    # re-anchoring `window_start` so a later standing fire auto-approves again.
+    digest = asks_of(_state(proj))[after.ask_id]["digest"]
+    E.answer(log, cfg, after.ask_id, "approved", actor=A.resolve_actor(cfg, "me"), digest=digest,
+             window=True)
+    got = C.operator_gate(log, cfg, canon)
+    assert got.ok and got.stamp["via"] == "policy"  # the re-opened window auto-approves again
+
+
+def test_the_window_choice_only_reopens_when_it_names_a_repo(proj, monkeypatch):
+    """B6e5e17ccda: the standing-window choice anchors the window only when the answer actually
+    enables it -- with no repository path the window is not written, so it must not re-anchor."""
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99, standing_window_s=120)
+    first = C.operator_gate(log, cfg, canon)
+    assert first.ok
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
+    after = C.operator_gate(log, cfg, canon)
+    assert not after.ok and after.ask_id
+    digest = asks_of(_state(proj))[after.ask_id]["digest"]
+    E.answer(log, cfg, after.ask_id, "approved", actor=A.resolve_actor(cfg, "me"), digest=digest,
+             window=False)  # a plain approve never re-opens the window
+    got = C.operator_gate(log, cfg, canon)
+    assert not got.ok and got.ask_id  # still lapsed: a plain approve does not re-open
+
+
 def test_standing_verbs_scopes_what_the_window_covers(proj, monkeypatch):
     _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
