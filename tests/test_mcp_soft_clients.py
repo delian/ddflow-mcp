@@ -260,7 +260,7 @@ def test_no_caller_can_widen_the_expiry_window():
     with pytest.raises(TypeError):
         C.capability({"name": "opencode"}, today=date(2027, 6, 1), max_age_days=999999)
     with pytest.raises(TypeError):
-        C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1), max_age_days=999999)
+        C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1), **{"max_age_days": 999999})
     assert C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1)) == "unknown"
 
 
