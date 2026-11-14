@@ -4,4 +4,5 @@
 name = "path.moved"
 doc = "A merge landed a rename, a move or a package split; one record per move, derived from git rename detection (old path, new path, the merge sha, and how: rename, split or unavailable)."
 fields = { "old" = ["str"], "new" = ["str"], "sha" = ["str"], "how" = ["str"] }
+lookup = { "old" = "a path that moved", "new" = "the path it moved to", "sha" = "the merge sha", "how" = "rename, split or unavailable" }
 exempt = "file paths, a merge sha and a move kind recorded by merge; no authored prose to check"

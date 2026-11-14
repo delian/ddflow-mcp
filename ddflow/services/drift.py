@@ -304,10 +304,16 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     path into the new file), not ``-C`` copy detection: a copy is not a move."""
     r = git(
         tree,
-        "-c", "core.quotepath=off",
-        "-c", "diff.renames=true",
-        "diff", "--name-status", "-M", "-z",
-        before, after,
+        "-c",
+        "core.quotepath=off",
+        "-c",
+        "diff.renames=true",
+        "diff",
+        "--name-status",
+        "-M",
+        "-z",
+        before,
+        after,
     )
     if not r.ok or ("rename" in (r.err or "") and "skipp" in (r.err or "")):
         return None
