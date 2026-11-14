@@ -13,7 +13,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-ALLOWED = {"jinja2", "tomlkit"}
+ALLOWED = {"argcomplete", "jinja2", "tomlkit"}
 
 pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
 deps = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"].get("dependencies", [])
