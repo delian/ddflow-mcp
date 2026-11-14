@@ -34,9 +34,13 @@ def _fresh_drop_memo(monkeypatch):
 
 def _write_layers(root: Path, local: list[str]) -> None:
     (root / ".ddflow").mkdir()
-    (root / ".ddflow" / "config.toml").write_text(f"[approvals]\npolicy = {json.dumps(FILE_POLICY)}\n")
+    (root / ".ddflow" / "config.toml").write_text(
+        f"[approvals]\npolicy = {json.dumps(FILE_POLICY)}\n"
+    )
     (root / ".ddflow" / "local").mkdir()
-    (root / ".ddflow" / "local" / "config.toml").write_text(f"[approvals]\npolicy = {json.dumps(local)}\n")
+    (root / ".ddflow" / "local" / "config.toml").write_text(
+        f"[approvals]\npolicy = {json.dumps(local)}\n"
+    )
 
 
 def test_a_lower_layer_list_that_drops_higher_entries_is_recorded(tmp_path):

@@ -462,9 +462,7 @@ class Config(_SectionFields):
         POINT-IN-TIME: a still-lower layer may re-add an entry this note names, which does
         not retract it (roborev low)."""
         earlier = self.sources.get(key, "default")
-        if earlier == "default" or (
-            dropped := _dropped_list_entries(below, value)
-        ) is None:
+        if earlier == "default" or (dropped := _dropped_list_entries(below, value)) is None:
             return
         self.dropped_members.append(
             f"{key}: the {source} layer replaced the list and dropped "
