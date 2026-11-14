@@ -99,7 +99,9 @@ def outcome_table(ctx: Context, group_by: str) -> list[dict]:
                 "group": name,
                 "n": total,
                 **{v: c.get(v, 0) for v in VERDICTS},
+                "pass_rate": rate(c["passed"], total, minimum),
                 "failure_rate": rate(c["failed"], total, minimum),
+                "partial_rate": rate(c["partial"], total, minimum),
                 "skip_rate": rate(c["skipped"], total, minimum),
                 "unavailable_rate": rate(c["unavailable"], total, minimum),
             }

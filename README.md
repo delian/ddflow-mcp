@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=e6f81cc7d8f5 -->
-<details><summary>All 742 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=28f2b7f44d22 -->
+<details><summary>All 757 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1022,6 +1022,8 @@ long default is left to `ddflow config --explain`.
 | `export.redact` | `true` |  |
 | `export.max_bytes` | `60000` |  |
 | `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
+| `export.security_contact` | `""` |  |
+| `export.security_response_days` | `0` |  |
 | `export.tables` | `{}` |  |
 | `fasttrack.tiny_cold_max_source_lines` | `10` |  |
 | `flow.model` | `"trunk"` | `trunk` \| `gitflow` |
@@ -1083,6 +1085,8 @@ long default is left to `ddflow config --explain`.
 | `gates.baseline_red_notify_to` | `"coordinator"` |  |
 | `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
 | `gates.keep_env` | `[]` |  |
+| `gates.scrub_secret_names` | `"warn"` | `off` \| `warn` \| `on` |
+| `gates.secret_name_patterns` | (long: see `ddflow config --explain`) |  |
 | `gates.standards_wait_s` | `900` |  |
 | `govern.quota_mark_1` | `0.4` |  |
 | `govern.quota_mark_2` | `0.6` |  |
@@ -1319,6 +1323,8 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.status_fix_tasks_in_headline` | `false` |  |
+| `output.status_completed_shown` | `12` |  |
 | `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
@@ -1459,6 +1465,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
+| `schedule.order` | (long: see `ddflow config --explain`) |  |
+| `schedule.order_pin` | `[]` |  |
 | `schedule.bugs_first` | `true` |  |
 | `schedule.reserved_slots` | `0` |  |
 | `schedule.reserved_tags` | `["ddflow-gap"]` |  |
@@ -1531,12 +1539,16 @@ long default is left to `ddflow config --explain`.
 | `suites.agent_share` | `0.5` |  |
 | `suites.default_cost_s` | `600.0` |  |
 | `suites.cost_runs` | `20` |  |
+| `suites.failed_first` | `true` |  |
+| `suites.failed_first_max_ids` | `50` |  |
 | `suites.class_patterns` | (long: see `ddflow config --explain`) |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
 | `swarm.w_rework` | `1.5` |  |
 | `swarm.w_queue` | `0.5` |  |
+| `swarm.w_headroom` | `1.0` |  |
+| `swarm.headroom_floor_usd` | `0.0` |  |
 | `swarm.fit_margin` | `0.1` |  |
 | `swarm.cost_ref_usd` | `1.0` |  |
 | `swarm.rework_ref` | `1.0` |  |
@@ -1567,6 +1579,9 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.budget_stop_enabled` | `true` |  |
+| `swarm.budget_warn_fraction` | `0.5` |  |
+| `swarm.budget_stop_grace_s` | `10.0` |  |
 | `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
 | `swarm.remote_bundle_max_bytes` | `104857600` |  |
 | `swarm.remote_return_max_bytes` | `52428800` |  |

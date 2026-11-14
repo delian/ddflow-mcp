@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/gateenv.py:MAX_NAMES_SHOWN" = "how many variable names one doctor note lists before it says '(+N more)': a display cut so the note stays one line, not a tuning choice"

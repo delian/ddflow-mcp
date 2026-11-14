@@ -24,7 +24,7 @@
     -h, --help            show this help message and exit
     --agents AGENTS       comma-separated: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,openc
                           ode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,op
-                          enhands,goose,cody,dsh,grok (default: all)
+                          enhands,goose,cody,dsh,grok,vibe (default: all)
     --docs DOCS           where to write the drivers
     --launch {auto,uvx,docker,python}
                           how agents spawn the MCP server: 'auto' prefers uvx for an install from a
@@ -611,11 +611,12 @@
 # ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [--timeout TIMEOUT] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [--timeout TIMEOUT] [{run,status,record,failed-first}]
   
   positional arguments:
-    {run,status,record}   run: check the merge result; status (default): what would run, and whether
-                          it can
+    {run,status,record,failed-first}
+                          run: check the merge result; status (default): what would run, and whether
+                          it can; failed-first: the tests the next run of the item puts first
   
   options:
     -h, --help            show this help message and exit
@@ -3285,6 +3286,15 @@
   
   '''
 # ---
+# name: test_help[ddflow stacks]
+  '''
+  usage: ddflow stacks [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow status]
   '''
   usage: ddflow status [-h] [--by-tag BY_TAG] [--full]
@@ -3856,13 +3866,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,stacks,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,correct,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,completion,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,dispatch,suggest,lease,restart,kill,paths,perf,probe,digest,pair,tokens,stacks,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -4001,6 +4011,8 @@
       digest              the operator queue: what waits on a person, as askable entries
       pair                a PERSON mints a one-time code for a named client with a role (`tokens
                           redeem` spends it)
+      stacks              show the stack this repository resolves to and its build, smoke, lock-
+                          check and test commands
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -4232,6 +4244,7 @@
     'ddflow show',
     'ddflow similar',
     'ddflow split',
+    'ddflow stacks',
     'ddflow status',
     'ddflow suggest',
     'ddflow sync',

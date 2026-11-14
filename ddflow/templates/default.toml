@@ -175,6 +175,8 @@ documents = []
 redact = true
 max_bytes = 60000
 refresh = "off"
+security_contact = ""
+security_response_days = 0
 tables = {}
 
 [fasttrack]
@@ -242,6 +244,8 @@ baseline_red_rate_warn = 10
 baseline_red_notify_to = "coordinator"
 scrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"]
 keep_env = []
+scrub_secret_names = "warn"
+secret_name_patterns = ["_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD"]
 standards_wait_s = 900
 
 [govern]
@@ -518,6 +522,8 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+status_fix_tasks_in_headline = false
+status_completed_shown = 12
 json_envelope = false
 
 [perf_metrics]
@@ -692,6 +698,8 @@ empty_phase = "note"
 phase_full_suite = "require"
 auto_order = "propose"
 optimizer = "greedy-v1"
+order = ["recover_first", "bugs_first", "unphased_first", "priority", "id"]
+order_pin = []
 bugs_first = true
 reserved_slots = 0
 reserved_tags = ["ddflow-gap"]
@@ -776,6 +784,8 @@ max_wait_factor = 3.0
 agent_share = 0.5
 default_cost_s = 600.0
 cost_runs = 20
+failed_first = true
+failed_first_max_ids = 50
 class_patterns = {red_main = ["fix-Bmain-red", "main-red", "red-main"], integrator = ["merge[ _-]?queue", "queue run", "integrator"], phase = ["^P-", "phase[ _-]?(close|suite)"], baseline = ["baseline"]}
 
 [swarm]
@@ -784,6 +794,8 @@ w_fit = 2.0
 w_cost = 1.0
 w_rework = 1.5
 w_queue = 0.5
+w_headroom = 1.0
+headroom_floor_usd = 0.0
 fit_margin = 0.1
 cost_ref_usd = 1.0
 rework_ref = 1.0
@@ -814,6 +826,9 @@ dispatch_why_items = 5
 launch_enabled = false
 launch_templates_file = ".ddflow/local/lane-templates.toml"
 launch_max_budget_usd = 5.0
+budget_stop_enabled = true
+budget_warn_fraction = 0.5
+budget_stop_grace_s = 10.0
 remote_exclude = [".ddflow", ".env", "**/.env"]
 remote_bundle_max_bytes = 104857600
 remote_return_max_bytes = 52428800

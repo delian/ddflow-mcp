@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.budget_warn_fraction"
+new = "0.5"
+why = "LB-lane-budget-stop: the share of a template's budget_usd at which a running lane is warned before the runtime stop."
+impact = "additive"

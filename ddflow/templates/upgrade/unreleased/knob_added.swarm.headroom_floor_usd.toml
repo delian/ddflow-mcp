@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.headroom_floor_usd"
+new = "0.0"
+why = "SW-headroom: remaining USD at or below which a lane with a known limit is refused by the hard filter."
+impact = "additive"

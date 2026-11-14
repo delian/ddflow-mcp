@@ -445,9 +445,9 @@ COMMANDS: tuple[Command, ...] = (
                 positional=True,
                 nargs="?",
                 default="status",
-                choices=("run", "status", "record"),
+                choices=("run", "status", "record", "failed-first"),
                 cli_only=True,
-                cli_help="run: check the merge result; status (default): what would run, and whether it can",
+                cli_help="run: check the merge result; status (default): what would run, and whether it can; failed-first: the tests the next run of the item puts first",
             ),
             Param(
                 "ref",
@@ -499,7 +499,7 @@ COMMANDS: tuple[Command, ...] = (
                 help="run: seconds this run may take (at most [gates].max_run_timeout_s).",
                 cli_help="run: seconds this run may take instead of [ci].timeout_s (at most [gates].max_run_timeout_s)",
             ),
-            Param("action", help="run | status (default).", mcp_only=True),
+            Param("action", help="run | status (default) | failed-first.", mcp_only=True),
         ),
         tool_order=("action", "ref", "base", "command", "full", "timeout"),
         flag_exempt={

@@ -143,7 +143,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
     done = [t for t in tasks if t.state == "done"]
     # The settled states are counted by the one per-state count (core.progress) the
     # STATUS.md export uses; the in-flight buckets come from the plan.
-    counts = PR.state_counts(tasks)
+    # The ONE owner of the task / phase / bug totals (core.progress.totals): the prose
+    # headline, this body, the MCP tool, the `Progress:` block and STATUS.md read it.
+    tot = PR.queue_totals(st, fix_in_headline=cfg.output.status_fix_tasks_in_headline, plan=p)
+    done.sort(key=lambda t: t.completed_at)  # newest last, so every cut keeps the tail
     running = p.running
     capped = [st.items[i] for i in p.capped]
     blocked = [b for b in p.blocked if b.item not in set(p.capped)]
@@ -153,21 +156,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
     open_bugs = [b for b in st.bugs.values() if b.open]
 
     data: dict[str, Any] = {
-        "phases": {"total": len(phases), "done": sum(1 for x in phases if x.state == "done")},
-        "tasks": {
-            "total": len(tasks),
-            "done": counts["done"],
-            "running": len(running),
-            "ready": len(p.ready),
-            "held_by_cap": len(capped),
-            "blocked": len(blocked),
-            "review": len(p.review),
-            "abandoned": counts["abandoned"],
-        },
-        "completed_tasks": [
-            {"id": t.id, "title": t.title, "sha": t.merged_sha}
-            for t in sorted(done, key=lambda t: t.completed_at)
-        ],
+        **{k: v for k, v in tot.as_json().items() if k in ("phases", "tasks")},
+        "bugs": dict(tot.bugs),
+        "completed_tasks": [{"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done],
         "in_flight": [
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
@@ -293,6 +284,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         "findings": findings,
         "hours": hours,
         "tasks": len(tasks),
+        "totals": tot,
+        "completed_shown": _completed_shown(cfg),
         "phases": len(phases),
         "decisions": len(live_decisions),
         "lessons": len(st.lessons),
@@ -445,6 +438,11 @@ def _by_tag_lines(view: dict[str, Any]) -> list[str]:
                 tops += f", {v['blockers_cut']} more"
             lines.append(f"    top blockers: {tops}")
     return lines
+
+
+def _completed_shown(cfg: Any) -> int:
+    """Completions the prose lists: the knob; 0 lists all, unless `allow_full` is off (12)."""
+    return cfg.output.status_completed_shown or (0 if cfg.output.allow_full else 12)
 
 
 def _bound(data: dict[str, Any]) -> None:

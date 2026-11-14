@@ -2,8 +2,9 @@
 
 ``collect(query)`` is the data: release lines from the version tags and known issues from the
 recorded bugs, as plain values, kept apart from the writer so another document type can render
-it. The template puts each in a named region, and the reporting section outside them is the
-operator's: seeded once with a TODO when the file is created, never written again.
+it. The template puts each in a named region; the ``reporting`` region says where to report
+privately when ``[export].security_contact`` is set, and says plainly that none is set when it
+is not (ddflow never invents one). The text outside the regions is never written.
 
 Nothing here is invented. A line's status comes from configuration, an issue from a recorded
 bug, a version from a tag. What ddflow does not record (dependency advisories and the findings
@@ -172,6 +173,19 @@ def _issue(b: Bug, fix: _Fix | None, tags: list[KC._Tag], disclose: str) -> dict
     }
 
 
+def _reporting(cfg: Config) -> dict[str, Any]:
+    """The configured reporting contact as markdown, and the stated first-answer time (0: none).
+    An address or a link is written as an autolink; anything else (a sentence) as it is."""
+    contact = cfg.export.security_contact_text()  # whitespace only: never cut
+    if contact and " " not in contact:
+        if contact.startswith(("http://", "https://")) or "@" in contact:
+            contact = f"<{contact}>"
+    return {
+        "contact": contact,
+        "response_days": cfg.export.security_response_days if contact else 0,
+    }
+
+
 def collect(q: Query) -> dict[str, Any]:
     """Supported lines and known issues as plain data: what any security document renders."""
     cfg = KC.repo_config(q, "the security document")
@@ -188,6 +202,7 @@ def collect(q: Query) -> dict[str, Any]:
         "versions": _versions(bugs, fixes, tags, cfg),
         "open": [_issue(b, None, tags, disclose) for b in opened],
         "fixed": [_issue(b, fixes[b.id], tags, disclose) for b in reversed(closed)],
+        "reporting": _reporting(cfg),
     }
 
 

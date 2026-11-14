@@ -24,11 +24,19 @@ ddflow will not overwrite it) or `missing`.
     security   SECURITY.md     (none)                     supported versions and known issues, in named regions
 
 Replay is not a kind: it carries paths and addresses. Imported rulebooks are not exported.
-The security document writes two regions of SECURITY.md (or of an existing .github/ or docs/
+The security document writes three regions of SECURITY.md (or of an existing .github/ or docs/
 copy): the version lines from the tags and `[export.security]` `supported_lines` and
-`deprecated_lines`, and known issues from bugs tagged `security` or `secbug`. A row shows id and
-severity; `disclose` (`ids`, `fixed`, `all`) adds titles. A new file gets a TODO for the reporting
-contact, which ddflow never invents; a file with no markers needs `--update --force`.
+`deprecated_lines`, known issues from bugs tagged `security` or `secbug`, and the reporting
+section. A row shows id and severity; `disclose` (`ids`, `fixed`, `all`) adds titles. The
+reporting region carries `[export].security_contact` (an address or URL, published as written
+and not redacted by the export) and `security_response_days`. ddflow never invents a contact: while none is
+set the region says so and `ddflow doctor` notes it. Set it by file, CLI or a prompt:
+
+    ddflow config --set export.security_contact security@example.org
+    ddflow config --set export.security_response_days 5
+    ddflow export security --update       (or ask the agent: "set our security contact to ...")
+
+A file with no markers needs the operator's forced update (the regions are appended).
 
 The changelog files each finished item by (1) the `--changelog "Added: ..."` line given to
 `ddflow complete` or `ddflow bug fixed` (`skip` leaves it out), (2) the Conventional Commit

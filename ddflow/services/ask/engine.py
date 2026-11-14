@@ -214,6 +214,7 @@ def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-
     level: int = 0,
     proof: str = "",
     now: float | None = None,
+    window: bool = False,
 ) -> dict[str, Any]:
     """Record a person's answer. Raises `AskRefused` unless every invariant holds. Returns the
     folded row. ``outcome`` is approved/denied for an approval, one of the options for a
@@ -248,6 +249,7 @@ def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-
                 "level": level if level >= 1 else 1,
                 "code_presented": code,  # spent now: kept so `verdict` can re-hash it
                 "proof": proof,  # a channel's own evidence (a harness tool_use id), see its verifier
+                "opened_window": window,  # the standing-window choice re-opens the standing window
             },
         )
         return dict(get(_state(log), ask_id) or {})

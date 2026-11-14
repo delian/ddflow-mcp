@@ -70,6 +70,21 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     run_cli(
         repo, "rule", "add", "--id", "r-test", "--title", "Test rule", "--content", "test content"
     )
+    # A lesson with an explicit id, so `ddflow_lesson_show` has a real lesson to return
+    # and the two surfaces compare a lesson, not two refusals.
+    run_cli(
+        repo,
+        "lesson",
+        "add",
+        "--id",
+        "L1",
+        "--title",
+        "pin the grammar",
+        "--why",
+        "a",
+        "--how",
+        "b",
+    )
     # A fixed probe result for every companion, so neither surface shells out to detect
     # one. Each probe runs the real tool (npx, docker, ...) with a timeout, and two live
     # probes need not agree: under load one times out (`unknown`) while the other

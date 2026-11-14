@@ -408,4 +408,17 @@ def doctor_notes(repo: Path, cfg: Config, st: State) -> list[str]:
         for r in unacknowledged(st, cfg)
     ]
     notes += T.drift_notes(repo)
+    notes += contact_notes(cfg)
     return notes
+
+
+def contact_notes(cfg: Config) -> list[str]:
+    """A note while the security document is selected and no reporting contact is configured:
+    a reporter then has nowhere private to go (SEC-policy-contact)."""
+    if "security" not in cfg.export.documents or cfg.export.security_contact.strip():
+        return []
+    return [
+        "export: SECURITY.md has no reporting contact; the Reporting a Vulnerability section "
+        'says none is set (`ddflow config --set export.security_contact "<address or URL>"`, '
+        "then `ddflow export security --update`)"
+    ]
