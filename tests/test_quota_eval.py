@@ -149,7 +149,9 @@ def test_a_non_positive_recheck_is_refused():
 
 def test_a_stale_reading_with_a_past_reset_gives_way_to_the_fixed_boundary():
     w = quota.Window("day", 100, "percent", reset="fixed", anchor="2026-11-01T06:00:00+00:00")
-    (e,) = Q.evaluate(profile(w), [reading("day", resets="2026-11-12T06:00:00+00:00")], NOW)
+    ev = Q.evaluate(profile(w), [reading("day", resets="2026-11-12T06:00:00+00:00")], NOW)
+    assert len(ev) == 1
+    e = ev[0]
     assert clock.epoch(e.resets_at) == clock.epoch("2026-11-13T06:00:00+00:00")
 
 
