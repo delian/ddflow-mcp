@@ -153,47 +153,39 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     list's page footer names the SAME filtered list (B-next-paging-drops-filters)."""
     base, _, rest = command.partition(" --state ")
     if rest:
-        cli, tool, narrow, _paged = COMMANDS[base]
-        state, kind, phase, only, tags = _split_state(rest)
-        c_args, t_args = [f"--state {_quote_arg(state)}"], [f"state={shlex.quote(state)}"]
-        for flag, val in (("kind", kind), ("phase", phase)):
-            if val:
-                c_args.append(f"--{flag} {_quote_arg(val)}")
-                t_args.append(f"{flag}={shlex.quote(val)}")
-        if only:
-            c_args.append("--phase-only")
-            t_args.append("phase_only=true")
-        if tags:
-            for t in tags:
-                c_args.append(f"--tag {_quote_arg(t)}")
-            t_args.append("tag=" + ",".join(tags))
-        return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
-    if not command.startswith("next --lane "):
-        # A non-lane ``next`` narrowed with ``--kind/--phase/--phase-only/--tag``: the list it
-        # pages (blocked) keeps the whole selection in the footer, not the unfiltered list.
-        if command.startswith("next "):
-            cli, tool, narrow, paged = COMMANDS["next"]
-            kind, phase, only, tags = _split_plain(command[len("next ") :])
-            if kind or phase or only or tags:
-                c_args, t_args = [], []
-                if kind:
-                    c_args.append(f"--kind {_quote_arg(kind)}")
-                    t_args.append(f"kind={shlex.quote(kind)}")
-                if phase:
-                    c_args.append(f"--phase {_quote_arg(phase)}")
-                    t_args.append(f"phase={shlex.quote(phase)}")
-                if only:
-                    c_args.append("--phase-only")
-                    t_args.append("phase_only=true")
-                if tags:
-                    for t in tags:
-                        c_args.append(f"--tag {_quote_arg(t)}")
-                    t_args.append("tag=" + ",".join(tags))
-                return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, paged
-        cli, tool, narrow, paged = COMMANDS[command]
-        return cli, tool, narrow, paged
-    # `next --lane L [--kind K] [--phase P]`: the rerun keeps the whole selection.
-    cli, tool, narrow, paged = COMMANDS["next"]
+        return _state_entry(base, rest)
+    if command.startswith("next --lane "):
+        return _lane_entry(command)
+    if command.startswith("next "):
+        entry = _plain_next_entry(command)
+        if entry is not None:
+            return entry
+    cli, tool, narrow, paged = COMMANDS[command]
+    return cli, tool, narrow, paged
+
+
+def _state_entry(base: str, rest: str) -> tuple[str, str, tuple[str, str] | None, str]:
+    """The ``next --state S`` footer: keep the state and its kind/phase/tag selection."""
+    cli, tool, _narrow, _paged = COMMANDS[base]
+    state, kind, phase, only, tags = _split_state(rest)
+    c_args, t_args = [f"--state {_quote_arg(state)}"], [f"state={shlex.quote(state)}"]
+    for flag, val in (("kind", kind), ("phase", phase)):
+        if val:
+            c_args.append(f"--{flag} {_quote_arg(val)}")
+            t_args.append(f"{flag}={shlex.quote(val)}")
+    if only:
+        c_args.append("--phase-only")
+        t_args.append("phase_only=true")
+    if tags:
+        for t in tags:
+            c_args.append(f"--tag {_quote_arg(t)}")
+        t_args.append("tag=" + ",".join(tags))
+    return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
+
+
+def _lane_entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
+    """The ``next --lane L`` footer: keep the lane, kind and phase (its answer pages no list)."""
+    cli, tool, narrow, _paged = COMMANDS["next"]
     lane, kind, phase, only = _split_lane(command[len("next --lane ") :])
     c_args, t_args = [f"--lane {_quote_arg(lane)}"], [f"lane={shlex.quote(lane)}"]
     for flag, val in (("kind", kind), ("phase", phase)):
@@ -204,6 +196,30 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
         c_args.append("--phase-only")
         t_args.append("phase_only=true")
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
+
+
+def _plain_next_entry(command: str) -> tuple[str, str, tuple[str, str] | None, str] | None:
+    """The non-lane narrowed ``next`` footer (B-next-paging-drops-filters): the page call keeps
+    the whole selection, or None when the token carries no narrowing flag."""
+    cli, tool, narrow, paged = COMMANDS["next"]
+    kind, phase, only, tags = _split_plain(command[len("next ") :])
+    if not (kind or phase or only or tags):
+        return None
+    c_args, t_args = [], []
+    if kind:
+        c_args.append(f"--kind {_quote_arg(kind)}")
+        t_args.append(f"kind={shlex.quote(kind)}")
+    if phase:
+        c_args.append(f"--phase {_quote_arg(phase)}")
+        t_args.append(f"phase={shlex.quote(phase)}")
+    if only:
+        c_args.append("--phase-only")
+        t_args.append("phase_only=true")
+    if tags:
+        for t in tags:
+            c_args.append(f"--tag {_quote_arg(t)}")
+        t_args.append("tag=" + ",".join(tags))
+    return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, paged
 
 
 def _split_state(rest: str) -> tuple[str, str, str, bool, tuple[str, ...]]:
