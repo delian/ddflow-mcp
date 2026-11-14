@@ -176,6 +176,8 @@ documents = []
 redact = true
 max_bytes = 60000
 refresh = "off"
+security_contact = ""
+security_response_days = 0
 tables = {}
 
 [fasttrack]
@@ -697,6 +699,8 @@ empty_phase = "note"
 phase_full_suite = "require"
 auto_order = "propose"
 optimizer = "greedy-v1"
+order = ["recover_first", "bugs_first", "unphased_first", "priority", "id"]
+order_pin = []
 bugs_first = true
 reserved_slots = 0
 reserved_tags = ["ddflow-gap"]
