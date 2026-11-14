@@ -94,6 +94,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_correct": [
+  "ddflow_task action=correct",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_decision_add": [
   "ddflow_decision action=add",
   "0.2.8",
@@ -479,6 +484,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_rule_inventory": [
+  "ddflow_view action=rules_inventory",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_rule_list": [
   "ddflow_rule action=list",
   "0.2.8",
@@ -561,6 +571,11 @@
  ],
  "ddflow_split": [
   "ddflow_task action=split",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_stacks": [
+  "ddflow_view action=stacks",
   "0.2.8",
   "1.0"
  ],

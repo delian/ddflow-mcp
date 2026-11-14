@@ -40,7 +40,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, duplicate(id,of), reopen(id,reason), tag(id).",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, status, duplicate(id,of), reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -191,6 +191,7 @@
            "found",
            "file_tasks",
            "dedupe",
+           "status",
            "duplicate",
            "reopen",
            "tag"
@@ -1334,6 +1335,10 @@
          "sort": {
           "type": "string",
           "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). ..."
+         },
+         "severity": {
+          "type": "string",
+          "description": "kind=bug: only bugs of this severity (critical|high|medium|low). ..."
          },
          "tail": {
           "type": "integer",

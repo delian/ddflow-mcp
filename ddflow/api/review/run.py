@@ -498,6 +498,18 @@ def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_mo
     return identifying
 
 
+def _empty_diff_report(kind: str) -> tuple[str, dict[str, Any] | None]:
+    """(sentence ending, evidence) for the `unavailable` of an empty diff (after leaving
+    excluded files out): a delta whose commits only touched excluded files leaves a
+    reviewer nothing to review, so the earlier passed/failed round stands (its outage
+    noted under `unavailable_deltas` by `_keep_reviewed_round`) instead of a
+    `unavailable` that replaces it (bug Be82376964f); `_keep_reviewed_round` reads the
+    `review_kind` to keep it. A full review records unavailable as before."""
+    if kind == "delta":
+        return "; the earlier round stands.", {"review_kind": kind}
+    return ". Recording UNAVAILABLE.", None
+
+
 def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -563,9 +575,20 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     def unavailable(reason: str, **extra) -> O.Outcome:
         """Record it, then report it. An unrecorded UNAVAILABLE is indistinguishable
         from a gate nobody ran, which is how "we reviewed it" becomes true on paper."""
+        evidence = extra.pop("evidence", None)
         if item:
             _record(
-                repo, log, cfg, st, item, gate, "unavailable", called_from, gates, reason=reason
+                repo,
+                log,
+                cfg,
+                st,
+                item,
+                gate,
+                "unavailable",
+                called_from,
+                gates,
+                reason=reason,
+                evidence=evidence,
             )
         return O.nothing(
             "review",
@@ -645,11 +668,11 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         diff, cfg, repo, say, extra_evidence, it.tags if it else None, exclude, include_pinned
     )
     if not diff.strip():
+        suffix, evidence = _empty_diff_report(kind)
         return unavailable(
-            f"Empty diff ({how}) — nothing to review"
-            + skipped.empty_note()
-            + ". Recording UNAVAILABLE.",
+            f"Empty diff ({how}) — nothing to review" + skipped.empty_note() + suffix,
             how=how,
+            evidence=evidence,
         )
 
     intent = intent or _item_intent(it)

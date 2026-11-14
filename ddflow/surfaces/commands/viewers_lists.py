@@ -278,35 +278,6 @@ BUG_SHOW = Command(
 )
 
 
-def cmd_bug_status(a, c: Ctx) -> int:
-    """`ddflow bug status`: the open-bug count, severities, blocked vs unblocked, one answer."""
-    out = KB.bug_status(c.repo)
-    d = out.data
-    if c.json:
-        emit_json(dict(d))
-        return out.exit
-    counts = ", ".join(
-        f"{s or 'unset'}: {d['severity'].get(s, 0)}"
-        for s in ("critical", "high", "medium", "low", "")
-    )
-    print(f"{d['open']} open bugs: {counts}")
-    print(f"blocked {d['blocked']}  unblocked {d['unblocked']}  no fix task {d['no_fix_task']}")
-    return out.exit
-
-
-BUG_STATUS = Command(
-    path=("bug", "status"),
-    summary="how many open bugs: totals by severity and blocked vs unblocked",
-    tool="ddflow_bug_status",
-    tier="standard",
-    description="How many bugs are open, counted by severity (critical/high/medium/low/unset), "
-    "and how many of them are blocked (their fix task is blocked or still has unmet needs), "
-    "unblocked, or have no fix task yet. Read-only summary of the bug backlog.",
-    call=lambda repo, a, agent: KB.bug_status(repo),
-    payload=("open", "severity", "blocked", "unblocked", "no_fix_task"),
-    handler=cmd_bug_status,
-)
-
 COMMANDS = (
     *(
         Command(
@@ -320,7 +291,6 @@ COMMANDS = (
         for kind in ("task", "phase", "bug", "lesson")
     ),
     BUG_SHOW,
-    BUG_STATUS,
 )
 
 

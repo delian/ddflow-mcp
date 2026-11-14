@@ -21,9 +21,51 @@ import re
 import secrets
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Any
 
-from ..config import Config, name_template_problem
 from . import agentname
+
+#: The tokens a name template may use.
+NAME_TOKENS = ("role", "family", "host", "rand", "seq")
+#: What a generated name may hold outside its tokens: lower-case ASCII letters, digits, '-'.
+#: It is a git branch part, a shard file name (case-insensitive file systems), a tmux
+#: session and a DNS label, so nothing wider is safe.
+NAME_LITERAL = re.compile(r"[a-z0-9-]*")
+#: The name scopes a template may have to guarantee uniqueness for.
+NAME_SCOPES = ("global", "host", "family")
+#: The behaviours when a generated name is already taken.
+NAME_COLLISIONS = ("suffix", "refuse")
+
+
+def name_template_problem(template: Any) -> str:
+    """Why ``template`` cannot make lane names, or "". Scope-free: the scope's own
+    requirement is `core.naming.template_problem`."""
+    if not isinstance(template, str) or not template:
+        return "must be a non-empty template string"
+    tokens = re.findall(r"\{([^{}]*)\}", template)
+    literal = re.sub(r"\{[^{}]*\}", "", template)
+    if bad := [t for t in tokens if t not in NAME_TOKENS]:
+        known = ", ".join(f"{{{t}}}" for t in NAME_TOKENS)
+        return f"unknown token {{{bad[0]}}}; the tokens are {known}"
+    if "{" in literal or "}" in literal:
+        return "has an unbalanced brace"
+    if not NAME_LITERAL.fullmatch(literal):
+        bad_c = sorted({c for c in literal if not NAME_LITERAL.fullmatch(c)})[0]
+        return (
+            f"holds {bad_c!r} outside its tokens: a name is a branch part, a shard file and "
+            "a tmux session, so only lower-case ASCII letters, digits and '-' may appear"
+        )
+    if len(tokens) != len(set(tokens)):
+        return "uses a token twice"
+    if "role" not in tokens:
+        return "needs {role}: the human-readable part"
+    if "rand" not in tokens:
+        return (
+            "needs {rand}: {seq} counts only the names one clone sees and a host label can "
+            "alias, so only a random suffix keeps offline clones apart"
+        )
+    return ""
+
 
 #: Vowel-free and without 0, 1, 3 (the Kubernetes alphabet), as Kubernetes' generated names:
 #: nothing read aloud or typed on a phone is mistaken for another character or for a word.
@@ -64,7 +106,7 @@ def clean(part: str, limit: int | None = None) -> str:
     return text
 
 
-def host_part(cfg: Config, hostname: str) -> str:
+def host_part(cfg: Any, hostname: str) -> str:
     """This machine's label: `[naming].host_label`, else the first label of ``hostname``."""
     return clean(
         cfg.naming.host_label or hostname.split(".", maxsplit=1)[0], cfg.naming.host_length
@@ -106,7 +148,7 @@ def _join(template: str, values: dict[str, str]) -> str:
     return re.sub(r"-{2,}", "-", out).strip("-")
 
 
-def render(cfg: Config, *, role: str, family: str, host: str, rand: str = "", seq: int = 0) -> str:
+def render(cfg: Any, *, role: str, family: str, host: str, rand: str = "", seq: int = 0) -> str:
     """The template filled and shortened to `[naming].max_length`: {role}, then {family},
     lose characters first; {host}, {rand} and {seq} are never cut."""
     n = cfg.naming
@@ -135,7 +177,7 @@ def render(cfg: Config, *, role: str, family: str, host: str, rand: str = "", se
 
 
 def generate(
-    cfg: Config,
+    cfg: Any,
     *,
     role: str,
     family: str = "",
