@@ -215,7 +215,11 @@ def _heartbeat_items(argv: list[str]) -> list[str]:
     the subcommand (`ddflow task comment --body heartbeat T1` is not one). Handles a direct
     fetch (`ddflow [options] heartbeat <item>`) and the body of a `sh -c '<loop>'`."""
     words = list(argv)
-    if len(words) >= _SH_C_MIN_WORDS and _base(words[0]) in ("sh", "bash", "zsh", "ksh") and words[1] == "-c":
+    if (
+        len(words) >= _SH_C_MIN_WORDS
+        and _base(words[0]) in ("sh", "bash", "zsh", "ksh")
+        and words[1] == "-c"
+    ):
         words = _shell_words(" ".join(words[2:]))
     out: list[str] = []
     i = 0

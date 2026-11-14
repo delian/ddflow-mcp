@@ -62,7 +62,12 @@ def _git_merge_temp(path: str) -> bool:
     """
     name = path.rsplit("/", 1)[-1]
     tail = name[len(".merge_file_") :]
-    return name.startswith(".merge_file_") and len(tail) == _MERGE_FILE_TAIL_CHARS and tail.isascii() and tail.isalnum()
+    return (
+        name.startswith(".merge_file_")
+        and len(tail) == _MERGE_FILE_TAIL_CHARS
+        and tail.isascii()
+        and tail.isalnum()
+    )
 
 
 def _not_work(path: str) -> bool:
