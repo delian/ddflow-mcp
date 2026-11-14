@@ -898,7 +898,8 @@ def _git_discard(words: list[str]) -> str:
         return sub
     if sub == "checkout":
         rest = args[1:]
-        if "--" in rest:
+        # `--` means "everything after is a path"; `-f`/`--force` discards regardless of target.
+        if "--" in rest or "-f" in rest or "--force" in rest:
             return "checkout"
         # `-b`/`-B`/`-t`/`-l` take the next word as their value (a branch name, not a path).
         positions: list[str] = []
