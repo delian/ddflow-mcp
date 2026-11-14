@@ -4675,6 +4675,17 @@
       swarm.w_queue = 0.5   [default]
           Weight of the queue term: how long the item has waited, so a low-priority
           item is not starved.
+      swarm.w_headroom = 1.0   [default]
+          Weight of the headroom term: the share of the lane's spending limit (from
+          the layered `[prices]` table) still unspent, so a lane with more left is
+          preferred. A lane with no limit on record scores neutral (0.5), never zero.
+          Zero ignores headroom in the score; an exhausted lane stays refused whatever
+          this is.
+      swarm.headroom_floor_usd = 0.0   [default]
+          Remaining USD at or below which a lane with a known limit is refused
+          outright (a hard filter, not a score). Zero refuses only an exhausted lane.
+          A lane with no limit on record is never refused. A project or user layer can
+          raise this floor; no caller argument lowers it.
       swarm.fit_margin = 0.1   [default]
           How far below the best eligible lane's fit a lane may be and still compete
           on cost. A lane further below is ranked after every lane inside the margin.
@@ -5158,6 +5169,16 @@
           .roborev.toml. Never overwrites a file already in the worktree, and never
           copies a path git tracks (that one arrives with the checkout). A copy that
           fails is skipped, not raised.
+      worktree.behind_ignore_globs = ['.ddflow/']   [default]
+          Paths that do not make a tree 'behind' its base. A tree is behind in CODE
+          when a commit it lacks touches a path outside this list: three quarters of
+          main's commits touch only the event log (`.ddflow/`), so counting them made
+          every worktree behind and every sync, queue re-merge, `max_behind` count and
+          session hint act on a movement that carried no code. The total is still
+          reported beside the code count (`behind by N commit(s) (K touch code)`); a
+          rulebook change under an ignored path still counts as drift (`stale_rules`).
+          Directories end in `/`, other entries are globs; an empty list counts every
+          commit, as before.
   
     ''',
   )
