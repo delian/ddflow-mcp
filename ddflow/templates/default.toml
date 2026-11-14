@@ -518,6 +518,8 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+status_fix_tasks_in_headline = false
+status_completed_shown = 12
 json_envelope = false
 
 [perf_metrics]
