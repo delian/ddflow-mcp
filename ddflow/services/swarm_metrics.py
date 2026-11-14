@@ -313,6 +313,10 @@ def provider(ctx: Context) -> list[dict]:
             "n": n,
             "value": n / (wall / HOUR) if wall else None,
         },
+        # `swarm.rework_rate` (gate returns + late bugs) reads as the summary's `rework`
+        # (completed items a later bug hit): same word, different quantity. The canonical
+        # name is `swarm.review_rework_rate`; the old one stays for one release (WF-metrics).
+        {"metric": "swarm.review_rework_rate", "group": "", "n": n, "value": rw["rate"]},
         {"metric": "swarm.rework_rate", "group": "", "n": n, "value": rw["rate"]},
         {
             "metric": "swarm.agent_hours_per_item",
