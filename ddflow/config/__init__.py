@@ -51,6 +51,7 @@ from ..config_sections.ids import (  # noqa: F401
     id_template_problem,
 )
 from ..config_sections.mcp import MCP_TOOL_TIERS  # noqa: F401
+from ..config_sections.naming import NAME_TOKENS, name_template_problem  # noqa: F401
 from ..config_sections.release import RELEASE_LINT_POLICIES  # noqa: F401
 from ..config_sections.schedule import (  # noqa: F401
     FLOW_SIGNALS,

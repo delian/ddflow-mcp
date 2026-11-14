@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.host_length"
+new = "12"
+why = "Longest host label in a generated name, 4 to 24 (default 12)."
+impact = "additive"

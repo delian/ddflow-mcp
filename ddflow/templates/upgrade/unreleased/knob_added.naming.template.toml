@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.template"
+new = "\"{role}-{family}-{host}-{rand}\""
+why = "The shape of a generated lane or agent name (default {role}-{family}-{host}-{rand})."
+impact = "additive"

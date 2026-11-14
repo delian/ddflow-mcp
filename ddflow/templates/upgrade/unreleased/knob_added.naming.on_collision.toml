@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.on_collision"
+new = "\"suffix\""
+why = "What a generated name does when it is taken: draw a new suffix, or refuse (default suffix)."
+impact = "additive"

@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=77eb990c11b4 -->
-<details><summary>All 758 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=82a6ead753ae -->
+<details><summary>All 766 knobs across 71 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1306,6 +1306,14 @@ long default is left to `ddflow config --explain`.
 | `metrics.lock_falsifier_red_main_pct` | `10` |  |
 | `metrics.lock_revert_key` | `"locks.mode"` |  |
 | `metrics.lock_revert_value` | `"strict"` |  |
+| `naming.template` | `"{role}-{family}-{host}-{rand}"` |  |
+| `naming.scope` | `"global"` | `global` \| `host` \| `family` |
+| `naming.on_collision` | `"suffix"` | `suffix` \| `refuse` |
+| `naming.max_length` | `48` |  |
+| `naming.rand_length` | `4` |  |
+| `naming.max_tries` | `32` |  |
+| `naming.host_length` | `12` |  |
+| `naming.host_label` | `""` |  |
 | `notify.channel` | `"terminal"` | `terminal` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
 | `notify.ask_channel` | `"harness"` | `harness` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
 | `notify.endpoints` | `{}` |  |

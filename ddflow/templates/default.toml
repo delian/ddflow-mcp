@@ -502,6 +502,16 @@ lock_falsifier_red_main_pct = 10
 lock_revert_key = "locks.mode"
 lock_revert_value = "strict"
 
+[naming]
+template = "{role}-{family}-{host}-{rand}"
+scope = "global"
+on_collision = "suffix"
+max_length = 48
+rand_length = 4
+max_tries = 32
+host_length = 12
+host_label = ""
+
 [notify]
 channel = "terminal"
 ask_channel = "harness"

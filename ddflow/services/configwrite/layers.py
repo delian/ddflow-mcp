@@ -44,6 +44,8 @@ MACHINE_LOCAL_KEYS: dict[str, str] = {
     # git-ignored local layer, like the reviewer/companion endpoints above.
     "agent.roles": "local",
     "agent.capability_verbs": "local",
+    # A host label names this machine: a hostname never enters committed config.
+    "naming.host_label": "local",
 }
 
 
