@@ -202,7 +202,8 @@ def _after_merge_note(primary: Path, repo: Path, cfg, before, watched, *, check:
         # refused message made the hook regenerate nothing, so main's rows were dropped.
         return O.ok(
             "pins",
-            note="pins: post-merge hook skipped in a linked worktree; run `ddflow pins regenerate`",
+            note="pins: post-merge hook skipped in a linked worktree; run `ddflow pins regenerate`"
+            " from the primary checkout",
         )
     note = PM.after_merge(repo, cfg)
     _record_written(primary, repo, before, watched)
