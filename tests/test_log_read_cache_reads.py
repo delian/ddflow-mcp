@@ -249,7 +249,7 @@ def test_an_unreadable_shard_raises_rather_than_vanishing(repo):
         with pytest.raises(PermissionError):
             mine.read_all()
     finally:
-        os.chmod(theirs.shard, 0o644)
+        os.chmod(theirs.shard, 0o600)
 
     # A vanished shard, by contrast, is benign and skipped.
     theirs.shard.unlink()
