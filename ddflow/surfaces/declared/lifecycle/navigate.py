@@ -212,7 +212,14 @@ def _next(repo, a, agent):
             tags,
         )
         return _cap(repo, _state_answer(out, state, phase, tags), token, a)
-    return _cap(repo, out, "next", a)
+    token = (
+        "next"
+        + (f" --kind {kind}" if kind != _api().DEFAULT_NEXT_KIND else "")
+        + (f" --phase {phase}" if phase else "")
+        + (" --phase-only" if phase_only else "")
+        + "".join(f" --tag {t}" for t in tags)
+    )
+    return _cap(repo, out, token, a)
 
 
 def _next_notes(out, a, ctx):
