@@ -396,7 +396,7 @@
          },
          "op": {
           "type": "string",
-          "description": "ci: run | status (default)."
+          "description": "ci: run | status (default) | failed-first."
          },
          "ref": {
           "type": "string",
