@@ -11,3 +11,4 @@
 {"agent":"recover-1030c","data":{"at":1794653994.808933,"holder":"recover-1030c"},"id":"eddf3654fdb519da20a377470","kind":"lease.renewed","lamport":199414,"schema":1,"subject":"WF-lanes-roster-cap","ts":"2026-11-14T10:59:57.221071Z"}
 {"agent":"recover-1030c","data":{"at":1794653999.9399874,"branch":"ddflow/WF-lanes-roster-cap","holder":"recover-1030c","worktree":".ddflow/worktrees/WF-lanes-roster-cap"},"id":"e47b9c7f4be07f0d2eeab49b5","kind":"lease.renewed","lamport":199417,"schema":1,"subject":"WF-lanes-roster-cap","ts":"2026-11-14T11:00:05.467259Z"}
 {"agent":"recover-1030c","data":{},"id":"e72733db32e8285828a77851a","kind":"item.started","lamport":199419,"schema":1,"subject":"WF-lanes-roster-cap","ts":"2026-11-14T11:00:11.037713Z"}
+{"agent":"recover-1030c","data":{"gate":"ci"},"id":"eddf10df8a1f93596db28df65","kind":"gate.started","lamport":199462,"schema":1,"subject":"B189","ts":"2026-11-14T11:09:48.203085Z"}
