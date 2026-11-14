@@ -261,7 +261,7 @@ def test_a_layer_in_an_unsearchable_directory_fails_closed(log, tmp_path, repo):
             pytest.skip("file permissions do not apply to this user")
         assert not H.chat_t3(cfg)
     finally:
-        os.chmod(d, 0o755)
+        os.chmod(d, 0o700)
 
 
 def test_a_missing_layer_is_simply_absent(log, tmp_path, repo):
