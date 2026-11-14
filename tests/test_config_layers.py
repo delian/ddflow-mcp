@@ -105,6 +105,7 @@ def test_a_changed_dropped_set_is_said_again(tmp_path, capsys):
     Config.load(tmp_path)  # drop skip, complete, claim
     capsys.readouterr()
     Config.load(tmp_path)  # the same note: suppressed, not repeated
+    assert capsys.readouterr().err == ""
     (tmp_path / ".ddflow" / "local" / "config.toml").write_text(
         '[approvals]\npolicy = ["claim_unavailable"]\n'
     )
