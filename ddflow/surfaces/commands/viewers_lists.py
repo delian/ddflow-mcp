@@ -90,6 +90,14 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
         )
         out.append(
             Param(
+                "severity",
+                default=None,
+                choices=tuple(KB.BUG_SEVERITIES),
+                help="only rows of this severity (one of critical/high/medium/low)",
+            )
+        )
+        out.append(
+            Param(
                 "sort",
                 default=None,
                 choices=("severity",),
@@ -234,7 +242,12 @@ def cmd_list(a, c: Ctx) -> int:
         # The bug's domain facets (severity, its fix task, that task's dependency
         # edges) and the `--sort` order are the engine's deferred knowledge half,
         # attached before the rows are rendered.
-        out = KB.finish_bug_list(c.repo, out, sort=getattr(a, "sort", None) or "")
+        out = KB.finish_bug_list(
+            c.repo,
+            out,
+            sort=getattr(a, "sort", None) or "",
+            severity=getattr(a, "severity", None) or "",
+        )
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
         for r in out.data["rows"]:
@@ -264,6 +277,36 @@ BUG_SHOW = Command(
     "the same read would cost every agent's tools/list bytes",
 )
 
+
+def cmd_bug_status(a, c: Ctx) -> int:
+    """`ddflow bug status`: the open-bug count, severities, blocked vs unblocked, one answer."""
+    out = KB.bug_status(c.repo)
+    d = out.data
+    if c.json:
+        emit_json(dict(d))
+        return out.exit
+    counts = ", ".join(
+        f"{s or 'unset'}: {d['severity'].get(s, 0)}"
+        for s in ("critical", "high", "medium", "low", "")
+    )
+    print(f"{d['open']} open bugs: {counts}")
+    print(f"blocked {d['blocked']}  unblocked {d['unblocked']}  no fix task {d['no_fix_task']}")
+    return out.exit
+
+
+BUG_STATUS = Command(
+    path=("bug", "status"),
+    summary="how many open bugs: totals by severity and blocked vs unblocked",
+    tool="ddflow_bug_status",
+    tier="standard",
+    description="How many bugs are open, counted by severity (critical/high/medium/low/unset), "
+    "and how many of them are blocked (their fix task is blocked or still has unmet needs), "
+    "unblocked, or have no fix task yet. Read-only summary of the bug backlog.",
+    call=lambda repo, a, agent: KB.bug_status(repo),
+    payload=("open", "severity", "blocked", "unblocked", "no_fix_task"),
+    handler=cmd_bug_status,
+)
+
 COMMANDS = (
     *(
         Command(
@@ -277,6 +320,7 @@ COMMANDS = (
         for kind in ("task", "phase", "bug", "lesson")
     ),
     BUG_SHOW,
+    BUG_STATUS,
 )
 
 
