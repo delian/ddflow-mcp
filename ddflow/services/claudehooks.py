@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,11 @@ class HookSpec:
     #: D-compat): the hook's IDENTITY stays `name`, so a hook installed under the old
     #: command is refreshed in place, never orphaned beside a second one.
     run: str = ""
+    #: Seconds the harness lets the hook run (0 = its default). SessionEnd has 1.5 s by
+    #: default, which a log fold cannot fit.
+    timeout: int = 0
+    #: Run it in the background (`async: true`), so a fold does not delay each turn.
+    background: bool = False
 
     @property
     def subcommand(self) -> str:
@@ -98,11 +104,14 @@ class HookSpec:
         )
 
 
+#: A table row for each harness the legacy table covers: the agent named once, not per row.
+_claude = partial(HookSpec, "claude")
+_gemini = partial(HookSpec, "gemini")
+
 #: Every harness hook ddflow installs. Git hooks are not here: they are files, not
 #: settings entries, and `enforce._hooks()` is their one table.
 HOOKS: tuple[HookSpec, ...] = (
-    HookSpec(
-        "claude",
+    _claude(
         "session-start",
         "SessionStart",
         CLAUDE_SETTINGS,
@@ -111,8 +120,7 @@ HOOKS: tuple[HookSpec, ...] = (
         fail_open=False,
         run="run session_start --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "pre-compact",
         PRECOMPACT_EVENT,
         CLAUDE_SETTINGS,
@@ -121,8 +129,25 @@ HOOKS: tuple[HookSpec, ...] = (
         "the session's state is recorded before every compaction",
         run="run pre_compact --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
+        "stop",
+        "Stop",
+        CLAUDE_SETTINGS,
+        None,
+        "what the session is doing is recorded after each turn",
+        run="run stop --harness claude",
+        background=True,
+    ),
+    _claude(
+        "session-end",
+        "SessionEnd",
+        CLAUDE_SETTINGS,
+        None,
+        "the session's end is recorded with what it was doing",
+        run="run session_end --harness claude",
+        timeout=30,  # the harness default of 1.5 s cannot fit a log fold
+    ),
+    _claude(
         "prompt",
         PROMPT_EVENT,
         CLAUDE_SETTINGS,
@@ -130,8 +155,7 @@ HOOKS: tuple[HookSpec, ...] = (
         "every operator prompt is recorded",
         run="run prompt --harness claude",
     ),
-    HookSpec(
-        "claude",
+    _claude(
         "pre-tool",
         "PreToolUse",
         CLAUDE_SETTINGS,
@@ -141,14 +165,30 @@ HOOKS: tuple[HookSpec, ...] = (
         "and [locks].mode)",
         run="run pre_tool --harness claude",
     ),
-    HookSpec(
-        "gemini",
+    _gemini(
         "prompt",
         GEMINI_PROMPT_EVENT,
         GEMINI_SETTINGS,
         None,
         "every operator prompt is recorded",
         run="run prompt --harness gemini",
+    ),
+    _gemini(
+        "pre-compact",
+        "PreCompress",
+        GEMINI_SETTINGS,
+        None,
+        "the session's state is recorded before every compaction",
+        run="run pre_compact --harness gemini",
+    ),
+    _gemini(
+        "session-end",
+        "SessionEnd",
+        GEMINI_SETTINGS,
+        None,
+        "the session's end is recorded with what it was doing",
+        run="run session_end --harness gemini",
+        timeout=30,  # the harness default of 1.5 s cannot fit a log fold
     ),
 )
 
@@ -178,6 +218,8 @@ def install_spec(repo: Path, h: HookSpec) -> str:
         matcher=h.matcher,
         rel=h.file,
         purpose=h.purpose,
+        timeout=h.timeout,
+        background=h.background,
     )
 
 
@@ -316,6 +358,31 @@ def state(
     return on, ""
 
 
+def _entry_options(timeout: int, background: bool) -> dict[str, Any]:
+    """The entry fields a table row's `timeout` and `background` write. A row that sets
+    neither leaves the operator's own `timeout` or `async` on the entry alone."""
+    opts: dict[str, Any] = {}
+    if timeout:
+        opts["timeout"] = timeout
+    if background:
+        opts["async"] = True
+    return opts
+
+
+def _refreshed(
+    region: Managed, have: str, command: str, fresh: str, path: Path, event: str
+) -> tuple[str, bool]:
+    """The command line a refresh writes over `have`, and whether `have` had been edited."""
+    try:
+        owned = region.owns(have)
+        wanted = region.splice(have, command) if owned else fresh
+        return wanted, owned and region.state(have) == "edited"
+    except NewerContent as exc:
+        raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
+    except RegionError as exc:
+        raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
+
+
 def install(
     repo: Path,
     command: str,
@@ -325,6 +392,8 @@ def install(
     matcher: str | None = MATCHER,
     rel: str = CLAUDE_SETTINGS,
     purpose: str = "",
+    timeout: int = 0,
+    background: bool = False,
 ) -> str:
     """Add (or refresh) our hook for `event`, leaving every other hook exactly as it was.
 
@@ -339,25 +408,21 @@ def install(
     if not isinstance(groups, list):
         raise SettingsError(f"{path}: `hooks.{event}` is not a list; not touching it")
     region = _region(marker)
-    entry = {"type": "command", "command": region.render(command)}
+    opts = _entry_options(timeout, background)
+    entry: dict[str, Any] = {"type": "command", "command": region.render(command), **opts}
     for g in groups:
         for i, h in enumerate(_hooks_of(g, path)):
             if _ours(h, marker):
                 have = str(h.get("command", ""))
-                try:
-                    owned = region.owns(have)
-                    wanted = region.splice(have, command) if owned else entry["command"]
-                    edited = owned and region.state(have) == "edited"
-                except NewerContent as exc:
-                    raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
-                except RegionError as exc:
-                    raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
-                if wanted == have and h.get("type") == "command":
+                wanted, edited = _refreshed(region, have, command, entry["command"], path, event)
+                if (
+                    wanted == have
+                    and h.get("type") == "command"
+                    and all(h.get(k) == v for k, v in opts.items())
+                ):
                     return f"the ddflow {event} hook is already in {path}"
-                saved = ""
-                if edited:
-                    saved = backup_edited(repo, path, "command")
-                g["hooks"][i] = {**h, "type": "command", "command": wanted}
+                saved = backup_edited(repo, path, "command") if edited else ""
+                g["hooks"][i] = {**h, "type": "command", "command": wanted, **opts}
                 _write(path, data)
                 return f"updated the ddflow {event} hook in {path}{saved}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})

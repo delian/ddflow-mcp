@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/resultcache.py:DAY_S" = 'unit conversion: the number of seconds in one day (a physical constant, not a tunable)'

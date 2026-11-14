@@ -30,7 +30,6 @@ UNOFFERED: dict[str, tuple[str, ...]] = {
         "search",
     ),
     "lesson": (
-        "show",
         "edit",
         "note",
         "remove",

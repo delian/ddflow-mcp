@@ -210,6 +210,8 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     stale = RG.earlier_tree(st, cfg, item_id, repo, landed)
     for r in rows:
         r["earlier_tree"] = stale.get(r["gate"], "")
+    landing_d = _landing(repo, cfg, it, led, rows)
+    RG.mark_missed_final(rows, str(landing_d.get("branch_head") or ""))
     sc = cfg.session
     filed = _filed(events, st, item_id, who, sc.report_title_chars)
     tests = _bug_tests(events, st, item_id, sc.report_summary_chars)
@@ -219,7 +221,7 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     follow += [f"{t['id']} (task, open)" for t in filed["tasks"] if t["open"]]
     return {
         "item": {"id": it.id, "title": it.title, "kind": it.kind, "state": it.state, "agent": who},
-        "landing": _landing(repo, cfg, it, led, rows),
+        "landing": landing_d,
         "regression": {"bugs": tests, "test_files": list(led.get("done", {}).get("tests", []))},
         "gates": rows,
         "overrides": overrides,

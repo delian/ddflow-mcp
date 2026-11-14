@@ -1,2 +1,4 @@
 [exempt]
 "ddflow/api/gates/_run.py:_MAX_FAILED_IDS_SHOWN" = 'internal truncation of a superseded-run refusal message: how many failing test ids it names before the "... and N more" note; changing it changes message shape, not how ddflow behaves for a person'
+"ddflow/api/gates/_run.py:_RECORD_LOCK_RETRIES" = 'internal retry shield on the events-record lock: a fixed few attempts before giving up, not a workload knob'
+"ddflow/api/gates/_run.py:_RECORD_LOCK_RETRY_S" = 'internal backoff between record-lock retries: a fixed short pause shielding a contended events log, not a workload knob'

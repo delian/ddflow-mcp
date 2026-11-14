@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "verify.lock_check_cmd"
+new = "\"\""
+why = "Overrides the stack's lock-check command; empty uses the stack table's."
+impact = "additive"

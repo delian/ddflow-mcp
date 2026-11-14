@@ -55,7 +55,10 @@ def dedupe_bugs(
             clusters=[],
             count=0,
             applied=[],
+            failed=[],
             floor=fl,
+            semantic=None,  # every declared key set, so --json and MCP are byte-identical
+            scanned=None,
         )
     vectors, note = bugsim.embed_vectors(repo, cfg, [bugsim.record_text(r) for r in records])
     groups, scores = bugsim.cluster(records, floor=fl, vectors=vectors)

@@ -55,6 +55,22 @@ def _old_lines() -> dict[str, str]:
             "hooks run pre_tool --harness claude", refresh="ddflow hooks install --claude"
         )
         + " || true",
+        "stop": E.command_line(
+            "hooks run stop --harness claude", refresh="ddflow hooks install --claude"
+        )
+        + " || true",
+        "session-end": E.command_line(
+            "hooks run session_end --harness claude", refresh="ddflow hooks install --claude"
+        )
+        + " || true",
+        "pre-compact-gemini": E.command_line(
+            "hooks run pre_compact --harness gemini", refresh="ddflow hooks install --gemini"
+        )
+        + " || true",
+        "session-end-gemini": E.command_line(
+            "hooks run session_end --harness gemini", refresh="ddflow hooks install --gemini"
+        )
+        + " || true",
         "prompt-gemini": E.command_line(
             "hooks run prompt --harness gemini", refresh="ddflow hooks install --gemini"
         )
@@ -78,11 +94,19 @@ def _expected_files() -> dict[str, dict]:
                     }
                 ],
                 "PreCompact": [{"hooks": [cmd(old["pre-compact"])]}],
+                "Stop": [{"hooks": [{**cmd(old["stop"]), "async": True}]}],
+                "SessionEnd": [{"hooks": [{**cmd(old["session-end"]), "timeout": 30}]}],
                 "UserPromptSubmit": [{"hooks": [cmd(old["prompt-claude"])]}],
                 "PreToolUse": [{"matcher": CH.PRETOOL_MATCHER, "hooks": [cmd(old["pre-tool"])]}],
             }
         },
-        GEMINI: {"hooks": {"BeforeAgent": [{"hooks": [cmd(old["prompt-gemini"])]}]}},
+        GEMINI: {
+            "hooks": {
+                "BeforeAgent": [{"hooks": [cmd(old["prompt-gemini"])]}],
+                "PreCompress": [{"hooks": [cmd(old["pre-compact-gemini"])]}],
+                "SessionEnd": [{"hooks": [{**cmd(old["session-end-gemini"]), "timeout": 30}]}],
+            }
+        },
     }
 
 
@@ -120,9 +144,13 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         *([note] if note else []),
         # Ba0febd9946: this line used to say "every operator prompt is recorded".
         f"added a PreCompact hook to {c}: the session's state is recorded before every compaction",
+        f"added a Stop hook to {c}: what the session is doing is recorded after each turn",
+        f"added a SessionEnd hook to {c}: the session's end is recorded with what it was doing",
         f"added a UserPromptSubmit hook to {c}: every operator prompt is recorded",
         f"added a PreToolUse hook to {c}: {GUARD}",
         f"added a BeforeAgent hook to {g}: every operator prompt is recorded",
+        f"added a PreCompress hook to {g}: the session's state is recorded before every compaction",
+        f"added a SessionEnd hook to {g}: the session's end is recorded with what it was doing",
     ]
     assert API.hooks(repo, action="install", claude=True, gemini=True).data["message"] == "\n".join(
         want
@@ -131,9 +159,13 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         f"the ddflow SessionStart hook is already in {c}",
         *([note] if note else []),
         f"the ddflow PreCompact hook is already in {c}",
+        f"the ddflow Stop hook is already in {c}",
+        f"the ddflow SessionEnd hook is already in {c}",
         f"the ddflow UserPromptSubmit hook is already in {c}",
         f"the ddflow PreToolUse hook is already in {c}",
         f"the ddflow BeforeAgent hook is already in {g}",
+        f"the ddflow PreCompress hook is already in {g}",
+        f"the ddflow SessionEnd hook is already in {g}",
     ]
     assert API.hooks(repo, action="install", claude=True, gemini=True).data["message"] == "\n".join(
         again
@@ -141,9 +173,13 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
     gone = [
         f"removed the ddflow SessionStart hook from {c}",
         f"removed the ddflow PreCompact hook from {c}",
+        f"removed the ddflow Stop hook from {c}",
+        f"removed the ddflow SessionEnd hook from {c}",
         f"removed the ddflow UserPromptSubmit hook from {c}",
         f"removed the ddflow PreToolUse hook from {c}",
         f"removed the ddflow BeforeAgent hook from {g}",
+        f"removed the ddflow PreCompress hook from {g}",
+        f"removed the ddflow SessionEnd hook from {g}",
     ]
     assert API.hooks(repo, action="uninstall", claude=True, gemini=True).data[
         "message"
@@ -152,9 +188,13 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
     none = [
         f"no ddflow SessionStart hook in {c}",
         f"no ddflow PreCompact hook in {c}",
+        f"no ddflow Stop hook in {c}",
+        f"no ddflow SessionEnd hook in {c}",
         f"no ddflow UserPromptSubmit hook in {c}",
         f"no ddflow PreToolUse hook in {c}",
         f"no ddflow BeforeAgent hook in {g}",
+        f"no ddflow PreCompress hook in {g}",
+        f"no ddflow SessionEnd hook in {g}",
     ]
     assert API.hooks(repo, action="uninstall", claude=True, gemini=True).data[
         "message"
@@ -225,7 +265,7 @@ def test_adopt_writes_the_same_prompt_hooks_as_hooks_install(repo: Path) -> None
     assert _read(repo, CLAUDE) == {
         "hooks": {"UserPromptSubmit": files[CLAUDE]["hooks"]["UserPromptSubmit"]}
     }
-    assert _read(repo, GEMINI) == files[GEMINI]
+    assert _read(repo, GEMINI) == {"hooks": {"BeforeAgent": files[GEMINI]["hooks"]["BeforeAgent"]}}
     assert A._install_prompt_hooks(repo, ["codex"]) == []
 
 
@@ -247,9 +287,13 @@ def test_the_table_names_every_harness_hook_once() -> None:
     assert keys == [
         ("claude", "session-start"),
         ("claude", "pre-compact"),
+        ("claude", "stop"),
+        ("claude", "session-end"),
         ("claude", "prompt"),
         ("claude", "pre-tool"),
         ("gemini", "prompt"),
+        ("gemini", "pre-compact"),
+        ("gemini", "session-end"),
     ]
     assert len({(h.file, h.event) for h in CH.HOOKS}) == len(CH.HOOKS)
     for h in CH.HOOKS:

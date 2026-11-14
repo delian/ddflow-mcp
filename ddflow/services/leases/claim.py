@@ -289,7 +289,11 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             # `clash` is what `_break_idle` left standing (a non-breakable lease): the hint
             # must name IT, while `glob_clashes` re-lists every live clash for the message.
             other_id, lease, _pair = clash
-            named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
+            named, _ids = clash_report(
+                glob_clashes(state, cfg, it, holder, mine, now),
+                now=now,
+                activity=LB.tree_activity(log.root),
+            )
             raise LeaseError(
                 f"{item_id} writes files another live lease holds: {named}"
                 + (

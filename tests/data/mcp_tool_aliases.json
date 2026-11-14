@@ -34,6 +34,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_bug_duplicate": [
+  "ddflow_bug action=duplicate",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_bug_file_tasks": [
   "ddflow_bug action=file_tasks",
   "0.2.8",
@@ -226,6 +231,11 @@
  ],
  "ddflow_job_run": [
   "ddflow_job action=run",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_kill": [
+  "ddflow_admin action=kill",
   "0.2.8",
   "1.0"
  ],
@@ -431,6 +441,11 @@
  ],
  "ddflow_resolve": [
   "ddflow_task action=resolve",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_restart": [
+  "ddflow_admin action=restart",
   "0.2.8",
   "1.0"
  ],

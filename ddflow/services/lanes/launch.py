@@ -12,6 +12,11 @@ must reach the template's ``min_hooks``; 7. the Lane contract's ``start``; 8. on
 
 No daemon: the scheduler tick calls this. No model is reached here; ``binary`` and the driver are
 injectable so a test runs a stub. Approval is only ever read (``launch_template.approved``).
+
+Admission is the ESTIMATE only: nothing here stops the lane afterwards. That is the runtime half
+(``ddflow.services.lanes.budgetstop``): the supervisor interrupts a launched lane once its usage
+events reach ``budget_usd``, gated on ``[swarm] budget_stop_enabled`` (which this audit note
+records so the launch itself says whether the cap will be enforced).
 """
 
 from __future__ import annotations
@@ -285,6 +290,7 @@ def launch(req: Request) -> Launched | Refused:
             "agent": req.agent,
             "hooks": prep.level,
             "budget_usd": t.budget_usd,
+            "budget_stop_enabled": cfg.swarm.budget_stop_enabled,
             "seed_dropped": list(seed.dropped),
         },
         sort_keys=True,
