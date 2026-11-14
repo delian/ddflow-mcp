@@ -66,6 +66,7 @@ def name_template_problem(template: Any) -> str:
         )
     return ""
 
+
 #: Vowel-free and without 0, 1, 3 (the Kubernetes alphabet), as Kubernetes' generated names:
 #: nothing read aloud or typed on a phone is mistaken for another character or for a word.
 RAND_ALPHABET = "bcdfghjklmnpqrstvwxz2456789"

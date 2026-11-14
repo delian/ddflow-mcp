@@ -15,9 +15,8 @@ from typing import Any
 
 from ..core.naming import (
     NAME_COLLISIONS,
-    NAME_LITERAL,
     NAME_SCOPES,
-    NAME_TOKENS,
+    NAME_TOKENS,  # noqa: F401  (re-exported through `ddflow.config`)
     name_template_problem,
 )
 from ._docs import declare, int_at_least, knob
