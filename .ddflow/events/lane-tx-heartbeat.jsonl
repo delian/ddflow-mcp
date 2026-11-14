@@ -89,3 +89,4 @@
 {"agent":"lane-tx-heartbeat","data":{"gate":"unit_tests"},"id":"e303b550fb4e902b6b8dab7a7","kind":"gate.started","lamport":197866,"schema":1,"subject":"TX-heartbeat-catchup-lockfree","ts":"2026-11-14T00:19:00.715885Z"}
 {"agent":"lane-tx-heartbeat","data":{"at":1794616070.0214968,"holder":"lane-tx-heartbeat"},"id":"e18f463a8851736e5418de207","kind":"lease.renewed","lamport":197965,"schema":1,"subject":"TX-heartbeat-catchup-lockfree","ts":"2026-11-14T00:27:50.192567Z"}
 {"agent":"lane-tx-heartbeat","data":{"at":1794616444.784156,"holder":"lane-tx-heartbeat"},"id":"e7225e625f357cc8f2b7d9689","kind":"lease.renewed","lamport":198026,"schema":1,"subject":"TX-heartbeat-catchup-lockfree","ts":"2026-11-14T00:34:05.012929Z"}
+{"agent":"lane-tx-heartbeat","data":{"at":1794616569.7049513,"holder":"lane-tx-heartbeat"},"id":"eef1b135aee87973c51a84f55","kind":"lease.renewed","lamport":198045,"schema":1,"subject":"TX-heartbeat-catchup-lockfree","ts":"2026-11-14T00:36:09.889766Z"}
