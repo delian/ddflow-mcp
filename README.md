@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=93c8e7d2112f -->
-<details><summary>All 745 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=72ac14c005d1 -->
+<details><summary>All 751 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1083,6 +1083,8 @@ long default is left to `ddflow config --explain`.
 | `gates.baseline_red_notify_to` | `"coordinator"` |  |
 | `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
 | `gates.keep_env` | `[]` |  |
+| `gates.scrub_secret_names` | `"warn"` | `off` \| `warn` \| `on` |
+| `gates.secret_name_patterns` | (long: see `ddflow config --explain`) |  |
 | `gates.standards_wait_s` | `900` |  |
 | `govern.quota_mark_1` | `0.4` |  |
 | `govern.quota_mark_2` | `0.6` |  |
@@ -1319,6 +1321,8 @@ long default is left to `ddflow config --explain`.
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |
 | `output.allow_full` | `true` |  |
+| `output.status_fix_tasks_in_headline` | `false` |  |
+| `output.status_completed_shown` | `12` |  |
 | `output.json_envelope` | `false` |  |
 | `perf_metrics.ring_max_bytes` | `2000000` |  |
 | `perf_metrics.ring_max_age_s` | `604800` |  |
@@ -1537,6 +1541,8 @@ long default is left to `ddflow config --explain`.
 | `swarm.w_cost` | `1.0` |  |
 | `swarm.w_rework` | `1.5` |  |
 | `swarm.w_queue` | `0.5` |  |
+| `swarm.w_headroom` | `1.0` |  |
+| `swarm.headroom_floor_usd` | `0.0` |  |
 | `swarm.fit_margin` | `0.1` |  |
 | `swarm.cost_ref_usd` | `1.0` |  |
 | `swarm.rework_ref` | `1.0` |  |

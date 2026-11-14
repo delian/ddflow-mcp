@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "path.moved"
+why = "A merge landed a rename, move or package split; one record per move, derived from git rename detection (old path, new path, merge sha)."
+impact = "additive"

@@ -14,7 +14,7 @@ from ...adapters import git as G
 from ...config import Config
 from ...config_sections._layers import read_toml
 from ...core import schedule
-from ...core.model import REVIEW, Item, State
+from ...core.model import DONE, REVIEW, Item, Lease, State
 from ...infra import worktree as W
 from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
@@ -23,6 +23,18 @@ from ..leaseclock import foreign
 from .common import _fold
 from .lifecycle import expire
 from .model import Recovery
+
+
+def _expired_lease(it: Item, lease: Lease | None, now: float, grace_s: int) -> bool:
+    """Is ``it`` owed an ``expired_lease`` finding for a lease that is no longer live?
+
+    A DONE item whose lease lapsed but was never cleared is owed nothing: ``complete``
+    keeps the expired lease record (nothing clears it) and `release --note salvaged` on
+    it is a no-op ('no lease'), so an expired-lease finding would read stale relative to
+    the item's actual state and overstate crash-orphans (Ba73b94a6ad). An ABANDONED item
+    is not "done": its branch may still hold work worth salvaging, so it stays reportable.
+    """
+    return bool(lease) and not lease.live(now, grace_s) and it.state != DONE
 
 
 def scan(
@@ -78,7 +90,7 @@ def scan(
         if it.removed:
             continue
         lease = it.lease
-        if lease and not lease.live(now, cfg.lease.grace_s):
+        if _expired_lease(it, lease, now, cfg.lease.grace_s):
             # Prefer whichever source actually names a tree. These should agree, and
             # after the renew fix they do -- but if they ever diverge, trusting the
             # empty one produces "nothing to salvage" over real work, which is the one
@@ -540,11 +552,19 @@ def sweep(log: EventLog, cfg: Config, repo: Path, *, apply: bool = False) -> lis
     """Report recoverable state; with ``apply``, record expiry for the UNSALVAGEABLE
     ones only. Salvageable trees are never touched automatically, whatever the policy —
     the knob controls convenience, not safety."""
-    found = scan(log, cfg, repo)
+    state = _fold(log)
+    found = scan(log, cfg, repo, state=state)
     if apply:
         for rec in found:
             # `is False` NOT `not ...` -- None means "could not measure" and must never
             # be swept. `not None` is True, which is how unknown became clean.
             if rec.kind == "expired_lease" and rec.salvageable is False:
+                # The fold keeps an expired lease on its item so recovery still reports
+                # it; recording its expiry again every pass wrote 333 of 350 lease.expired
+                # events as repeats (WF-lease-expired-once). One expiry per lease: a later
+                # lease on the item starts with no `expired_at`.
+                lease = state.items[rec.item].lease
+                if lease is not None and lease.expired_at:
+                    continue
                 expire(log, rec.item, reason=f"swept: {rec.advice}")
     return found

@@ -411,6 +411,16 @@ bug X", or names X in a fix list ("fixes bugs A, B and X"), is a fix, a mention 
 invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON (a task under no phase is listed in an **Unphased** section of the board, and under `unphased` in the JSON);
 `--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
 
+**The queue's totals are one number everywhere** (B6341fe42ca). `ddflow status` prints
+`N of M live tasks done (K abandoned and F fix tasks listed separately)`, then every bucket
+of every task record summing to the total (`done + running + ready + held by cap + blocked +
+review + abandoned`), then phases and bugs counted the same way. The prose, `--json status`
+(additive fields `tasks.live`, `tasks.live_done`, `tasks.fix`, `bugs`), the MCP tool, the
+`Progress:` block after `complete` (labelled "live tasks") and the STATUS.md export all read
+`core.progress.totals.queue_totals`. `Completed (last N of TOTAL)` says when its list is
+bounded. `[output].status_fix_tasks_in_headline` puts fix tasks in the headline pair;
+`[output].status_completed_shown` sets how many completions are listed.
+
 **A phase's done/total is the same number everywhere** — the board, `phase list` (and
 `ddflow_read kind=phase`), the progress line after `complete` and the ROADMAP export. A phase counts every live task nested any depth below it, sub-tasks and bug-fix
 tasks included; an abandoned task is settled, so it is out of the total and shown as

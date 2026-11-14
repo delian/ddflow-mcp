@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "output.status_fix_tasks_in_headline"
+new = 'false'
+why = "B6341fe42ca: status totals come from one function; this knob sets how the headline and Progress block count fix tasks / how many completions the prose lists."
+impact = "additive"

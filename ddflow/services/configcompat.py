@@ -67,6 +67,7 @@ def report(repo: Path, cfg: Config, problems: list[str], notes: list[str]) -> No
         for where, extra in skipped_table_fields(repo)
     ]
     notes += [f"config: {m}; the rest of the setting applies" for m in cfg.ignored_members]
+    notes += [f"config: {m} (r-tighten-only)" for m in cfg.dropped_members]
     if cfg.file_format > CONFIG_FORMAT:
         notes.append(
             f"config is format {cfg.file_format}, newer than the format {CONFIG_FORMAT} this "

@@ -83,6 +83,21 @@ _OPERATOR_FORCE = (
     "guards agents' Bash only). For `complete` and `claim` there is a chat route that needs no "
     "--force: re-run with `--approval request`, the operator answers in chat, then `--approval <id>`"
 )
+#: A data-losing git form in the PRIMARY checkout while `.ddflow/events` holds uncommitted
+#: changes: refused only then (Ba34619983b). A branch switch (`git checkout <branch>`) is not a
+#: discard of the working tree and is left alone; committing the log first is the way past.
+_EVENT_DISCARD_INSTEAD = (
+    "commit the event log first: ddflow commits `.ddflow/events` at merge, complete, release "
+    "and stop (`[log].commit_events`), so finish at one of those doors, or WIP-commit the "
+    "shards yourself, before discarding tracked changes they may hold"
+)
+#: The git subcommands whose job is to discard tracked/untracked working-tree changes: they can
+#: revert `.ddflow/events/*.jsonl` appends (or delete shards git has not committed) in the primary
+#: checkout, which is why they are refused there while shards are uncommitted (Ba34619983b).
+_GIT_DISCARD_SUBCOMMANDS = frozenset({"restore", "clean"})
+#: `git checkout` flags whose value (the NEXT word) is a branch name, not a path. `-t`/`-l`
+#: are boolean, not valued, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
+_CHECKOUT_VALUED = frozenset({"-b", "-B", "-o"})
 
 
 @dataclass(frozen=True)
@@ -90,8 +105,15 @@ class Refusal:
     entry: str  #: the forbidden_commands entry that matched
     command: str  #: the command (one pipeline element) that matched it
     instead: str  #: the safe alternative
+    data_aware: bool = False  #: a data-aware refusal (Ba34619983b), not a static-list entry
 
     def message(self) -> str:
+        if self.data_aware:
+            return (
+                f"ddflow refused `{self.command}`: {self.entry} would discard uncommitted "
+                f"`.ddflow/events` lines. Instead: {self.instead}. (This is a data-aware guard, "
+                "not a [hooks].forbidden_commands entry: commit the shards and it lets it through.)"
+            )
         return (
             f"ddflow refused `{self.command}`: it matches [hooks].forbidden_commands "
             f"`{self.entry}`. Instead: {self.instead}. "
@@ -867,6 +889,79 @@ def _instead(entry: str, words: list[str] | None = None) -> str:
     )
 
 
+def _git_discard(words: list[str]) -> str:
+    """The git discard subcommand `words` is (``restore``/``clean``), or ``checkout`` naming a
+    pathspec (``git checkout -- <path>``, or a path that starts with ``.``/``/`` -- a name that is
+    never a branch), "" when `words` is not git, is not one of those, or is a branch switch.
+    `git reset --hard` is the static `forbidden_commands` entry's job, not this one."""
+    head = _head(words)
+    if not head or head[0].rsplit("/", 1)[-1] != "git":
+        return ""
+    args = _args(head)
+    if not args:
+        return ""
+    sub = args[0]
+    if sub in _GIT_DISCARD_SUBCOMMANDS:
+        return sub
+    if sub == "checkout":
+        rest = args[1:]
+        # `--` means "everything after is a path"; `-f`/`--force` discards regardless of target.
+        if "--" in rest or "-f" in rest or "--force" in rest:
+            return "checkout"
+        # `-b`/`-B`/`-o` take the next word as their value (a branch name, not a path);
+        # `-t`/`-l` are boolean, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
+        positions: list[str] = []
+        i = 0
+        while i < len(rest):
+            w = rest[i]
+            if w in _CHECKOUT_VALUED:
+                i += 2
+                continue
+            if not w.startswith("-"):
+                positions.append(w)
+            i += 1
+        # a path starts with `.`/`/` (never a branch), or two positionals is the `<tree-ish> <path>`
+        # restore form; one bare positional is judged a branch switch.
+        if any(w.startswith((".", "/")) for w in positions) or len(positions) > 1:
+            return "checkout"
+    if sub == "switch" and (
+        "-f" in args[1:] or "--force" in args[1:] or "--discard-changes" in args[1:]
+    ):
+        return "switch"
+    return ""
+
+
+def _uncommitted_events(cwd: str | Path) -> bool:
+    """Whether the checkout at `cwd` holds an event shard git has not committed (new or
+    appended); False when there is none, or when git could not tell (B-fails-safe to NOT
+    refuse: a transient git error must not block a command the operator relies on)."""
+    top = git.run(cwd or Path.cwd(), "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out.strip():
+        return False
+    entries = git.status(top.out.strip(), ".ddflow/events", untracked="all")
+    if entries is None:
+        return False
+    return any(e.path.endswith(".jsonl") for e in entries)
+
+
+def _discard_refusal(words: list[str], cwd: str | Path) -> Refusal | None:
+    """A data-losing git form in the primary checkout while `.ddflow/events` holds uncommitted
+    changes is a silent loss the static list cannot name (Ba34619983b): the refusal, or None.
+    It holds back only when this checkout is NOT the primary (`is_primary`, so a worktree -- other
+    than being the cwd -- is exempt), or the shards are all committed. A `git -C other`/`cd other`
+    in the line is not resolved: refusing a discard named `-C` elsewhere LOOKS primary is the safe
+    refusal, losing the events is not, and resolving each `cd`/`-C` target per command is not this
+    hook's job."""
+    form = _git_discard(words)
+    if not form:
+        return None
+    if not is_primary(cwd or Path.cwd()):
+        return None
+    if _uncommitted_events(cwd or Path.cwd()):
+        return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD, True)
+    return None
+
+
 def check(
     command: str,
     cfg: Config,
@@ -897,6 +992,8 @@ def check(
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
+        if r := _discard_refusal(words, cwd or Path.cwd()):
+            return r
     return None
 
 

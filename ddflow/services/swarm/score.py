@@ -11,8 +11,8 @@ Two stages (D-swarm-answers Q1, Q5, Q10):
    window, the trust tier, and family independence (a reviewer's family differs from the
    author's, an unknown family on either side never passes; an author needs a reviewer family left that differs from its own). A refused
    pair is never scored into eligibility: no weight can override a refusal.
-2. ``evaluate``: a score from critical path, fit (ledger), cost, rework and queue, each a
-   term in [0, 1] times its ``[swarm]`` weight, kept in ``Decision.parts``. Cost only ranks
+2. ``evaluate``: a score from critical path, fit (ledger), cost, rework, headroom and
+   queue, each a term in [0, 1] times its ``[swarm]`` weight, kept in ``Decision.parts``. Cost only ranks
    lanes whose fit is within ``fit_margin`` of the best eligible lane (``rank``), so a free
    local route never wins by being free. An unmeasured pair scores neutral, and an
    ``unavailable``/``partial`` outcome is never a pass (``review_satisfied`` and the ledger).
@@ -25,6 +25,7 @@ from dataclasses import dataclass, field, replace
 
 from ...core.globs import overlap
 from ..lanes import capacity as CAPACITY
+from . import headroom as HR
 from . import ledger as L
 from .score_config import Weights
 
@@ -62,6 +63,9 @@ class Lane:
     kinds: tuple[str, ...] = ()  # empty: any kind
     level: int = 0  # measured conformance level; 0 = none (never passed a run)
     pools: tuple[CAPACITY.Headroom, ...] = ()  # endpoint pool headroom the lane needs
+    standing: HR.Standing = field(
+        default_factory=HR.Standing
+    )  # limit headroom; unknown is neutral, never blocks
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,7 @@ def _lane_refusals(item: Item, lane: Lane, world: World, w: Weights) -> list[str
     if lane.level < w.conformance_min_level:
         out.append(f"conformance level {lane.level} below the required {w.conformance_min_level}")
     out += CAPACITY.refusals(lane.pools)  # an endpoint/GPU pool with no free slot refuses
+    out += HR.refusals(lane.standing, floor_usd=w.headroom_floor_usd, need_usd=est_cost(item, lane))
     return out
 
 
@@ -191,6 +196,7 @@ def _terms(item: Item, lane: Lane, world: World, w: Weights) -> tuple[dict[str, 
         "fit": cell.score(),
         "cost": cost_t,
         "rework": rework_t,
+        "headroom": HR.term(lane.standing),
         "queue": min(1.0, max(0.0, item.waited_s) / w.queue_ref_s) if w.queue_ref_s else 0.0,
     }
     return terms, why
@@ -214,6 +220,7 @@ def evaluate(
         "cost": w.w_cost,
         "rework": w.w_rework,
         "queue": w.w_queue,
+        "headroom": w.w_headroom,
     }
     parts = tuple((k, weights[k] * terms[k]) for k in weights)
     return Decision(
