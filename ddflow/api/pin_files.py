@@ -58,10 +58,11 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     # The foreign-import refusal protects the *interactive* regenerate route, which re-records
     # transcript pins by running pytest (a foreign import would pin the guard's refusal, not the
     # real output — Bc28808f9c3). The after-merge hook run re-records only the recipes that allow
-    # it (README tables etc. — their regen is not a transcript suite), so it is safe in a linked
-    # worktree and must not refuse there: the merge driver keeps the branch side of a pin file and
-    # the hook then folds main's rows back in; refusing drops them (Bf9931aed2b). The linked
-    # worktree's own handling is `_after_merge_note`'s (B683c75d7b3).
+    # it (README tables etc. — their regen is not a transcript suite) with the child env already
+    # scrubbed (`pins._run`, B683c75d7b3), so it is safe from a linked worktree and must not
+    # refuse there: the merge driver keeps the branch side of a pin file and the hook then folds
+    # main's rows back in; refusing dropped them (Bf9931aed2b). A linked worktree is not
+    # special to `_after_merge_note`: it regenerates through the same path as the primary.
     foreign_refused = (
         _foreign_import_refusal()
         if verb == "regenerate" and not check and not after_merge
@@ -239,7 +240,8 @@ def _skew_refusal(
     primary: Path, repo: Path, agent: str, *, check: bool, after_merge: bool
 ) -> O.Outcome | None:
     """The refusal when an older binary would re-record pins, else None. A check writes
-    nothing, and a post-merge hook in a linked worktree records nothing: neither is refused."""
+    nothing, and a post-merge hook in a linked worktree is also not refused (the after-merge
+    route is safe from a worktree, Bf9931aed2b): neither is a skew refusal."""
     if check or (after_merge and _linked_worktree(repo)):
         return None
     reason = _older_binary_refusal(primary, agent)
