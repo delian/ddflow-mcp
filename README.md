@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=171ffb675d92 -->
-<details><summary>All 754 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=77eb990c11b4 -->
+<details><summary>All 758 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1023,6 +1023,8 @@ long default is left to `ddflow config --explain`.
 | `export.redact` | `true` |  |
 | `export.max_bytes` | `60000` |  |
 | `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
+| `export.security_contact` | `""` |  |
+| `export.security_response_days` | `0` |  |
 | `export.tables` | `{}` |  |
 | `fasttrack.tiny_cold_max_source_lines` | `10` |  |
 | `flow.model` | `"trunk"` | `trunk` \| `gitflow` |
@@ -1464,6 +1466,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
+| `schedule.order` | (long: see `ddflow config --explain`) |  |
+| `schedule.order_pin` | `[]` |  |
 | `schedule.bugs_first` | `true` |  |
 | `schedule.reserved_slots` | `0` |  |
 | `schedule.reserved_tags` | `["ddflow-gap"]` |  |
