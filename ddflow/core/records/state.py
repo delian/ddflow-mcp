@@ -141,6 +141,12 @@ class State:
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.
     waiting: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: `path.moved`: a rename, move or package split a merge landed ({"old", "new", "sha",
+    #: "how"}). One record per move, derived from git rename detection (MV-path-moves).
+    moves: list[dict[str, Any]] = field(default_factory=list)
+    #: merge shas whose `path.moved` detection could not run (git unavailable). Kept OUT of
+    #: `moves` so a find of "no moves" is never read as "ran and found none".
+    moves_unavailable: list[str] = field(default_factory=list)
     #: agent -> "path\0key" -> the newest `agent.onboarded` record of that artifact ({"path",
     #: "kind", "key", "digest", "descriptor", "version"}); read it through `onboarded_of`.
     onboarded: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)

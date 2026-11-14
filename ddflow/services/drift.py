@@ -273,3 +273,70 @@ def set_last_seen(repo: Path, tree: Path, sha: str) -> None:
     data[str(tree.resolve())] = sha
     p.parent.mkdir(parents=True, exist_ok=True)
     replace_text(p, json.dumps(data, sort_keys=True))
+
+
+@dataclass(frozen=True)
+class Move:
+    """One path that moved: an old path to its new path, and how (MV-path-moves)."""
+
+    old: str
+    new: str
+    how: str  # "rename" | "split"
+
+
+def _split_target(old: str) -> str:
+    """The ``module/__init__.py`` path a deleted python module ``old`` split into, or "".
+    A package split only splits a python module into its OWN package directory, so a
+    deleted non-module never fakes a split (MV-path-moves)."""
+    if not old.endswith(".py") or not old[:-3]:
+        return ""
+    return f"{old[:-3]}/__init__.py"
+
+
+def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
+    """Every rename, move and package split in what ``after`` did since ``before``, or None
+    when git could not say (never "nothing moved"). A rename is git's own ``-M`` content
+    detection, so it is one edge each of a plain move, a move plus edit, and a many-into-one
+    file merge. A package split is ``X`` deleted while ``X/__init__.py`` is added: git keeps
+    the module body's rename into ``__init__.py`` only when enough content survives, so the
+    shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
+    split-* tasks). A many-into-one file merge is git's own ``-M`` rename links (each old
+    path into the new file), not ``-C`` copy detection: a copy is not a move."""
+    r = git(
+        tree,
+        "-c",
+        "core.quotepath=off",
+        "-c",
+        "diff.renames=true",
+        "diff",
+        "--name-status",
+        "-M",
+        "-z",
+        before,
+        after,
+    )
+    if not r.ok or ("rename" in (r.err or "") and "skipp" in (r.err or "")):
+        return None
+    added: set[str] = set()
+    deleted: set[str] = set()
+    out: list[Move] = []
+    # A `-z --name-status` stream is ``R100`` NUL old NUL new, or ``A``/``D``/``M`` NUL path;
+    # `-c diff.renames=true` excludes copies, so only a rename carries two path fields.
+    tokens = [p for p in r.out.split("\0") if p]
+    i = 0
+    while i < len(tokens):
+        kind = tokens[i]
+        n = 2 if kind.startswith("R") else 1
+        names = tokens[i + 1 : i + 1 + n]
+        if kind.startswith("R") and len(names) >= 2:
+            out.append(Move(names[0], names[-1], "rename"))
+        elif kind == "A" and names:
+            added.add(names[0])
+        elif kind == "D" and names:
+            deleted.add(names[0])
+        i += 1 + n
+    for old in sorted(deleted):
+        target = _split_target(old)
+        if target in added:
+            out.append(Move(old, target, "split"))
+    return out

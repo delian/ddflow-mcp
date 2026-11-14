@@ -15,6 +15,7 @@ from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
 from ...services import ci as CI
+from ...services import drift as DR
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
@@ -107,6 +108,21 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
+
+def _record_moves(log, repo, item: str, before: str, after: str, sha: str) -> None:
+    """Record one `path.moved` per rename, move or package split this landing did, derived
+    from git rename detection on the branch's diff (MV-path-moves). Each record is
+    self-contained (old path, new path, the merge sha), so replay rebuilds the move list
+    from history alone -- nothing is stored that is not in the log. git that could not
+    answer DOES record an unavailable record (``how = "unavailable"``), never nothing:
+    "could not tell" is never read as "nothing moved"."""
+    moves = DR.moves_between(repo, before, after)
+    if moves is None:
+        log.append("path.moved", item, {"old": "", "new": "", "sha": sha, "how": "unavailable"})
+        return
+    for m in moves:
+        log.append("path.moved", item, {"old": m.old, "new": m.new, "sha": sha, "how": m.how})
 
 
 def _record_reconciled(
@@ -358,6 +374,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         landed_after=landed_after,
     )
     _record_reconciled(repo, cfg, log, it, item, landed_before, landed_after, branch_head)
+    _record_moves(log, repo, item, landed_before, landed_after, sha)
     return _finish_merge(
         repo,
         cfg,
