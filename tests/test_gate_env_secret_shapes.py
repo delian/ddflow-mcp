@@ -18,7 +18,7 @@ import pytest
 
 from ddflow.config import Config
 from ddflow.services import gates as G
-from ddflow.services.gateenv import child_env, doctor_notes, secret_names
+from ddflow.services.gateenv import child_env, doctor_notes, env_evidence, secret_names
 
 
 @pytest.fixture(autouse=True)
@@ -117,10 +117,23 @@ def test_a_knobs_own_variable_is_never_secret_shaped_but_another_ddflow_name_is(
     }
 
 
-def test_the_doctor_note_names_the_ci_exception():
+def test_the_doctor_note_names_both_keep_lists():
     seen = SimpleNamespace(evidence={"env_secret_mode": "warn", "env_secret_names": ["A_TOKEN"]})
     state = SimpleNamespace(items={"i": SimpleNamespace(gates={"a": seen})})
-    assert "[ci].keep_env" in doctor_notes(state, Config())[0]
+    note = doctor_notes(state, Config())[0]
+    assert "[gates].keep_env preserves one, [ci].keep_env one for CI" in note
+
+
+def test_the_evidence_is_the_gate_view_and_off_has_no_names():
+    cfg = Config()
+    cfg.ci.keep_env = ["A_TOKEN"]
+    base = {"A_TOKEN": "1", "B_TOKEN": "2"}
+    assert env_evidence(cfg, base) == {
+        "env_secret_mode": "warn",
+        "env_secret_names": ["A_TOKEN", "B_TOKEN"],
+    }
+    cfg.gates.scrub_secret_names = "off"
+    assert env_evidence(cfg, base) == {"env_secret_mode": "off"}
 
 
 def test_a_name_in_scrub_env_is_not_reported_as_visible():

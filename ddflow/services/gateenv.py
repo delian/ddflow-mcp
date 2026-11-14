@@ -76,16 +76,15 @@ def secret_names(
     )
 
 
-def env_evidence(
-    cfg: Config | None, base: Mapping[str, str] | None = None, *, ci: bool = False
-) -> dict[str, Any]:
+def env_evidence(cfg: Config | None, base: Mapping[str, str] | None = None) -> dict[str, Any]:
     """What a gate's evidence says about the secret-shaped variables: the mode used, and (unless
-    `off`) their NAMES: the visible ones under `warn`, the removed ones under `on`."""
+    `off`) their NAMES: the visible ones under `warn`, the removed ones under `on`. It is the view of
+    a gate command (`[gates].keep_env` applies); the CI command is a gate too (`ddflow ci run`), and its
+    own `[ci].keep_env` is applied by `child_env(..., ci=True)` inside that run."""
     gates = cfg.gates if cfg is not None else GatesConfig()
     out: dict[str, Any] = {"env_secret_mode": gates.scrub_secret_names}
     if gates.scrub_secret_names != "off":
-        keep = cfg.ci.keep_env if ci and cfg is not None else ()
-        out["env_secret_names"] = secret_names(_ambient(base), gates, keep)
+        out["env_secret_names"] = secret_names(_ambient(base), gates)
     return out
 
 
