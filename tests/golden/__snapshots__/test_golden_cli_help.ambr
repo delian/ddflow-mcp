@@ -547,10 +547,10 @@
 # ---
 # name: test_help[ddflow bug]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show,status} ...
+  usage: ddflow bug [-h] {found,file-tasks,dedupe,status,duplicate,fixed,invalid,tag,reopen,list,show} ...
   
   positional arguments:
-    {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show,status}
+    {found,file-tasks,dedupe,status,duplicate,fixed,invalid,tag,reopen,list,show}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
                           the younger ones onto each cluster's canonical
@@ -561,7 +561,6 @@
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
       show                read one bug: its text, where it was found, its fix task and its closure
-      status              how many open bugs: totals by severity and blocked vs unblocked
   
   options:
     -h, --help            show this help message and exit
