@@ -707,9 +707,11 @@ def test_the_window_choice_reopens_a_lapsed_window(proj, monkeypatch):
     assert got.ok and got.stamp["via"] == "policy"  # the re-opened window auto-approves again
 
 
-def test_the_window_choice_only_reopens_when_it_names_a_repo(proj, monkeypatch):
-    """B6e5e17ccda: the standing-window choice anchors the window only when the answer actually
-    enables it -- with no repository path the window is not written, so it must not re-anchor."""
+def test_a_plain_approve_never_reopens_the_window(proj, monkeypatch):
+    """B6e5e17ccda: a plain approve (``window=False``) never re-anchors the window -- only the
+    standing-window choice does, so a lapsed window stays lapsed unless the operator re-opens it.
+    (The ``repo is not None`` gate on the window-choice answer lives in ``harness.attest``, which
+    owns WHEN the window may be re-opened; that path is covered by the harness tests.)"""
     from datetime import timedelta
 
     frozen = _frozen_clock(monkeypatch)
