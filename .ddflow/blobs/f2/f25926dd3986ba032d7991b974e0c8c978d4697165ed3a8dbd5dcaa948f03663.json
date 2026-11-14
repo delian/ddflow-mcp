@@ -1,0 +1,1 @@
+{"ids":["tests/test_registry.py::test_the_item_kinds_stay_a_plain_table_and_the_harnesses_list_the_same_names","tests/test_constants_ratchet.py::test_the_script_exits_clean_on_this_tree","tests/test_constants_ratchet.py::test_no_new_unclassified_constant","tests/test_no_agent_literals.py::test_no_new_agent_literal"],"sha":"2166f641efb1bc935734304680a7afe4b26a9331"}
