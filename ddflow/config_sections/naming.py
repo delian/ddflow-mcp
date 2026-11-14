@@ -13,46 +13,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ..core.naming import (
+    NAME_COLLISIONS,
+    NAME_LITERAL,
+    NAME_SCOPES,
+    NAME_TOKENS,
+    name_template_problem,
+)
 from ._docs import declare, int_at_least, knob
-
-#: The tokens a name template may use.
-NAME_TOKENS = ("role", "family", "host", "rand", "seq")
-#: What a generated name may hold outside its tokens: lower-case ASCII letters, digits, '-'.
-#: It is a git branch part, a shard file name (case-insensitive file systems), a tmux
-#: session and a DNS label, so nothing wider is safe.
-NAME_LITERAL = re.compile(r"[a-z0-9-]*")
-NAME_SCOPES = ("global", "host", "family")
-NAME_COLLISIONS = ("suffix", "refuse")
-
-
-def name_template_problem(template: Any) -> str:
-    """Why ``template`` cannot make lane names, or "". Scope-free: the scope's own
-    requirement is `core.naming.template_problem`."""
-    if not isinstance(template, str) or not template:
-        return "must be a non-empty template string"
-    tokens = re.findall(r"\{([^{}]*)\}", template)
-    literal = re.sub(r"\{[^{}]*\}", "", template)
-    if bad := [t for t in tokens if t not in NAME_TOKENS]:
-        known = ", ".join(f"{{{t}}}" for t in NAME_TOKENS)
-        return f"unknown token {{{bad[0]}}}; the tokens are {known}"
-    if "{" in literal or "}" in literal:
-        return "has an unbalanced brace"
-    if not NAME_LITERAL.fullmatch(literal):
-        bad_c = sorted({c for c in literal if not NAME_LITERAL.fullmatch(c)})[0]
-        return (
-            f"holds {bad_c!r} outside its tokens: a name is a branch part, a shard file and "
-            "a tmux session, so only lower-case ASCII letters, digits and '-' may appear"
-        )
-    if len(tokens) != len(set(tokens)):
-        return "uses a token twice"
-    if "role" not in tokens:
-        return "needs {role}: the human-readable part"
-    if "rand" not in tokens:
-        return (
-            "needs {rand}: {seq} counts only the names one clone sees and a host label can "
-            "alias, so only a random suffix keeps offline clones apart"
-        )
-    return ""
 
 
 def _int_between(lo: int, hi: int, why: str) -> Callable[[Any], str]:
