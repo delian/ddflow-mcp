@@ -34,9 +34,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "ddflow"
 
 #: Layer -> what it may import. Lower layers appear in higher layers' lists, never the
-#: reverse. `config` is at the bottom: everything reads knobs, and it reads nobody.
+#: reverse. `config` may import `core` (config_sections reaches core's pure validators,
+#: e.g. core.naming, for a knob's `check=`); `core` still imports `config` (legacy knob
+#: reads, shrinking as code moves behind D-adapters-answers).
 ALLOWED: dict[str, set[str]] = {
-    "config": set(),
+    "config": {"core"},
     "core": {"config"},
     "infra": {"config", "core"},
     "views": {"config", "core", "infra", "services"},

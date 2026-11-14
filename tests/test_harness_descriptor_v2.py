@@ -27,7 +27,10 @@ def p(extra: str = ""):
 
 #: Shipped descriptors that declare v2 sections, read from their vendor's docs. Every other one
 #: still loads with them absent, which means not verified. A new one fails below, so it is noticed.
-V2_DECLARED = {"grok"}
+V2_DECLARED = {"grok", "vibe", "claude", "kilo", "opencode"}
+
+#: Shipped descriptors that fill the reserved [acp] section (XA-headless-facts-claude-kilo).
+ACP_DECLARED = {"claude", "kilo"}
 
 
 def test_shipped_descriptors_still_load_with_v2_not_verified():
@@ -38,7 +41,8 @@ def test_shipped_descriptors_still_load_with_v2_not_verified():
     for h in shipped:
         if h.id not in V2_DECLARED:
             assert h.detect is None and h.headless is None and h.autonomy is None
-        assert h.reserved == {}
+        if h.id not in ACP_DECLARED:  # [acp] is the one reserved section a shipped descriptor fills
+            assert h.reserved == {}
 
 
 def test_a_shipped_v2_section_keeps_its_values_and_its_source():

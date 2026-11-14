@@ -310,3 +310,27 @@ def test_an_unreachable_delta_keeps_the_earlier_passed_round_and_notes_the_outag
     assert rec.outcome == "passed", rec
     ev = rec.evidence
     assert ev["reviewed_head"] == head and ev["unavailable_deltas"], ev
+
+
+def test_an_empty_delta_over_only_excluded_files_keeps_the_earlier_passed_round(repo, tmp_path):
+    """Bug Be82376964f: a delta over commits that change only excluded files (pins/golden/
+    transcripts) found an empty diff and recorded UNAVAILABLE, replacing the earlier passed
+    round and reading as a spent round. The empty delta keeps the earlier round (its outage
+    noted under `unavailable_deltas`), calls no reviewer, and spends no delta round."""
+    seen = _setup(repo, tmp_path)
+    (tmp_path / "fake-reviewer").write_text(
+        f"#!/bin/sh\ncat >/dev/null\nprintf 'call\\n' >> '{seen}'\necho 'STATUS: NO FINDINGS'\n"
+    )
+    assert _review(repo).exit == OK  # full round 1: clean pass
+    head = _ev(repo)["reviewed_head"]
+    calls = _calls(seen)
+    _fix(repo, "snap.ambr", "regenerated\n")  # an excluded generated file, nothing else
+    out = _review(repo, delta=True)
+    assert _calls(seen) == calls, "no reviewer ran for a delta that left nothing to review"
+    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
+    assert rec.outcome == "passed", rec.outcome
+    ev = rec.evidence
+    assert ev["reviewed_head"] == head, "the earlier round's head stays"
+    assert ev["unavailable_deltas"], "the empty delta is a note, not a replacement"
+    assert ev.get("delta_rounds", 0) == 0, "the empty delta spent no delta round"
+    assert "the earlier round stands" in out.data["text"], out.data["text"]

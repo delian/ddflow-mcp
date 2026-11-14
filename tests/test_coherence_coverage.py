@@ -261,7 +261,7 @@ def test_every_cli_verb_that_records_text_is_classified():
 def _tool_api_source(name: str) -> str:
     """The source of tool ``name``'s ``api``: from its table entry, or from the ``call`` of
     the `Command` that declares it (`surfaces/declared/`)."""
-    for path in sorted((PKG / "surfaces").glob("*/*.py")):
+    for path in sorted((PKG / "surfaces").rglob("*.py")):
         tree = ast.parse(path.read_text("utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Command":
@@ -277,6 +277,13 @@ def _tool_api_source(name: str) -> str:
                         if isinstance(kk, ast.Constant) and kk.value == "api":
                             return ast.unparse(vv)
     return ""
+
+
+def test_tool_api_source_sees_commands_declared_under_declared_records():
+    """Bug Bc1c5099e0a: the scan walked only ``surfaces/*/*.py``, which misses a Command
+    declared under ``surfaces/declared/records/`` (one level deeper), so ``ddflow_bug_found``
+    read as '' and the checked-kind duplicate-check assert failed on main."""
+    assert "_answer(a)" in _tool_api_source("ddflow_bug_found")
 
 
 def test_every_mcp_tool_that_records_text_is_classified_and_a_checked_one_takes_the_answer():

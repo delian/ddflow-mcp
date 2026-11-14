@@ -66,9 +66,139 @@ stop = "AskUserQuestion / operator approval"
 [env]
 session_id = ["CLAUDE_CODE_SESSION_ID"]
 
+[detect]
+process_names = ["claude"]
+env = ["CLAUDECODE"]
+client_names = ["claude-code"]
+
+[headless]
+argv = ["claude", "-p"]
+model_flag = "--model"
+effort_flag = "--effort"
+mcp_flag = "--mcp-config"
+output_flag = "--output-format"
+output_format = "stream-json"
+resume_flag = "--resume"
+autonomy = "scoped"
+
+[autonomy]
+profiles = { accept-edits = "--permission-mode acceptEdits", scoped = "--permission-mode dontAsk --allowedTools mcp__ddflow", bypass = "--dangerously-skip-permissions" }
+
+[acp]
+none = true
+
+[facts."detect.process_names"]
+s = "verified"
+src = "probe: which claude; claude --version -> 2.1.323 (Claude Code)"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --version"
+by = "read-only probe, lane-xa-headless-facts"
+note = "binary name claude, installed at ~/.local/bin/claude"
+
+[facts."detect.env"]
+s = "verified"
+src = "probe: the environment of the claude process that ran this lane (CLAUDECODE=1, CLAUDE_CODE_SESSION_ID set)"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "env | grep ^CLAUDECODE"
+by = "read-only probe, lane-xa-headless-facts"
+note = "observed in a session; identity.py HARNESS_MARKERS reads the same variable"
+
+[facts."detect.client_names"]
+s = "documented"
+src = "docs/ddflow/research/mcp-client-matrix.md (R-soft-claude-listchanged)"
+d = "2026-11-14"
+ver = "2.1.296"
+note = "clientInfo.name claude-code, title Claude Code, read at an initialize handshake by an earlier probe; not re-read on 2.1.323"
+
+[facts."headless.argv"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "-p, --print: print the response and exit; the prompt is the last argument; the workspace trust dialog is skipped in this mode"
+
+[facts."headless.model_flag"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--model <alias or full name>"
+
+[facts."headless.effort_flag"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--effort <low|medium|high|xhigh|max>"
+
+[facts."headless.mcp_flag"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--mcp-config <json files or strings...>; --strict-mcp-config ignores every other MCP source"
+
+[facts."headless.output_flag"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--output-format, only with --print"
+
+[facts."headless.output_format"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "choices text (default), json (single result), stream-json (realtime); with -p the stream needs --verbose in older builds: not run, see [verified].unverified"
+
+[facts."headless.resume_flag"]
+s = "verified"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "-r, --resume [session id or name]; --session-id <uuid> pins a new session id; --fork-session copies on resume"
+
+[facts."autonomy.profiles"]
+s = "verified"
+src = "probe: claude --help (the flag spellings and the mode names it lists)"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+note = "--permission-mode choices acceptEdits, auto, bypassPermissions, manual, dontAsk, plan; --allowedTools; --dangerously-skip-permissions; --permission-prompts host|none. The flag spellings were read here; that dontAsk with --allowedTools lets the ddflow MCP tools run and denies the rest was NOT run"
+
+[facts."acp"]
+s = "none"
+src = "probe: claude --help"
+d = "2026-11-14"
+ver = "2.1.323"
+probe = "claude --help"
+note = "no acp subcommand and no ACP flag in claude --help or its command list; third-party ACP adapters were not assessed"
+
 [verified]
-date = "2026-10-09"
+date = "2026-11-14"
 sources = ["https://code.claude.com/docs/en/hooks.md", "https://code.claude.com/docs/en/mcp.md", "https://code.claude.com/docs/en/env-vars.md"]
 record = "R-hx-claude"
-probe = "claude --version -> 2.1.285; claude mcp add --help"
-
+probe = "claude --version -> 2.1.323; claude --help; claude mcp --help; claude auth --help (read-only, 2026-11-14)"
+unverified = [
+  "[headless] max_turns_flag: --max-turns is NOT in claude --help 2.1.323, so it is left out; probe: claude -p --max-turns 1 \"say ok\" (one model call; a person runs it)",
+  "[headless] exit codes of a -p run (success, max turns, error, permission denied); probe: claude -p --output-format json \"say ok\"; echo $? (one model call)",
+  "[headless] whether --output-format stream-json under -p still needs --verbose; probe: claude -p --output-format stream-json \"say ok\" (one model call)",
+  "[autonomy] that --permission-mode dontAsk with --allowedTools mcp__ddflow lets an MCP call run and denies the rest in a -p run; probe: claude -p --permission-mode dontAsk --allowedTools mcp__ddflow \"list the ddflow tools\" (one model call)",
+]
