@@ -893,6 +893,7 @@ max_parallel = 0
 sync_before_start = true
 adopt_existing = true
 local_files = []
+behind_ignore_globs = [".ddflow/"]
 
 [gate.research]
 title = "Research"
