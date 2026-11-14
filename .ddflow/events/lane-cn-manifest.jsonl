@@ -113,3 +113,4 @@
 {"agent":"lane-cn-manifest","data":{"at":1794650378.1301098,"holder":"lane-cn-manifest"},"id":"ecd82d838842b4f9b64668773","kind":"lease.renewed","lamport":199044,"schema":1,"subject":"CN-manifest","ts":"2026-11-14T09:59:38.279908Z"}
 {"agent":"lane-cn-manifest","data":{"at":1794650570.220393,"holder":"lane-cn-manifest"},"id":"e7b8f8a3959e912ef4e93e395","kind":"lease.renewed","lamport":199056,"schema":1,"subject":"CN-manifest","ts":"2026-11-14T10:02:50.513171Z"}
 {"agent":"lane-cn-manifest","data":{"at":1794651287.7417836,"holder":"lane-cn-manifest"},"id":"e745e91bfbdc2a1d672addac5","kind":"lease.renewed","lamport":199135,"schema":1,"subject":"CN-manifest","ts":"2026-11-14T10:14:47.890850Z"}
+{"agent":"lane-cn-manifest","data":{"at":1794652138.6175401,"holder":"lane-cn-manifest"},"id":"e0c66f5c910ff524aa9d07602","kind":"lease.renewed","lamport":199202,"schema":1,"subject":"CN-manifest","ts":"2026-11-14T10:28:58.839815Z"}
