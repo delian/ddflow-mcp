@@ -47,6 +47,7 @@ def run_sqlite(root, mode):
         try:
             os.unlink(db + suf)
         except FileNotFoundError:
+            # Cleanup is best-effort: SQLite sidecar files may legitimately not exist yet.
             pass
     c = sqlite3.connect(db)
     c.execute(f"pragma journal_mode={mode}")
