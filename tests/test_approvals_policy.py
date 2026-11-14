@@ -701,8 +701,15 @@ def test_the_window_choice_reopens_a_lapsed_window(proj, monkeypatch):
     # The operator answers THAT ask with the standing-window choice: it re-opens the window,
     # re-anchoring `window_start` so a later standing fire auto-approves again.
     digest = asks_of(_state(proj))[after.ask_id]["digest"]
-    E.answer(log, cfg, after.ask_id, "approved", actor=A.resolve_actor(cfg, "me"), digest=digest,
-             window=True)
+    E.answer(
+        log,
+        cfg,
+        after.ask_id,
+        "approved",
+        actor=A.resolve_actor(cfg, "me"),
+        digest=digest,
+        window=True,
+    )
     got = C.operator_gate(log, cfg, canon)
     assert got.ok and got.stamp["via"] == "policy"  # the re-opened window auto-approves again
 
@@ -725,8 +732,15 @@ def test_a_plain_approve_never_reopens_the_window(proj, monkeypatch):
     after = C.operator_gate(log, cfg, canon)
     assert not after.ok and after.ask_id
     digest = asks_of(_state(proj))[after.ask_id]["digest"]
-    E.answer(log, cfg, after.ask_id, "approved", actor=A.resolve_actor(cfg, "me"), digest=digest,
-             window=False)  # a plain approve never re-opens the window
+    E.answer(
+        log,
+        cfg,
+        after.ask_id,
+        "approved",
+        actor=A.resolve_actor(cfg, "me"),
+        digest=digest,
+        window=False,
+    )  # a plain approve never re-opens the window
     got = C.operator_gate(log, cfg, canon)
     assert not got.ok and got.ask_id  # still lapsed: a plain approve does not re-open
 
