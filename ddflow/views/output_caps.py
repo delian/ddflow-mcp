@@ -139,37 +139,66 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
     return info
 
 
+def _quote_arg(value: str) -> str:
+    """`value` for a footer CLI command: one starting with ``-`` is single-quoted, so a pasted
+    command is not read as a flag (B-next-paging-drops-filters)."""
+    return "'" + value + "'" if value.startswith("-") else shlex.quote(value)
+
+
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
     names keep the lane, and its answer (one item and a note) pages no list. ``next --state S``
-    is `next` listing one state: the calls it names keep the state, and its `items` list pages."""
+    is `next` listing one state: the calls it names keep the state, and its `items` list pages.
+    A non-lane ``next`` narrowed with its own flags carries them in the token, so a cut
+    list's page footer names the SAME filtered list (B-next-paging-drops-filters)."""
     base, _, rest = command.partition(" --state ")
     if rest:
         cli, tool, narrow, _paged = COMMANDS[base]
         state, kind, phase, only, tags = _split_state(rest)
-        c_args, t_args = [f"--state {shlex.quote(state)}"], [f"state={shlex.quote(state)}"]
+        c_args, t_args = [f"--state {_quote_arg(state)}"], [f"state={shlex.quote(state)}"]
         for flag, val in (("kind", kind), ("phase", phase)):
             if val:
-                c_args.append(f"--{flag} {shlex.quote(val)}")
+                c_args.append(f"--{flag} {_quote_arg(val)}")
                 t_args.append(f"{flag}={shlex.quote(val)}")
         if only:
             c_args.append("--phase-only")
             t_args.append("phase_only=true")
         if tags:
             for t in tags:
-                c_args.append(f"--tag {shlex.quote(t)}")
+                c_args.append(f"--tag {_quote_arg(t)}")
             t_args.append("tag=" + ",".join(tags))
         return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
-    base, _, rest = command.partition(" --lane ")
-    cli, tool, narrow, paged = COMMANDS[base]
-    if not rest:
+    if not command.startswith("next --lane "):
+        # A non-lane ``next`` narrowed with ``--kind/--phase/--phase-only/--tag``: the list it
+        # pages (blocked) keeps the whole selection in the footer, not the unfiltered list.
+        if command.startswith("next "):
+            cli, tool, narrow, paged = COMMANDS["next"]
+            kind, phase, only, tags = _split_plain(command[len("next ") :])
+            if kind or phase or only or tags:
+                c_args, t_args = [], []
+                if kind:
+                    c_args.append(f"--kind {_quote_arg(kind)}")
+                    t_args.append(f"kind={shlex.quote(kind)}")
+                if phase:
+                    c_args.append(f"--phase {_quote_arg(phase)}")
+                    t_args.append(f"phase={shlex.quote(phase)}")
+                if only:
+                    c_args.append("--phase-only")
+                    t_args.append("phase_only=true")
+                if tags:
+                    for t in tags:
+                        c_args.append(f"--tag {_quote_arg(t)}")
+                    t_args.append("tag=" + ",".join(tags))
+                return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, paged
+        cli, tool, narrow, paged = COMMANDS[command]
         return cli, tool, narrow, paged
     # `next --lane L [--kind K] [--phase P]`: the rerun keeps the whole selection.
-    lane, kind, phase, only = _split_lane(rest)
-    c_args, t_args = [f"--lane {shlex.quote(lane)}"], [f"lane={shlex.quote(lane)}"]
+    cli, tool, narrow, paged = COMMANDS["next"]
+    lane, kind, phase, only = _split_lane(command[len("next --lane ") :])
+    c_args, t_args = [f"--lane {_quote_arg(lane)}"], [f"lane={shlex.quote(lane)}"]
     for flag, val in (("kind", kind), ("phase", phase)):
         if val:
-            c_args.append(f"--{flag} {shlex.quote(val)}")
+            c_args.append(f"--{flag} {_quote_arg(val)}")
             t_args.append(f"{flag}={shlex.quote(val)}")
     if only:
         c_args.append("--phase-only")
@@ -195,6 +224,20 @@ def _split_lane(rest: str) -> tuple[str, str, str, bool]:
     rest, _, phase = rest.partition(" --phase ")
     lane, _, kind = rest.partition(" --kind ")
     return lane, kind, phase, bool(only)
+
+
+def _split_plain(rest: str) -> tuple[str, str, bool, tuple[str, ...]]:
+    """``'K --phase P --phase-only --tag T'`` -> (K, P, True, (T,)); all optional. The non-lane
+    ``next`` narrow form (B-next-paging-drops-filters): a ``--kind`` value, then a ``--phase``,
+    then ``--phase-only``, then repeated ``--tag`` values. The leading `` --tag `` barrier gets a
+    leading space first, so a token whose FIRST flag is ``--tag`` is parsed too."""
+    rest = " " + rest
+    tags = tuple(rest.split(" --tag ")[1:])
+    rest = rest.split(" --tag ", maxsplit=1)[0]
+    rest, only, _ = rest.partition(" --phase-only")
+    rest, _, phase = rest.partition(" --phase ")
+    _, _, kind = rest.partition(" --kind ")
+    return kind, phase, bool(only), tags
 
 
 def lane_token(lane: str, kind: str = "", phase: str = "", phase_only: bool = False) -> str:

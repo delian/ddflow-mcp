@@ -458,6 +458,56 @@ def test_next_lane_footer_quotes_a_lane_with_a_space(repo, monkeypatch):
     assert nxt["full_mcp"] == "ddflow_next lane='wave 2' full=true"
 
 
+def _nonlane_footer(monkeypatch, repo, a):
+    from ddflow.surfaces.declared.lifecycle import navigate
+
+    fake = SimpleNamespace(
+        DEFAULT_NEXT_KIND="task",
+        next_item=lambda *x, **k: O.ok(
+            "next", ready=[], blocked=[{"item": f"I{i}", "reason": "deps"} for i in range(120)]
+        ),
+    )
+    monkeypatch.setattr(navigate, "_api", lambda: fake)
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_ROWS", "50")
+    return navigate._next(repo, a, "agent").data["next"]
+
+
+def test_next_page_footer_names_the_same_filtered_list(repo, monkeypatch):
+    """A non-lane `next` narrowed with --kind/--phase/--tag cut by max_rows must page the
+    SAME filtered list, not the unfiltered `ddflow next --cursor N` (B-next-paging-drops-filters)."""
+    nxt = _nonlane_footer(
+        monkeypatch,
+        repo,
+        {
+            "kind": "phase",
+            "phase": "P-coordination",
+            "tag": ["wave:2"],
+            "wave": 3,
+            "phase_only": True,
+        },
+    )
+    assert (
+        nxt["cursor_cli"]
+        == "ddflow next --kind phase --phase P-coordination --phase-only --tag wave:2"
+        " --tag wave:3 --cursor 50"
+    )
+    assert (
+        nxt["cursor_mcp"]
+        == "ddflow_next kind=phase phase=P-coordination phase_only=true tag=wave:2,wave:3 cursor=50"
+    )
+    default_kind = _nonlane_footer(monkeypatch, repo, {"phase": "P-coordination"})
+    assert default_kind["cursor_cli"] == "ddflow next --phase P-coordination --cursor 50"
+
+
+def test_next_page_footer_quotes_a_dash_leading_value_and_a_lane_text_tag(repo, monkeypatch):
+    """A dash-leading tag would be read as a flag, and a tag containing ` --lane ` would be
+    re-read as a lane command: both must survive as `--tag` values (rubber_duck findings)."""
+    dash = _nonlane_footer(monkeypatch, repo, {"tag": ["-wave:2"]})
+    assert dash["cursor_cli"] == "ddflow next --tag '-wave:2' --cursor 50"
+    lane_text = _nonlane_footer(monkeypatch, repo, {"tag": ["a --lane b"]})
+    assert lane_text["cursor_cli"] == "ddflow next --tag 'a --lane b' --cursor 50"
+
+
 def test_max_chars_doc_says_four_chars_a_token_is_ascii_only(repo):
     run_cli(repo, "init")
     text = run_cli(repo, "config", "--explain")[1]
