@@ -48,6 +48,7 @@ _SUBMODULE_OF = {
     "BUG_INVALID_FIELDS": "_shared",
     "file_tasks_call": "_shared",
     "_bug_dedupe_render": "_shared",
+    "_bug_status_render": "_shared",
 }
 
 _reexport.reexport(globals(), _SUBMODULE_OF, __name__)

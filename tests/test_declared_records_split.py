@@ -24,6 +24,7 @@ PATHS = [
     ("bug", "found"),
     ("bug", "file-tasks"),
     ("bug", "dedupe"),
+    ("bug", "status"),
     ("bug", "duplicate"),
     ("bug", "fixed"),
     ("bug", "invalid"),
