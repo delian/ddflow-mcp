@@ -73,6 +73,7 @@ def h_requested(st: State, ev: Event) -> None:
         "level": 0,
         "proof": "",
         "policy": False,
+        "opened_window": False,
         "code_presented": "",
         "role": "",
         "via": "",
@@ -103,6 +104,7 @@ def h_answered(st: State, ev: Event) -> None:
         via=str(d.get("via", "")),
         human=d.get("human") is True,
         notify=_int(d.get("notify")),
+        opened_window=d.get("opened_window") is True,
         answered_at=ev.ts,
     )
 
