@@ -79,5 +79,26 @@ def run(h) -> dict:
             "detail": ", ".join(declared) or "declared, none verified",
         }
 
-    ok = all(c["status"] == "ok" for c in checks.values())
-    return {"agent": hid, "status": "ok" if ok else "failed", "checks": checks}
+    checks["headless"] = _headless(h)
+
+    states = {c["status"] for c in checks.values()}
+    # failed beats unverified beats ok: a declared section nobody read is never a pass
+    status = "failed" if "failed" in states else "unverified" if "unverified" in states else "ok"
+    return {"agent": hid, "status": status, "checks": checks}
+
+
+def _headless(h) -> dict:
+    """Grade ``[headless]``: the facts it gives are counted by their status, so a descriptor whose
+    headless values nobody read says so (``unverified``) instead of passing over an unknown.
+    Malformed means a declared section with no launch command."""
+    head = getattr(h, "headless", None)
+    if head is None or head.none:
+        return {"status": "ok", "detail": "not declared (unknown)"}
+    if not head.argv:
+        return {"status": "failed", "detail": "headless declared but gives no argv"}
+    rows = [r for r in harnessfacts.rows(h) if r["fact"].startswith("headless.")]
+    read = [r["fact"] for r in rows if r["status"] in facts.READABLE]
+    left = [r["fact"] for r in rows if r["status"] not in facts.READABLE]
+    detail = f"{len(read)} read (verified or documented), {len(left)} unverified"
+    detail += ": " + ", ".join(left) if left else ""
+    return {"status": "ok" if read else "unverified", "detail": detail}

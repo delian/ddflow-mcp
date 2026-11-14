@@ -53,9 +53,64 @@ wait = "background task + ddflow wait"
 persist = "printed ddflow next + cadence"
 stop = "Ask and stop"
 
+[detect]
+process_names = ["opencode"]
+
+[headless]
+argv = ["opencode", "run"]
+model_flag = "--model"
+output_flag = "--format"
+output_format = "json"
+autonomy = "auto"
+
+[autonomy]
+profiles = { auto = "--auto" }
+
+[facts."detect.process_names"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "the first binary the opencode lane looks for, before kilo"
+
+[facts."headless.argv"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "same run command shape as kilo, its fork; not re-read here"
+
+[facts."headless.model_flag"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "same run command shape as kilo, its fork; not re-read here"
+
+[facts."headless.output_flag"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "same run command shape as kilo, its fork; not re-read here"
+
+[facts."headless.output_format"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "same run command shape as kilo, its fork; not re-read here"
+
+[facts."autonomy.profiles"]
+s = "documented"
+src = "ddflow/services/lanes/opencode.py FACTS (opencode 1.19.0 run --help, read by an earlier lane; opencode is not installed on this machine)"
+d = "2026-11-14"
+ver = "1.19.0"
+note = "same run command shape as kilo, its fork; not re-read here"
+
 [verified]
 date = "2026-10-09"
 sources = ["https://github.com/anomalyco/opencode"]
 record = "R-hx-opencode"
-unverified = ["worktree dir", "session id env var"]
+unverified = ["worktree dir", "session id env var", "[headless] effort_flag, resume_flag, max_turns_flag and exit codes (not read on opencode; probe: opencode run --help on a machine that has it)"]
 

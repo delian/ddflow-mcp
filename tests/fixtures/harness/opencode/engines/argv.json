@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: the rendering of the descriptor's [headless] template for fixed inputs; a snapshot of what ddflow would launch, not a capture of opencode (not installed here)",
+    "version": "unversioned"
+  },
+  "inputs": {
+    "model": "m1",
+    "cwd": "/w"
+  },
+  "expect": [
+    "opencode",
+    "run",
+    "--model",
+    "m1",
+    "--auto",
+    "--format",
+    "json"
+  ]
+}

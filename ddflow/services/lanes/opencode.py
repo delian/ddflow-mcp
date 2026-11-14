@@ -31,7 +31,7 @@ from ...adapters import templates as _tpl
 from ...config import Config
 from ...infra import fsio, paths
 from ...infra import proc as P
-from .. import mcpconfig, modelreg
+from .. import harnessreg, mcpconfig, modelreg
 from ..engines import stream_map
 from ..lane_driver import (
     LaunchSpec,
@@ -194,14 +194,29 @@ def _merge_config(path: Path, mcp: dict[str, Any], instr: Path) -> None:
         fh.write(json.dumps(doc, indent=2) + "\n")
 
 
-def argv_for(b: Binary) -> tuple[str, ...]:
-    """The headless command; every value a whole-element placeholder (E4). ``--auto`` is in the
-    ``run --help`` of both binaries (kilo 7.8.18, opencode 1.19.0)."""
-    auto = ("--auto",)
+def argv_for(b: Binary, *, descriptor: Any = None) -> tuple[str, ...]:
+    """The headless command; every value a whole-element placeholder (E4). The run command, the
+    model and output flags and the ``--auto`` profile are read from the ``[headless]`` and
+    ``[autonomy]`` sections of the binary's descriptor (kilo.toml, opencode.toml; XA-headless-
+    facts-claude-kilo); ``descriptor`` replaces it (a test, a project override). ``--dir`` and
+    ``--file`` have no descriptor field, so they stay here (both in ``run --help``)."""
+    h = descriptor if descriptor is not None else harnessreg.get(b.name)
+    head = h.headless if h is not None else None
+    if head is None or head.none or not head.argv:
+        raise ValueError(f"{b.name}: the descriptor gives no [headless].argv")
+    auto: tuple[str, ...] = ()
+    if head.autonomy:
+        profiles = h.autonomy.profiles if h.autonomy is not None and not h.autonomy.none else {}
+        if head.autonomy not in profiles:  # a lane that cannot run unattended must not start
+            raise ValueError(
+                f"{b.name}: [headless].autonomy {head.autonomy!r} is not an [autonomy] profile"
+            )
+        auto = tuple(profiles[head.autonomy].split())
     # the task text is a private file (the closed placeholder list has no prompt); `--file` takes
     # a list, so it comes last and the one-line message first (run --help of both)
-    return (b.path, "run", MESSAGE, "--format", "json", "--model", "{model}", "--dir", "{dir}",
-            *auto, "--file", "{prompt_file}")  # fmt: skip
+    return (b.path, *head.argv[1:], MESSAGE, head.output_flag, head.output_format,
+            head.model_flag, "{model}", "--dir", "{dir}", *auto,
+            "--file", "{prompt_file}")  # fmt: skip
 
 
 @dataclass(frozen=True)

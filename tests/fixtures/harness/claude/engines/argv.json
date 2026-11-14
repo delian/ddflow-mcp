@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: the rendering of the descriptor's [headless] template for fixed inputs; a snapshot of what ddflow would launch, not a capture of a run of claude (its flags were read from --help)",
+    "version": "unversioned"
+  },
+  "inputs": {
+    "model": "m1",
+    "session": "s1",
+    "cwd": "/w"
+  },
+  "expect": [
+    "claude",
+    "-p",
+    "--model",
+    "m1",
+    "--resume",
+    "s1",
+    "--permission-mode",
+    "dontAsk",
+    "--allowedTools",
+    "mcp__ddflow",
+    "--output-format",
+    "stream-json"
+  ]
+}
