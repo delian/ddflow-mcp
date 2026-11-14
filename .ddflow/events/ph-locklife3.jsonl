@@ -80,3 +80,4 @@
 {"agent":"ph-locklife3","data":{"gate":"ci"},"id":"e02c4c360669a2ea7e2e32507","kind":"gate.started","lamport":197573,"schema":1,"subject":"MV-path-moves","ts":"2026-11-13T23:32:19.417089Z"}
 {"agent":"ph-locklife3","data":{"gate":"ci"},"id":"ef110bdd3fa312e1e1c1ec20d","kind":"gate.started","lamport":197626,"schema":1,"subject":"MV-path-moves","ts":"2026-11-13T23:39:41.421605Z"}
 {"agent":"ph-locklife3","data":{"at":1794614084.379491,"holder":"ph-locklife3"},"id":"e50ca347bb9ec053dbd5ecde1","kind":"lease.renewed","lamport":197713,"schema":1,"subject":"MV-path-moves","ts":"2026-11-13T23:54:44.554728Z"}
+{"agent":"ph-locklife3","data":{"at":1794614991.8520927,"holder":"ph-locklife3"},"id":"ee77660f449c481b54075b541","kind":"lease.renewed","lamport":197788,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T00:09:52.012106Z"}
