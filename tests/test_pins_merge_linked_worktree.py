@@ -31,7 +31,11 @@ def test_the_post_merge_hook_in_a_linked_worktree_is_not_refused_as_a_foreign_im
     out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
     assert out.exit == O.OK, out
     assert "refusing to regenerate pins" not in (out.reason or ""), out
-    assert "post-merge hook skipped in a linked worktree" in out.data.get("note", ""), out
+    note = out.data.get("note", "")
+    assert "post-merge hook skipped in a linked worktree" in note, out
+    # Bf9931aed2b: the remedy must point at the primary checkout -- the interactive route
+    # refuses from a linked worktree, so "run pins regenerate" alone fails in the reported env.
+    assert "ddflow pins regenerate` from the primary checkout" in note, note
 
 
 def test_an_interactive_regenerate_from_a_foreign_import_still_refuses(repo, tmp_path, monkeypatch):
