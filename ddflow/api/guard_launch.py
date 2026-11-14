@@ -34,6 +34,28 @@ def _deliberate_outside_launch(foreign: I.ForeignLaunch) -> bool:
         return False
 
 
+def _callers_own_tree(foreign: I.ForeignLaunch) -> bool:
+    """The import root is the caller's OWN worktree: the very tree this code came from is
+    legitimate, not foreign. ``None``/unidentifiable answers False — an import that IS from
+    a linked worktree while the caller's tree cannot be told apart is not evidence it is the
+    caller's own, so it stays foreign (it is refused, not excused)."""
+    try:
+        own = W.current(Path.cwd())
+    except Exception:
+        return False
+    return own is not None and own.path.resolve() == foreign.worktree.resolve()
+
+
+def would_run(foreign: I.ForeignLaunch) -> bool:
+    """True when the guard would RUN the command over this import: the caller's own tree, or
+    a deliberate outside launch (a test sandbox). Shared with ``pins``, whose regenerate
+    must refuse exactly when this guard would (Bc28808f9c3) — only then would a transcript
+    command pin the guard's own refusal instead of the real output."""
+    if _callers_own_tree(foreign):
+        return True
+    return _deliberate_outside_launch(foreign)
+
+
 def guard_foreign_launch() -> int:
     """The command's exit status: ``OK`` to run, ``FAIL`` after refusing a foreign import."""
     try:
@@ -42,25 +64,7 @@ def guard_foreign_launch() -> int:
         return OK
     if foreign is None:
         return OK
-    try:
-        own = W.current(Path.cwd())
-    except Exception:
-        # The import IS from a linked worktree (or the guard would have returned above),
-        # so running it could execute another lane's unmerged code — the failure this
-        # guard exists for — while not identifying the caller is NOT evidence the import
-        # is the caller's own tree. Refuse, and repoint nothing: a heal on an unproven
-        # foreignity would strand the caller's own tree if git merely misread it.
-        print(
-            f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL}"
-            f" {I.normalise_path(foreign.worktree)}, but the caller's own tree cannot be"
-            " identified; refusing to run code that may be another lane's — re-run once"
-            " the checkout is reachable",
-            file=sys.stderr,
-        )
-        return FAIL
-    if own is not None and own.path.resolve() == foreign.worktree.resolve():
-        return OK  # the very tree this code came from: legitimate, not foreign
-    if _deliberate_outside_launch(foreign):
+    if would_run(foreign):
         return OK
     try:
         I.repoint_shared_editable(foreign.worktree, foreign.primary)

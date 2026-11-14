@@ -17,7 +17,13 @@ from pathlib import Path
 from ..infra import git as G
 from ..infra import worktree as W
 from . import drift as D
+from .enforce.driftchecks import rulebooks
 from .pins import pin_files
+
+#: Why a tree that is behind by commits is still "current".
+NO_CODE = (
+    "none of the commits it lacks touches code (only [worktree].behind_ignore_globs paths moved)"
+)
 
 
 @dataclass
@@ -26,6 +32,8 @@ class SyncResult:
     #: "current" | "behind" (--check) | "merged" | "refused" | "conflict" | "unknown"
     status: str
     behind: int | None = 0
+    #: of ``behind``, the commits touching code (outside `[worktree].behind_ignore_globs`).
+    code_behind: int | None = 0
     relevant: int = 0
     #: the shas the merge brought in (from `drift.measure`'s commits), newest first.
     commits: list[str] = field(default_factory=list)
@@ -244,12 +252,15 @@ def sync(
     check: bool,
     keep_local: bool = False,
 ) -> SyncResult:
-    rep = D.measure(repo, tree, base, cfg=cfg, globs=globs)
-    if rep.behind is None:
-        return SyncResult(rep.base, "unknown", None, detail=rep.detail)
+    rep = D.measure(repo, tree, base, cfg=cfg, globs=globs, rulebooks=rulebooks())
+    if rep.behind is None or rep.code_behind is None:
+        return SyncResult(rep.base, "unknown", None, None, detail=rep.detail)
     if rep.behind == 0:
-        return SyncResult(rep.base, "current", 0)
-    out = SyncResult(rep.base, "behind", rep.behind, len(rep.relevant))
+        return SyncResult(rep.base, "current", 0, 0)
+    if rep.code_behind == 0 and not rep.rules:
+        # Only the ignored paths (the event log) moved: nothing to bring in (GM-code-behind).
+        return SyncResult(rep.base, "current", rep.behind, 0, detail=NO_CODE)
+    out = SyncResult(rep.base, "behind", rep.behind, rep.code_behind, len(rep.relevant))
     if check:
         return out
     if (refusal := _unsafe(out, tree, keep_local)) is not None:

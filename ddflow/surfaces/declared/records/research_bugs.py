@@ -10,6 +10,7 @@ from ._shared import (
     _answer,
     _api,
     _bug_dedupe_render,
+    _bug_status_render,
     file_tasks_call,
     importlib,
 )
@@ -279,6 +280,23 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="minimum score to cluster (default: [dedupe].show_floor)",
             ),
         ),
+    ),
+    Command(
+        path=("bug", "status"),
+        summary="how many open bugs: totals by severity and blocked vs unblocked",
+        tool="ddflow_bug_status",
+        family="ddflow_bug",
+        action="status",
+        tier="standard",
+        description="How many bugs are open, counted by severity (critical/high/medium/low/unset), "
+        "and how many of them are blocked (their fix task is blocked or still has unmet needs), "
+        "unblocked, or have no fix task yet. Read-only summary of the bug backlog.",
+        call=lambda repo, a, agent: importlib.import_module("ddflow.api.knowledge.bugs").bug_status(
+            repo
+        ),
+        payload=("open", "severity", "blocked", "unblocked", "no_fix_task"),
+        render=_bug_status_render,
+        wire_shape=(("bug", "status"), {}),
     ),
     Command(
         path=("bug", "duplicate"),

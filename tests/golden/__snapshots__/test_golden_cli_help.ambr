@@ -554,6 +554,7 @@
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
                           the younger ones onto each cluster's canonical
+      status              how many open bugs: totals by severity and blocked vs unblocked
       duplicate           close a bug as a duplicate of a bug that is already FIXED (cites its test)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       tag                 add or remove tags on an existing bug, open or closed

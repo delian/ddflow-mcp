@@ -80,3 +80,15 @@ def _bug_dedupe_render(out, a):
             f"settle any left with `ddflow link <dup> --duplicate-of <canonical>`"
         )
     return "\n".join(lines)
+
+
+def _bug_status_render(out, a):
+    d = out.data
+    counts = ", ".join(
+        f"{s or 'unset'}: {d['severity'].get(s, 0)}"
+        for s in ("critical", "high", "medium", "low", "")
+    )
+    return (
+        f"{d['open']} open bugs: {counts}\n"
+        f"blocked {d['blocked']}  unblocked {d['unblocked']}  no fix task {d['no_fix_task']}"
+    )

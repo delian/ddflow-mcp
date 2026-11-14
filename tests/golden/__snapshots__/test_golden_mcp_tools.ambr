@@ -40,7 +40,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, duplicate(id,of), reopen(id,reason), tag(id).",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, status, duplicate(id,of), reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -191,6 +191,7 @@
            "found",
            "file_tasks",
            "dedupe",
+           "status",
            "duplicate",
            "reopen",
            "tag"
