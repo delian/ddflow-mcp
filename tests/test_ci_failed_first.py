@@ -22,6 +22,14 @@ from ddflow.services.ci import failed_first as FF
 SLOW = 0.1  # seconds each fixture test takes: 36 tests before the failing one cost 3.6 s
 
 
+@pytest.fixture(autouse=True)
+def _outside_any_failed_first_run(monkeypatch):
+    """This file runs inside `ddflow ci run`, which is itself a failed-first run: the outer run's
+    variables must not leak into the runs these tests start."""
+    for name in (FF.IDS_ENV, FF.OUT_ENV, FF.ACTIVE_ENV):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _toml(text: str) -> str:
     """``text`` as a TOML basic string (JSON escapes, astral characters kept raw): shell quoting is not TOML quoting."""
     return json.dumps(text, ensure_ascii=False)
