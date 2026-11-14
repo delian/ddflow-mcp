@@ -253,6 +253,7 @@ def _pool_map(fn, items, timeout_s: float):
                 f"flock, and a lock acquired twice in one process against its own "
                 f"open file description blocks forever."
             )
+            return None
 
 
 # -- 1. many agents writing at once ----------------------------------------------------
