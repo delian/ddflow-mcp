@@ -31,6 +31,9 @@ def addenda_lines(a: dict) -> list[str]:
     """`show`'s block for one record: what was added to it (verbatim, who, when, score)
     and the links in both directions."""
     out: list[str] = []
+    if a.get("author"):
+        out.append(f"  author model {a['author']}")
+    out += correction_lines(a.get("corrections") or [], bool(a.get("history")))
     if a["additions"]:
         out.append(f"  additions ({len(a['additions'])}):")
         for x in a["additions"]:
@@ -57,6 +60,35 @@ def addenda_lines(a: dict) -> list[str]:
             for x in a["linked_from"]
         ]
     return out
+
+
+def _digests(row: dict) -> str:
+    """` (old X, new Y)` for the digests a correction kept; "" when it kept none."""
+    kept = [f"{w} {row[w]}" for w in ("old", "new") if row.get(w)]
+    return f" ({', '.join(kept)})" if kept else ""
+
+
+def correction_lines(found: list[dict], history: bool) -> list[str]:
+    """`show`'s corrected-field markers (REC-show-corrected-fields): per field its latest
+    correction -- by whom, when, why -- or, with `history`, every correction in order. The old
+    and new values appear only as the digests a correction asked to keep; the log holds the
+    text, so none is printed here."""
+    if not found:
+        return []
+    if history:
+        out = [f"  corrections ({len(found)}):"]
+        for c in found:
+            out.append(f"    {c['at']} by {c['by']} -- {c['reason']}")
+            out += [f"      corrected {r['field']}{_digests(r)}" for r in c["fields"]]
+        return out
+    latest: dict[str, tuple[dict, dict]] = {}
+    for c in found:
+        for r in c["fields"]:
+            latest[r["field"]] = (c, r)
+    return [
+        f"  corrected {name}: by {c['by']} at {c['at']} -- {c['reason']}{_digests(r)}"
+        for name, (c, r) in sorted(latest.items())
+    ]
 
 
 def _reason(x: dict) -> str:

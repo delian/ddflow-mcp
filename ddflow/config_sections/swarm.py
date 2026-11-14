@@ -76,6 +76,16 @@ class SwarmConfig:
         doc="Weight of the queue term: how long the item has waited, so a low-priority item is not starved.",
         check=_nonneg,
     )
+    w_headroom: float = knob(
+        1.0,
+        doc="Weight of the headroom term: the share of the lane's spending limit (from the layered `[prices]` table) still unspent, so a lane with more left is preferred. A lane with no limit on record scores neutral (0.5), never zero. Zero ignores headroom in the score; an exhausted lane stays refused whatever this is.",
+        check=_nonneg,
+    )
+    headroom_floor_usd: float = knob(
+        0.0,
+        doc="Remaining USD at or below which a lane with a known limit is refused outright (a hard filter, not a score). Zero refuses only an exhausted lane. A lane with no limit on record is never refused. A project or user layer can raise this floor; no caller argument lowers it.",
+        check=_nonneg,
+    )
     fit_margin: float = knob(
         0.10,
         doc="How far below the best eligible lane's fit a lane may be and still compete on cost. A lane further below is ranked after every lane inside the margin.",
@@ -248,6 +258,21 @@ class SwarmConfig:
     launch_max_budget_usd: float = knob(
         5.0,
         doc="Ceiling on any template's `budget_usd`: a launch from a template that asks for more is refused, whatever its approval. Zero removes the ceiling.",
+        check=_nonneg,
+    )
+    budget_stop_enabled: bool = knob(
+        True,
+        doc="Whether the runtime budget stop is on: the lane supervisor sums a running lane's usage events and interrupts it once its spend reaches the template's `budget_usd` (soft warn at `budget_warn_fraction`). When off, a lane only ever stops at its own end. The admission estimate (launch) still refuses an over-budget launch.",
+        check=lambda v: "" if isinstance(v, bool) else "must be true or false",
+    )
+    budget_warn_fraction: float = knob(
+        0.5,
+        doc="Share of a template's `budget_usd` at which a running lane gets a soft warn before the hard stop at the cap. A fraction of one warns only at the cap itself.",
+        check=_share,
+    )
+    budget_stop_grace_s: float = knob(
+        10.0,
+        doc="Seconds a lane is given to stop after its budget interrupt before the hard kill. Zero interrupts with no grace (the transport's own kill follows).",
         check=_nonneg,
     )
     remote_exclude: list[str] = knob(

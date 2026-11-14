@@ -110,13 +110,12 @@ def test_a_restore_that_loses_a_shard_byte_is_noticed() -> None:
 
 
 def test_the_tools_list_judgement() -> None:
-    size, bad = DR.tools_problems([{"name": "t", "description": "d"}], 10_000)
+    size, bad = DR.tools_problems([{"name": "t", "description": "d"}])
     assert bad == [] and size > 0
-    _size, bad = DR.tools_problems([{"name": "t", "outputSchema": {}}], 0)
+    _size, bad = DR.tools_problems([{"name": "t", "outputSchema": {}}])
     assert "output schemas" in bad[0]
-    _size, bad = DR.tools_problems([{"name": "t"}], 5)
-    assert bad == []  # over the report line is a number, not a failure (D-mcp-budget-report)
-    assert DR.tools_problems([], 0)[1] == ["tools/list answered nothing"]
+    assert DR.tools_problems([{"name": "t"}])[1] == []
+    assert DR.tools_problems([])[1] == ["tools/list answered nothing"]
 
 
 def test_a_release_commit_is_its_tag_else_its_release_commit(tmp_path: Path) -> None:

@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "flow.pr_body_cell_max"
+new = "200"
+why = "Longest one cell of the pull-request description's gate table, in characters."
+effect = "a gate note longer than this is cut in the request description; the log keeps the full reason."
+impact = "additive"

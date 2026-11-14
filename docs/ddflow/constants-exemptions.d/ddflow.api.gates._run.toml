@@ -1,3 +1,5 @@
 [exempt]
 "ddflow/api/gates/_run.py:_MAX_FAILED_IDS_SHOWN" = 'internal truncation of a superseded-run refusal message: how many failing test ids it names before the "... and N more" note; changing it changes message shape, not how ddflow behaves for a person'
 "ddflow/api/gates/_run.py:_GATE_START_LOCK_RETRY_S" = 'how long `gate run` keeps re-trying the events.lock to record its start before a clean give-up; one resilience default for a badly held lock, not a per-project knob -- the acquire wait itself is already tuned by [lease].acquire_timeout_s'
+"ddflow/api/gates/_run.py:_RECORD_LOCK_RETRIES" = 'internal retry shield on the events-record lock: a fixed few attempts before giving up, not a workload knob'
+"ddflow/api/gates/_run.py:_RECORD_LOCK_RETRY_S" = 'internal backoff between record-lock retries: a fixed short pause shielding a contended events log, not a workload knob'

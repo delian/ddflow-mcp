@@ -53,6 +53,13 @@ from ._vet import (
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
 
+#: How many additional times recording a gate outcome is retried after the event-log lock
+#: times out, and the pause between attempts. Each attempt already waited the lock's own
+#: timeout, so these ride out a transient heartbeat holder without ever re-running the gate
+#: command (B054959b3c4).
+_RECORD_LOCK_RETRIES = 3
+_RECORD_LOCK_RETRY_S = 2.0
+
 
 def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     """A callback renewing the caller's lease on `it`, or None if the caller holds none.
@@ -510,6 +517,31 @@ def run(
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
+def _record_unavailable_reliably(log, cfg, repo, it, gate, reason, evidence, gates, forced) -> bool:
+    """Record ``unavailable`` for a run whose outcome the event-log lock would not let it
+    write, retrying a bounded number of times so a transient lock holder does not lose a
+    detached run. Returns whether the outcome landed on the record (B054959b3c4)."""
+    for attempt in range(_RECORD_LOCK_RETRIES + 1):
+        try:
+            R.record_measured(
+                log,
+                cfg,
+                repo,
+                it,
+                gate,
+                "unavailable",
+                reason=reason,
+                evidence=evidence,
+                gates=gates,
+                forced=forced,
+            )
+            return True
+        except TimeoutError:
+            if attempt < _RECORD_LOCK_RETRIES:
+                time.sleep(_RECORD_LOCK_RETRY_S)
+    return False
+
+
 def _guarded(log, cfg, repo, agent, it, item, gate, **run):
     """`_execute` with the started-marker held and a SIGTERM/SIGHUP turned into a recorded
     `unavailable` (B58842554a7). ``run`` is `_execute`'s keywords."""
@@ -543,6 +575,33 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
             forced=forced,
         )
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
+    except TimeoutError as err:
+        # The event-log lock could not be acquired to write the run's outcome, so the run
+        # would otherwise die with a raw traceback and no record at all (B054959b3c4).
+        reason = (
+            "the run's outcome could not be recorded: the event-log lock was not acquired "
+            f"in time ({err}). The gate stays unrecorded -- retry when the machine is less "
+            "loaded (see `ddflow doctor`)."
+        )
+        _log, _cfg, now = _load(repo, agent)
+        rec = now.items[item].gates.get(gate) if item in now.items else None
+        if _recorded_since(rec, started_at):
+            # Something was recorded while the run lived: that stands, as in the sweep.
+            return O.nothing("gate.run", reason, gate=gate, outcome="", evidence={}, id=item)
+        _record_unavailable_reliably(
+            log,
+            cfg,
+            repo,
+            it,
+            gate,
+            reason,
+            evidence={"started_tree_sha": started_on, "lock_timeout": str(err)},
+            gates=gates,
+            forced=forced,
+        )
+        return O.nothing(
+            "gate.run", reason, gate=gate, outcome="unavailable", evidence={"lock_timeout": str(err)}, id=item
+        )
     finally:
         RUN.clear_started(marker)
 

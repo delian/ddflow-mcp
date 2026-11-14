@@ -1,0 +1,134 @@
+id = "vibe"
+rank = 24
+family = "mistral"
+title = "Mistral Vibe"
+delta = "vibe.md"
+
+[mcp]
+path = ".vibe/config.toml"
+shape = "toml.mcp_servers"
+note = "config.toml in ./.vibe (then the user home) with [[mcp_servers]] at the root; VIBE_HOME moves everything and trusted_folders.toml gates the project file."
+
+[instructions]
+reads = ["AGENTS.md"]
+agents_md = "yes"
+claude_md = "nv"
+
+[hooks]
+style = "vibe"
+file = ".vibe/hooks.toml"
+emitter = "silent"
+block = "json"
+
+[hooks.events]
+pre_tool = "pre_tool"
+post_tool = "post_tool"
+
+[skills]
+dir = ".vibe/skills"
+
+[subagents]
+dir = ".vibe/agents"
+
+[detect]
+process_names = ["vibe"]
+
+[headless]
+argv = ["vibe", "-p"]
+output_flag = "--output"
+output_format = "streaming"
+resume_flag = "--resume"
+max_turns_flag = "--max-turns"
+autonomy = "auto-approve"
+
+[autonomy]
+profiles = { auto-approve = "--auto-approve" }
+
+[facts."instructions.reads"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "AGENTS.md from the user home and the project dirs up to the trust root"
+
+[facts."hooks.file"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = ".vibe/hooks.toml (project) after the trust step; project entry wins by name and subagents inherit hooks"
+
+[facts."hooks.events"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "vibe has three native hook events pre_tool, post_tool, post_agent; only pre_tool and post_tool are mapped here because post_agent has no canonical counterpart; no session-start or session-end hook"
+
+[facts."hooks.block"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "a pre_tool hook replies with a JSON allow/deny decision on stdout"
+
+[facts."skills.dir"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "Agent Skills spec under .agents/skills, .vibe/skills and the user home"
+
+[facts."subagents.dir"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "custom agents in agents/*.toml; the built-in task tool spawns subagents"
+
+[facts."detect.process_names"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "binary name vibe; installed via uv tool install mistral-vibe or the mistral.ai/vibe/install.sh script"
+
+[facts."headless.argv"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "vibe -p / --prompt / --prompt-file run one prompt headless"
+
+[facts."headless.output_format"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "--output text|json|streaming; --output-dir writes export.json"
+
+[facts."headless.resume_flag"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "--resume continues a prior run"
+
+[facts."headless.max_turns_flag"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "--max-turns; also --max-price, --max-tokens and --time-limit bound the run"
+
+[facts."autonomy.profiles"]
+s = "documented"
+src = "https://github.com/mistralai/mistral-vibe"
+d = "2026-10-31"
+note = "--auto-approve / --yolo; built-in agents ask, accept-edits, auto-approve"
+
+[verified]
+date = "2026-10-31"
+sources = [
+  "https://github.com/mistralai/mistral-vibe",
+  "https://mistral.ai/news/mistral-vibe-2-0",
+]
+record = "R-mistral-vibe"
+unverified = [
+  "current version and the session storage path and format (not documented)",
+  "the custom OpenAI-compatible provider schema and model flag (not documented)",
+  "the hook stdin payload shape and the session id field (no fixtures yet)",
+  "the env variable that carries the session id",
+  "the export.json schema and the complete permission levels",
+  "exit codes beyond the documented 0-4",
+  "the normalizer is the shared default until a vibe normalizer lands",
+]

@@ -22,6 +22,8 @@ class Weights:
     w_cost: float = 1.0
     w_rework: float = 1.5
     w_queue: float = 0.5
+    w_headroom: float = 1.0
+    headroom_floor_usd: float = 0.0
     fit_margin: float = 0.10
     cost_ref_usd: float = 1.0
     rework_ref: float = 1.0
@@ -44,6 +46,8 @@ class Weights:
             w_cost=sw.w_cost,
             w_rework=sw.w_rework,
             w_queue=sw.w_queue,
+            w_headroom=sw.w_headroom,
+            headroom_floor_usd=sw.headroom_floor_usd,
             fit_margin=sw.fit_margin,
             cost_ref_usd=sw.cost_ref_usd,
             rework_ref=sw.rework_ref,

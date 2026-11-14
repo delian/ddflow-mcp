@@ -602,10 +602,14 @@ def attest(
         credential_role=cfg.agent.operator_role,
         authenticated=True,
     )
+    # The standing-window choice re-opens the window (B6e5e17ccda): its answer anchors
+    # `policy.window_start`, so the operator re-arming a lapsed window re-opens it. When no
+    # repo names where to write the config the window is not enabled, so it must not anchor.
+    opened_window = hit.answer == window_label(ask_id) and repo is not None
     try:
         E.answer(
             log, cfg, ask_id, outcome, actor=actor, digest=row["digest"], text=text,
-            via=VIA, level=LEVEL, proof=hit.tool_use_id, now=now,
+            via=VIA, level=LEVEL, proof=hit.tool_use_id, now=now, window=opened_window,
         )  # fmt: skip
     except E.AskRefused as exc:
         return False, str(exc)
