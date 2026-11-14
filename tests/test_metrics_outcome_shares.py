@@ -48,6 +48,26 @@ def test_outcome_rows_report_pass_and_partial_rates():
     assert ci["partial_rate"] == pytest.approx(0.9)
 
 
+def test_pass_and_partial_are_shares_of_every_verdict_not_just_passed_partial():
+    """The pass/partial share is over ALL verdicts, so a viewer reads the true split. A
+    two-verdict group cannot tell a correct ``passed/total`` from a wrong
+    ``passed/(passed+partial)``: with failed outcomes in the group they disagree (5% and
+    45%, not 10% and 90%)."""
+    log = Log()
+    i = 0
+    for verdict, n in (("passed", 1), ("partial", 9), ("failed", 10)):
+        for _ in range(n):
+            tid = f"T{i:02d}"
+            log.task(tid, f"f{i}.py")
+            log.claim("a1", tid, T0 + i * 3600, f"f{i}.py")
+            log.add(f"gate.{verdict}", tid, "a1", T0 + i * 3600 + 100, gate="ci", by="a1", evidence={})
+            log.complete("a1", tid, T0 + i * 3600 + 600)
+            i += 1
+    ci = {r["group"]: r for r in run(log).metrics["outcomes"]}["ci"]
+    assert ci["pass_rate"] == pytest.approx(1 / 20)
+    assert ci["partial_rate"] == pytest.approx(9 / 20)
+
+
 def test_summary_text_carries_pass_and_partial():
     ans = run(ci_log())
     assert "pass 10%" in ans.text
