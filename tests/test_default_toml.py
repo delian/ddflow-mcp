@@ -100,13 +100,19 @@ def test_the_file_stays_under_the_size_limit():
 def test_the_size_limit_assert_renders_no_config_repr():
     """B82787201d0: ci's "new offender in an already-red test" compares the assertion text, so
     a failure reason that embeds `Config()`'s dataclass repr reads as a NEW failure whenever a
-    knob is added. The size-limit assert must name only its operands' locals, so its reason is
-    two ints, never a Config repr."""
+    knob is added. The size-limit assert must name only int locals, never construct `Config()`."""
+    import ast
     import inspect
 
-    src = inspect.getsource(test_the_file_stays_under_the_size_limit)
-    assert_line = next(line for line in src.splitlines() if "assert" in line)
-    assert "Config()" not in assert_line, assert_line
+    tree = ast.parse(inspect.getsource(test_the_file_stays_under_the_size_limit))
+    (fn,) = tree.body
+    (assert_node,) = (n for n in ast.walk(fn) if isinstance(n, ast.Assert))
+    construct = [
+        n
+        for n in ast.walk(assert_node.test)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "Config"
+    ]
+    assert not construct
 
 
 @pytest.mark.parametrize("damage", [b"\xff\xfe not utf-8", b""], ids=["bytes", "empty"])
