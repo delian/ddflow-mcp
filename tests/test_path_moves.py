@@ -101,4 +101,7 @@ def test_merge_records_a_path_moved_event(repo):
     assert code == 0, (code, out, err)
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
     assert st.moves, "no path.moved recorded"
-    assert any(m.get("new") == "src/b.py" for m in st.moves), st.moves
+    assert any(
+        m.get("old") == "src/a.py" and m.get("new") == "src/b.py" and m.get("how") == "rename"
+        for m in st.moves
+    ), st.moves
