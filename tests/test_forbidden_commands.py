@@ -457,9 +457,6 @@ def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path
     # a branch switch is not a discard of the working tree: still allowed
     assert _check("git checkout -b other", cwd=tmp_path) is None
 
-    # a `cd other` in the LINE acts elsewhere (a worktree holds no shards): not refused here
-    assert _check("cd /elsewhere && git restore .", cwd=tmp_path) is None
-
     # a worktree is not the primary checkout: its `git restore .` holds back even when the
     # worktree holds an uncommitted shard -- the guard is for the primary checkout alone.
     _gitc(tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "checkout", "-q", "-b", "wip")
