@@ -89,6 +89,15 @@ def test_overriding_a_non_empty_default_is_not_a_drop(tmp_path):
     assert cfg.dropped_members == [], cfg.dropped_members
 
 
+def test_an_env_layer_drop_names_env_not_the_config_files(tmp_path):
+    """`DDFLOW_*` (the env layer) is applied last and may drop a file/local list; the
+    note names the env layer, never misattributes it to config.toml (roborev low)."""
+    _write_layers(tmp_path, ["skip_after_unavailable", "accept_baseline_red"])
+    cfg = Config.load(tmp_path, env={"DDFLOW_APPROVALS_POLICY": "claim_unavailable"})
+    note = " ".join(cfg.dropped_members)
+    assert "env layer" in note, note
+
+
 def test_a_changed_dropped_set_is_said_again(tmp_path, capsys):
     """The same knob's dropped set can change across reloads; the new set must warn
     again, not hide behind the earlier note (rubber_duck finding on the first revision)."""

@@ -458,7 +458,9 @@ class Config(_SectionFields):
 
         The packaged default is a BASELINE a project legitimately overrides, so it is not a
         "layer" whose list a later config file may silently loosen: only a drop of what a
-        real config layer (file/local/env) had set is noted (roborev medium)."""
+        real config layer (file/local/env) had set is noted (roborev medium). A note is
+        POINT-IN-TIME: a still-lower layer may re-add an entry this note names, which does
+        not retract it (roborev low)."""
         earlier = self.sources.get(key, "default")
         if earlier == "default" or (
             dropped := _dropped_list_entries(below, value)

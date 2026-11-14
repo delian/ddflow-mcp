@@ -74,9 +74,9 @@ def _warn_dropped(notes: list[str], root: Path) -> None:
         return
     _WARNED_DROPPED.update((str(root), n) for n in new)
     print(
-        f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml turns a "
-        f"higher layer's list entries off: {'; '.join(new)}. A later layer's list replaces "
-        "the earlier one's (D-config-layer-order); every entry dropped is named here, never "
-        "silent (r-tighten-only).",
+        f"ddflow: warning: a lower config layer turns a higher layer's list entries off: "
+        f"{'; '.join(new)}. A later layer's list replaces the earlier one's "
+        "(D-config-layer-order); every entry dropped is named here (by the layer that did "
+        "it), never silent (r-tighten-only).",
         file=sys.stderr,
     )
