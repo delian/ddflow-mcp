@@ -53,6 +53,11 @@ class Digest(Protocol):
 NOT_FOR_SECURITY = frozenset({"sha1", "md5"})
 
 
+def _require_strong_algo(algo: str) -> None:
+    if algo in NOT_FOR_SECURITY:
+        raise ValueError(f"insecure hash algorithm for sensitive digest: {algo}")
+
+
 def hasher(data: bytes | memoryview = b"", algo: str = "sha256", *, size: int | None = None):
     """An incremental hash object (`update`, `hexdigest`, `copy`), seeded with `data`: for
     a digest computed in pieces or continued as a file grows (the event log's shards).
@@ -126,6 +131,7 @@ def content_digest(
 ) -> str:
     """The hex digest of `data` (text is UTF-8 encoded with `errors`), cut to `length`
     characters when given; ``size`` is blake2's ``digest_size`` (see `hasher`)."""
+    _require_strong_algo(algo)
     raw = data.encode("utf-8", errors) if isinstance(data, str) else data
     hexed = hasher(raw, algo, size=size).hexdigest()
     return hexed[:length] if length is not None else hexed
