@@ -135,3 +135,4 @@
 {"agent":"lane-ff-failed-first","data":{"at":1794617522.334162,"holder":"lane-ff-failed-first"},"id":"e7ffd11ed3a610b5531388880","kind":"lease.renewed","lamport":198165,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T00:52:02.549183Z"}
 {"agent":"lane-ff-failed-first","data":{"at":1794621224.094119,"holder":"lane-ff-failed-first"},"id":"ec7cb15719dad437255781096","kind":"lease.renewed","lamport":198503,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T01:53:44.276688Z"}
 {"agent":"lane-ff-failed-first","data":{"gate":"ci"},"id":"eb449fa5f5ed056bee8d27c89","kind":"gate.started","lamport":198506,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T01:54:13.861172Z"}
+{"agent":"lane-ff-failed-first","data":{"at":1794622157.0204296,"holder":"lane-ff-failed-first"},"id":"ebe7ba9e51b2c6c44a7dedc62","kind":"lease.renewed","lamport":198533,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T02:09:17.176226Z"}
