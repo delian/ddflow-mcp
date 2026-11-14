@@ -27,7 +27,7 @@ from ._decls import (
 from ._errors import InvalidValue
 from ._packaged import apply_packaged
 from ._tree import _is_code_tree
-from ._warn import _warn_unknown
+from ._warn import _warn_dropped, _warn_unknown
 
 
 # Judged across sections, so it lives with `Config` rather than in `[schedule]`'s module.
@@ -72,6 +72,7 @@ _NOT_SECTIONS = (
     "sources",
     "unknown_knobs",
     "ignored_members",
+    "dropped_members",
     "file_format",
     "_fallback_notes",
     "_bad_values",
@@ -85,6 +86,23 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     if key == "session.context_budget" and isinstance(value, dict):
         return {**below, **value}
     return value
+
+
+def _dropped_list_entries(below: Any, value: Any) -> list[Any] | None:
+    """Entries ``value`` (a later layer's list) dropped that ``below`` (the accumulated,
+    higher layer's list) held: the entries whose set the lower layer replaced out of
+    existence (D-config-layer-order: lists replace). ``None`` when there is no list
+    replacement or nothing was dropped. Duplicates are dropped (``==``-based, so the
+    elements need not be hashable, and they are not always strings: `docs.extract` is
+    `list[dict]`)."""
+    if not isinstance(below, list) or not isinstance(value, list) or not below:
+        return None
+    dropped: list[Any] = []
+    for entry in below:
+        if entry in dropped or entry in value:
+            continue
+        dropped.append(entry)
+    return dropped or None
 
 
 def _operator_only_refusal(sec: str, knob: str, key: str) -> str:
@@ -144,6 +162,12 @@ class Config(_SectionFields):
     #: not know (a newer release's `[dedupe].kinds` entry): ignored, the rest applied. One
     #: note each, for stderr and `doctor`; never a failure (D-compat 2).
     ignored_members: list[str] = field(default_factory=list, repr=False)
+    #: Entries of a list knob a LATER layer dropped when its list replaced the layer
+    #: above's (D-config-layer-order: lists replace). One note each, for stderr and
+    #: `doctor`; never a failure. r-tighten-only: a lower layer may tighten, never
+    #: silently loosen, so a local list that turns a higher layer's entries off is said
+    #: out loud, and each dropped entry is named rather than gone in silence.
+    dropped_members: list[str] = field(default_factory=list, repr=False)
     #: The `format = N` a file layer declared (0: none did); `CONFIG_FORMAT` is what this
     #: code reads. A newer one is reported by `doctor` and refuses writes.
     file_format: int = field(default=0, repr=False)
@@ -207,6 +231,7 @@ class Config(_SectionFields):
             _warn_unknown(
                 cfg.unknown_knobs, Path(root), cfg.fallback_entries(), cfg.ignored_members
             )
+            _warn_dropped(cfg.dropped_members, Path(root))
         return cfg
 
     @classmethod
@@ -398,6 +423,7 @@ class Config(_SectionFields):
                 self.sources[key] = f"{source} (strictest fallback)"
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
+        self._note_dropped(key, getattr(target, knob), value, source)
         self._forget_fallback(key, f"the {source} value {value!r}")
         setattr(target, knob, value)
         self.sources[key] = source
@@ -423,6 +449,26 @@ class Config(_SectionFields):
         `by` names what overrode it -- and, when that is itself unknown, what runs."""
         for i, head in self._fallback_notes.get(key, []):
             self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
+
+    def _note_dropped(self, key: str, below: Any, value: Any, source: str) -> None:
+        """Record that ``source`` (a later config LAYER) replaced ``key``'s list and dropped
+        entries ``below`` (the accumulated, higher config layer's list) held, when the two
+        differ (D-config-layer-order: lists replace). The note names the dropped entries and
+        the layer that had set them, for `_warn_dropped` and `doctor` (r-tighten-only).
+
+        The packaged default is a BASELINE a project legitimately overrides, so it is not a
+        "layer" whose list a later config file may silently loosen: only a drop of what a
+        real config layer (file/local/env) had set is noted (roborev medium). A note is
+        POINT-IN-TIME: a still-lower layer may re-add an entry this note names, which does
+        not retract it (roborev low)."""
+        earlier = self.sources.get(key, "default")
+        if earlier == "default" or (dropped := _dropped_list_entries(below, value)) is None:
+            return
+        self.dropped_members.append(
+            f"{key}: the {source} layer replaced the list and dropped "
+            f"{', '.join(str(e) for e in dropped)} "
+            f"(set by the {earlier} layer)"
+        )
 
     def _apply_export_tables(
         self, values: dict[str, Any], soft: Callable[[str], bool], source: str
@@ -464,6 +510,7 @@ class Config(_SectionFields):
         out = dataclasses.asdict(self)
         out.pop("sources", None)
         out.pop("ignored_members", None)
+        out.pop("dropped_members", None)
         out.pop("file_format", None)
         out.pop("_fallback_notes", None)
         out.pop("_bad_values", None)
