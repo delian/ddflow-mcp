@@ -89,3 +89,5 @@
 {"agent":"lane-xa-pair-fakes","data":{"at":1794668597.202055,"holder":"lane-xa-pair-fakes"},"id":"ef3cd182b74d3534da948dd41","kind":"lease.renewed","lamport":200550,"schema":1,"subject":"XA-pair-fakes","ts":"2026-11-14T15:03:17.386794Z"}
 {"agent":"lane-xa-pair-fakes","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ec4bf6135083be375d11a093b","kind":"cadence.ran","lamport":200551,"schema":1,"subject":"recall_recheck:XA-pair-fakes","ts":"2026-11-14T15:03:20.455808Z"}
 {"agent":"lane-xa-pair-fakes","data":{"gate":"ci"},"id":"ef62bb2d030e9244978e7e631","kind":"gate.started","lamport":200553,"schema":1,"subject":"XA-pair-fakes","ts":"2026-11-14T15:03:34.552973Z"}
+{"agent":"lane-xa-pair-fakes","data":{"at":1794669518.7333598,"holder":"lane-xa-pair-fakes"},"id":"e03ff5b6d53b41b9aef3d1bb2","kind":"lease.renewed","lamport":200611,"schema":1,"subject":"XA-pair-fakes","ts":"2026-11-14T15:18:38.914107Z"}
+{"agent":"lane-xa-pair-fakes","data":{"at":1794670398.9255662,"holder":"lane-xa-pair-fakes"},"id":"e1167cb179fc7b1f800fce7c6","kind":"lease.renewed","lamport":200657,"schema":1,"subject":"XA-pair-fakes","ts":"2026-11-14T15:33:19.090035Z"}
