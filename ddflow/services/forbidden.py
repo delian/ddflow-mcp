@@ -911,6 +911,21 @@ def _uncommitted_events(cwd: str | Path) -> bool:
     return any(e.path.endswith(".jsonl") for e in entries)
 
 
+def _discard_refusal(words: list[str], cwd: str | Path) -> Refusal | None:
+    """A data-losing git form in the primary checkout while `.ddflow/events` holds uncommitted
+    changes is a silent loss the static list cannot name (Ba34619983b): the refusal, or None.
+    Two reasons to hold back: the command acts on ANOTHER checkout (`git -C other`/`cd other`,
+    a worktree holds no events), or this checkout's shards are all committed."""
+    form = _git_discard(words)
+    if not form:
+        return None
+    if _elsewhere([words]) or not is_primary(cwd or Path.cwd()):
+        return None
+    if _uncommitted_events(cwd or Path.cwd()):
+        return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD)
+    return None
+
+
 def check(
     command: str,
     cfg: Config,
@@ -927,7 +942,6 @@ def check(
         return None
     primary: bool | None = None
     cmds = _commands(command)
-    elsewhere = _elsewhere(cmds)
     for words in cmds:
         if any(matches(a, words, ordered=False) for a in cfg.hooks.allowed_commands):
             continue
@@ -938,19 +952,12 @@ def check(
                 continue
             if only_primary:
                 if primary is None:
-                    primary = elsewhere or is_primary(cwd or Path.cwd())
+                    primary = _elsewhere(cmds) or is_primary(cwd or Path.cwd())
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
-        # A data-losing git form in the primary checkout while event shards are uncommitted is
-        # a silent loss the static list cannot name (Ba34619983b): refused only then, and only
-        # when the command acts on this checkout (not `git -C other`/`cd other`).
-        form = _git_discard(words)
-        if form and not elsewhere:
-            if primary is None:
-                primary = is_primary(cwd or Path.cwd())
-            if primary and _uncommitted_events(cwd or Path.cwd()):
-                return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD)
+        if (r := _discard_refusal(words, cwd or Path.cwd())):
+            return r
     return None
 
 
