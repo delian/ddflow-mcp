@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=93c8e7d2112f -->
-<details><summary>All 745 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=3c859a57e6e7 -->
+<details><summary>All 747 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1537,6 +1537,8 @@ long default is left to `ddflow config --explain`.
 | `swarm.w_cost` | `1.0` |  |
 | `swarm.w_rework` | `1.5` |  |
 | `swarm.w_queue` | `0.5` |  |
+| `swarm.w_headroom` | `1.0` |  |
+| `swarm.headroom_floor_usd` | `0.0` |  |
 | `swarm.fit_margin` | `0.1` |  |
 | `swarm.cost_ref_usd` | `1.0` |  |
 | `swarm.rework_ref` | `1.0` |  |
