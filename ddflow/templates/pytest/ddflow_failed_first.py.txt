@@ -1,0 +1,114 @@
+"""ddflow's failed-first pytest plugin (FF-failed-first). Standard library only.
+
+ddflow copies this file into a scratch directory as ``ddflow_failed_first.py`` and loads it into
+the project's pytest as a ``pytest11`` entry point of a ``dist-info`` beside it (found through
+``PYTHONPATH``; a pytest that lost it, or runs with PYTEST_DISABLE_PLUGIN_AUTOLOAD, does not load
+it and orders nothing). It runs in whatever interpreter the
+project's tests use, which need not have ddflow installed, and does nothing unless the
+environment names the ids file. It is data to ddflow (``templates/pytest``), not a module of it.
+
+Ordering is applied in ``pytest_collection_modifyitems`` before xdist distributes, the same
+stable partition in every worker. The ids actually put first are noted by any process, the timestamps
+of the session and its first failure by the controller only (appended to a JSON-lines file). A missing or unreadable ids file is the ordinary order, never an error."""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+IDS_ENV = "DDFLOW_FAILED_FIRST_FILE"
+OUT_ENV = "DDFLOW_FAILED_FIRST_OUT"
+#: The pid of the first pytest process that takes part, so a pytest a TEST starts inside it stands
+#: down instead of ordering and noting into the outer run's files.
+ACTIVE_ENV = "DDFLOW_FAILED_FIRST_ACTIVE"
+
+_state: dict[str, Any] = {"controller": False, "failed": False, "depth": 0}
+
+
+def _read_plan() -> tuple[list[str], list[str]]:
+    """(ids, files) from the file the environment names; empty when absent or unreadable."""
+    path = os.environ.get(IDS_ENV, "")
+    try:
+        data = json.loads(Path(path).read_text("utf-8")) if path else {}
+        ids = [str(i) for i in data.get("ids") or ()]
+        files = [str(f) for f in data.get("files") or ()]
+    except (OSError, ValueError, AttributeError, TypeError):
+        return [], []
+    return ids, files
+
+
+def order_nodeids(nodeids: list[str], ids: list[str], files: list[str]) -> list[int]:
+    """The indexes of ``nodeids`` in run order: the failed ``ids`` first (in the order given),
+    then the tests of ``files``, then the rest, each group in its original order."""
+    rank = {nid: n for n, nid in reversed(list(enumerate(ids)))}
+    touched = set(files)
+
+    def key(i: int) -> tuple[int, int, int]:
+        nid = nodeids[i]
+        if nid in rank:
+            return 0, rank[nid], i
+        return (1 if nid.split("::", 1)[0] in touched else 2), 0, i
+
+    return sorted(range(len(nodeids)), key=key)
+
+
+def pytest_collection_modifyitems(config, items):
+    ids, files = _read_plan()
+    if getattr(config, "_ddff_off", True) or not (ids or files) or not items:
+        return
+    nodeids = [it.nodeid for it in items]
+    order = order_nodeids(nodeids, ids, files)
+    items[:] = [items[i] for i in order]
+    # What was REALLY put first: the ids this collection holds. Under xdist only the workers
+    # collect, so any process may note it (the ids are the same in each).
+    held = set(nodeids)
+    first = [i for i in ids if i in held]
+    if first:
+        _note(ev="ordered", ids=first)
+
+
+def _note(**fields: Any) -> None:
+    out = os.environ.get(OUT_ENV, "")
+    if not out:
+        return
+    try:
+        with open(out, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(fields) + "\n")
+    except OSError:
+        return
+
+
+def pytest_configure(config):
+    _state["depth"] += 1
+    config._ddff_off = True  # until this session proves it is the run's own
+    if _state["depth"] > 1:
+        return  # a session a test starts in this very process: not this run's tests
+    worker = hasattr(config, "workerinput")
+    _state["failed"] = False
+    # Workers report nothing: the controller sees every worker's report and has one clock.
+    _state["controller"] = not worker
+    if worker:
+        config._ddff_off = False
+        return
+    if (os.environ.get(ACTIVE_ENV) or str(os.getpid())) != str(os.getpid()):
+        # A pytest started by a test of the outer run: it is not this run's tests. Stand down,
+        # and hide the plan from any worker it starts.
+        _state["controller"] = False
+        os.environ.pop(IDS_ENV, None)
+        return
+    config._ddff_off = False
+    os.environ[ACTIVE_ENV] = str(os.getpid())  # a later session of THIS process is ours too
+    _note(ev="start", at=time.time())
+
+
+def pytest_unconfigure(config):
+    _state["depth"] = max(_state["depth"] - 1, 0)
+
+
+def pytest_runtest_logreport(report):
+    if _state["controller"] and _state["depth"] == 1 and report.failed and not _state["failed"]:
+        _state["failed"] = True
+        _note(ev="fail", at=time.time(), id=report.nodeid)

@@ -175,6 +175,8 @@ documents = []
 redact = true
 max_bytes = 60000
 refresh = "off"
+security_contact = ""
+security_response_days = 0
 tables = {}
 
 [fasttrack]
@@ -780,6 +782,8 @@ max_wait_factor = 3.0
 agent_share = 0.5
 default_cost_s = 600.0
 cost_runs = 20
+failed_first = true
+failed_first_max_ids = 50
 class_patterns = {red_main = ["fix-Bmain-red", "main-red", "red-main"], integrator = ["merge[ _-]?queue", "queue run", "integrator"], phase = ["^P-", "phase[ _-]?(close|suite)"], baseline = ["baseline"]}
 
 [swarm]

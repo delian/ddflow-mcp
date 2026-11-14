@@ -374,22 +374,23 @@ def test_a_new_file_is_seeded_with_a_todo_and_never_a_contact(repo):
     text = (repo / "SECURITY.md").read_text()
     assert "## Reporting a Vulnerability" in text and "TODO" in text
     assert "@" not in text.split("## Reporting a Vulnerability")[1]
-    assert {r.name for r in RG.parse(text)} == {"versions", "known-issues"}
+    assert {r.name for r in RG.parse(text)} == {"versions", "known-issues", "reporting"}
+    # the heading belongs to the reporting region, so a configured contact reaches it later
     reporting = text.index("## Reporting a Vulnerability")
-    assert all(not (r.begin <= reporting < r.stop) for r in RG.parse(text))
+    (region,) = [r for r in RG.parse(text) if r.begin <= reporting < r.stop]
+    assert region.name == "reporting"
 
 
 def test_a_refresh_keeps_the_operators_text_byte_for_byte(repo):
     _write(repo, [])
     p = repo / "SECURITY.md"
-    mine = p.read_text().replace("TODO", "Mail security@example.org;")
-    mine = "Intro by hand.\n\n" + mine + "\nOutro by hand.\n"
+    mine = "Intro by hand.\n\n" + p.read_text() + "\nOutro by hand, mail security@example.org.\n"
     p.write_text(mine)
     assert _write(repo, [bug("B1", "2026-09-15T00:00:00Z")]).action == "updated"
     new = p.read_text()
     assert "B1" in new
-    assert new.startswith("Intro by hand.\n\n") and new.endswith("\nOutro by hand.\n")
-    assert "Mail security@example.org;" in new
+    assert new.startswith("Intro by hand.\n\n")
+    assert new.endswith("\nOutro by hand, mail security@example.org.\n")
 
 
 def test_a_file_with_no_markers_is_refused_until_force_appends_the_regions(repo):
@@ -404,10 +405,10 @@ def test_a_file_with_no_markers_is_refused_until_force_appends_the_regions(repo)
     res = _write(repo, [], force=True)
     text = p.read_text()
     assert res.action == "updated" and text.startswith("# Ours\n\nMail us.\n\n<!-- ddflow:begin")
-    assert [r.name for r in RG.parse(text)] == ["versions", "known-issues"]
+    assert [r.name for r in RG.parse(text)] == ["versions", "known-issues", "reporting"]
     assert "-->\n\n<!-- ddflow:begin" in text  # the regions keep a blank line between them
     assert not any("not inserted" in n for n in res.notes)
-    assert "Reporting" not in text  # the operator's file has its own policy text
+    assert "# Ours\n\nMail us." in text  # the operator's file keeps its own policy text
     assert ops.state_of(repo, cfg, load(repo, []), _spec(cfg))[0] == "fresh"
 
 

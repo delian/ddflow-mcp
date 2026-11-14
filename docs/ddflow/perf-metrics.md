@@ -56,6 +56,25 @@ waits, forecast and retro are a different command: `ddflow metrics`.
 - The report answer names its exact next call in CLI and MCP form so the operator can
   keep driving it without guessing.
 
+## Failed tests first, and the time to the first failure
+
+A `ci run` of an item that failed before runs the tests that failed then FIRST, so a test that
+is still broken is reported in seconds instead of at the end of a run that costs minutes (1005
+failed ci runs ran to the end, about 275 hours, p50 472 s). The ids come from ddflow's own
+evidence, not pytest's cache (ddflow runs in scratch worktrees under xdist): the item's last
+failed `ci` and `unit_tests` records, the whole list from the blob the run kept aside, at most
+`[suites].failed_first_max_ids`; after them come the tests of the files the diff touches. They
+reach the project's pytest as a plugin copy and a file named by `DDFLOW_FAILED_FIRST_FILE`,
+applied in `pytest_collection_modifyitems` before xdist distributes. A missing ids file is the
+ordinary order, never an error.
+
+The run's evidence (`ci_scope`) carries `ran_failed_first` (the ids ordered first) and
+`first_failure_at_s`, the seconds from the first pytest session's start (collection included) to
+its first failed test: the figure that shows whether a repeat failure is now seen early and the
+data a stop-at-first-new-failure decision needs. `ddflow ci failed-first [--ref ITEM]` (the
+`ddflow_ci` action `failed-first`) shows the ids a run would put first. Turn it off with
+`ddflow config --set suites.failed_first false`. The `unit_tests` gate does not order yet.
+
 ## Knobs
 
 Every threshold and interval is a `[perf_metrics]` knob, settable four ways (config file,
