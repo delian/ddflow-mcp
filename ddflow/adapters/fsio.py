@@ -65,12 +65,13 @@ class LockTimeout(TimeoutError):
 
 def _temp_beside(path: Path, perm: int) -> tuple[int, Path]:
     """A new, uniquely named file in `path`'s directory, open for writing, created with
-    `perm` (less the umask). The name is unique per call: a FIXED name is shared by
-    concurrent writers, and one renames the other's half-written file into place."""
+    owner-only permissions (less the umask). The name is unique per call: a FIXED name is
+    shared by concurrent writers, and one renames the other's half-written file into place."""
+    safe_perm = (perm & (stat.S_IRUSR | stat.S_IWUSR)) | stat.S_IRUSR | stat.S_IWUSR
     while True:
         tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
         try:
-            return os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, perm), tmp
+            return os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, safe_perm), tmp
         except FileExistsError:  # pragma: no cover - 48 random bits colliding
             continue
 
