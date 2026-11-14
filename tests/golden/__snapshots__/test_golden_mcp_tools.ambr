@@ -1335,6 +1335,10 @@
           "type": "string",
           "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). ..."
          },
+         "severity": {
+          "type": "string",
+          "description": "kind=bug: only bugs of this severity (critical|high|medium|low). ..."
+         },
          "tail": {
           "type": "integer",
           "description": "Last N entries, oldest first (overrides limit)."

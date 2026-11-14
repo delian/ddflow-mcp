@@ -474,24 +474,26 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--severity {low,medium,high,critical}] [--sort {severity}]
   
   options:
-    -h, --help         show this help message and exit
-    --state STATE      only rows in this state
-    --phase PHASE      only rows under this phase id
-    --tag TAG          only rows carrying this tag
-    --since SINCE      only rows last changed at or after this ISO date or timestamp
-    --match MATCH      only rows whose id or title contains this text (case-insensitive); use it
-                       instead of `| grep`, which sees one page only
-    --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
-                       most)
-    --offset OFFSET    skip this many rows (paging)
-    --all              include fixed and invalid bugs, and list every row (up to the most a list
-                       gives)
-    --item ITEM        only bugs filed in or against this queue item id
-    --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
-                       newest change first
+    -h, --help            show this help message and exit
+    --state STATE         only rows in this state
+    --phase PHASE         only rows under this phase id
+    --tag TAG             only rows carrying this tag
+    --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
+    --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
+                          most)
+    --offset OFFSET       skip this many rows (paging)
+    --all                 include fixed and invalid bugs, and list every row (up to the most a list
+                          gives)
+    --item ITEM           only bugs filed in or against this queue item id
+    --severity {low,medium,high,critical}
+                          only rows of this severity (one of critical/high/medium/low)
+    --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
+                          newest change first
   
   '''
 # ---
@@ -520,6 +522,15 @@
   
   '''
 # ---
+# name: test_help[ddflow bug status]
+  '''
+  usage: ddflow bug status [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow bug tag]
   '''
   usage: ddflow bug tag [-h] [--add ADD] [--remove REMOVE] id
@@ -536,10 +547,10 @@
 # ---
 # name: test_help[ddflow bug]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show} ...
+  usage: ddflow bug [-h] {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show,status} ...
   
   positional arguments:
-    {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show}
+    {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show,status}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
                           the younger ones onto each cluster's canonical
@@ -549,6 +560,7 @@
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
       show                read one bug: its text, where it was found, its fix task and its closure
+      status              how many open bugs: totals by severity and blocked vs unblocked
   
   options:
     -h, --help            show this help message and exit
@@ -1895,7 +1907,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--severity {low,medium,high,critical}] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1916,6 +1928,8 @@
     --offset OFFSET       skip this many rows (paging)
     --all                 list every row, not one page (up to the most a list gives)
     --item ITEM           only bugs filed in or against this queue item id
+    --severity {low,medium,high,critical}
+                          only rows of this severity (one of critical/high/medium/low)
     --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
                           newest change first
   
@@ -4070,6 +4084,7 @@
     'ddflow bug list',
     'ddflow bug reopen',
     'ddflow bug show',
+    'ddflow bug status',
     'ddflow bug tag',
     'ddflow cadence',
     'ddflow chore',
