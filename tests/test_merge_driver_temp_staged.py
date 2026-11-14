@@ -71,7 +71,9 @@ def test_a_unicode_merge_file_name_is_not_gits_ascii_temp(repo, cfg, monkeypatch
     # (with only isalnum(), git would misclassify it and silently unstage it).
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    name = ".merge_file_\u03a9\u00e9\u00e9\u00e9\u00e9\u00e9"  # six codepoints: the narrow tail length
+    name = (
+        ".merge_file_\u03a9\u00e9\u00e9\u00e9\u00e9\u00e9"  # six codepoints: the narrow tail length
+    )
     (tree / name).write_text("payload\n")
     subprocess.run(["git", "-C", str(tree), "add", name], check=True)
     monkeypatch.chdir(tree)
@@ -94,5 +96,7 @@ def test_a_temp_file_whose_reset_fails_is_reported_not_silently_waived(repo, cfg
     (tree / ".merge_file_xYz123").unlink()
     monkeypatch.chdir(tree)
     staged = LC.staged_paths(repo)  # read first: the patch below reprograms only the reset
-    monkeypatch.setattr(LC.G, "run", lambda *a, **k: G.GitResult(code=1, out="", err="", unavailable=True))
+    monkeypatch.setattr(
+        LC.G, "run", lambda *a, **k: G.GitResult(code=1, out="", err="", unavailable=True)
+    )
     assert ".merge_file_xYz123" in LC._unstage_git_temp(repo, staged)

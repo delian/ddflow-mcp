@@ -63,9 +63,7 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     # worktree's hook is `_after_merge_note`'s job (Bf9931aed2b); refusing it dropped main's rows.
     foreign_refused = (
         _foreign_import_refusal()
-        if verb == "regenerate"
-        and not check
-        and not (after_merge and _linked_worktree(repo))
+        if verb == "regenerate" and not check and not (after_merge and _linked_worktree(repo))
         else None
     )
     if foreign_refused is not None:
