@@ -374,7 +374,7 @@ class EventLog(_GuardMixin, _ReadMixin):
             # it outright rather than appending JSON onto an operator-writable file.
             raise ValueError(f"refusing to write {self.shard}: it is a symlink")
         created = not self.shard.exists()
-        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW, 0o644)
+        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW, 0o600)
         try:
             # A shard that does not end in a newline holds a torn append from a writer
             # that died mid-line (every writer holds this lock, so none is mid-line now).
