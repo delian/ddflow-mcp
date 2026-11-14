@@ -197,22 +197,6 @@ def _regenerate_tail(
 
 def _after_merge_note(primary: Path, repo: Path, cfg, before, watched, *, check: bool) -> O.Outcome:
     """Run what the post-merge hook runs, on the ``after_merge`` route."""
-    if _linked_worktree(repo):
-        # A task worktree's merge of main: its pins are re-recorded by `ddflow pins regenerate`,
-        # never by the hook running tests against the worktree's index (B683c75d7b3). The merge
-        # driver kept the branch side of any pin file it merged, so main's rows are not in the
-        # tree yet: name the stale pins and say they are main's rows (not drift), so the
-        # regeneration that restores them is not reverted; the interactive route refuses from a
-        # linked worktree, so the remedy names the primary checkout (Bf9931aed2b).
-        stale = PM.merge_report(repo, cfg).get("stale", [])
-        note = "pins: post-merge hook skipped in a linked worktree"
-        note += (
-            f"; stale pins: {', '.join(stale)} are main's rows the branch lacks, not drift"
-            if stale
-            else ""
-        )
-        note += "; run `ddflow pins regenerate` from the primary checkout"
-        return O.ok("pins", note=note)
     note = PM.after_merge(repo, cfg)
     _record_written(primary, repo, before, watched)
     return O.ok("pins", note=note)

@@ -1,5 +1,6 @@
-"""The post-merge pins hook never runs recipes inside a linked worktree (B683c75d7b3): its
-GIT_DIR/GIT_INDEX_FILE made pytest fixtures commit "init" to the worktree."""
+"""The post-merge pins hook is safe inside a linked worktree: the recipes it runs had their
+GIT_DIR/GIT_INDEX_FILE scrubbed (B683c75d7b3), so the hook regenerates there and restores
+main's pin rows instead of skipping them (Bf9931aed2b)."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ def _git(cwd: Path, *a: str) -> None:
     )
 
 
-def test_after_merge_hook_skips_a_linked_worktree(tmp_path: Path, monkeypatch) -> None:
+def test_after_merge_hook_regenerates_a_linked_worktree(tmp_path: Path, monkeypatch) -> None:
     for k in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR"):
         monkeypatch.delenv(k, raising=False)
     main = tmp_path / "main"
@@ -33,10 +34,10 @@ def test_after_merge_hook_skips_a_linked_worktree(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(PM, "after_merge", lambda repo, cfg: ran.append(repo) or "ran")
     head = subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"])
     out = pin_files.pins_regenerate(main, after_merge=True, start=wt)
-    assert ran == [] and out.ok
+    assert ran == [wt] and out.ok
     assert subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"]) == head
     pin_files.pins_regenerate(main, after_merge=True, start=main)
-    assert ran == [main]
+    assert ran == [wt, main]
 
 
 def test_recipe_child_with_hook_git_env_leaves_the_scratch_repo_untouched(
