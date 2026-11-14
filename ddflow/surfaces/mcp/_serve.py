@@ -15,8 +15,7 @@ from typing import Any
 from ...adapters.mcp import StdioServer
 from ...api import cap_blas_threads
 from ...infra import proc as PROC
-from ...infra.worktree import observe_boot
-from ...infra.worktree import repo_root
+from ...infra.worktree import observe_boot, repo_root
 from .. import mcp_lifecycle as _lifecycle
 from .. import mcp_upgrade as _upgrade
 from ..mcp_protocol import SERVER_INFO
