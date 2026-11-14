@@ -19,17 +19,10 @@
   },
   "approval.granted": {
    "fields": {
-    "base_url": ["str"],
-    "command": ["str"],
     "digest": ["str"],
-    "family": ["str"],
     "host": ["str"],
     "human": ["bool"],
-    "kind": ["str"],
-    "model": ["str"],
-    "name": ["str"],
     "note": ["str"],
-    "proxy": ["dict"],
     "subject": ["str"],
     "token_hash": ["str"],
     "user": ["str"]
@@ -54,7 +47,6 @@
     "human": ["bool"],
     "id": ["str"],
     "level": ["int"],
-    "notify": ["int"],
     "outcome": ["str"],
     "policy": ["bool"],
     "proof": ["str"],
@@ -181,7 +173,6 @@
   "bug.fixed": {
    "fields": {
     "changelog": ["dict"],
-    "landed": ["str"],
     "lesson": ["str"],
     "regression_test": ["str"],
     "regression_tests": ["list"],
@@ -197,7 +188,6 @@
     "duplicate_of": ["str"],
     "extends": ["str"],
     "fix_task": ["str"],
-    "found_evidence": ["str"],
     "globs": ["list"],
     "item": ["str"],
     "key": ["str"],
@@ -206,7 +196,6 @@
     "scope": ["str"],
     "score": ["float"],
     "severity": ["str"],
-    "sighted": ["dict"],
     "summary": ["str"],
     "tags": ["list"],
     "title": ["str"]
@@ -290,10 +279,7 @@
     "extends": ["str"],
     "globs": ["list"],
     "item": ["str"],
-    "kept": ["str"],
     "related": ["str"],
-    "resolves": ["list"],
-    "saw": ["list"],
     "sources": ["list"],
     "status": ["str"],
     "supersedes": ["list"],
@@ -427,7 +413,6 @@
    "fields": {
     "by": ["str"],
     "evidence": ["dict"],
-    "forced": ["bool"],
     "gate": ["str"],
     "kind": ["str"],
     "reason": ["str"]
@@ -446,7 +431,6 @@
    "fields": {
     "by": ["str"],
     "evidence": ["dict"],
-    "forced": ["bool"],
     "gate": ["str"],
     "outcome": ["str"],
     "reason": ["str"]
@@ -457,7 +441,6 @@
    "fields": {
     "by": ["str"],
     "evidence": ["dict"],
-    "forced": ["bool"],
     "gate": ["str"],
     "kind": ["str"],
     "reason": ["str"]
@@ -483,7 +466,6 @@
    "fields": {
     "by": ["str"],
     "evidence": ["dict"],
-    "forced": ["bool"],
     "gate": ["str"],
     "reason": ["str"]
    },
@@ -492,8 +474,7 @@
   "item.abandoned": {
    "fields": {
     "kind": ["str"],
-    "reason": ["str"],
-    "renamed_to": ["str"]
+    "reason": ["str"]
    },
    "v": 1
   },
@@ -507,9 +488,6 @@
   },
   "item.completed": {
    "fields": {
-    "approval": ["dict"],
-    "author_family": ["str"],
-    "author_model": ["str"],
     "changelog": ["dict", "str"],
     "chore": ["dict", "str"],
     "evidence": ["str"],
@@ -517,11 +495,9 @@
     "imported": ["bool"],
     "kind": ["str"],
     "ledger": ["dict"],
-    "model_source": ["str"],
     "not_applicable": ["dict"],
     "overridden": ["list"],
-    "sha": ["str"],
-    "umbrella": ["list"]
+    "sha": ["str"]
    },
    "v": 1
   },
@@ -564,7 +540,7 @@
   },
   "job.ended": {
    "fields": {
-    "exit_code": ["int", "null"],
+    "exit_code": ["int"],
     "note": ["str"]
    },
    "v": 1
@@ -596,14 +572,11 @@
     "agent": ["str"],
     "at": ["float"],
     "branch": ["str"],
-    "clone": ["str"],
     "expires_at": ["int"],
     "globs": ["list"],
     "holder": ["str"],
     "kind": ["str"],
-    "mode": ["str"],
     "note": ["str"],
-    "optimistic": ["list"],
     "resources": ["list"],
     "ttl_s": ["int"],
     "worktree": ["str"]
@@ -629,7 +602,6 @@
     "agent": ["str"],
     "by": ["str"],
     "event": ["str"],
-    "forced": ["bool"],
     "holder": ["str"],
     "note": ["str"],
     "reason": ["str"],
@@ -643,7 +615,6 @@
     "branch": ["str"],
     "globs": ["list"],
     "holder": ["str"],
-    "note": ["str"],
     "resources": ["list"],
     "worktree": ["str"]
    },
@@ -668,10 +639,8 @@
     "extends": ["str"],
     "globs": ["list"],
     "how": ["str"],
-    "kept": ["str"],
     "pattern": ["str"],
     "related": ["str"],
-    "resolves": ["list"],
     "rule": ["str"],
     "seen_in": ["list"],
     "sites": ["list"],
@@ -692,7 +661,6 @@
   "link.recorded": {
    "fields": {
     "by": ["str"],
-    "reason": ["str"],
     "relation": ["str"],
     "target": ["str"]
    },
@@ -747,7 +715,12 @@
    "v": 1
   },
   "path.moved": {
-   "fields": {},
+   "fields": {
+    "how": ["str"],
+    "new": ["str"],
+    "old": ["str"],
+    "sha": ["str"]
+   },
    "v": 1
   },
   "phase.added": {
@@ -768,7 +741,6 @@
   },
   "phase.completed": {
    "fields": {
-    "approval": ["dict"],
     "evidence": ["str"],
     "kind": ["str"],
     "tasks": ["int"]
@@ -776,18 +748,12 @@
    "v": 1
   },
   "phase.removed": {
-   "fields": {
-    "reason": ["str"]
-   },
+   "fields": {},
    "v": 1
   },
   "phase.updated": {
    "fields": {
     "body": ["str"],
-    "globs": ["list"],
-    "needs": ["list"],
-    "priority": ["int"],
-    "tags": ["list"],
     "title": ["str"]
    },
    "v": 1
@@ -843,7 +809,6 @@
     "head": ["str"],
     "method": ["str"],
     "paths": ["list"],
-    "reason": ["str"],
     "result": ["str"],
     "why": ["str"]
    },
@@ -851,7 +816,6 @@
   },
   "record.corrected": {
    "fields": {
-    "approval": ["dict"],
     "digest_chars": ["int"],
     "digest_new": ["bool"],
     "digest_old": ["bool"],
@@ -866,7 +830,6 @@
    "fields": {
     "auto": ["bool"],
     "dedupe": ["dict"],
-    "globs": ["list"],
     "relation": ["str"],
     "score": ["float", "null"],
     "text": ["str"],
@@ -883,27 +846,11 @@
    "v": 1
   },
   "release.tagged": {
-   "fields": {
-    "branch": ["str"],
-    "items": ["list"],
-    "line": ["str"],
-    "pushed": ["bool"],
-    "sha": ["str"],
-    "tag": ["str"],
-    "version": ["str"]
-   },
+   "fields": {},
    "v": 1
   },
   "repair.applied": {
-   "fields": {
-    "details": ["list"],
-    "events": ["int"],
-    "findings": ["list"],
-    "repair": ["str"],
-    "since": ["str"],
-    "summary": ["str"],
-    "version": ["str"]
-   },
+   "fields": {},
    "v": 1
   },
   "research.recorded": {
@@ -911,8 +858,6 @@
     "budget": ["str"],
     "claim": ["str"],
     "dedupe": ["dict"],
-    "duplicate_of": ["str"],
-    "extends": ["str"],
     "falsifier": ["str"],
     "item": ["str"],
     "mechanism": ["str"],
@@ -982,9 +927,6 @@
   },
   "session.ended": {
    "fields": {
-    "how": ["str"],
-    "lapse_at": ["str"],
-    "last_active": ["str"],
     "summary": ["str"]
    },
    "v": 1
@@ -1000,10 +942,8 @@
   },
   "session.prompt": {
    "fields": {
-    "auto": ["bool"],
     "item": ["str"],
     "redactions": ["int"],
-    "relayed_by": ["str"],
     "text": ["str"]
    },
    "v": 1
@@ -1126,8 +1066,6 @@
     "dedupe": ["dict"],
     "extends": ["str"],
     "fixes": ["list"],
-    "followup_gate": ["str"],
-    "followup_of": ["str"],
     "globs": ["list"],
     "kind": ["str"],
     "line": ["str"],
@@ -1155,9 +1093,6 @@
    "fields": {
     "body": ["str"],
     "globs": ["list"],
-    "kind": ["str"],
-    "landed_after": ["str"],
-    "landed_before": ["str"],
     "needs": ["list"],
     "parent": ["str"],
     "priority": ["int"],
@@ -1218,24 +1153,7 @@
    "v": 1
   },
   "upgrade.applied": {
-   "fields": {
-    "backup": ["str"],
-    "categories": ["list"],
-    "config_changes": ["list"],
-    "confirmed": ["dict"],
-    "detail": ["str"],
-    "from": ["str"],
-    "items": ["list"],
-    "run": ["str"],
-    "source": ["str"],
-    "status": ["str"],
-    "step": ["str"],
-    "step_status": ["str"],
-    "summary": ["str"],
-    "target": ["str"],
-    "to": ["str"],
-    "written": ["dict"]
-   },
+   "fields": {},
    "v": 1
   },
   "worktree.adopted": {
@@ -1249,7 +1167,6 @@
   "worktree.created": {
    "fields": {
     "base": ["str"],
-    "base_sha": ["str"],
     "branch": ["str"],
     "path": ["str"]
    },
@@ -1264,7 +1181,6 @@
     "landed_after": ["str"],
     "landed_before": ["str"],
     "outside_globs": ["list"],
-    "outside_globs_unknown": ["bool"],
     "sha": ["str"]
    },
    "v": 1
