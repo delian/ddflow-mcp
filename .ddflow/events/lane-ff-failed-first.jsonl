@@ -128,3 +128,4 @@
 {"agent":"lane-ff-failed-first","data":{"at":1794615443.219182,"holder":"lane-ff-failed-first"},"id":"e0610e292fef4b1daa7e4df39","kind":"lease.renewed","lamport":197844,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T00:17:23.382561Z"}
 {"agent":"lane-ff-failed-first","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e2509fca87d5c8b24614705d4","kind":"cadence.ran","lamport":197847,"schema":1,"subject":"recall_recheck:FF-failed-first","ts":"2026-11-14T00:17:36.716972Z"}
 {"agent":"lane-ff-failed-first","data":{"gate":"ci"},"id":"ed84d56d05430f71ee997551f","kind":"gate.started","lamport":197849,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T00:17:50.667344Z"}
+{"agent":"lane-ff-failed-first","data":{"at":1794616384.4150681,"holder":"lane-ff-failed-first"},"id":"e2fbaf8ec1b9e1cfe1c9f4d7c","kind":"lease.renewed","lamport":198018,"schema":1,"subject":"FF-failed-first","ts":"2026-11-14T00:33:04.647484Z"}
