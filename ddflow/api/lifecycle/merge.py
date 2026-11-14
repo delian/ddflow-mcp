@@ -110,9 +110,7 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
         )
 
 
-def _record_moves(
-    log, repo, item: str, before: str, after: str, sha: str
-) -> None:
+def _record_moves(log, repo, item: str, before: str, after: str, sha: str) -> None:
     """Record one `path.moved` per rename, move or package split this landing did, derived
     from git rename detection on the branch's diff (MV-path-moves). Each record is
     self-contained (old path, new path, the merge sha), so replay rebuilds the move list

@@ -39,7 +39,9 @@ def _sha(repo: Path) -> str:
 
 def _claimed(repo: Path, item: str, glob: str, agent: str) -> None:
     assert run_cli(repo, "init", agent=agent)[0] == 0
-    code, out, err = run_cli(repo, "task", "add", item, "--title", "t", "--globs", glob, agent=agent)
+    code, out, err = run_cli(
+        repo, "task", "add", item, "--title", "t", "--globs", glob, agent=agent
+    )
     assert code == 0, out + err
     (repo / "ddflow").mkdir(exist_ok=True)
     (repo / glob).parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +79,9 @@ def test_moves_between_detects_a_package_split(repo):
     assert moves is not None
     # The module body did not survive, so git rename detection links nothing: the shape
     # `mod.py` deleted with `mod/__init__.py` added is the package split record.
-    assert any(m.old == "mod.py" and m.new == "mod/__init__.py" and m.how == "split" for m in moves), moves
+    assert any(
+        m.old == "mod.py" and m.new == "mod/__init__.py" and m.how == "split" for m in moves
+    ), moves
 
 
 def test_moves_between_returns_none_when_git_cannot_say(repo):
