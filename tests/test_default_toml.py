@@ -108,9 +108,7 @@ def test_the_size_limit_assert_renders_no_config_repr():
     tree = ast.parse(inspect.getsource(test_the_file_stays_under_the_size_limit))
     (fn,) = tree.body
     (assert_node,) = (n for n in ast.walk(fn) if isinstance(n, ast.Assert))
-    names_config = any(
-        isinstance(n, ast.Name) and n.id == "Config" for n in ast.walk(assert_node)
-    )
+    names_config = any(isinstance(n, ast.Name) and n.id == "Config" for n in ast.walk(assert_node))
     assert not names_config
 
 
