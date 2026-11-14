@@ -106,3 +106,7 @@ class WorktreeConfig:
         factory=list,
         doc="Git-IGNORED, machine-local files (repo-relative paths) copied from the primary checkout into every worktree a claim binds -- one it creates, the harness tree it adopts, or the item's own tree on a re-claim -- a tool config that must not be committed but is read from each checkout, like .roborev.toml. Never overwrites a file already in the worktree, and never copies a path git tracks (that one arrives with the checkout). A copy that fails is skipped, not raised.",
     )
+    behind_ignore_globs: list[str] = knob(
+        factory=lambda: [".ddflow/"],
+        doc="Paths that do not make a tree 'behind' its base. A tree is behind in CODE when a commit it lacks touches a path outside this list: three quarters of main's commits touch only the event log (`.ddflow/`), so counting them made every worktree behind and every sync, queue re-merge, `max_behind` count and session hint act on a movement that carried no code. The total is still reported beside the code count (`behind by N commit(s) (K touch code)`); a rulebook change under an ignored path still counts as drift (`stale_rules`). Directories end in `/`, other entries are globs; an empty list counts every commit, as before.",
+    )

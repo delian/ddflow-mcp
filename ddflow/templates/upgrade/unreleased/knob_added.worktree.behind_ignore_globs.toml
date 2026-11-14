@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "worktree.behind_ignore_globs"
+new = '[".ddflow/"]'
+why = "A worktree is behind its base in code only when a commit it lacks touches a path outside this list: event-log-only commits on main no longer make `ddflow sync`, the queue re-merge, `max_behind` or the session hint act."
+impact = "additive"

@@ -44,6 +44,7 @@ def sync(
         "base": r.base,
         "status": r.status,
         "behind": r.behind,
+        "code_behind": r.code_behind,
         "touching_globs": r.relevant,
         "pin_files": r.merged_pins,
         "conflicts": r.conflicts,
@@ -111,6 +112,11 @@ def _here(called_from) -> Path:
 
 
 def _text(r: BS.SyncResult, d: dict) -> str:
+    if r.status == "current" and r.behind:
+        return (
+            f"{d['item']} is up to date with `{r.base}` in code: behind by {r.behind} commit(s) "
+            f"({r.code_behind} touch code); {r.detail}."
+        )
     if r.status == "current":
         return f"{d['item']} is up to date with `{r.base}`."
     if r.status == "unknown":
@@ -131,7 +137,10 @@ def _text(r: BS.SyncResult, d: dict) -> str:
             )
             + f"Conflicting files:{lines}"
         )
-    head = f"{d['item']} is {r.behind} commit(s) behind `{r.base}`; {r.relevant} touch its globs."
+    head = (
+        f"{d['item']} is {r.behind} commit(s) behind `{r.base}` ({r.code_behind} touch code); "
+        f"{r.relevant} touch its globs."
+    )
     if r.status == "behind":
         return head + f" `ddflow sync {d['item']}` merges them."
     pins = f" Pin files settled: {', '.join(r.merged_pins)}." if r.merged_pins else ""
@@ -139,6 +148,7 @@ def _text(r: BS.SyncResult, d: dict) -> str:
     unver = d.get("gates_unverified", [])
     extra = f"; could not be checked: {', '.join(unver)}" if unver else ""
     return (
-        f"merged `{r.base}` into {d['item']}: {r.behind} commit(s), {r.relevant} touching its globs."
+        f"merged `{r.base}` into {d['item']}: {r.behind} commit(s) ({r.code_behind} touch code), "
+        f"{r.relevant} touching its globs."
         f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}{extra}."
     )
