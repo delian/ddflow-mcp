@@ -54,6 +54,14 @@ class Drift:
     rules: tuple[str, ...] = ()
     #: why `behind` is None; empty otherwise.
     detail: str = ""
+    #: of the `behind` commits, those touching code (outside `[worktree].behind_ignore_globs`,
+    #: the event log by default); None = not measured, read as `behind`.
+    code_behind: int | None = None
+
+    @property
+    def code(self) -> int | None:
+        """The commits that count as being behind: those touching code."""
+        return self.behind if self.code_behind is None else self.code_behind
 
 
 def drift_base(repo: Path, here: Path, cfg: Config | None = None) -> str:
@@ -66,7 +74,7 @@ def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> 
     rulebooks changed there since the fork. Any checkout, the primary included: the
     primary ON the base branch is simply 0 behind. The calculation is `drift.measure`."""
     r = D.measure(repo, here, base, cfg=cfg, rulebooks=rulebooks())
-    return Drift(r.base, r.behind, r.rules, r.detail)
+    return Drift(r.base, r.behind, r.rules, r.detail, r.code_behind)
 
 
 def _concludes_merge_of(here: Path, base: str) -> bool:
@@ -170,12 +178,12 @@ def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = No
             "stale_rules",
         )
         code, parts = max(code, c), [*parts, m]
-    if d.behind > e.max_behind and e.behind != "off":
+    if (d.code or 0) > e.max_behind and e.behind != "off":
         c, m = _verdict(
             e.behind,
             [
-                f"ddflow: this branch is {d.behind} commits behind `{d.base}` (more than "
-                f"[enforce].max_behind = {e.max_behind}).",
+                f"ddflow: this branch is {d.code} commits behind `{d.base}` in code (more than "
+                f"[enforce].max_behind = {e.max_behind}; {d.behind} commits in all).",
                 "Drift compounds: merging now is cheaper than porting later.",
                 f"    git merge {shlex.quote(d.base)}",
             ],
