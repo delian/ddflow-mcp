@@ -441,7 +441,13 @@ def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path
     _gitc(tmp_path, "commit", "-q", "-m", "seed-shard")
     shard.write_text('{"id":"e1","kind":"a"}\n{"id":"e2","kind":"b"}\n')
 
-    for cmd in ("git restore .", "git checkout -- .", "git clean -fd"):
+    for cmd in (
+        "git restore .",
+        "git checkout -- .",
+        "git checkout .",
+        "git checkout .ddflow/events",
+        "git clean -fd",
+    ):
         r = _check(cmd, cwd=tmp_path)
         assert r is not None, cmd
         assert "commit the event log first" in r.message(), r.message()
@@ -449,9 +455,15 @@ def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path
     # a branch switch is not a discard of the working tree: still allowed
     assert _check("git checkout -b other", cwd=tmp_path) is None
 
-    # once the shards are committed there is nothing to lose: allowed again
+    # a worktree is not the primary checkout: its `git restore .` is allowed (it holds no event
+    # shards, and the guard is for the primary checkout alone).
+    _gitc(tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "checkout", "-q", "-b", "wip")
     _gitc(tmp_path, "add", ".ddflow/events/shard.jsonl")
     _gitc(tmp_path, "commit", "-q", "-m", "committed")
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "-C", str(tmp_path), "worktree", "add", "-q", str(wt)], check=True)
+    assert _check("git restore .", cwd=wt) is None
+
     assert _check("git restore .", cwd=tmp_path) is None
     assert _check("git checkout -- .", cwd=tmp_path) is None
     assert _check("git clean -fd", cwd=tmp_path) is None

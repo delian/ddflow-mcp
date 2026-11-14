@@ -880,10 +880,10 @@ def _instead(entry: str, words: list[str] | None = None) -> str:
 
 
 def _git_discard(words: list[str]) -> str:
-    """The git discard subcommand `words` is (``restore``/``clean``), or ``checkout`` with a
-    ``--`` (the discard form `git checkout -- <path>`), "" when `words` is not git, is not one
-    of those, or is a branch switch. `git reset --hard` is the static `forbidden_commands`
-    entry's job, not this one."""
+    """The git discard subcommand `words` is (``restore``/``clean``), or ``checkout`` naming a
+    pathspec (``git checkout -- <path>``, or a path that starts with ``.``/``/`` -- a name that is
+    never a branch), "" when `words` is not git, is not one of those, or is a branch switch.
+    `git reset --hard` is the static `forbidden_commands` entry's job, not this one."""
     head = _head(words)
     if not head or head[0].rsplit("/", 1)[-1] != "git":
         return ""
@@ -893,8 +893,16 @@ def _git_discard(words: list[str]) -> str:
     sub = args[0]
     if sub in _GIT_DISCARD_SUBCOMMANDS:
         return sub
-    if sub == "checkout" and "--" in args[1:]:
-        return "checkout"
+    if sub == "checkout":
+        rest = args[1:]
+        if "--" in rest:
+            return "checkout"
+        for w in rest:
+            if w.startswith("-"):
+                continue
+            if w.startswith((".", "/")):
+                return "checkout"
+            break  # a bare word could be a branch or a path: judge it as a branch switch
     return ""
 
 
@@ -956,7 +964,7 @@ def check(
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
-        if (r := _discard_refusal(words, cwd or Path.cwd())):
+        if r := _discard_refusal(words, cwd or Path.cwd()):
             return r
     return None
 
