@@ -143,7 +143,9 @@ def _flag_arg(flag: str, value: str) -> str:
     """A ``--flag <value>`` footer fragment: a dash-leading value uses ``--flag=value`` (argparse
     reads the leading dash as the value, not another option), and ``shlex.quote`` escapes
     embedded quotes and spaces (B-next-paging-drops-filters)."""
-    return f"{flag}={shlex.quote(value)}" if value.startswith("-") else f"{flag} {shlex.quote(value)}"
+    return (
+        f"{flag}={shlex.quote(value)}" if value.startswith("-") else f"{flag} {shlex.quote(value)}"
+    )
 
 
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
