@@ -83,6 +83,18 @@ _OPERATOR_FORCE = (
     "guards agents' Bash only). For `complete` and `claim` there is a chat route that needs no "
     "--force: re-run with `--approval request`, the operator answers in chat, then `--approval <id>`"
 )
+#: A data-losing git form in the PRIMARY checkout while `.ddflow/events` holds uncommitted
+#: changes: refused only then (Ba34619983b). A branch switch (`git checkout <branch>`) is not a
+#: discard of the working tree and is left alone; committing the log first is the way past.
+_EVENT_DISCARD_INSTEAD = (
+    "commit the event log first: ddflow commits `.ddflow/events` at merge, complete, release "
+    "and stop (`[log].commit_events`), so finish at one of those doors, or WIP-commit the "
+    "shards yourself, before discarding tracked changes they may hold"
+)
+#: The git subcommands whose job is to discard tracked/untracked working-tree changes: they can
+#: revert `.ddflow/events/*.jsonl` appends (or delete shards git has not committed) in the primary
+#: checkout, which is why they are refused there while shards are uncommitted (Ba34619983b).
+_GIT_DISCARD_SUBCOMMANDS = frozenset({"restore", "clean"})
 
 
 @dataclass(frozen=True)
@@ -867,6 +879,38 @@ def _instead(entry: str, words: list[str] | None = None) -> str:
     )
 
 
+def _git_discard(words: list[str]) -> str:
+    """The git discard subcommand `words` is (``restore``/``clean``), or ``checkout`` with a
+    ``--`` (the discard form `git checkout -- <path>`), "" when `words` is not git, is not one
+    of those, or is a branch switch. `git reset --hard` is the static `forbidden_commands`
+    entry's job, not this one."""
+    head = _head(words)
+    if not head or head[0].rsplit("/", 1)[-1] != "git":
+        return ""
+    args = _args(head)
+    if not args:
+        return ""
+    sub = args[0]
+    if sub in _GIT_DISCARD_SUBCOMMANDS:
+        return sub
+    if sub == "checkout" and "--" in args[1:]:
+        return "checkout"
+    return ""
+
+
+def _uncommitted_events(cwd: str | Path) -> bool:
+    """Whether the checkout at `cwd` holds an event shard git has not committed (new or
+    appended); False when there is none, or when git could not tell (B-fails-safe to NOT
+    refuse: a transient git error must not block a command the operator relies on)."""
+    top = git.run(cwd or Path.cwd(), "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out.strip():
+        return False
+    entries = git.status(top.out.strip(), ".ddflow/events", untracked="all")
+    if entries is None:
+        return False
+    return any(e.path.endswith(".jsonl") for e in entries)
+
+
 def check(
     command: str,
     cfg: Config,
@@ -883,6 +927,7 @@ def check(
         return None
     primary: bool | None = None
     cmds = _commands(command)
+    elsewhere = _elsewhere(cmds)
     for words in cmds:
         if any(matches(a, words, ordered=False) for a in cfg.hooks.allowed_commands):
             continue
@@ -893,10 +938,19 @@ def check(
                 continue
             if only_primary:
                 if primary is None:
-                    primary = _elsewhere(cmds) or is_primary(cwd or Path.cwd())
+                    primary = elsewhere or is_primary(cwd or Path.cwd())
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
+        # A data-losing git form in the primary checkout while event shards are uncommitted is
+        # a silent loss the static list cannot name (Ba34619983b): refused only then, and only
+        # when the command acts on this checkout (not `git -C other`/`cd other`).
+        form = _git_discard(words)
+        if form and not elsewhere:
+            if primary is None:
+                primary = is_primary(cwd or Path.cwd())
+            if primary and _uncommitted_events(cwd or Path.cwd()):
+                return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD)
     return None
 
 

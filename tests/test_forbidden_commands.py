@@ -404,6 +404,59 @@ def test_reset_hard_only_on_primary(tmp_path):
     assert _check('echo GIT_DIR=x && git commit -m "GIT_DIR=y" && git reset --hard', cwd=wt) is None
 
 
+def _gitc(tmp_path: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(tmp_path), *list(args)], check=True)
+
+
+def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path):
+    """Ba34619983b: `git checkout -- .` / `git restore` / `git clean` in the primary checkout
+    silently discard uncommitted event-shard lines, and the static `forbidden_commands` list
+    had no entry for those discard forms. The data-aware guard refuses them while `.ddflow/events`
+    holds uncommitted changes, only in the primary checkout, and lets them through once committed."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    events = tmp_path / ".ddflow" / "events"
+    events.mkdir(parents=True)
+    shard = events / "shard.jsonl"
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=a",
+            "-c",
+            "user.email=a@b",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+        check=True,
+    )
+    shard.write_text('{"id":"e1","kind":"a"}\n')
+    _gitc(
+        tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "add", ".ddflow/events/shard.jsonl"
+    )
+    _gitc(tmp_path, "commit", "-q", "-m", "seed-shard")
+    shard.write_text('{"id":"e1","kind":"a"}\n{"id":"e2","kind":"b"}\n')
+
+    for cmd in ("git restore .", "git checkout -- .", "git clean -fd"):
+        r = _check(cmd, cwd=tmp_path)
+        assert r is not None, cmd
+        assert "commit the event log first" in r.message(), r.message()
+
+    # a branch switch is not a discard of the working tree: still allowed
+    assert _check("git checkout -b other", cwd=tmp_path) is None
+
+    # once the shards are committed there is nothing to lose: allowed again
+    _gitc(tmp_path, "add", ".ddflow/events/shard.jsonl")
+    _gitc(tmp_path, "commit", "-q", "-m", "committed")
+    assert _check("git restore .", cwd=tmp_path) is None
+    assert _check("git checkout -- .", cwd=tmp_path) is None
+    assert _check("git clean -fd", cwd=tmp_path) is None
+
+
 def test_operator_lifts_per_session_and_config():
     assert _check("pkill x", {FB.ENV_ALLOW: "pkill"}) is None
     assert _check("pkill x", {FB.ENV_ALLOW: "git stash"}) is not None
