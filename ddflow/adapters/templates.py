@@ -60,10 +60,17 @@ class JinjaRenderer:
             import jinja2
         except ImportError:
             return _render_stdlib(text, vars)
-        # bandit B701: these templates render markdown/plain-text prompts, never HTML;
-        # escaping would corrupt them.
-        env = jinja2.Environment(  # nosec B701
-            undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
+        # These templates are generally markdown/plain-text prompts, so keep string-template
+        # autoescaping disabled while still using Jinja's context-aware autoescape policy.
+        env = jinja2.Environment(
+            undefined=jinja2.StrictUndefined,
+            trim_blocks=True,
+            lstrip_blocks=True,
+            autoescape=jinja2.select_autoescape(
+                enabled_extensions=("html", "htm", "xml"),
+                default_for_string=False,
+                default=False,
+            ),
         )
         try:
             return env.from_string(text).render(**vars)
