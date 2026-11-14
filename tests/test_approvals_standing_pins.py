@@ -317,3 +317,30 @@ def test_a_use_with_no_recorded_work_item_counts_against_every_item(proj):
     assert PO.used(state, RULE, _canon().subject(), "T2") == 1
     row["text"] = "x\n  work item: T1 (auto)\n  approved by standing rule: pins_regenerate"
     assert PO.used(state, RULE, _canon().subject(), "T1") == 1  # names no item that exists
+
+
+def test_the_operators_window_choice_reopens_the_pins_window_too(proj, monkeypatch):
+    """B6e5e17ccda x pins: a lapsed pins window is re-opened by the operator's standing-window
+    answer (on an ask of a generic verb), as the generic window is; a pins fire alone never
+    anchors the generic window."""
+    from ddflow.services import actors as A
+    from ddflow.services.ask import engine as E
+
+    cfg = _cfg(proj, standing_window_s=60)
+    assert _gate(proj, cfg).ok
+    real = PO.clock.now_utc
+    monkeypatch.setattr(PO.clock, "now_utc", lambda: real() + timedelta(seconds=120))
+    other = _canon("default-toml", args={"only": "default-toml"})
+    assert not _gate(proj, cfg, other).ok  # lapsed
+    ask = C.operator_gate(
+        EventLog(proj, "bot"),
+        cfg,
+        Canon(verb="complete.force", agent="bot", item="T1", target="x", state="s"),
+    )
+    E.answer(
+        EventLog(proj, "bot"), cfg, ask.ask_id, "approved",
+        actor=A.resolve_actor(cfg, "me"),
+        digest=asks_of(_state(proj))[ask.ask_id]["digest"],
+        window=True,
+    )  # fmt: skip
+    assert _gate(proj, cfg, other).ok

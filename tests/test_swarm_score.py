@@ -208,7 +208,7 @@ def test_hedged_leases_each_count_against_max_lanes_and_zero_refs_do_not_divide(
     d = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), wd, w)
     assert not d.ok and any("max_lanes" in r for r in d.reasons)
     # evaluate scores a refused pair too (its parts explain the refusal): no division by zero
-    assert len(d.parts) == 5 and all(math.isfinite(v) for _, v in d.parts)
+    assert len(d.parts) == 6 and all(math.isfinite(v) for _, v in d.parts)
     ok = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), _world(), w)
     assert ok.ok and math.isfinite(ok.score)
 

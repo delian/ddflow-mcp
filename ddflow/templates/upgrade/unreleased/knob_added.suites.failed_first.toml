@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "suites.failed_first"
+new = 'true'
+why = "A ci run of an item runs the ids its last failed ci and unit_tests runs reported first, and records ran_failed_first and first_failure_at_s. Default on; false keeps the ordinary order."
+impact = "additive"

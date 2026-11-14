@@ -28,6 +28,7 @@ from ...services import external as EX
 from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
+from ...services import gateenv as GENV
 from ...services import lanerelease as LR
 from ...services import lanerotate as LROT
 from ...services import launchers as LA
@@ -411,6 +412,7 @@ def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per find
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
     notes.extend(FK.doctor_notes(repo))  # a test that keeps failing and then passing
+    notes.extend(GENV.doctor_notes(st, cfg))  # secret-shaped variables a gate ran with (warn)
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)

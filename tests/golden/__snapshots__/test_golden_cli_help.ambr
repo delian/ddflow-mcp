@@ -611,11 +611,12 @@
 # ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [--timeout TIMEOUT] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [--timeout TIMEOUT] [{run,status,record,failed-first}]
   
   positional arguments:
-    {run,status,record}   run: check the merge result; status (default): what would run, and whether
-                          it can
+    {run,status,record,failed-first}
+                          run: check the merge result; status (default): what would run, and whether
+                          it can; failed-first: the tests the next run of the item puts first
   
   options:
     -h, --help            show this help message and exit

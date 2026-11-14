@@ -200,22 +200,25 @@ def window_start(state, cfg: Config, *, pins: bool = False) -> float:
     """The start of the standing window: 0.0 before any IN-SCOPE standing rule has fired, else
     the epoch of the LATEST in-scope standing auto-approval's ``answered_at`` -- the most
     recent fire. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
-    so a stale answer from a verb the window no longer covers cannot anchor it. ``max``, never
+    so a stale answer from a verb the window no longer covers cannot anchor it.     ``max``, never
     the first: the window stays open for `[approvals].standing_window_s` after the newest fire,
     re-anchoring on each new one so a later fire keeps it open past the opening fire's lapse
     (the first-fire anchor would leave it permanently closed once `standing_window_s` passed and
-    no fire followed). The fold KEEPS every ask row for the life of the log (`use_ttl_s` bounds
-    spending, not retention), so the anchor persists past an answer TTL, and
-    `approvals log`/`doctor` show what fired within it. The `pins.regenerate` rule has a window
-    of its OWN (``pins``): its fires anchor only it and the generic window ignores them, so an
-    agent's regenerations can never keep the window of `complete.force` and the like open."""
+    no fire followed). A window the OPERATOR re-opened (an answer that picked the standing-window
+    choice in `approvals attest`) anchors it the same way, so a lapsed window can be re-opened
+    by the operator instead of being closed for good (B6e5e17ccda): the anchor is the newest of
+    the standing fires and the operator's re-opens. The fold KEEPS every ask row for the life of
+    the log (`use_ttl_s` bounds spending, not retention), so the anchor persists past an answer
+    TTL, and `approvals log`/`doctor` show what fired within it. The `pins.regenerate` rule has a
+    window of its OWN (``pins``): its fires anchor only it and the generic window ignores them, so
+    an agent's regenerations can never keep the window of `complete.force` and the like open; the
+    operator's re-open anchors both."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
         for r in asks_of(state).values()
-        if r["policy"]
-        and r["answered_at"]
+        if r["answered_at"]
         and r["verb"] in cfg.approvals.standing_verbs
-        and (r["verb"] == PINS_VERB) == pins
+        and (r["opened_window"] or (r["policy"] and (r["verb"] == PINS_VERB) == pins))
         and r["answered_by"] != f"policy:{RETRY_RULE_ID}"  # the retry rule never opens the window
     ]
     return max(starts, default=0.0)

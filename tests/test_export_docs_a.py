@@ -327,8 +327,8 @@ def test_status_counts_in_flight_and_agent_hours(monkeypatch):
     q = g.query()
     monkeypatch.setattr(time, "time", lambda: 1e12)  # the clock must not matter
     body = _body("status", q)
-    assert "- Tasks: 2/7 done" in body and "across 5 phases (1 complete)" in body
-    assert "- By state: 2 done, 1 running, 4 open." in body
+    assert "- Tasks: 2 of 7 live tasks done" in body and "across 5 phases (1 complete)" in body
+    assert "2 done + 1 running + 0 review + 4 not started + 0 abandoned = 7" in body
     assert "- Agent-hours: 5.0." in body  # 3h closed + 2h open to the newest event
     assert "- Open bugs: 1 of 2." in body
     assert "As of 2026-09-03." in body
@@ -346,4 +346,4 @@ def test_empty_log_renders_empty_sections_not_errors():
     q = Log().query()
     assert "None." in _body("roadmap", q)
     assert "## Open (0)" in _body("bugs", q)
-    assert "0/0 done" in _body("status", q)
+    assert "0 of 0 live tasks done" in _body("status", q)
