@@ -23,16 +23,24 @@ def _text(blob) -> str:
 
 
 def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
-    """Invoke the CLI as a real subprocess, as an agent would."""
+    """Invoke the CLI as a real subprocess, as an agent would: in the repository under
+    test. Anchoring the cwd there keeps a launch of the tree under test the explicit
+    external launch the foreign-launch guard allows (B93e00ef048), never the cross-lane
+    run it refuses when the caller stands inside the checkout family. `root` is one
+    absolute path, used for both `--repo` and `cwd`, so a relative arg cannot make the
+    child resolve `--repo` against the cwd we just moved it into."""
+    root = Path(repo).resolve()
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
-    args = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
+    args = [sys.executable, "-m", "ddflow", "--repo", str(root)]
     if agent:
         args += ["--agent", agent]
     # The ceiling for a hang, not a measurement: a CLI start under the load of many agents'
     # ci runs takes minutes (Bfaef48ced6), so it grows with the load (tests/_wait.py).
     limit = min(RUN_CLI_TIMEOUT_S * slow_factor(), RUN_CLI_TIMEOUT_MAX_S)
     try:
-        p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=limit)
+        p = subprocess.run(
+            [*args, *argv], capture_output=True, text=True, env=env, cwd=str(root), timeout=limit
+        )
     except subprocess.TimeoutExpired as exc:  # say WHICH command, with what it printed
         seen = f"stdout={_text(exc.stdout)!r} stderr={_text(exc.stderr)!r}"
         raise AssertionError(
