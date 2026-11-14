@@ -163,7 +163,7 @@ def test_a_directory_the_process_cannot_write_is_read_only(old: Path) -> None:
     try:
         assert US._writable(old) is False
     finally:
-        os.chmod(old / ".ddflow", 0o755)
+        os.chmod(old / ".ddflow", 0o700)
     assert US._writable(old) is True
 
 
