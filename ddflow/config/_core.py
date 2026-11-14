@@ -422,11 +422,7 @@ class Config(_SectionFields):
                 self.sources[key] = f"{source} (strictest fallback)"
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
-        if dropped := _dropped_list_entries(getattr(target, knob), value):
-            self.dropped_members.append(
-                f"{key}: the {source} layer replaced the list and dropped "
-                f"{', '.join(dropped)} (set by the {self.sources.get(key, 'default')} layer)"
-            )
+        self._note_dropped(key, getattr(target, knob), value, source)
         self._forget_fallback(key, f"the {source} value {value!r}")
         setattr(target, knob, value)
         self.sources[key] = source
@@ -452,6 +448,17 @@ class Config(_SectionFields):
         `by` names what overrode it -- and, when that is itself unknown, what runs."""
         for i, head in self._fallback_notes.get(key, []):
             self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
+
+    def _note_dropped(self, key: str, below: Any, value: Any, source: str) -> None:
+        """Record that ``source`` (a later layer) replaced ``key``'s list and dropped entries
+        ``below`` (the accumulated, higher layer's list) held, when the two differ
+        (D-config-layer-order: lists replace). The note names the dropped entries and the
+        layer that had set them, for `_warn_dropped` and `doctor` (r-tighten-only)."""
+        if dropped := _dropped_list_entries(below, value):
+            self.dropped_members.append(
+                f"{key}: the {source} layer replaced the list and dropped "
+                f"{', '.join(dropped)} (set by the {self.sources.get(key, 'default')} layer)"
+            )
 
     def _apply_export_tables(
         self, values: dict[str, Any], soft: Callable[[str], bool], source: str
