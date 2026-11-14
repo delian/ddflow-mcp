@@ -39,6 +39,8 @@ from .staged import (
     staged_paths,
 )
 
+_MERGE_FILE_TAIL_CHARS = 6  # git mkstemp writes exactly six ASCII random characters
+
 
 def _git_merge_temp(path: str) -> bool:
     """``git merge``'s own transient working-directory temp file, not work.
@@ -60,7 +62,7 @@ def _git_merge_temp(path: str) -> bool:
     """
     name = path.rsplit("/", 1)[-1]
     tail = name[len(".merge_file_") :]
-    return name.startswith(".merge_file_") and len(tail) == 6 and tail.isascii() and tail.isalnum()
+    return name.startswith(".merge_file_") and len(tail) == _MERGE_FILE_TAIL_CHARS and tail.isascii() and tail.isalnum()
 
 
 def _not_work(path: str) -> bool:
