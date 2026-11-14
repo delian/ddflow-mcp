@@ -1,0 +1,10 @@
+id = "r-remote-instructs-local"
+title = "ddflow may run remote or in a container with no filesystem: it instructs the agent to run the local toolkit, and there is one source of truth"
+tags = ["principle", "remote", "no-shell", "architecture"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "integrations/**"]
+created = "2026-11-14T00:27:11.346973+00:00"
+updated = "2026-11-14T00:27:11.346982+00:00"
+
+OPERATOR 2026-11-14. RULE: ddflow may run as a remote MCP server or inside a container, with no access to the project's filesystem or to the user's machine. When a step needs the local filesystem, git, a worktree, a test run or any local process, the server never ends in a bare unavailable and never assumes it can do it: it returns the agent_action envelope of r-no-shell (argv, cwd, expected outcome, and the call that records the result as agent_reported, never as server-verified), assuming the ddflow toolkit is installed on the agent's machine too. Local and remote ddflow must not keep two diverging stores: the project's event log (r-log-is-the-state: the same format, pushed to the project's git remote) is the one source of truth, a server-side or container copy is a cache that can be rebuilt from it, and the server states which local ddflow version it needs (version handshake, r-upgrade-safe) and refuses to guess when the two differ. How local and remote are kept in sync, and which side wins on conflict, is an open investigation (research R-remote-local-sync): until it is decided, write nothing that only the server can read back. CHECK: a conformance test on a no-filesystem fixture that every step that needs local state returns an agent_action envelope and that a log written remotely equals one written locally (extends test_mcp_parity and ST-merge-strategy); a test that a version mismatch is reported with the exact upgrade step. VERIFY: can an agent with the local toolkit complete this step when the server cannot touch its files, and does the record say who verified it?
