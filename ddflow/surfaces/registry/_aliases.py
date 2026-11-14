@@ -110,7 +110,9 @@ class AliasChoices(dict):
         # hashing it raises TypeError (Bab15b39e03). Only a str can name a command or alias.
         return isinstance(key, str) and (super().__contains__(key) or key in self.hidden)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: object, default: Any = None) -> Any:
+        if not isinstance(key, str):
+            return default
         return self[key] if key in self else default
 
 
