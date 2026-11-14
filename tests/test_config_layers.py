@@ -67,3 +67,26 @@ def test_a_lower_layer_that_empties_the_list_is_recorded(tmp_path):
     _write_layers(tmp_path, [])
     note = " ".join(Config.load(tmp_path).dropped_members)
     assert "accept_baseline_red" in note, note
+
+
+def test_a_dropped_non_string_entry_is_stringified_not_raised():
+    """`docs.extract` is `list[dict]`: a dropped dict entry must be NAMED, never a
+    `TypeError` from joining it (rubber_duck finding on the first revision)."""
+    cfg = Config()
+    cfg._note_dropped("docs.extract", [{"kind": "flags"}, {"kind": "tools"}], [], "local")
+    note = " ".join(cfg.dropped_members)
+    assert "kind" in note, note
+
+
+def test_a_changed_dropped_set_is_said_again(tmp_path, capsys):
+    """The same knob's dropped set can change across reloads; the new set must warn
+    again, not hide behind the earlier note (rubber_duck finding on the first revision)."""
+    _write_layers(tmp_path, ["accept_baseline_red"])
+    Config.load(tmp_path)  # drop skip, complete, claim
+    capsys.readouterr()
+    Config.load(tmp_path)  # the same note: suppressed, not repeated
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text(
+        '[approvals]\npolicy = ["claim_unavailable"]\n'
+    )
+    Config.load(tmp_path)  # now drops accept_baseline_red instead
+    assert "accept_baseline_red" in capsys.readouterr().err

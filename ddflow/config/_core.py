@@ -457,7 +457,8 @@ class Config(_SectionFields):
         if dropped := _dropped_list_entries(below, value):
             self.dropped_members.append(
                 f"{key}: the {source} layer replaced the list and dropped "
-                f"{', '.join(dropped)} (set by the {self.sources.get(key, 'default')} layer)"
+                f"{', '.join(str(e) for e in dropped)} "
+                f"(set by the {self.sources.get(key, 'default')} layer)"
             )
 
     def _apply_export_tables(

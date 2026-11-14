@@ -13,7 +13,10 @@ from ._tree import _CODE_TREE
 #: times over reads as five problems.
 _WARNED: set[tuple[str, str]] = set()
 
-#: (root, key) already warned about as a lower layer dropping a higher layer's list entries.
+#: (root, note) already warned about as a lower layer dropping a higher layer's list
+#: entries. Keyed by the WHOLE note (not the key alone): the same knob's dropped set can
+#: change across reloads in one process, and each new drop must be said, never reused
+#: from the earlier note.
 _WARNED_DROPPED: set[tuple[str, str]] = set()
 
 
@@ -66,10 +69,10 @@ def _warn_dropped(notes: list[str], root: Path) -> None:
     load (and listed by `doctor`), never gone in silence. stderr, so `--json` and MCP
     replies stay parseable -- the same reason `_warn_unknown` prints there.
     """
-    new = [n for n in notes if (str(root), n.partition(":")[0]) not in _WARNED_DROPPED]
+    new = [n for n in notes if (str(root), n) not in _WARNED_DROPPED]
     if not new:
         return
-    _WARNED_DROPPED.update((str(root), n.partition(":")[0]) for n in new)
+    _WARNED_DROPPED.update((str(root), n) for n in new)
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml turns a "
         f"higher layer's list entries off: {'; '.join(new)}. A later layer's list replaces "
