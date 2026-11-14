@@ -55,7 +55,18 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
-    foreign_refused = _foreign_import_refusal() if verb == "regenerate" and not check else None
+    # The foreign-import refusal protects the *interactive* regenerate route, which re-records
+    # transcript pins by running pytest (a foreign import would pin the guard's refusal, not the
+    # real output — Bc28808f9c3). The after-merge hook run re-records only the recipes that allow
+    # it (README tables etc. — their regen is not a transcript suite), so it is safe in a linked
+    # worktree and must not refuse there: the merge driver keeps the branch side of a pin file and
+    # the hook then folds main's rows back in; refusing drops them (Bf9931aed2b). The linked
+    # worktree's own handling is `_after_merge_note`'s (B683c75d7b3).
+    foreign_refused = (
+        _foreign_import_refusal()
+        if verb == "regenerate" and not check and not after_merge
+        else None
+    )
     if foreign_refused is not None:
         return foreign_refused
     refused = _skew_refusal(primary, repo, agent, check=check, after_merge=after_merge)
