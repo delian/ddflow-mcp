@@ -83,6 +83,21 @@ _OPERATOR_FORCE = (
     "guards agents' Bash only). For `complete` and `claim` there is a chat route that needs no "
     "--force: re-run with `--approval request`, the operator answers in chat, then `--approval <id>`"
 )
+#: A data-losing git form in the PRIMARY checkout while `.ddflow/events` holds uncommitted
+#: changes: refused only then (Ba34619983b). A branch switch (`git checkout <branch>`) is not a
+#: discard of the working tree and is left alone; committing the log first is the way past.
+_EVENT_DISCARD_INSTEAD = (
+    "commit the event log first: ddflow commits `.ddflow/events` at merge, complete, release "
+    "and stop (`[log].commit_events`), so finish at one of those doors, or WIP-commit the "
+    "shards yourself, before discarding tracked changes they may hold"
+)
+#: The git subcommands whose job is to discard tracked/untracked working-tree changes: they can
+#: revert `.ddflow/events/*.jsonl` appends (or delete shards git has not committed) in the primary
+#: checkout, which is why they are refused there while shards are uncommitted (Ba34619983b).
+_GIT_DISCARD_SUBCOMMANDS = frozenset({"restore", "clean"})
+#: `git checkout` flags whose value (the NEXT word) is a branch name, not a path. `-t`/`-l`
+#: are boolean, not valued, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
+_CHECKOUT_VALUED = frozenset({"-b", "-B", "-o"})
 
 
 @dataclass(frozen=True)
@@ -90,8 +105,15 @@ class Refusal:
     entry: str  #: the forbidden_commands entry that matched
     command: str  #: the command (one pipeline element) that matched it
     instead: str  #: the safe alternative
+    data_aware: bool = False  #: a data-aware refusal (Ba34619983b), not a static-list entry
 
     def message(self) -> str:
+        if self.data_aware:
+            return (
+                f"ddflow refused `{self.command}`: {self.entry} would discard uncommitted "
+                f"`.ddflow/events` lines. Instead: {self.instead}. (This is a data-aware guard, "
+                "not a [hooks].forbidden_commands entry: commit the shards and it lets it through.)"
+            )
         return (
             f"ddflow refused `{self.command}`: it matches [hooks].forbidden_commands "
             f"`{self.entry}`. Instead: {self.instead}. "
@@ -99,22 +121,129 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
+def _heredoc_name(line: str, i: int, n: int) -> tuple[str, int]:
+    """The here-doc delimiter name (quotes removed) and the index one past the word, parsed from
+    `i`: the word ends at the first UNQUOTED space/tab or shell operator; a `'...'`/`"..."` inside
+    it is part of the word and may hold those chars (inside a double quote a backslash escapes
+    only dollar, backtick, double quote or backslash) (Bdd23c77383)."""
+    name: list[str] = []
+    while i < n and line[i] not in " \t\r;|&()<>\n":
+        c = line[i]
+        if c == "\\":
+            name.append(line[i + 1] if i + 1 < n else "\\")
+            i += 2
+        elif c in {"'", '"'}:
+            q = c
+            i += 1
+            while i < n and line[i] != q:
+                if line[i] == "\\" and i + 1 < n:
+                    nxt = line[i + 1]
+                    if q == '"' and nxt in ("$", "`", '"', "\\"):
+                        name.append(nxt)  # a backslash quote-removes these four
+                        i += 2
+                    else:
+                        name.append(line[i])  # an unmatched backslash stays, the next char too
+                        i += 1
+                else:
+                    name.append(line[i])
+                    i += 1
+            i += 1
+        else:
+            name.append(c)
+            i += 1
+    return "".join(name), i
+
+
+def _heredoc_word(line: str, i: int, n: int) -> tuple[str, int] | None:
+    """The here-doc delimiter name and the index one past the `<<` word at `i` (its first `<`),
+    or None when the `<<` opens none: a `<<<` here-string, a `(<<` or `1<<` shift."""
+    if i > 0 and (line[i - 1] == "<" or line[i - 1] == "(" or line[i - 1].isdigit()):
+        return None  # `<<<`, `(<<` or a shift: not a here-doc (the `(?<![<\d(])` guard)
+    i += 2  # past `<<`
+    if i < n and line[i] == "<":
+        return None  # `<<<` here-string and shell additions to it
+    if i < n and line[i] == "-":
+        i += 1
+    while i < n and line[i] in " \t\r":
+        i += 1
+    return _heredoc_name(line, i, n)
+
+
+def _dquote_close(line: str, i: int, n: int) -> tuple[str, int]:
+    """The ``(quote open, index past the close)`` of a double quote, scanning from `i` (a char
+    INSIDE it): ``("", past the close)``, or (``'"'``, `n`) when it stays open to the line's
+    end (including an empty ``""`` whose close is the line's last char, which still CLOSES it);
+    a backslash escapes the next char, so a ``\\"`` is not the close."""
+    j = i
+    while j < n and line[j] != '"':
+        if line[j] == "\\" and j + 1 < n:
+            j += 2
+        else:
+            j += 1
+    return ("", j + 1) if j < n else ('"', n)
+
+
+def _comment_here(line: str, i: int, escaped: set[int]) -> bool:
+    """The ``#`` at `i` begins a comment: at the line's start, or after a `_COMMENT_BOUNDARY`
+    char that is not a backslash-escaped data char (an escaped boundary is literal text)."""
+    return i == 0 or (line[i - 1] in _COMMENT_BOUNDARY and i - 1 not in escaped)
+
+
+def _heredoc_openers(line: str, quote: str) -> tuple[list[str], str]:
+    """The `<<` heredoc markers on `line` that sit OUTSIDE a quote, and the quote (if any)
+    still open at the line's end. A `<<` inside `'...'`/`"..."` is literal text, not a heredoc
+    (Bdd23c77383); an escaped ``\\<`` is not a marker, and a `'`/`"` inside a comment is data,
+    not a quote opener. ``quote`` is the quote open from earlier lines: a quote may span lines,
+    and a `<<` it swallows is still literal."""
+    ms: list[str] = []
+    i, n = 0, len(line)
+    escaped: set[int] = set()
+    while i < n:
+        c = line[i]
+        if quote == "'":
+            j = line.find("'", i)
+            if j < 0:
+                return ms, "'"  # the single quote stays open to the next line
+            quote, i = "", j + 1
+        elif quote == '"':
+            quote, i = _dquote_close(line, i, n)  # a quote opened on an earlier line: its close
+        elif c == "\\":
+            if i + 1 < n:
+                escaped.add(i + 1)
+            i += 2 if i + 1 < n else 1
+        elif c == "#" and _comment_here(line, i, escaped):
+            i = n  # a comment runs to end of line: its `'`/`"` are data, not quote openers
+        elif c == "'":
+            quote, i = "'", i + 1
+        elif c == '"':
+            quote, i = _dquote_close(line, i + 1, n)
+        elif c == "<" and i + 1 < n and line[i + 1] == "<":
+            w = _heredoc_word(line, i, n)
+            if w is not None:
+                ms.append(w[0])
+                i = w[1]
+                continue
+            i += 1
+        else:
+            i += 1
+    return ms, quote
 
 
 def _strip_heredocs(text: str) -> str:
     """The command line without heredoc bodies, which are data, not commands. A `<<` that
-    opens no body (a here-string, a shift, a quoted `a<<b`) drops nothing: only a terminator
-    line that really follows makes it a heredoc."""
+    opens no body (a here-string, a shift, a quoted `a<<b`, a `<<` inside a quote) drops
+    nothing: only a terminator line that really follows makes it a heredoc."""
     lines = text.split("\n")
     out: list[str] = []
     i = 0
+    quote = ""
     while i < len(lines):
         line = lines[i]
         out.append(line)
         i += 1
-        for m in _HEREDOC.finditer(line):
-            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(1)), None)
+        ms, quote = _heredoc_openers(line, quote)
+        for m in ms:
+            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m), None)
             if end is not None:
                 i = end + 1
                 break
@@ -760,6 +889,79 @@ def _instead(entry: str, words: list[str] | None = None) -> str:
     )
 
 
+def _git_discard(words: list[str]) -> str:
+    """The git discard subcommand `words` is (``restore``/``clean``), or ``checkout`` naming a
+    pathspec (``git checkout -- <path>``, or a path that starts with ``.``/``/`` -- a name that is
+    never a branch), "" when `words` is not git, is not one of those, or is a branch switch.
+    `git reset --hard` is the static `forbidden_commands` entry's job, not this one."""
+    head = _head(words)
+    if not head or head[0].rsplit("/", 1)[-1] != "git":
+        return ""
+    args = _args(head)
+    if not args:
+        return ""
+    sub = args[0]
+    if sub in _GIT_DISCARD_SUBCOMMANDS:
+        return sub
+    if sub == "checkout":
+        rest = args[1:]
+        # `--` means "everything after is a path"; `-f`/`--force` discards regardless of target.
+        if "--" in rest or "-f" in rest or "--force" in rest:
+            return "checkout"
+        # `-b`/`-B`/`-o` take the next word as their value (a branch name, not a path);
+        # `-t`/`-l` are boolean, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
+        positions: list[str] = []
+        i = 0
+        while i < len(rest):
+            w = rest[i]
+            if w in _CHECKOUT_VALUED:
+                i += 2
+                continue
+            if not w.startswith("-"):
+                positions.append(w)
+            i += 1
+        # a path starts with `.`/`/` (never a branch), or two positionals is the `<tree-ish> <path>`
+        # restore form; one bare positional is judged a branch switch.
+        if any(w.startswith((".", "/")) for w in positions) or len(positions) > 1:
+            return "checkout"
+    if sub == "switch" and (
+        "-f" in args[1:] or "--force" in args[1:] or "--discard-changes" in args[1:]
+    ):
+        return "switch"
+    return ""
+
+
+def _uncommitted_events(cwd: str | Path) -> bool:
+    """Whether the checkout at `cwd` holds an event shard git has not committed (new or
+    appended); False when there is none, or when git could not tell (B-fails-safe to NOT
+    refuse: a transient git error must not block a command the operator relies on)."""
+    top = git.run(cwd or Path.cwd(), "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out.strip():
+        return False
+    entries = git.status(top.out.strip(), ".ddflow/events", untracked="all")
+    if entries is None:
+        return False
+    return any(e.path.endswith(".jsonl") for e in entries)
+
+
+def _discard_refusal(words: list[str], cwd: str | Path) -> Refusal | None:
+    """A data-losing git form in the primary checkout while `.ddflow/events` holds uncommitted
+    changes is a silent loss the static list cannot name (Ba34619983b): the refusal, or None.
+    It holds back only when this checkout is NOT the primary (`is_primary`, so a worktree -- other
+    than being the cwd -- is exempt), or the shards are all committed. A `git -C other`/`cd other`
+    in the line is not resolved: refusing a discard named `-C` elsewhere LOOKS primary is the safe
+    refusal, losing the events is not, and resolving each `cd`/`-C` target per command is not this
+    hook's job."""
+    form = _git_discard(words)
+    if not form:
+        return None
+    if not is_primary(cwd or Path.cwd()):
+        return None
+    if _uncommitted_events(cwd or Path.cwd()):
+        return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD, True)
+    return None
+
+
 def check(
     command: str,
     cfg: Config,
@@ -790,6 +992,8 @@ def check(
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
+        if r := _discard_refusal(words, cwd or Path.cwd()):
+            return r
     return None
 
 

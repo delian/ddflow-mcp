@@ -21,6 +21,8 @@ line and over MCP alike. A cut answer ends in a footer that names the exact next
 | `max_rows` | 50 | rows a list shows; 0 lifts the row cap |
 | `max_chars` | 30000 | characters of text or serialised body (about 7500 tokens); 0 lifts it |
 | `non_ascii_weight` | 4 | characters of `max_chars` one non-ASCII character of prose costs; 1 counts plain characters |
+| `status_fix_tasks_in_headline` | false | whether fix tasks count in the `status` headline pair and the `Progress:` block |
+| `status_completed_shown` | 12 | how many recent completions the prose `status` lists (`Completed (last N of TOTAL)`); 0 lists all, unless `allow_full` is false (then 12) |
 | `allow_full` | true | false makes `--full` still return the capped answer, saying so, and stops 0 lifting a cap |
 
 Each is set in `.ddflow/config.toml`, the git-ignored local layer, with
@@ -32,3 +34,17 @@ A `--json` body that carries both prose and rows (`board`) gives each half of `m
 a row's heavy nested fields go first (each becomes a marker of the same type, counted in
 `truncated.fields_cut`), then rows only ever halve (down to 1) until the body fits, so the cut is
 bounded.
+
+## Status totals (B6341fe42ca)
+
+The `status` headline used to take `len()` of a prose list the caps had already cut to the
+row limit ("12/5065 tasks complete" beside `--json` saying 2222 done). The counts now come
+from `core.progress.totals.queue_totals`, which owns the task, phase and bug totals; the
+prose, `--json status`, the MCP tool, the completion `Progress:` block and the STATUS.md
+export all read it. The screen states the definition, `N of M live tasks done (K abandoned
+and F fix tasks listed separately)`, and every bucket of every task record
+(`done + running + ready + held by cap + blocked + review + abandoned = total`), then phases
+and bugs the same way. `--json status` keeps every existing field and adds `tasks.live`,
+`tasks.live_done`, `tasks.fix`, `tasks.fix_done`, `tasks.fix_in_headline`,
+`tasks.definition` and `bugs`. The `Progress:` block is the live pair of the same function,
+labelled "live tasks". The Completed list reads `Completed (last N of TOTAL)` when bounded.

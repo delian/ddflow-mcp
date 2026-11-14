@@ -28,6 +28,7 @@ from ...services import external as EX
 from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
+from ...services import gateenv as GENV
 from ...services import lanerelease as LR
 from ...services import lanerotate as LROT
 from ...services import launchers as LA
@@ -318,6 +319,11 @@ def _over_budget_notes(
     ]
 
 
+def _finished_ids(st) -> list[str]:
+    """Ids of items that are done or abandoned: their heartbeat loops are noise."""
+    return [i for i, it in st.items.items() if it.terminal]
+
+
 def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per findings source
     repo: Path,
     *,
@@ -406,11 +412,14 @@ def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per find
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
     notes.extend(FK.doctor_notes(repo))  # a test that keeps failing and then passing
+    notes.extend(GENV.doctor_notes(st, cfg))  # secret-shaped variables a gate ran with (warn)
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
     notes.extend(FSZ.doctor_notes(repo, cfg.quality.max_file_bytes))  # r-small-files
-    notes.extend([*RH.doctor_notes(repo), *RH.host_notes()])  # identity, core.bare, orphan suites
+    notes.extend(
+        [*RH.doctor_notes(repo), *RH.host_notes(_finished_ids(st))]
+    )  # identity, core.bare, orphan suites
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)

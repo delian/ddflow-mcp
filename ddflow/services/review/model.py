@@ -132,6 +132,16 @@ class Reviewer:
     extra_body: dict[str, Any] = field(default_factory=dict)
     #: Extra environment for a kind="command" reviewer (e.g. a per-reviewer API key).
     env: dict[str, str] = field(default_factory=dict)
+    #: Priority among the gate's reviewers: LOWER is served first -- the same convention
+    #: as an item's task priority (default 100, and `DEFAULT_PRIORITY` there). The gate
+    #: ranks its pool by cross-family tier FIRST and priority WITHIN it (`_order_cross_
+    #: family_first`): a reviewer outside the author's family still serves before a
+    #: same-family one whatever their priorities, and priority only orders reviewers of
+    #: the same tier, config order breaking ties. A higher-priority reviewer a quota wall
+    #: marked degraded is shed and re-probed after `[review].degraded_cooldown_s` by the
+    #: existing `_shed_degraded`/cooldown path, unchanged. Tuning it never re-approves an
+    #: entry (reviewer_trust.IDENTITY, which names the fields that change WHO reviews).
+    priority: int = 100
 
     def resolved_family(self) -> str:
         """Declared family wins over guessed. ``""`` means nobody has classified this

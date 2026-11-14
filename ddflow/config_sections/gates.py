@@ -179,6 +179,16 @@ class GatesConfig:
         factory=list,
         doc='Variables a gate command keeps although `scrub_env` removes them, e.g. `["DDFLOW_AGENT"]` for a gate whose command runs ddflow as the calling agent. Empty by default. `[ci].keep_env` does the same for the CI command alone.',
     )
+    scrub_secret_names: str = knob(
+        "warn",
+        doc="What a gate command and the CI command do about secret-shaped variables in the caller's environment (names matching `[gates].secret_name_patterns`: reviewer and provider keys exported into the shell). 'warn' (default) leaves them and records their NAMES, never a value, in the gate's evidence (`env_secret_names`, with `env_secret_mode`) and `ddflow doctor` notes them; 'on' removes them from the child (`[gates].keep_env`, and `[ci].keep_env` for CI, preserve one); 'off' does neither. A gate's command is project code and its output is kept in the committed log, so 'on' stops it reading a key at all; a command that needs one (a nested `ddflow review` with `GEMINI_API_KEY`) lists it in `keep_env`. the environment variable of a knob (`DDFLOW_GATES_SCRUB_SECRET_NAMES`) never matches. Change it for the project (`ddflow config --set gates.scrub_secret_names on`), for this machine (add --local), per run (DDFLOW_GATES_SCRUB_SECRET_NAMES), or over MCP with `ddflow_configure`.",
+        choices=("off", "warn", "on"),
+        strictest=("on", "secret-shaped variables are removed from every gate and CI child"),
+    )
+    secret_name_patterns: list[str] = knob(
+        factory=lambda: ["_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD"],
+        doc="Name fragments that make an environment variable secret-shaped for `[gates].scrub_secret_names`: a variable whose name contains one, compared case-blind, matches (default `_API_KEY`, `_TOKEN`, `_SECRET`, `_PASSWORD`, `_PASSWD`). Empty = nothing matches. `[gates].keep_env` still preserves a variable that matches.",
+    )
     standards_wait_s: int = knob(
         900,
         doc="Seconds `python -m ddflow.services.roborev_branch` (the standards gate's roborev run on the item's COMBINED branch diff) waits for the roborev job before it gives up (default 900; 0 = enqueue and return). A job still running at the limit is left running and reported with its id and `roborev wait --job <id>`: the gate is recorded `unavailable` with that reason, never passed.",

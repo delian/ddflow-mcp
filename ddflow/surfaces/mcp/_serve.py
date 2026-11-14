@@ -15,6 +15,7 @@ from typing import Any
 from ...adapters.mcp import StdioServer
 from ...api import cap_blas_threads
 from ...infra import proc as PROC
+from ...infra.worktree import observe_boot
 from ...infra.worktree import repo_root
 from .. import mcp_lifecycle as _lifecycle
 from .. import mcp_upgrade as _upgrade
@@ -45,6 +46,15 @@ def serve(
     """
     srv = Server(repo, called_from=called_from)
     _upgrade.adopt(srv)
+    # The boot record: remember the current boot id in `.ddflow/local/boot` (never an
+    # event, never committed), so the first health pass after this process started can
+    # tell it is newer than every pid recorded before it (orphan-recovery.md rows d/e).
+    # Best-effort only -- a machine without /proc reports "unknown", never a fake "no
+    # reboot", and a failure to write must never corrupt the protocol stream.
+    try:
+        observe_boot(repo)
+    except Exception:
+        pass
     # A real stdio session reads its own descriptor, so a re-exec loses no request.
     inp = stdin or _upgrade.stdio_lines()
     outp = stdout or sys.stdout

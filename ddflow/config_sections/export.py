@@ -83,6 +83,20 @@ class ExportConfig:
         choices=EXPORT_REFRESH_MODES,
         strictest=("off", "no safety dimension; ddflow writes no document by itself"),
     )
+    security_contact: str = knob(
+        "",
+        doc="The private reporting contact the security document publishes in its Reporting a Vulnerability section of SECURITY.md: an email address or the URL of a private reporting page, written as given, whitespace collapsed, with a single address or link shown as a markdown autolink in angle brackets (it is the one text the security document's export redaction leaves alone, because publishing it is the point; search and session views still redact it). EMPTY by default and never filled in by ddflow: it is a person's data, so the operator supplies it. While it is empty the section says plainly that no contact is set and `ddflow doctor` notes it once the security document is selected. Set it with the config file, `ddflow config --set export.security_contact ...`, or ask the agent to; `ddflow export security --update` then refreshes the section.",
+        check=lambda v: "" if isinstance(v, str) else "must be a string",
+    )
+    security_response_days: int = knob(
+        0,
+        doc="How many days a reporter can expect to wait for a first answer, stated in the Reporting a Vulnerability section of SECURITY.md next to `security_contact`. 0 (default) states nothing, because a promise ddflow cannot know is not made for the project. Only used when `security_contact` is set.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "must be an integer >= 0"
+        ),
+    )
     #: The per-document tables, `[export.<doc>]`: path, mode, template, filters, refresh,
     #: redact. Filled from those tables by `Config._apply`; this field is only the store.
     tables: dict[str, dict[str, Any]] = knob(
@@ -90,6 +104,11 @@ class ExportConfig:
         doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; graph, how many phases the dependency graph draws, default 25, 0 for none; eta, true by default, false leaves out the estimated time to finish; show_hidden; the security document also takes supported_lines and deprecated_lines, lists of release lines such as "1.2" or "1"; disclose, ids, fixed or all, default ids; tags, the bug tags that mean a security issue, default ["security", "secbug"]). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
         check=_export_tables_problem,
     )
+
+    def security_contact_text(self) -> str:
+        """The contact as the security document writes it and its redaction exemption matches
+        it: whitespace collapsed. The one definition both use."""
+        return " ".join(self.security_contact.split())
 
     def table(self, doc: str) -> dict[str, Any]:
         return self.tables.get(doc, {})

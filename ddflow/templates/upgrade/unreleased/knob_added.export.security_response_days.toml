@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "export.security_response_days"
+new = "0"
+why = "How many days a reporter can expect to wait for a first answer, stated beside the security contact in SECURITY.md. 0 states nothing."
+impact = "additive"

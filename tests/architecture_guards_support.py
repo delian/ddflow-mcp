@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import configparser
+import json
 import re
 import subprocess
 import sys
@@ -56,12 +57,26 @@ COUNTERS: tuple[str, ...] = (
     "complexity_d_or_worse",
     "duplicate_code_clusters",
     "unreferenced_functions",
+    "text_io_no_encoding",
+    "ble001",
+    "s110",
+    "t201",
+    "pth",
 )
 
 #: The counters whose sites sit in one module each, so their baseline is one file per
 #: module. (A duplicate-code cluster spans modules and an unreferenced function list is
 #: short: those two keep a single file.)
-PER_MODULE: tuple[str, ...] = (*HOMES, "deferred_imports", "complexity_d_or_worse")
+PER_MODULE: tuple[str, ...] = (
+    *HOMES,
+    "deferred_imports",
+    "complexity_d_or_worse",
+    "text_io_no_encoding",
+    "ble001",
+    "s110",
+    "t201",
+    "pth",
+)
 
 #: Pinned so the count means the same thing on every machine: no rc file is read, no
 #: stats are persisted under the home directory, and six lines is the smallest cluster.
@@ -133,6 +148,14 @@ _TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
 #: Modules whose every use is counted under their own name.
 _MODULE_USES = ("tempfile", "fcntl", "hashlib", "tomlkit")
 
+#: The ruff rules AU-ruff-widen enables with a shrink-only baseline, one per-module counter
+#: per rule group. A counter's sites are its rule's violations, module by module; `t201`
+#: counts `print()` only OUTSIDE `ddflow.surfaces` (there it is the interface), which
+#: ruff.toml's `[lint.per-file-ignores]` already suppresses, so surfaces never reach the counter.
+_RUFF_SELECT = ("BLE001", "S110", "T201", "PTH")
+#: ruff code prefix -> the counter it falls under ("T2" covers T201/T203, "PTH" the pathlib rules).
+_RUFF_KIND = {"BLE": "ble001", "S11": "s110", "T2": "t201", "PTH": "pth"}
+
 
 def _modules() -> list[Path]:
     return sorted(p for p in PKG.rglob("*.py") if "__pycache__" not in p.parts)
@@ -157,6 +180,7 @@ class _Sites(ast.NodeVisitor):
         self.depth = 0  # function nesting
         self.sites: dict[str, list[int]] = {k: [] for k in HOMES}
         self.sites["deferred_imports"] = []
+        self.sites["text_io_no_encoding"] = []
 
     # -- name resolution ------------------------------------------------------------
     def _absolute(self, node: ast.ImportFrom) -> str:
@@ -241,6 +265,13 @@ class _Sites(ast.NodeVisitor):
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
+        # `.read_text(...)` / `.write_text(...)` without `encoding=` reads and writes text in
+        # the platform's locale encoding (r-tell-dont-discover): the encoding must be named and
+        # not literally None, which is the locale default by another name.
+        if isinstance(node.func, ast.Attribute) and node.func.attr in ("read_text", "write_text"):
+            enc = next((kw.value for kw in node.keywords if kw.arg == "encoding"), None)
+            if enc is None or (isinstance(enc, ast.Constant) and enc.value is None):
+                self.sites["text_io_no_encoding"].append(node.lineno)
         # `datetime.fromisoformat`, `date.fromisoformat`, `datetime.strptime`: a timestamp
         # parsed outside `core.clock` (B-uni-clock), by any receiver -- or by a name bound
         # to one (`from time import strptime`).
@@ -263,7 +294,7 @@ class _Sites(ast.NodeVisitor):
 
 
 def _ast_sites() -> dict[str, list[str]]:
-    out: dict[str, list[str]] = {k: [] for k in (*HOMES, "deferred_imports")}
+    out: dict[str, list[str]] = {k: [] for k in (*HOMES, "deferred_imports", "text_io_no_encoding")}
     for path in _modules():
         module = _dotted(path)
         visitor = _Sites(module, path.name == "__init__.py")
@@ -388,7 +419,62 @@ def _measure(kind: str) -> list[str]:
         return _duplicate_clusters()
     if kind == "unreferenced_functions":
         return _unreferenced_functions()
+    if kind in _RUFF_KIND.values():
+        return _ruff_sites()[kind]
     return _sites(kind)
+
+
+_RUFF_CACHE: dict[str, list[str]] = {}
+
+
+def _ruff_bin() -> list[str]:
+    """The argv prefix that runs this repository's ruff, reuse the ci ruff resolver so the
+    ruff the check uses is the ruff this measure uses."""
+    from ddflow.services.ci import ruff as _ci_ruff
+
+    return _ci_ruff.ruff_bin(ROOT)
+
+
+def _ruff_sites() -> dict[str, list[str]]:
+    """The AU-ruff-widen counters, one site per violation as `ddflow/a.py:line`. The ruff run
+    is shared: `--output-format=json` over the four new rule groups, each violation bucketed by
+    ``_RUFF_KIND``; an outcome that is not clean and not a violations-only run is "ruff could
+    not run", skipped, never read as zero."""
+    if _RUFF_CACHE:  # measured once: it holds all four kind keys, so "not yet" is an empty dict
+        return _RUFF_CACHE
+    args = _ruff_bin()
+    if not args:
+        pytest.skip("ruff (a dev dependency) is not installed")
+    try:
+        proc = subprocess.run(
+            [*args, "check", "--select", ",".join(_RUFF_SELECT), "--output-format=json", "ddflow"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            stdin=subprocess.DEVNULL,
+            timeout=180,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("ruff did not finish in 180s (checking the new rule groups)")
+    if proc.returncode not in (0, 1):  # 1 = violations found (still measured); 0 = clean
+        pytest.skip(f"ruff could not run (exit {proc.returncode}):\n{proc.stderr}")
+    root = ROOT.resolve()
+    out = {k: [] for k in _RUFF_KIND.values()}
+    for row in json.loads(proc.stdout) if proc.stdout.strip() else []:
+        for prefix, kind in _RUFF_KIND.items():
+            if row["code"].startswith(prefix):
+                fn = Path(row["filename"])
+                rendered = fn.resolve().relative_to(root) if fn.is_absolute() else fn
+                # `print()` in `ddflow/surfaces` is the interface, not a violation
+                # ("T20 (outside surfaces)"), so it never reaches the `t201` baseline.
+                if kind == "t201" and rendered.parts[:2] == ("ddflow", "surfaces"):
+                    break
+                out[kind].append(f"{rendered}:{row['location']['row']}")
+                break
+    _RUFF_CACHE.update(out)
+    return _RUFF_CACHE
 
 
 def _baseline_path(name: str) -> Path:

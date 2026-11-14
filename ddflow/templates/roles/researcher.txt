@@ -1,3 +1,4 @@
-Read-only: no edits and no item leases; state a falsifiable claim, run the cheapest test that could refute it and record the verdict (CONFIRMED, REFUTED or THEORETICAL) with the command and its output.
-File every defect found as a bug after `ddflow similar`; never only work around it.
-Record the operator's words verbatim and a lesson after any surprise.
+rule:r-read-verbs-read-only
+rule:r-evidence-over-assertion
+A read verb appends zero events and never restamps
+Record research with a verdict -- CONFIRMED, REFUTED or THEORETICAL -- never a bare literature summary

@@ -112,6 +112,41 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_a_quoted_heredoc_marker_is_not_a_heredoc():
+    """Bdd23c77383: `<<EOF` inside a quoted argument is literal text, not a heredoc, so the
+    command on the following line is a real command and must still be refused. An UNQUOTED
+    `<<EOF` is a real heredoc whose body stays data."""
+    assert _check("echo '<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check('echo "<<EOF"\ngit push origin main\nEOF') is not None
+    # a multi-line single quote that swallows the marker is data too, not an opener
+    assert _check("echo 'x\n<<EOF'\ngit push origin main\nEOF") is not None
+    assert _check("echo <<EOF\ngit push origin main\nEOF") is None
+    # a `'` inside a comment is not a quote opener, so the real heredoc still strips its body
+    assert _check("# don't run\ncat <<EOF\ngit push origin main\nEOF") is None
+    # a double quote left open on one line keeps a `<<` on the next line quoted: not a heredoc
+    assert _check('echo "\n<<EOF"\ngit push origin main\nEOF') is not None
+    # an empty ``""`` that closes at the line's last char still CLOSES the quote, so the next
+    # line's `" <<EOF"` is a fresh quote and `git push` after it is a command
+    assert _check('echo ""\nfoo " <<EOF"\ngit push origin main\nEOF') is not None
+    # a quoted heredoc delimiter's closing quote is part of the marker, not a string quote, so
+    # a LATER heredoc's body is still stripped (critic #1)
+    assert _check("cat <<'EOF'\nsafe\nEOF\ncat <<EOF\ngit push origin main\nEOF") is None
+    # a quoted delimiter may hold whitespace (its delimiter is the quoted text), so the command
+    # after its terminator is a command, not a body (critic #2)
+    assert _check("cat <<'EOF with spaces'\nEOF with spaces\ngit push origin main\nEOF") is not None
+    # a CRLF heredoc line still strips its body: `\r` ends the delimiter word, not part of it
+    assert _check("cat <<EOF\r\npkill x\r\nEOF\r\n") is None
+    # a quote AFTER an unquoted prefix is part of the delimiter word (quote-removed), so the
+    # `git push` after the `safeend` terminator is a command (critic #4)
+    assert _check("cat <<safe'end'\nsafeend\ngit push origin main\nsafe") is not None
+    # a `\X` inside a DOUBLE-quoted delimiter quote-removes to `X`, so `"a\"b"` names `a"b`
+    # and the `git push` after that terminator is a command (critic #5)
+    assert _check('cat <<"a\\"b"\ngit push origin main\na"b\ngit push origin main') is not None
+    # a backslash escapes only $/backtick/"/\ in a double-quoted delimiter, so `"a\b"` names
+    # `a\b` (not `ab`) and `git push` after it is a command (critic #6/#7)
+    assert _check('cat <<"a\\b"\ngit push origin main\na\\b\ngit push origin main') is not None
+
+
 def test_a_flag_in_command_position_is_still_refused_and_a_substring_is_data():
     """B-hook-flag-match-matches-quoted-text: matching a FLAG entry is by whole words, not by
     substrings, and a quote delimiter does not neutralize the flag. `git push '--force'` is a
@@ -367,6 +402,76 @@ def test_reset_hard_only_on_primary(tmp_path):
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None
     assert _check('echo GIT_DIR=x && git commit -m "GIT_DIR=y" && git reset --hard', cwd=wt) is None
+
+
+def _gitc(tmp_path: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(tmp_path), *list(args)], check=True)
+
+
+def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path):
+    """Ba34619983b: `git checkout -- .` / `git restore` / `git clean` in the primary checkout
+    silently discard uncommitted event-shard lines, and the static `forbidden_commands` list
+    had no entry for those discard forms. The data-aware guard refuses them while `.ddflow/events`
+    holds uncommitted changes, only in the primary checkout, and lets them through once committed."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    events = tmp_path / ".ddflow" / "events"
+    events.mkdir(parents=True)
+    shard = events / "shard.jsonl"
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=a",
+            "-c",
+            "user.email=a@b",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+        check=True,
+    )
+    shard.write_text('{"id":"e1","kind":"a"}\n')
+    _gitc(
+        tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "add", ".ddflow/events/shard.jsonl"
+    )
+    _gitc(tmp_path, "commit", "-q", "-m", "seed-shard")
+    shard.write_text('{"id":"e1","kind":"a"}\n{"id":"e2","kind":"b"}\n')
+
+    for cmd in (
+        "git restore .",
+        "git checkout -- .",
+        "git checkout .",
+        "git checkout .ddflow/events",
+        "git checkout HEAD .ddflow/events",
+        "git switch --discard-changes feature",
+        "git clean -fd",
+    ):
+        r = _check(cmd, cwd=tmp_path)
+        assert r is not None, cmd
+        assert "commit the event log first" in r.message(), r.message()
+
+    # a branch switch is not a discard of the working tree: still allowed
+    assert _check("git checkout -b other", cwd=tmp_path) is None
+
+    # a worktree is not the primary checkout: its `git restore .` holds back even when the
+    # worktree holds an uncommitted shard -- the guard is for the primary checkout alone.
+    _gitc(tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "checkout", "-q", "-b", "wip")
+    _gitc(tmp_path, "add", ".ddflow/events/shard.jsonl")
+    _gitc(tmp_path, "commit", "-q", "-m", "committed")
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "-C", str(tmp_path), "worktree", "add", "-q", str(wt)], check=True)
+    (wt / ".ddflow" / "events" / "shard.jsonl").write_text(
+        '{"id":"e1","kind":"a"}\n{"id":"e2","kind":"b"}\n{"id":"e3","kind":"c"}\n'
+    )
+    assert _check("git restore .", cwd=wt) is None
+
+    assert _check("git restore .", cwd=tmp_path) is None
+    assert _check("git checkout -- .", cwd=tmp_path) is None
+    assert _check("git clean -fd", cwd=tmp_path) is None
 
 
 def test_operator_lifts_per_session_and_config():

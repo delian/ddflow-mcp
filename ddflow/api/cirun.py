@@ -15,6 +15,7 @@ from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
 from ..services.ci import admission as AD
+from ..services.ci import failed_first as FF
 from ..services.flakes import failed_tests
 from ..services.gates import baseline as BL
 from ..services.gates.handrecord import CI_RUN
@@ -188,6 +189,23 @@ def _measured(log, cfg, full: bool, command: str) -> list[float]:
     return [] if full or command else AD.measured_rates(log.read_all(), cfg)
 
 
+def _checked(repo: Path, cfg, st, log, item: str, ref: str, base: str, command: str,
+             timeout_s: int | None, full: bool) -> CI.Result:  # fmt: skip
+    """`CI.run` for ``ref``, with the item's previously failed tests ordered first
+    (`[suites].failed_first`; not for a named command) and what that showed -- the ids put first
+    and the time to the first failure -- added to the scope the evidence records."""
+    plan = FF.Plan() if command or not item else _failed_first_plan(repo, cfg, st, item, ref, base)
+    with FF.session(plan) as ff:
+        res = CI.run(
+            repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s or 0,
+            for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
+            rates=_measured(log, cfg, full, command), extra_env=ff.env,
+        )  # fmt: skip
+        if res.scope and (found := ff.outcome()):  # an item's run always plans a scope
+            res.scope = {**res.scope, **found}
+    return res
+
+
 def run(
     repo: Path,
     *,
@@ -225,11 +243,7 @@ def run(
         ref, why = _item_ref(repo, st.items[ref])
         if why:
             return O.nothing("ci.run", why, status="unavailable")
-    res = CI.run(
-        repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s or 0,
-        for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
-        rates=_measured(log, cfg, full, command),
-    )  # fmt: skip
+    res = _checked(repo, cfg, st, log, item, ref, base, command, timeout_s, full)
     data = res.as_data()
     data.update(_keep_failing_ids(repo, res))
     if res.scope:
@@ -256,6 +270,48 @@ def run(
     return O.nothing("ci.run", res.reason, **data)
 
 
+def _touched(repo: Path, cfg, ref: str, base: str) -> list[str]:
+    """The files the change under test touches: ``ref`` against ``base`` (default `[ci].base`,
+    else the repository's default branch), [] when git cannot say."""
+    sha = W.rev(repo, ref)
+    named = base or cfg.ci.base or W.default_branch(repo)
+    if not sha or not named:
+        return []
+    out = W.git(repo, "diff", "--name-only", f"{named}...{sha}")
+    return [ln for ln in out.out.splitlines() if ln.strip()] if out.ok else []
+
+
+def _failed_first_plan(repo: Path, cfg, st, item: str, ref: str, base: str) -> FF.Plan:
+    """What the next `ci run` of ``item`` puts first (`[suites].failed_first`): its last failed
+    ids, then the tests of the files its change touches."""
+    if not cfg.suites.failed_first:
+        return FF.Plan()
+    ids = FF.previous_failing_ids(
+        repo, st.items.get(item), cfg.suites.failed_first_max_ids, BL.read_full
+    )
+    return FF.Plan(ids=tuple(ids), files=tuple(_touched(repo, cfg, ref, base)))
+
+
+def failed_first(repo: Path, *, ref: str = "", agent: str = "") -> O.Outcome:
+    """The `ddflow_ci` action `failed-first`: the test ids (and touched files) the next `ci run`
+    of ``ref`` (an item id; default the item the caller holds) would run first."""
+    _log, cfg, st = _load(repo, agent)
+    item = ref if ref in st.items else held_item(repo, agent, None)
+    if not item:
+        return O.nothing("ci.failed-first", "name an item id: no item is held here")
+    it = st.items[item]
+    sha = it.branch if it.branch and W.rev(repo, it.branch) else ""
+    plan = _failed_first_plan(repo, cfg, st, item, sha, "")
+    return O.ok(
+        "ci.failed-first",
+        item=item,
+        enabled=bool(cfg.suites.failed_first),
+        ids=list(plan.ids),
+        files=list(plan.files),
+        max_ids=cfg.suites.failed_first_max_ids,
+    )
+
+
 def ci_tool(
     repo: Path,
     *,
@@ -268,7 +324,7 @@ def ci_tool(
     full: bool = False,
     timeout_s: int | None = None,
 ) -> O.Outcome:
-    """The `ddflow_ci` tool: action run | status. ``ref`` empty is no ref (the held item's
+    """The `ddflow_ci` tool: action run | status | failed-first. ``ref`` empty is no ref (the held item's
     branch, Be81c39acb8); a ref named, `HEAD` included, is taken at its word (B8f41346d9f)."""
     if action == "run":
         if not ref:
@@ -283,8 +339,12 @@ def ci_tool(
             full=full,
             timeout_s=timeout_s,
         )
+    if action == "failed-first":
+        if base or command or full or timeout_s is not None:
+            return O.refused("ci", "base, command, full and timeout are for action=run")
+        return failed_first(repo, ref=ref, agent=agent)
     if action == "status":
         if base or command or ref not in ("", "HEAD") or timeout_s is not None:
             return O.refused("ci", "ref, base, command and timeout are for action=run")
         return status(repo, agent=agent)
-    return O.refused("ci", f"unknown action {action!r}: run | status")
+    return O.refused("ci", f"unknown action {action!r}: run | status | failed-first")

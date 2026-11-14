@@ -21,7 +21,13 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
-from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
+from .bug_list import (  # noqa: F401
+    BUG_SEVERITIES,
+    SEVERITY_RANK,
+    bug_status,
+    finish_bug_list,
+    severity_rank,
+)
 from .bug_tags import found_tags
 
 BUG_SCOPES = ("project", "ddflow")

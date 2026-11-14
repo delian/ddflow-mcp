@@ -47,6 +47,7 @@ def packaged(monkeypatch):
 
     def use(path: Path) -> None:
         monkeypatch.setattr(_packaged, "PACKAGED_DEFAULTS", path)
+        monkeypatch.setattr(_packaged, "PACKAGED_DIR", path.parent / "no-default.d")
         _packaged.packaged.cache_clear()
         _packaged._SAID.clear()
 
@@ -92,7 +93,24 @@ def test_required_gates_stay_stated_once_in_the_gates_section():
 
 
 def test_the_file_stays_under_the_size_limit():
-    assert PACKAGED_DEFAULTS.stat().st_size < Config().quality.max_file_bytes
+    size = PACKAGED_DEFAULTS.stat().st_size
+    limit = Config().quality.max_file_bytes
+    assert size < limit
+
+
+def test_the_size_limit_assert_renders_no_config_repr():
+    """B82787201d0: ci's "new offender in an already-red test" compares the assertion text, so
+    a failure reason that embeds `Config()`'s dataclass repr reads as a NEW failure whenever a
+    knob is added. The size-limit assert must not reference `Config` -- neither its expression
+    nor its message."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(test_the_file_stays_under_the_size_limit))
+    (fn,) = tree.body
+    (assert_node,) = (n for n in ast.walk(fn) if isinstance(n, ast.Assert))
+    names_config = any(isinstance(n, ast.Name) and n.id == "Config" for n in ast.walk(assert_node))
+    assert not names_config
 
 
 @pytest.mark.parametrize("damage", [b"\xff\xfe not utf-8", b""], ids=["bytes", "empty"])

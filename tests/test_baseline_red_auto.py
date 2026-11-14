@@ -605,3 +605,73 @@ def test_a_file_reached_by_import_that_is_not_an_always_guard_still_blocks(
     auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
     assert auto["accepted"] is False, auto
     assert "test_family_schema.py" in auto["why"]
+
+
+def test_a_named_after_pick_does_not_block_auto_accept(repo, monkeypatch) -> None:
+    """B2e41928996: a failing test the selector picks only by the naming CONVENTION (its stem
+    carried a changed file's stem, no import link) is not caused by the change, so its
+    presence in the selection must not block auto-accept. The reach that blocks is a runtime
+    dependency of the change (an import, a changed conftest, a changed data file); a
+    "named after" pick is none of these."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/ci_scope.py"],
+        tests=[Selected("tests/test_ci_scope.py", "named after ci_scope", 1)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_scope.py::test_selector_picks_it_by_name"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_spelled_identifier_pick_does_not_block_auto_accept(repo, monkeypatch) -> None:
+    """B2e41928996: a failing test the selector picks only because its text spells a changed
+    identifier (testidents -- not an import, not a changed data file) is not caused by the
+    change, so it must not block auto-accept."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/ci_scope.py"],
+        tests=[
+            Selected(
+                "tests/test_ci_enum.py",
+                "names ci_scope, changed in ddflow/services/ci_scope.py",
+                1,
+            )
+        ],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_enum.py::test_spells_the_identifier"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_data_file_reader_still_blocks_auto_accept(repo, monkeypatch) -> None:
+    """A failing test that READS a changed data file (a golden or fixture) depends on it at run
+    time, so the change could have caused the failure: the reach must still block, unlike a
+    pure naming-convention pick. `select` records the naming reason FIRST (`_by_name` runs before
+    `_data_readers` and the first reason stays), so the reader's own reason never shows up in the
+    selection -- the block is re-matched from the changed data files, not that shadowed reason
+    (B2e41928996, roborev finding on the first cut)."""
+    from ddflow.services.testselect import Selected, Selection
+
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_golden.py").write_text(
+        'def test_reads_golden():\n    data = "tests/fixtures/golden.json"\n'
+    )
+    sel = Selection(
+        base="main",
+        changed=["tests/fixtures/golden.json"],
+        tests=[Selected("tests/test_golden.py", "named after golden", 1)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_golden.py::test_reads_golden"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_golden.py" in auto["why"]
