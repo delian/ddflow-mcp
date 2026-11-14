@@ -302,22 +302,31 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
     shape is detected in parallel and recorded as its own ``split`` record (RF-* and the
     split-* tasks). A many-into-one file merge is git's own ``-M`` rename links (each old
     path into the new file), not ``-C`` copy detection: a copy is not a move."""
-    r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", "-z", before, after)
+    r = git(
+        tree,
+        "-c", "core.quotepath=off",
+        "-c", "diff.renames=true",
+        "diff", "--name-status", "-M", "-z",
+        before, after,
+    )
     if not r.ok or ("rename" in (r.err or "") and "skipped" in (r.err or "")):
         return None
     added: set[str] = set()
     deleted: set[str] = set()
     out: list[Move] = []
     # A `-z --name-status` stream is ``R100`` NUL old NUL new, or ``A``/``D``/``M`` NUL path;
-    # a rename record carries two path fields after its status, every other one carries one.
+    # a rename (and, defensively, a copy if a repo's `diff.renames=copies` still leaks one)
+    # carries two path fields after its status, every other one carries one.
     tokens = [p for p in r.out.split("\0") if p]
     i = 0
     while i < len(tokens):
         kind = tokens[i]
-        n = 2 if kind.startswith("R") else 1
+        n = 2 if (kind.startswith("R") or kind.startswith("C")) else 1
         names = tokens[i + 1 : i + 1 + n]
         if kind.startswith("R") and len(names) >= 2:
             out.append(Move(names[0], names[-1], "rename"))
+        elif kind.startswith("C") and len(names) >= 2:
+            added.add(names[-1])  # a copy is NOT a move; only its destination is added
         elif kind == "A" and names:
             added.add(names[0])
         elif kind == "D" and names:
