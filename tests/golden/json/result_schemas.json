@@ -3272,6 +3272,39 @@
   },
   "array_schema": null
  },
+ "ddflow_bug_status": {
+  "command": "bug_status",
+  "schema": "bug_status@1",
+  "shape": "object",
+  "payload": [
+   "open",
+   "severity",
+   "blocked",
+   "unblocked",
+   "no_fix_task"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_status@1"
+    },
+    "open": {},
+    "severity": {},
+    "blocked": {},
+    "unblocked": {},
+    "no_fix_task": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_bug_duplicate": {
   "command": "bug_duplicate",
   "schema": "bug_duplicate@1",
