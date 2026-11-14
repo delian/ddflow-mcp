@@ -27,7 +27,7 @@ from ._decls import (
 from ._errors import InvalidValue
 from ._packaged import apply_packaged
 from ._tree import _is_code_tree
-from ._warn import _warn_unknown
+from ._warn import _warn_dropped, _warn_unknown
 
 
 # Judged across sections, so it lives with `Config` rather than in `[schedule]`'s module.
@@ -72,6 +72,7 @@ _NOT_SECTIONS = (
     "sources",
     "unknown_knobs",
     "ignored_members",
+    "dropped_members",
     "file_format",
     "_fallback_notes",
     "_bad_values",
@@ -85,6 +86,22 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     if key == "session.context_budget" and isinstance(value, dict):
         return {**below, **value}
     return value
+
+
+def _dropped_list_entries(below: Any, value: Any) -> list[str] | None:
+    """Entries ``value`` (a later layer's list) dropped that ``below`` (the accumulated,
+    higher layer's list) held: the entries whose set the lower layer replaced out of
+    existence (D-config-layer-order: lists replace). ``None`` when there is no list
+    replacement or nothing was dropped. Duplicates are dropped (``==``-based, so the
+    elements need not be hashable)."""
+    if not isinstance(below, list) or not isinstance(value, list) or not below:
+        return None
+    dropped: list[str] = []
+    for entry in below:
+        if entry in dropped or entry in value:
+            continue
+        dropped.append(entry)
+    return dropped or None
 
 
 def _operator_only_refusal(sec: str, knob: str, key: str) -> str:
@@ -144,6 +161,12 @@ class Config(_SectionFields):
     #: not know (a newer release's `[dedupe].kinds` entry): ignored, the rest applied. One
     #: note each, for stderr and `doctor`; never a failure (D-compat 2).
     ignored_members: list[str] = field(default_factory=list, repr=False)
+    #: Entries of a list knob a LATER layer dropped when its list replaced the layer
+    #: above's (D-config-layer-order: lists replace). One note each, for stderr and
+    #: `doctor`; never a failure. r-tighten-only: a lower layer may tighten, never
+    #: silently loosen, so a local list that turns a higher layer's entries off is said
+    #: out loud, and each dropped entry is named rather than gone in silence.
+    dropped_members: list[str] = field(default_factory=list, repr=False)
     #: The `format = N` a file layer declared (0: none did); `CONFIG_FORMAT` is what this
     #: code reads. A newer one is reported by `doctor` and refuses writes.
     file_format: int = field(default=0, repr=False)
@@ -207,6 +230,7 @@ class Config(_SectionFields):
             _warn_unknown(
                 cfg.unknown_knobs, Path(root), cfg.fallback_entries(), cfg.ignored_members
             )
+            _warn_dropped(cfg.dropped_members, Path(root))
         return cfg
 
     @classmethod
@@ -398,6 +422,11 @@ class Config(_SectionFields):
                 self.sources[key] = f"{source} (strictest fallback)"
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
+        if dropped := _dropped_list_entries(getattr(target, knob), value):
+            self.dropped_members.append(
+                f"{key}: the {source} layer replaced the list and dropped "
+                f"{', '.join(dropped)} (set by the {self.sources.get(key, 'default')} layer)"
+            )
         self._forget_fallback(key, f"the {source} value {value!r}")
         setattr(target, knob, value)
         self.sources[key] = source
@@ -464,6 +493,7 @@ class Config(_SectionFields):
         out = dataclasses.asdict(self)
         out.pop("sources", None)
         out.pop("ignored_members", None)
+        out.pop("dropped_members", None)
         out.pop("file_format", None)
         out.pop("_fallback_notes", None)
         out.pop("_bad_values", None)

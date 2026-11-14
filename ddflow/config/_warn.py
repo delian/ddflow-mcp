@@ -13,6 +13,9 @@ from ._tree import _CODE_TREE
 #: times over reads as five problems.
 _WARNED: set[tuple[str, str]] = set()
 
+#: (root, key) already warned about as a lower layer dropping a higher layer's list entries.
+_WARNED_DROPPED: set[tuple[str, str]] = set()
+
 
 def _warn_unknown(
     keys: list[str],
@@ -52,5 +55,25 @@ def _warn_unknown(
         f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
         f"than this code: {fix} (or, if it is a typo, fix it; "
         "`ddflow doctor` lists each).",
+        file=sys.stderr,
+    )
+
+
+def _warn_dropped(notes: list[str], root: Path) -> None:
+    """Say, on stderr, which list-knob entries a later config LAYER dropped by replacing a
+    list an earlier layer had set (D-config-layer-order: lists replace). r-tighten-only: a
+    lower layer may tighten, never SILENTLY loosen, so the dropped entries are named at
+    load (and listed by `doctor`), never gone in silence. stderr, so `--json` and MCP
+    replies stay parseable -- the same reason `_warn_unknown` prints there.
+    """
+    new = [n for n in notes if (str(root), n.partition(":")[0]) not in _WARNED_DROPPED]
+    if not new:
+        return
+    _WARNED_DROPPED.update((str(root), n.partition(":")[0]) for n in new)
+    print(
+        f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml turns a "
+        f"higher layer's list entries off: {'; '.join(new)}. A later layer's list replaces "
+        "the earlier one's (D-config-layer-order); every entry dropped is named here, never "
+        "silent (r-tighten-only).",
         file=sys.stderr,
     )
