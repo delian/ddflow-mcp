@@ -901,7 +901,8 @@ def _git_discard(words: list[str]) -> str:
         # `--` means "everything after is a path"; `-f`/`--force` discards regardless of target.
         if "--" in rest or "-f" in rest or "--force" in rest:
             return "checkout"
-        # `-b`/`-B`/`-t`/`-l` take the next word as their value (a branch name, not a path).
+        # `-b`/`-B`/`-o` take the next word as their value (a branch name, not a path);
+        # `-t`/`-l` are boolean, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
         positions: list[str] = []
         i = 0
         while i < len(rest):
@@ -916,6 +917,10 @@ def _git_discard(words: list[str]) -> str:
         # restore form; one bare positional is judged a branch switch.
         if any(w.startswith((".", "/")) for w in positions) or len(positions) > 1:
             return "checkout"
+    if sub == "switch" and (
+        "-f" in args[1:] or "--force" in args[1:] or "--discard-changes" in args[1:]
+    ):
+        return "switch"
     return ""
 
 
@@ -932,15 +937,15 @@ def _uncommitted_events(cwd: str | Path) -> bool:
     return any(e.path.endswith(".jsonl") for e in entries)
 
 
-def _discard_refusal(words: list[str], cwd: str | Path) -> Refusal | None:
+def _discard_refusal(words: list[str], cwd: str | Path, cmds: list[list[str]]) -> Refusal | None:
     """A data-losing git form in the primary checkout while `.ddflow/events` holds uncommitted
     changes is a silent loss the static list cannot name (Ba34619983b): the refusal, or None.
-    Two reasons to hold back: the command acts on ANOTHER checkout (`git -C other`/`cd other`,
-    a worktree holds no events), or this checkout's shards are all committed."""
+    Two reasons to hold back: the LINE acts on another checkout (`git -C other`/`cd other` in ANY
+    of its commands -- a worktree holds no events), or this checkout's shards are all committed."""
     form = _git_discard(words)
     if not form:
         return None
-    if _elsewhere([words]) or not is_primary(cwd or Path.cwd()):
+    if _elsewhere(cmds) or not is_primary(cwd or Path.cwd()):
         return None
     if _uncommitted_events(cwd or Path.cwd()):
         return Refusal(form, " ".join(words)[:200], _EVENT_DISCARD_INSTEAD)
@@ -977,7 +982,7 @@ def check(
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
-        if r := _discard_refusal(words, cwd or Path.cwd()):
+        if r := _discard_refusal(words, cwd or Path.cwd(), cmds):
             return r
     return None
 
