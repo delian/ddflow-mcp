@@ -396,7 +396,7 @@
          },
          "op": {
           "type": "string",
-          "description": "ci: run | status (default)."
+          "description": "ci: run | status (default) | failed-first."
          },
          "ref": {
           "type": "string",
@@ -724,6 +724,10 @@
          "blocked": {
           "type": "boolean",
           "description": "List every blocked item."
+         },
+         "state": {
+          "type": "string",
+          "description": "List the items in one report state (interrupted, running, blocked, ready, merged, held, review, blocking_deps). Echoed in --json under `state` and `filter.state`; the list is cut with the same --full / --cursor caps."
          },
          "kind": {
           "type": "string",
@@ -1219,7 +1223,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, dispatch, vigil, paths, perf, digest, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, dispatch, vigil, paths, perf, digest, rules_inventory, stacks, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1474,6 +1478,8 @@
            "paths",
            "perf",
            "digest",
+           "rules_inventory",
+           "stacks",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

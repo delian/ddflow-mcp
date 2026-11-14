@@ -1,0 +1,27 @@
+[stack]
+name = "python"
+title = "Python (uv, pip)"
+detect = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile"]
+priority = 50
+lock_files = ["uv.lock", "poetry.lock", "Pipfile.lock"]
+comment_tokens = ["#"]
+import_extractor = "regex:^\\s*(?:from\\s+([\\w.]+)\\s+import|import\\s+([\\w.]+))"
+dead_tool = "vulture"
+dep_tool = "pip-audit"
+
+[commands]
+build = [
+  { when = "uv.lock", run = "uv build" },
+  { run = "python -m build" },
+]
+smoke = [
+  { when = "uv.lock", run = "uv run --locked python -m pytest --collect-only -q" },
+  { run = "python -m pytest --collect-only -q" },
+]
+lock_check = [
+  { when = "uv.lock", run = "uv lock --check" },
+]
+test = [
+  { when = "uv.lock", run = "uv run --locked python -m pytest -q" },
+  { run = "python -m pytest -q" },
+]

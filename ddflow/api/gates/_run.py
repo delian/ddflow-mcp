@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import shlex
+import sys
+import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import replace
@@ -50,6 +52,13 @@ from ._vet import (
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
+
+#: How many additional times recording a gate outcome is retried after the event-log lock
+#: times out, and the pause between attempts. Each attempt already waited the lock's own
+#: timeout, so these ride out a transient heartbeat holder without ever re-running the gate
+#: command (B054959b3c4).
+_RECORD_LOCK_RETRIES = 3
+_RECORD_LOCK_RETRY_S = 2.0
 
 
 def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
@@ -317,6 +326,60 @@ def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
     return None, _no_tree_reason(repo, it, item, gate, held, force)
 
 
+#: The extra wall seconds `run` keeps re-trying the events.lock to record a run's start
+#: (the `gate.started` append) after one `[lease].acquire_timeout_s` acquire timed out: a
+#: heartbeat of another lane that holds the lock past one acquire window on a loaded host
+#: must not kill a long run before its command starts (B-gate-run-dies-on-events-lock).
+#: Each retry is a new acquire attempt, announced on stderr. 0 gives up after the first
+#: timeout with a clean result instead of a raw traceback.
+_GATE_START_LOCK_RETRY_S = 300.0
+
+
+def _record_gate_started(log, item, gate, forced) -> str | None:
+    """Append `gate.started`, re-trying while the events.lock is held by another lane past
+    one acquire window. Returns None once it is recorded, else a non-empty reason to stop
+    cleanly: a run must not die with a raw `TimeoutError` before its command starts
+    (B-gate-run-dies-on-events-lock)."""
+    deadline = time.monotonic() + _GATE_START_LOCK_RETRY_S
+    while True:
+        try:
+            log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+            return None
+        except TimeoutError as exc:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return str(exc) or "the events.lock stayed held past the retry bound"
+            print(
+                f"ddflow gate run: waiting to record the run start -- {exc}; retrying",
+                file=sys.stderr,
+            )
+            time.sleep(min(5.0, remaining))
+            if time.monotonic() >= deadline:
+                return "the events.lock stayed held past the retry bound"
+
+
+def _start_marker_and_record(repo, item, gate, started_on, log, forced, expected_s):
+    """(marker, refusal): mark the twin marker, then record `gate.started`, retrying the
+    events.lock. Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live
+    twin or a start that could not be recorded after the retry (B-gate-run-dies-on-events-lock).
+    One branch in `run` either way, so `run` keeps its complexity budget."""
+    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, expected_s)
+    if twin_refusal is not None:
+        return None, twin_refusal
+    refused = _record_gate_started(log, item, gate, forced)
+    if refused is not None:
+        RUN.clear_started(marker)  # a run that never started leaves no twin marker behind
+        return None, O.nothing(
+            "gate.run",
+            f"the run could not record its start: {refused}",
+            gate=gate,
+            outcome="",
+            evidence={"reason": refused},
+            id=item,
+        )
+    return marker, None
+
+
 def run(
     repo: Path,
     item: str,
@@ -416,11 +479,12 @@ def run(
         if covered is not None:
             return covered
         started_on = G.tree_identity(cwd)
-        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, gdef.timeout_s)
-        if twin_refusal is not None:
-            return twin_refusal
+        marker, start_refusal = _start_marker_and_record(
+            repo, item, gate, started_on, log, forced, gdef.timeout_s
+        )
+        if start_refusal is not None:
+            return start_refusal
         started_at = clock.now_iso()
-        log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
         done = _guarded(
             log,
             cfg,
@@ -451,6 +515,31 @@ def run(
     if exit_code == O.FAIL:
         return O.failed("gate.run", reason or f"{gate} failed", **data)
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _record_unavailable_reliably(log, cfg, repo, it, gate, reason, evidence, gates, forced) -> bool:
+    """Record ``unavailable`` for a run whose outcome the event-log lock would not let it
+    write, retrying a bounded number of times so a transient lock holder does not lose a
+    detached run. Returns whether the outcome landed on the record (B054959b3c4)."""
+    for attempt in range(_RECORD_LOCK_RETRIES + 1):
+        try:
+            R.record_measured(
+                log,
+                cfg,
+                repo,
+                it,
+                gate,
+                "unavailable",
+                reason=reason,
+                evidence=evidence,
+                gates=gates,
+                forced=forced,
+            )
+            return True
+        except TimeoutError:
+            if attempt < _RECORD_LOCK_RETRIES:
+                time.sleep(_RECORD_LOCK_RETRY_S)
+    return False
 
 
 def _guarded(log, cfg, repo, agent, it, item, gate, **run):
@@ -486,6 +575,38 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
             forced=forced,
         )
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
+    except TimeoutError as err:
+        # The event-log lock could not be acquired to write the run's outcome, so the run
+        # would otherwise die with a raw traceback and no record at all (B054959b3c4).
+        reason = (
+            "the run's outcome could not be recorded: the event-log lock was not acquired "
+            f"in time ({err}). The gate stays unrecorded -- retry when the machine is less "
+            "loaded (see `ddflow doctor`)."
+        )
+        _log, _cfg, now = _load(repo, agent)
+        rec = now.items[item].gates.get(gate) if item in now.items else None
+        if _recorded_since(rec, started_at):
+            # Something was recorded while the run lived: that stands, as in the sweep.
+            return O.nothing("gate.run", reason, gate=gate, outcome="", evidence={}, id=item)
+        _record_unavailable_reliably(
+            log,
+            cfg,
+            repo,
+            it,
+            gate,
+            reason,
+            evidence={"started_tree_sha": started_on, "lock_timeout": str(err)},
+            gates=gates,
+            forced=forced,
+        )
+        return O.nothing(
+            "gate.run",
+            reason,
+            gate=gate,
+            outcome="unavailable",
+            evidence={"lock_timeout": str(err)},
+            id=item,
+        )
     finally:
         RUN.clear_started(marker)
 

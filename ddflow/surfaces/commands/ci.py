@@ -42,6 +42,8 @@ def cmd_ci(a, c: Ctx) -> int:
         print(f"timeout:   {d['timeout_s']}s")
         print(f"available: {'yes' if d['available'] else 'NO -- ' + d['why']}")
         return out.exit
+    if a.verb == "failed-first":
+        return _cmd_failed_first(a, c)
     # The default is the HEAD of the tree the command runs in: as a gate it runs in the
     # item's worktree, while c.repo is the primary checkout (whose HEAD is main).
     # A tree another identity works in (a subagent in its parent's) is not the caller's:
@@ -78,6 +80,25 @@ def cmd_ci(a, c: Ctx) -> int:
     if out.exit == 1:
         _print_failure(d)
     return out.exit
+
+
+def _cmd_failed_first(a, c: Ctx) -> int:
+    """`ddflow ci failed-first`: the ids the next run of the item puts first."""
+    out = AR.failed_first(c.repo, ref=a.ref, agent=c.log.agent_id)
+    if c.json:
+        emit_json(out.body(""))
+        return out.exit
+    if out.exit:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    d = out.data
+    state = "on" if d["enabled"] else "off ([suites].failed_first)"
+    print(f"failed-first for {d['item']}: {state}, at most {d['max_ids']} ids")
+    for i in d["ids"]:
+        print(f"  first  {i}")
+    for f in d["files"]:
+        print(f"  then   tests of {f}")
+    return 0
 
 
 def _print_failure(d: dict) -> None:

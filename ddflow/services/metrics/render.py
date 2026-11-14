@@ -44,6 +44,7 @@ def summary(data: dict) -> str:
     ]
     out += [
         f"  {r['gate']:<14} n={r['n']:<5} p50 {dur(r['p50_s'])}  p90 {dur(r['p90_s'])}"
+        + (f"  not timed (attested): {r['untimed']}" if r.get("untimed") else "")
         + (
             f"  (queued (lock or slot): n={r['wait_n']} p50 {dur(r['wait_p50_s'])}"
             f" max {dur(r['wait_max_s'])})"
@@ -54,7 +55,8 @@ def summary(data: dict) -> str:
     ]
     out += ["", f"outcomes by {data['group_by']}"]
     out += [
-        f"  {r['group'][:34]:<34} n={r['n']:<5} fail {pct(r['failure_rate'])}  "
+        f"  {r['group'][:34]:<34} n={r['n']:<5} pass {pct(r['pass_rate'])}  "
+        f"partial {pct(r['partial_rate'])}  fail {pct(r['failure_rate'])}  "
         f"skip {pct(r['skip_rate'])}  unavailable {pct(r['unavailable_rate'])}"
         for r in data["outcomes"]
     ]

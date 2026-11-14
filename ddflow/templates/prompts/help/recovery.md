@@ -15,7 +15,9 @@ expired because it died, and the difference is only visible to a human.
 
 `ddflow recover --apply` acts only on an expired lease whose tree it measured EMPTY: it
 records the expiry, saying nothing was lost. A tree holding work, or one it could not
-measure, is never touched. Either way the item is taken back with `ddflow claim <item>
+measure, is never touched. It records the expiry once per lease: a lease whose expiry is
+already recorded is still listed by `ddflow recover` but a further `--apply` appends nothing.
+Either way the item is taken back with `ddflow claim <item>
 --force`, which adopts the existing worktree, the work in it included — that route is a
 person's; an agent's `--force` is dropped, and its route is `ddflow claim <item>
 --approval request`. Nothing is deleted.

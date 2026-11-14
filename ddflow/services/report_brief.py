@@ -43,20 +43,38 @@ def _list(label: str, items: list[str], sep: str) -> str:
     return f"{label}: {sep.join(items) or 'none'}"
 
 
+def _review_line(g: dict[str, Any]) -> str:
+    """One review gate's budget line for the brief (DX-agent-final-report-rounds):
+    ``rubber_duck 3/4`` (or ``rubber_duck 3`` past no cap), plus ` (on refutation)`."""
+    rr = g["review_rounds"]
+    line = f"{g['gate']} {rr['used']}/{rr['max']}" if rr["max"] else f"{g['gate']} {rr['used']}"
+    if rr["refutation"]:
+        line += " (on refutation)"
+    return line
+
+
 def lines(d: dict[str, Any]) -> list[str]:
-    """The 8 lines of a collected report (`services.report.collect`)."""
+    """The 8 lines of a collected report (`services.report.collect`), plus a ``review rounds``
+    line when a review gate spent rounds (or passed on refutation), the operator's
+    "just report it" surfacing of an automatic round budget."""
     it = d["item"]
     off = [f"{g['gate']} {g['outcome']}" for g in d["gates"] if g["outcome"] != "passed"]
-    return [
+    rounds = [_review_line(g) for g in d["gates"] if g.get("review_rounds")]
+    out = [
         f"{it['id']}: {it['state']} ({it['agent']})",
         _landed(d["landing"]),
         _regression(d["regression"]),
         _list("gates not passed", off, ", "),
         _list("forced or skipped", d["overrides"], "; "),
+    ]
+    if rounds:
+        out.append(_list("review rounds", rounds, ", "))
+    out += [
         _filed(d["filed"]),
         _list("follow-ups", d["follow_ups"], ", "),
         _list("not done", d["not_done"], "; "),
     ]
+    return out
 
 
 def render(d: dict[str, Any], chars: int) -> str:

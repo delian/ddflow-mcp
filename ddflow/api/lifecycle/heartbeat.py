@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
-from ...core.model import fold
+from ...core.model import DONE, fold
 from ...services import eventcommit as EC
 from ...services import healthwatch as HW
 from ...services import identity as ID
@@ -41,6 +41,94 @@ def heartbeat(
         if missing is not None:
             return missing
     gone = st.items.get(item)
+    if (early := _no_renewal(log, cfg, gone, item)) is not None:
+        return early
+    began = time.time()  # before the renewal: the lease is live at this instant once renewed
+    renewed = L.renew(log, item)
+    holder = log.agent_id  # whose lease the catch-up may point at the item
+    hint = ""
+    if not renewed:
+        it = st.items.get(item)
+        lease = it.lease if it else None
+        if lease and _in_leased_tree(repo, lease.worktree, _tree_of(called_from or repo)):
+            # Only a LIVE lease. Speaking for an expired one would resurrect a claim its
+            # holder abandoned, and lock out whoever `recover` sent to take it over.
+            if not lease.live(time.time(), cfg.lease.grace_s):
+                hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again as {lease.holder}"
+            else:
+                renewed = L.renew(log, item, holder=lease.holder)
+                holder = lease.holder
+    if not renewed:
+        broken = [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
+        if broken:  # the lease was taken from this agent: say so wherever it stands
+            hint = "; " + LB.notice_text(broken[0])
+    if renewed:
+        withheld = _catch_up_globs(log, cfg, item, began, holder, st)
+        return O.ok(
+            "lease.renewed",
+            id=item,
+            renewed=True,
+            waiters=_waiters(repo, item),
+            globs_withheld=withheld,
+            new_reports=_new_report_count(st, item),
+            yield_requested=_yield_request(log, cfg, item),
+            recall=_recheck(log, st, cfg, item),
+            **_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=True),
+        )
+    return O.nothing(
+        "lease.renewed",
+        f"no lease held {item}{hint}",
+        id=item,
+        renewed=False,
+        waiters=[],
+        globs_withheld="",
+        yield_requested="",
+        recall="",
+    )
+
+
+#: The word a finished item's note uses (`item is completed; nothing to renew`).
+_STATE_WORD = {DONE: "completed"}
+
+
+def _last_lease_event(log, item: str) -> str:
+    """The kind of the newest lease event on ``item`` (waiting notices are not the lease's)."""
+    kinds = [
+        e.kind
+        for e in log.read_all()
+        if e.subject == item and e.kind.startswith("lease.") and e.kind != "lease.waiting"
+    ]
+    return kinds[-1] if kinds else ""
+
+
+def _no_renewal(log, cfg, gone, item: str) -> O.Outcome | None:
+    """The answer for an item whose lease must not be renewed, or None to renew."""
+    finished = gone is not None and gone.terminal
+    released = (
+        gone is not None
+        and gone.lease is None
+        and not gone.removed
+        and _last_lease_event(log, item) == "lease.released"
+        and not [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
+    )
+    if finished or released:
+        # A loop that outlives its item or its lease must not fail or extend anything
+        # (LK-auto-heartbeat); a lease TAKEN from this agent still says so.
+        why = (
+            f"item is {_STATE_WORD.get(gone.state, gone.state)}"
+            if finished
+            else "item has no lease (released)"
+        )
+        return O.ok(
+            "lease.renewed",
+            id=item,
+            renewed=False,
+            note=f"{why}; nothing to renew",
+            waiters=[],
+            globs_withheld="",
+            yield_requested="",
+            recall="",
+        )
     if (
         gone is not None
         and gone.removed
@@ -66,48 +154,7 @@ def heartbeat(
             yield_requested="",
             recall="",
         )
-    began = time.time()  # before the renewal: the lease is live at this instant once renewed
-    renewed = L.renew(log, item)
-    holder = log.agent_id  # whose lease the catch-up may point at the item
-    hint = ""
-    if not renewed:
-        it = st.items.get(item)
-        lease = it.lease if it else None
-        if lease and _in_leased_tree(repo, lease.worktree, _tree_of(called_from or repo)):
-            # Only a LIVE lease. Speaking for an expired one would resurrect a claim its
-            # holder abandoned, and lock out whoever `recover` sent to take it over.
-            if not lease.live(time.time(), cfg.lease.grace_s):
-                hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again as {lease.holder}"
-            else:
-                renewed = L.renew(log, item, holder=lease.holder)
-                holder = lease.holder
-    if not renewed:
-        broken = [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
-        if broken:  # the lease was taken from this agent: say so wherever it stands
-            hint = "; " + LB.notice_text(broken[0])
-    if renewed:
-        withheld = _catch_up_globs(log, cfg, item, began, holder)
-        return O.ok(
-            "lease.renewed",
-            id=item,
-            renewed=True,
-            waiters=_waiters(repo, item),
-            globs_withheld=withheld,
-            new_reports=_new_report_count(st, item),
-            yield_requested=_yield_request(log, cfg, item),
-            recall=_recheck(log, st, cfg, item),
-            **_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=True),
-        )
-    return O.nothing(
-        "lease.renewed",
-        f"no lease held {item}{hint}",
-        id=item,
-        renewed=False,
-        waiters=[],
-        globs_withheld="",
-        yield_requested="",
-        recall="",
-    )
+    return None
 
 
 def _the_held_item(repo: Path, st, me: str, called_from) -> tuple[str, O.Outcome | None]:
@@ -188,7 +235,7 @@ def _recheck(log, st, cfg, item: str) -> str:
     )
 
 
-def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
+def _catch_up_globs(log, cfg, item: str, now: float, holder: str, loaded=None) -> str:
     """Point a just-renewed lease at the item's CURRENT globs and resources; "" or why
     it could not.
 
@@ -208,10 +255,20 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
     (B8eb33fe297); the catch-up is judged at the renewal instead -- and only for the lease
     ``holder`` renewed: one that changed hands in that window (a takeover, a break) is not
     pointed at the item's values, which were never the new holder's.
+
+    ``loaded`` is the state the caller already folded. A field it shows matching (the lease
+    of ``holder`` carries what the item names) is not looked at again: the lock is taken, and
+    the log re-read under it, only for a field that differs -- a no-op heartbeat holds the
+    append lock for nothing (TX-heartbeat-catchup-lockfree). A state that went stale since
+    is caught up by the next heartbeat. Only a lease LIVE in ``loaded`` is skipped, and
+    `update --globs` retargets a live lease itself; a lapsed one (the only kind that can differ
+    from its item) always takes the lock and the re-read.
     """
 
     why: list[str] = []
     for field in ("globs", "resources"):
+        if _matches(loaded, item, holder, field, now, cfg.lease.grace_s):
+            continue
         with log.transaction():
             it = localize(fold(log.read_all(), strict=False), log, now).items.get(item)
             lease = it.lease if it else None
@@ -229,6 +286,19 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
             elif live is not None:
                 L.retarget(log, item, live, *args)
     return "; ".join(why)
+
+
+def _matches(st, item: str, holder: str, field: str, now: float, grace_s: float) -> bool:
+    """True when ``st`` shows ``holder``'s LIVE lease already carrying the item's own ``field``.
+
+    A lease that was lapsed in ``st`` is never "matching": `update --globs` leaves a lapsed
+    lease alone, so an edit may have reached the item only, and may have landed after the load
+    -- it takes the lock and the re-read, as before."""
+    it = st.items.get(item) if st is not None else None
+    lease = it.lease if it else None
+    if lease is None or lease.holder != holder or not lease.live(now, grace_s):
+        return False
+    return sorted(getattr(lease, field)) == sorted(getattr(it, field))
 
 
 def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:

@@ -134,3 +134,12 @@ counts, recorded as a pass with the note `unchanged by delta`. Some reached with
 tests are needed, recorded as `full on A plus selected on delta B` (partial when the selection
 fell back, never a silent pass). A hub or test infrastructure in the delta, or git or the selector
 unable to say: the full run is needed.
+
+## A rerun runs the tests that failed last time first
+
+After a failed `ci` gate, the next `ddflow ci run` of the item runs its previously failing test
+ids first (then the tests of the files your diff touches), so a test that is still broken fails
+in seconds, and the gate evidence records `ran_failed_first` and `first_failure_at_s` in
+`ci_scope`. To see the ids: `ddflow ci failed-first --ref <item>` (MCP: `ddflow_ci` with
+`action=failed-first`, `ref=<item>`). Off: `ddflow config --set suites.failed_first false`; the
+count is `suites.failed_first_max_ids` (default 50). A missing ids file is the ordinary order.

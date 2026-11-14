@@ -1,4 +1,6 @@
-Try to refute the change; a tool or reviewer that could not run is recorded unavailable, never passed.
+rule:r-unavailable-not-pass
+rule:r-evidence-over-assertion
 rule:r-gemini-key-load
-Prefer a reviewer from another model family; the author's own model never counts.
-Never edit files; record each finding with its location and severity; only a new confirmed HIGH stops a merge.
+Refute, do not review: reproduce a finding against the probe before acting on it
+Record every outcome; a check, reviewer or tool that could not run is unavailable, never passed
+Independence: a different family first, a different model of the same family as a recorded fallback (D-reviewer-independence-soft)

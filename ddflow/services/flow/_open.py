@@ -20,6 +20,7 @@ from .. import choices as CH
 from .. import completion as CM
 from .. import leases as L
 from ._core import _state, stacked_on, target
+from .pr_template import render_body
 
 
 @dataclass
@@ -57,21 +58,13 @@ def pre_merge_blockers(
     return [b for b in blockers if CM.UNMERGED_BLOCKER not in b]
 
 
-def pr_body(st: State, it: Item, *, on: Item | None) -> str:
-    lines = [it.body.strip() or it.title, ""]
-    if on is not None and on.pr:
-        lines += [
-            f"**Stacked on {on.id}** ({on.pr.url}). Review that first; this request "
-            f"is retargeted automatically once it merges.",
-            "",
-        ]
-    ran = [(g, r.outcome) for g, r in it.gates.items() if r.outcome]
-    if ran:
-        lines += ["| gate | outcome |", "|---|---|"]
-        lines += [f"| {g} | {o} |" for g, o in ran]
-        lines.append("")
-    lines.append(f"Item: {it.id}")
-    return "\n".join(lines)
+def pr_body(
+    st: State, it: Item, *, on: Item | None, cfg: Config | None = None, repo: Path | None = None
+) -> str:
+    """The request body: the layered `[flow].pr_body_template` (`flow/pr_template.py`)."""
+    if cfg is None:  # the layered project config, not the bare defaults
+        cfg = Config.load(repo) if repo is not None else Config()
+    return render_body(st, it, on=on, cfg=cfg, repo=repo)
 
 
 def open_request(
@@ -128,7 +121,7 @@ def open_request(
                 head=it.branch,
                 base=out.base,
                 title=title or f"{it.id}: {it.title}",
-                body=pr_body(st, it, on=on),
+                body=pr_body(st, it, on=on, cfg=cfg, repo=repo),
                 draft=cfg.flow.pr_draft,
                 labels=list(cfg.flow.pr_labels),
                 reviewers=list(cfg.flow.pr_reviewers),

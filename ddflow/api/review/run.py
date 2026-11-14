@@ -78,6 +78,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     delta: bool = False,
     force: bool = False,
     reason: str = "",
+    approval: str = "",
     full: bool = False,
     exclude: str = "",
     include_pinned: bool = False,
@@ -397,25 +398,35 @@ _TIER_RANK = {"family": 0, "model": 1, "none": 2}
 
 
 def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
-    """`revs` with the fast cross-family tier led, so a slow same-family reviewer is not
-    paid for before an outside-family one can serve (bug B19066e802f), and a reviewer
-    that establishes nothing runs last instead of first in config order.
+    """`revs` ordered by the gate's reviewers: the cross-family tier first, so a slow
+    same-family reviewer is not paid for before an outside-family one can serve (bug
+    B19066e802f), and a reviewer that establishes nothing runs last instead of first in
+    config order; then the declared `priority` (LOWER first) orders reviewers of the
+    SAME tier, so a fast cross-family reviewer runs before a slow one however config
+    lists them.
 
-    The sort is STABLE: within a tier, config order survives, so order only yields when a
-    tier makes it. When the author cannot be named here (`[agent].family` and the session
-    model are both empty) `review_tier` returns `none` for every reviewer and the pool
-    keeps its config order -- a gate must not reorder on a guess about independence.
+    Within a (tier, priority), config order survives, so order only yields when a tier
+    or a priority gap makes it. When the author cannot be named here (`[agent].family`
+    and the session model are both empty) `review_tier` returns `none` for every
+    reviewer and priority still orders within that one tier -- a gate must not reorder
+    on a guess about independence, but a declared priority is a stated preference, not a
+    guess.
 
     Degraded/429 reviewers are shed BEFORE this runs (`_shed_degraded`), so the cascade
-    B8efd3d1bc4 dropped decides the pool's members and this only orders what remains.
+    B8efd3d1bc4 dropped decides the pool's members and this only orders what remains,
+    and a shed higher-priority reviewer is re-probed after its mark expires (the
+    configured `[review].degraded_cooldown_s`) instead of shed forever (bug B066719c493).
     """
 
     def rank(r):
-        return _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2)
+        return (
+            _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2),
+            r.priority,
+        )
 
     ordered = sorted(revs, key=rank)
     if [r.name for r in ordered] != [r.name for r in revs]:
-        say("→ order (cross-family first): " + ", ".join(r.name for r in ordered))
+        say("→ order (cross-family first, then priority): " + ", ".join(r.name for r in ordered))
     return ordered
 
 
@@ -504,6 +515,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     delta: bool = False,
     force: bool = False,
     reason: str = "",
+    approval: str = "",
     full: bool = False,
     exclude: str = "",
     include_pinned: bool = False,
@@ -616,6 +628,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         "called_from": called_from,
         "force": force,
         "reason": reason,
+        "agent": agent,
+        "approval": approval,
         "full": full,
     }
     kind, done, forced, diff, how, why, rerun = _scope(

@@ -425,8 +425,24 @@ class _Admission:
         return ""
 
 
+def _ticker(on_tick: Callable[[], None] | None, tick_s: float) -> Callable[[], None]:
+    """A callable that runs ``on_tick`` at most every ``tick_s`` seconds (a no-op when either
+    is unset); an error in ``on_tick`` is swallowed, a lease renewal never ends a wait."""
+    last = CLOCK.monotonic()
+
+    def tick() -> None:
+        nonlocal last
+        if on_tick is None or tick_s <= 0 or CLOCK.monotonic() - last < tick_s:
+            return
+        last = CLOCK.monotonic()
+        with contextlib.suppress(Exception):
+            on_tick()
+
+    return tick
+
+
 @contextlib.contextmanager
-def hold(
+def hold(  # noqa: PLR0913  -- an entry point with many documented keyword-only tuning knobs
     cfg: Any,
     holder: str,
     directory: Path | str | None = None,
@@ -437,6 +453,8 @@ def hold(
     cores: int | None = None,
     klass: str | None = None,
     scope: str = "suite",
+    on_tick: Callable[[], None] | None = None,
+    tick_s: float = 0,
 ) -> Iterator[None]:
     """Hold a full-suite slot for the block, in arrival order; `SuiteBusy` when none frees
     within the wait. ``say`` receives a line whenever the waiter's place in the queue
@@ -455,7 +473,11 @@ def hold(
 
     ``klass`` (default: read from the holder label by ``[suites].class_patterns``) is the
     priority class and ``scope`` names the kind of run, whose measured seconds predict its cost:
-    the line says ``you are #N, estimated wait 14m (3 ahead, predicted 31m)`` (SQ.order)."""
+    the line says ``you are #N, estimated wait 14m (3 ahead, predicted 31m)`` (SQ.order).
+
+    ``on_tick`` / ``tick_s`` (default none) renews the caller's lease while it waits in line: a
+    gate run queued for hours otherwise let its item's lease go idle (B55ed1848d1). ``on_tick``
+    is called at most every ``tick_s`` seconds of the wait; an error in it never ends the wait."""
     directory = Path(directory) if directory else state_dir()
     slots_n = limit(cfg, cores)
     wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
@@ -466,6 +488,7 @@ def hold(
     start = CLOCK.monotonic()
     slots = SLOTS.Slots(directory, NAME)
     said: tuple[int, str] = (0, "")
+    tick = _ticker(on_tick, tick_s)
     watch = _Admission(cfg, directory, slots_n, source, cores)
     with contextlib.ExitStack() as stack:
         mine = _note_of(cfg, directory, holder, klass or _CLASS.get(), scope)
@@ -518,6 +541,7 @@ def hold(
                 )
             time.sleep(QUEUE_POLL_S)
             _beat(ticket.path)
+            tick()
         # Placed: hand the place on (the ticket goes with this block), then hold.
         note = _note(directory, slot.index)
         now = CLOCK.wall()

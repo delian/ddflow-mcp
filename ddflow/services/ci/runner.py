@@ -136,6 +136,7 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     changed_from: str = "",
     tick: tuple[Callable[[], None], float] | None = None,
     rates: Sequence[float] = (),
+    extra_env: dict[str, str] | None = None,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and budgets the
@@ -154,7 +155,10 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     the caller renews its lease there (DX-long-op-renew).
 
     ``rates`` is what past runs measured (`admission.measured_rates`), for the decision whether
-    a selected run takes the suite slot; none: the file count decides."""
+    a selected run takes the suite slot; none: the file count decides.
+
+    ``extra_env`` is added to the environment of the command (the failed-first plugin's,
+    `ci.failed_first`), after the merge-range variables."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -186,6 +190,7 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
         full=full,
         for_item=for_item,
         rates=rates,
+        extra_env=extra_env,
     )
 
 
@@ -244,6 +249,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     full,
     for_item,
     rates,
+    extra_env=None,
 ) -> Result:
     """Once ``sha`` and ``base`` are resolved: plan the scope, decide the host suite slot, merge
     the tree when the checks RUN -- under the slot for a full-suite run, so a base that moved
@@ -253,7 +259,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     holder = _holder(repo, ref)
     override = bool(command.strip())
     used: dict[str, dict] = {}
-    env_extra = _merged_range_env(repo, changed_from)
+    env_extra = {**_merged_range_env(repo, changed_from), **(extra_env or {})}
 
     def plan(tree):
         return _plan(
@@ -637,7 +643,9 @@ def _run_stages(
         if selected:
             _say_what_ran(scope, unran)
         return p, "", spent
-    return _run_test_stages(cfg, tree, scope, budget, used, tick, p, spent, unran, holding_suite)
+    return _run_test_stages(
+        cfg, tree, scope, budget, used, tick, (p, spent), unran, holding_suite, env_extra
+    )
 
 
 def _run_test_stages(
@@ -647,14 +655,15 @@ def _run_test_stages(
     budget: int,
     used,
     tick,
-    p,
-    spent,
+    hooks,
     unran: set[str],
     holding_suite,
+    env_extra=None,
 ):
     """Run the selected-then-always test stages after the hooks passed, and fold the verdict
     into ``scope``. Extracted from `_run_stages` so the stage fan-out stays under the
-    complexity ratchet."""
+    complexity ratchet. ``hooks`` is the hook stage's ``(run, elapsed seconds)``."""
+    p, spent = hooks
     on_tick, tick_s = tick or (None, 0)
     before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
@@ -666,7 +675,7 @@ def _run_test_stages(
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
             cwd=tree,
-            env=child_env(cfg, ci=True),
+            env={**child_env(cfg, ci=True), **(env_extra or {})},
             timeout_s=max(min(budget, 60), budget - int(spent)),  # what is left, 60 s at least
             check_installed=True,  # a missing runner is unavailable, not a failed test
             on_tick=on_tick,

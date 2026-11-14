@@ -38,6 +38,15 @@ class OutputConfig:
         True,
         doc="Whether `--full` / `full=true` may lift the caps, and whether 0 in `max_rows` or `max_chars` does. Set it to false in the committed config to keep every answer bounded (a shared MCP host, a context-limited fleet): a `full` request then gets the capped answer, and every cut answer says the lift is off, so nothing is silently different. This is a setting, not an enforced lock: ddflow has no organisation layer yet, so the local layer or `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at a terminal asking for everything gets everything.",
     )
+    status_fix_tasks_in_headline: bool = knob(
+        False,
+        doc='Whether the fix tasks ddflow files for bugs count in the `status` headline pair and the `Progress:` block ("N of M live tasks done"). Off (default): the pair counts live work tasks, and the fix tasks and the abandoned tasks are listed separately on the same screen, so the headline is the progress of the planned work. On: fix tasks are in N and M. Every bucket of every task record is printed either way and sums to the total, and `--json status` carries `tasks.live`, `tasks.live_done`, `tasks.fix` and `tasks.fix_in_headline`.',
+    )
+    status_completed_shown: int = knob(
+        12,
+        doc="How many of the most recently completed tasks the prose `status` lists under `Completed (last N of TOTAL)`. The count in the headline and the buckets is always the whole queue, never the rows listed. 0 lists every completed task (still bounded by `max_rows` and `max_chars` unless `--full`).",
+        check=int_at_least(0),
+    )
     json_envelope: bool = knob(
         False,
         doc='Answer a `--json` command whose body is a bare array (`progress`, `loops`, ...) as `{"schema": "<command>@<n>", "rows": [...]}` instead, so every `--json` body carries a schema id and version (MP-schema-all). Off by default: the bare array is the shape callers index today and stays so (D-compat); no schema version is bumped for it. An object body, a refusal body and the MCP bodies are the same either way.',

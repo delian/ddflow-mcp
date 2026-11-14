@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "eta.window_days"
+new = "30.0"
+why = "the ETA data tables look back over a rolling window measured at each item's completion."
+effect = "developer-facing time-to-finish estimates read only the recent trend by default."
+impact = "additive"

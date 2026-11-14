@@ -280,3 +280,30 @@ def test_a_real_gitlab_pat_in_an_event_shard_still_fires(tmp_path):
     token = "glpat-" + "zk9LKmcXw3" + "Nc7Kd4Hf6Jg1" + "T7"
     line = "leaked " + token + "\n"
     assert _scan_committed(tmp_path / "real", ".ddflow/events/a.jsonl", line) != 0
+
+
+# Built from pieces so the repository's own scan does not read a 16-hex key literal out of
+# this file: the value lives in tests/, not in the event-shard path the allowlist is scoped
+# to, so a contiguous 16-hex literal here would be a finding on this file itself.
+_CACHE_KEY_DIGEST = "53e9c9b4" + "068d95af"
+
+
+def test_the_cache_key_resultcache_digest_in_an_event_shard_scans_clean(tmp_path):
+    # Bug Bci-gitleaks-over-the-pushed-commi-858efc87b3: ddflow's own `cache_key` resultcache
+    # digest (ddflow/services/gates/runner.py: rc_key[:16], a truncated hash over code and
+    # command) is not a credential; the generic-api-key rule read the digest as the key after
+    # the `key` keyword. The allowlist is anchored to the `cache_key` field name, so the
+    # digest scans clean there.
+    line = '{"cache_key":"' + _CACHE_KEY_DIGEST + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", line) == 0
+
+
+_REAL_KEY_LOOKALIKE = "a1b2c3d4" + "e5f60718"
+
+
+def test_a_16hex_value_under_another_field_in_an_event_shard_still_fires(tmp_path):
+    # Only the `cache_key` field is allowlisted, not a 16-hex shape: a 16-hex value under a
+    # different field in an event shard (here `api_key`) is a real finding, so the field
+    # anchoring cannot regress into suppressing a real key unnoticed.
+    line = '{"api_key":"' + _REAL_KEY_LOOKALIKE + '"}\n'
+    assert _scan_committed(tmp_path / "real", ".ddflow/events/a.jsonl", line) != 0

@@ -327,6 +327,7 @@ def cmd_review(a, c: Ctx) -> int:
         include_pinned=bool(getattr(a, "include_pinned", False)),
         force=bool(a.force),
         reason=a.reason or "",
+        approval=getattr(a, "approval", "") or "",
     )
     _report_refusal(a, c, out)
     return out.exit

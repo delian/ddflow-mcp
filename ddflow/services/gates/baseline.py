@@ -267,8 +267,26 @@ def auto_decision(
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
-    reached = {t.path for t in (*sel.tests, *sel.cut)}
+    #: A failing test blocks auto-accept only when its failure could be caused by the change:
+    #: it is the item's own changed file (``f in changed`` below), reads a changed data file
+    #: (``reaches_data`` below), or its file has a runtime dependency on a changed file -- it
+    #: imports one, uses a name a changed module re-exports, or sits under a changed conftest.
+    #: The selector's heuristic picks alone ("named after", a spelled identifier, a listed
+    #: package, a phrase, a declared ``GOVERNS``) carry no such signal, so a test that merely
+    #: reaches the change that way must not block auto-accept (B2e41928996).
+    reached = {
+        t.path
+        for t in (*sel.tests, *sel.cut)
+        if t.reason.startswith(("imports ", "uses ", "under changed "))
+    }
     files = test_files_of(ids)
+    #: ``select`` records the naming-convention reason FIRST (``_by_name`` runs before
+    #: ``_data_readers`` and the first reason stays), so a data-file reader's own reason never
+    #: shows up in ``sel``: re-match the failing files against the changed data files directly.
+    #: ``tests`` is the FAILING files on purpose (only their dependence matters here); the
+    #: data-file candidate anchor is the same ``tests/`` root ``select`` uses, so the two call
+    #: sites agree (a miss would be the dangerous direction, an unreached reader auto-accepted).
+    reaches_data = set(TS._data_readers(tree, sorted(changed), files))
     # A guard that DECLARES it governs the changed path is reached via its declared scope, not
     # just by import: an architecture guard declares ``GOVERNS = ("ddflow/**", ...)`` AND
     # imports ddflow modules, so testselect records it "imports ..." (that pick ran before
@@ -283,7 +301,14 @@ def auto_decision(
     # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
     # still declined here when the change reaches it, and an unreached one cannot be caused by
     # the change. The `full` branch above substitutes `uncompared` for that missing reach guard.
-    inside = [f for f in files if f in changed or (f in reached and f not in excluded)]
+    # `reaches_data` is deliberately NOT gated by `excluded`: a test that reads a changed data
+    # file has a specific dependence on it (not the trivial whole-tree reach `excluded` strips),
+    # so a guard that also reads a changed data file still blocks.
+    inside = [
+        f
+        for f in files
+        if f in changed or f in reaches_data or (f in reached and f not in excluded)
+    ]
     if inside:
         return {
             **out,

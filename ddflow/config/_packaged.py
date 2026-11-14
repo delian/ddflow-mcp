@@ -1,4 +1,4 @@
-"""The packaged layer: `templates/default.toml`, read under every other layer (CE-defaults-file).
+"""The packaged layer: `templates/default.d/` (or the single `default.toml`), read under every other layer (CE-defaults-file).
 
 The file is generated from the section declarations and pinned to them, so it normally says
 what the dataclass defaults already say. Each knob is therefore COMPARED and only a value that
@@ -22,7 +22,14 @@ import sys
 from dataclasses import fields
 from typing import Any
 
-from ..config_sections._layers import PACKAGED_DEFAULTS, ConfigConflict, read_toml
+from ..config_sections._layers import (
+    PACKAGED_DEFAULTS,
+    PACKAGED_DIR,
+    ConfigConflict,
+    dropin_files,
+    read_dropin_dir,
+    read_toml,
+)
 
 _REPAIR = "repair it with `ddflow pins regenerate --only default-toml`"
 _BUILT_IN = "the built-in defaults apply"
@@ -49,11 +56,16 @@ def _say_drift(keys: list[str]) -> None:
 
 @functools.cache
 def packaged() -> dict[str, Any]:
-    """The parsed packaged file, or `{}` (having warned) when it can not be read."""
-    try:
-        return read_toml(PACKAGED_DEFAULTS)
+    """The parsed packaged defaults, or `{}` (having warned) when they can not be read: the
+    `default.d` drop-in directory when it holds files, else the single `default.toml`."""
+    source = PACKAGED_DIR  # what a failure names, from the probe on
+    try:  # the probe is inside the try: an unreadable directory must warn, not crash
+        if dropin_files(PACKAGED_DIR):
+            return read_dropin_dir(PACKAGED_DIR)
+        source = PACKAGED_DEFAULTS
+        return read_toml(source)
     except (OSError, ValueError, ConfigConflict) as exc:  # ValueError: bad UTF-8 or TOML
-        _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}; {_BUILT_IN}")
+        _say(f"cannot read the packaged {source}: {exc}; {_BUILT_IN}")
         return {}
 
 
