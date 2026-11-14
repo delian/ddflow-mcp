@@ -328,7 +328,7 @@ def moves_between(tree: Path, before: str, after: str) -> list[Move] | None:
         kind = tokens[i]
         n = 2 if kind.startswith("R") else 1
         names = tokens[i + 1 : i + 1 + n]
-        if kind.startswith("R") and len(names) >= 2:
+        if kind.startswith("R") and len(names) == n:
             out.append(Move(names[0], names[-1], "rename"))
         elif kind == "A" and names:
             added.add(names[0])
