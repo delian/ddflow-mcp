@@ -154,13 +154,13 @@ def status(env_name: str, key_file: str = "") -> str:
     so a listing and a review cannot disagree."""
     got = resolve_key(env_name, key_file)
     if got:
-        return f"env ${env_name}" if got.source == "env" else f"file {key_file}"
+        return "env var" if got.source == "env" else f"file {key_file}"
     if got.reason:
         return f"UNAVAILABLE: {got.reason}"
     if not env_name:
         return "keyless"
     return (
-        f'missing: set ${env_name} or add api_key_file = "~/path/to/key" (mode 600) '
+        'missing: set the configured env var or add api_key_file = "~/path/to/key" (mode 600) '
         f"to the local reviewers file"
     )
 
