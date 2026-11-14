@@ -446,6 +446,7 @@ def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path
         "git checkout -- .",
         "git checkout .",
         "git checkout .ddflow/events",
+        "git checkout HEAD .ddflow/events",
         "git clean -fd",
     ):
         r = _check(cmd, cwd=tmp_path)
@@ -455,13 +456,16 @@ def test_discard_forms_refused_in_primary_only_while_events_uncommitted(tmp_path
     # a branch switch is not a discard of the working tree: still allowed
     assert _check("git checkout -b other", cwd=tmp_path) is None
 
-    # a worktree is not the primary checkout: its `git restore .` is allowed (it holds no event
-    # shards, and the guard is for the primary checkout alone).
+    # a worktree is not the primary checkout: its `git restore .` holds back even when the
+    # worktree holds an uncommitted shard -- the guard is for the primary checkout alone.
     _gitc(tmp_path, "-c", "user.name=a", "-c", "user.email=a@b", "checkout", "-q", "-b", "wip")
     _gitc(tmp_path, "add", ".ddflow/events/shard.jsonl")
     _gitc(tmp_path, "commit", "-q", "-m", "committed")
     wt = tmp_path / "wt"
     subprocess.run(["git", "-C", str(tmp_path), "worktree", "add", "-q", str(wt)], check=True)
+    (wt / ".ddflow" / "events" / "shard.jsonl").write_text(
+        '{"id":"e1","kind":"a"}\n{"id":"e2","kind":"b"}\n{"id":"e3","kind":"c"}\n'
+    )
     assert _check("git restore .", cwd=wt) is None
 
     assert _check("git restore .", cwd=tmp_path) is None

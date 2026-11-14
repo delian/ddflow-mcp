@@ -95,6 +95,8 @@ _EVENT_DISCARD_INSTEAD = (
 #: revert `.ddflow/events/*.jsonl` appends (or delete shards git has not committed) in the primary
 #: checkout, which is why they are refused there while shards are uncommitted (Ba34619983b).
 _GIT_DISCARD_SUBCOMMANDS = frozenset({"restore", "clean"})
+#: `git checkout` flags whose value (the NEXT word) is a branch name, not a path.
+_CHECKOUT_VALUED = frozenset({"-b", "-B", "-t", "-l"})
 
 
 @dataclass(frozen=True)
@@ -897,12 +899,21 @@ def _git_discard(words: list[str]) -> str:
         rest = args[1:]
         if "--" in rest:
             return "checkout"
-        for w in rest:
-            if w.startswith("-"):
+        # `-b`/`-B`/`-t`/`-l` take the next word as their value (a branch name, not a path).
+        positions: list[str] = []
+        i = 0
+        while i < len(rest):
+            w = rest[i]
+            if w in _CHECKOUT_VALUED:
+                i += 2
                 continue
-            if w.startswith((".", "/")):
-                return "checkout"
-            break  # a bare word could be a branch or a path: judge it as a branch switch
+            if not w.startswith("-"):
+                positions.append(w)
+            i += 1
+        # a path starts with `.`/`/` (never a branch), or two positionals is the `<tree-ish> <path>`
+        # restore form; one bare positional is judged a branch switch.
+        if any(w.startswith((".", "/")) for w in positions) or len(positions) > 1:
+            return "checkout"
     return ""
 
 
