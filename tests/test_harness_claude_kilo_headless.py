@@ -119,7 +119,7 @@ def test_a_verified_fact_names_the_probe_and_the_tool_version(h):
         words = node["probe"].split()
         # read-only: the tool's own --version or --help as the LAST word of a two or three word
         # command, or the one environment listing piped to grep; never a bare run or env <cmd>
-        env_listing = node["probe"].startswith("env | grep ^")
+        env_listing = re.fullmatch(r"env \| grep \^[A-Z_]+", node["probe"]) is not None
         assert env_listing or (words[-1] in ("--version", "--help") and len(words) <= 3), (
             h.id, key, node["probe"], "a verified fact's probe must be read-only",
         )  # fmt: skip
