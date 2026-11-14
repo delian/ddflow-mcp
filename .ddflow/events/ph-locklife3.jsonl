@@ -109,3 +109,5 @@
 {"agent":"ph-locklife3","data":{"gate":"ci"},"id":"e160fdf1942f8dba7eaa12627","kind":"gate.started","lamport":198511,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T01:58:31.649778Z"}
 {"agent":"ph-locklife3","data":{"at":1794622414.1859777,"holder":"ph-locklife3"},"id":"e190702175f22eb3b1e7b6533","kind":"lease.renewed","lamport":198541,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T02:13:34.325144Z"}
 {"agent":"ph-locklife3","data":{"at":1794623320.0266836,"holder":"ph-locklife3"},"id":"e5ecf5a7a5c5240c624eb3022","kind":"lease.renewed","lamport":198564,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T02:28:40.230020Z"}
+{"agent":"ph-locklife3","data":{"at":1794624222.3923304,"holder":"ph-locklife3"},"id":"e857f14e026f2d5b8c268e2ae","kind":"lease.renewed","lamport":198579,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T02:43:42.491000Z"}
+{"agent":"ph-locklife3","data":{"at":1794625124.826787,"holder":"ph-locklife3"},"id":"e3b8ab7bd833a682bc1cfbc08","kind":"lease.renewed","lamport":198596,"schema":1,"subject":"MV-path-moves","ts":"2026-11-14T02:58:45.037838Z"}
