@@ -95,8 +95,9 @@ _EVENT_DISCARD_INSTEAD = (
 #: revert `.ddflow/events/*.jsonl` appends (or delete shards git has not committed) in the primary
 #: checkout, which is why they are refused there while shards are uncommitted (Ba34619983b).
 _GIT_DISCARD_SUBCOMMANDS = frozenset({"restore", "clean"})
-#: `git checkout` flags whose value (the NEXT word) is a branch name, not a path.
-_CHECKOUT_VALUED = frozenset({"-b", "-B", "-t", "-l"})
+#: `git checkout` flags whose value (the NEXT word) is a branch name, not a path. `-t`/`-l`
+#: are boolean, not valued, so a valid `git checkout -l -b feature HEAD` stays a branch switch.
+_CHECKOUT_VALUED = frozenset({"-b", "-B", "-o"})
 
 
 @dataclass(frozen=True)
