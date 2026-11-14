@@ -100,8 +100,8 @@ def test_the_file_stays_under_the_size_limit():
 def test_the_size_limit_assert_renders_no_config_repr():
     """B82787201d0: ci's "new offender in an already-red test" compares the assertion text, so
     a failure reason that embeds `Config()`'s dataclass repr reads as a NEW failure whenever a
-    knob is added. The size-limit assert must name only int locals -- `Config` may appear in
-    neither its expression nor its message."""
+    knob is added. The size-limit assert must not reference `Config` -- neither its expression
+    nor its message."""
     import ast
     import inspect
 
