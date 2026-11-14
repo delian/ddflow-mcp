@@ -77,10 +77,15 @@ class JinjaRenderer:
             import jinja2
         except ImportError:
             return _render_file_stdlib(_read(directory, template), vars)
-        env = jinja2.Environment(  # nosec B701
+        env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(str(directory)),
             undefined=jinja2.StrictUndefined,
             keep_trailing_newline=True,
+            autoescape=jinja2.select_autoescape(
+                enabled_extensions=("html", "htm", "xml"),
+                default_for_string=False,
+                default=False,
+            ),
         )
         try:
             return env.get_template(template).render(**vars)
