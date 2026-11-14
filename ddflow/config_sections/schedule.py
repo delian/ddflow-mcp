@@ -297,7 +297,7 @@ class ScheduleConfig:
     )
     bugs_first: bool = knob(
         True,
-        doc="Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` orders by priority alone.",
+        doc="Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` makes the `bugs_first` key neutral (`order` still ranks `recover_first` and `unphased_first` ahead of it).",
     )
     reserved_slots: int = knob(
         0,
