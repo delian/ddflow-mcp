@@ -260,6 +260,10 @@ base_url = "http://127.0.0.1:11434/v1"
 model  = "qwen3:8b"
 family = "alibaba"              # must differ from the author's family
 gates  = ["critic"]
+# Optional: rank this gate's reviewers. Lower is served first; priority orders only
+# reviewers of the same cross-family tier (a reviewer outside the author's family
+# still serves before a same-family one whatever their priorities). Default 100.
+priority = 100
 # Optional: start it if it is not already running.
 launch = { command = "ollama serve", ready_url = "http://127.0.0.1:11434/v1/models" }
 
