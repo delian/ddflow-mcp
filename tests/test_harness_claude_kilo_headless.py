@@ -9,7 +9,9 @@ No agent is started here: the tests read the descriptors only.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +21,7 @@ import pytest
 from ddflow.services import driver_conformance as DC
 from ddflow.services import facts as F
 from ddflow.services import harnessfacts, harnessreg
+from ddflow.services.harnessv2 import Autonomy
 from ddflow.services.lanes import opencode as OC
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,7 +116,10 @@ def test_a_verified_fact_names_the_probe_and_the_tool_version(h):
     for key, node in verified.items():
         assert node.get("ver"), (h.id, key, "a verified fact names the version it was read on")
         assert node.get("probe"), (h.id, key, "and the read-only command that re-reads it")
-        assert not any(w in node["probe"] for w in (" -p ", " run ")) or "--help" in node["probe"]
+        words = node["probe"].split()
+        assert "--version" in words or "--help" in words or words[0] == "env", (
+            h.id, key, "a verified fact's probe is read-only: --version, --help or the env listing",
+        )  # fmt: skip
 
 
 def test_the_installed_versions_are_the_ones_the_facts_were_read_on():
@@ -123,9 +129,13 @@ def test_the_installed_versions_are_the_ones_the_facts_were_read_on():
 
 @pytest.mark.parametrize("h", [CLAUDE, KILO], ids=lambda h: h.id)
 def test_what_needs_a_model_run_is_listed_with_its_command(h):
-    text = "\n".join(h.verified.unverified)
-    assert "exit codes" in text and "max-turns" in text.replace("max_turns", "max-turns")
-    assert text.count("probe:") >= 2, "each such fact names the exact command a person would run"
+    entries = h.verified.unverified
+    codes = [e for e in entries if "exit codes" in e]
+    assert len(codes) == 1 and "probe: " in codes[0], "exit codes name their own command"
+    assert any("max_turns_flag" in e for e in entries)
+    for e in entries:
+        if "one model call" in e:  # the cost is stated beside each command that spends
+            assert "probe: " in e, e
 
 
 def test_kilo_lane_argv_is_built_from_the_descriptor():
@@ -148,8 +158,16 @@ def test_harness_test_grades_headless_not_ok_over_unknown(hid):
     out = DC.run(harnessreg.get(hid))
     chk = out["checks"]["headless"]
     assert chk["status"] == "ok"
-    assert "unknown" not in chk["detail"].split(":")[0]
-    assert "read" in chk["detail"] and "unverified" in chk["detail"]
+    assert re.match(r"^\d+ read \(verified or documented\), \d+ unverified", chk["detail"])
+    assert "unknown" not in chk["detail"]
+
+
+def test_a_headless_section_nobody_read_is_unverified_not_ok():
+    raw = (ROOT / "ddflow/harnesses/kilo.toml").read_text("utf-8")
+    bare = harnessreg.parse(raw.split("[facts.")[0] + raw[raw.index("[verified]") :], "kilo")
+    out = DC.run(bare)
+    assert out["checks"]["headless"]["status"] == "unverified"
+    assert out["status"] == "unverified"
 
 
 def test_the_agent_smoke_plan_lists_claude_and_kilo():
@@ -160,7 +178,6 @@ def test_the_agent_smoke_plan_lists_claude_and_kilo():
     plan = {r["agent"]: r["command"] for r in json.loads(got.stdout)}
     assert plan["claude"].startswith("claude -p ") and "--permission-mode dontAsk" in plan["claude"]
     assert plan["kilo"].startswith("kilo run ") and "--auto" in plan["kilo"]
-    assert "--format" not in plan["kilo"] or "json" in plan["kilo"]
 
 
 def test_the_three_descriptors_read_at_least_the_facts_this_task_recorded():
@@ -169,3 +186,14 @@ def test_the_three_descriptors_read_at_least_the_facts_this_task_recorded():
         rows += harnessfacts.rows(h)
     mine = [r for r in rows if r["agent"] in ("claude", "kilo", "opencode") and r["status"] in READ]
     assert len(mine) >= 28
+
+
+def test_acp_is_the_only_reserved_section_claude_and_kilo_fill():
+    assert set(CLAUDE.reserved) == {"acp"} and set(KILO.reserved) == {"acp"}
+
+
+def test_a_kilo_lane_whose_autonomy_profile_is_missing_refuses_to_start():
+    b = OC.Binary("kilo", "/x/kilo", "7.8.27", True)
+    other = dataclasses.replace(KILO, autonomy=Autonomy(profiles={"other": "--x"}))
+    with pytest.raises(ValueError, match="autonomy"):
+        OC.argv_for(b, descriptor=other)

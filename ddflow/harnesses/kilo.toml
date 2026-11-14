@@ -89,7 +89,7 @@ d = "2026-11-14"
 ver = "7.8.27"
 probe = "kilo --version"
 by = "read-only probe, lane-xa-headless-facts"
-note = "binary name kilo, installed at ~/.local/bin/kilo"
+note = "binary name kilo, installed at ~/.local/bin/kilo as a Node.js script (#!/usr/bin/env node). The name is the command ddflow runs; a RUNNING kilo was seen (ps) as comm MainThread, args node /home/delian/.local/bin/kilo, with a child binary .kilo, so a match on the running process comm would miss it"
 
 [facts."detect.client_names"]
 s = "documented"
@@ -188,6 +188,6 @@ unverified = [
   "[headless] max_turns_flag: kilo run --help lists no turn cap, so none is set; whether a hidden one exists was not run",
   "[headless] exit codes of a run (success, error, permission denied); probe: kilo run --format json --auto -m <provider/model> \"say ok\"; echo $? (one model call)",
   "[headless] mcp_flag: kilo run --help has no MCP flag; MCP servers come from the config file (kilo.json, `mcp` key); probe: kilo debug config",
-  "[detect] env: no environment variable that only a running kilo sets was read",
+  "[detect] env: the only KILO-prefixed variable seen on a running kilo child (read from /proc, names only) was KILO_TREE_SITTER_WASM_DIR, an internal path; whether the agent's tool subprocesses inherit it, and any session id variable, were not read; probe: kilo run --help lists none",
   "[acp] whether kilo acp speaks ACP on stdio or on the --port it lists (it starts a server, so a person runs it); probe: kilo acp --port 0 < /dev/null",
 ]

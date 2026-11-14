@@ -81,8 +81,10 @@ def run(h) -> dict:
 
     checks["headless"] = _headless(h)
 
-    ok = all(c["status"] == "ok" for c in checks.values())
-    return {"agent": hid, "status": "ok" if ok else "failed", "checks": checks}
+    states = {c["status"] for c in checks.values()}
+    # failed beats unverified beats ok: a declared section nobody read is never a pass
+    status = "failed" if "failed" in states else "unverified" if "unverified" in states else "ok"
+    return {"agent": hid, "status": status, "checks": checks}
 
 
 def _headless(h) -> dict:
@@ -98,4 +100,5 @@ def _headless(h) -> dict:
     read = [r["fact"] for r in rows if r["status"] in facts.READABLE]
     left = [r["fact"] for r in rows if r["status"] not in facts.READABLE]
     detail = f"{len(read)} read (verified or documented), {len(left)} unverified"
-    return {"status": "ok", "detail": detail + (": " + ", ".join(left) if left else "")}
+    detail += ": " + ", ".join(left) if left else ""
+    return {"status": "ok" if read else "unverified", "detail": detail}

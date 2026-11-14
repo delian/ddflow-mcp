@@ -204,9 +204,14 @@ def argv_for(b: Binary, *, descriptor: Any = None) -> tuple[str, ...]:
     head = h.headless if h is not None else None
     if head is None or head.none or not head.argv:
         raise ValueError(f"{b.name}: the descriptor gives no [headless].argv")
-    auto = ()
-    if head.autonomy and h.autonomy is not None:
-        auto = tuple(h.autonomy.profiles.get(head.autonomy, "").split())
+    auto: tuple[str, ...] = ()
+    if head.autonomy:
+        profiles = h.autonomy.profiles if h.autonomy is not None and not h.autonomy.none else {}
+        if head.autonomy not in profiles:  # a lane that cannot run unattended must not start
+            raise ValueError(
+                f"{b.name}: [headless].autonomy {head.autonomy!r} is not an [autonomy] profile"
+            )
+        auto = tuple(profiles[head.autonomy].split())
     # the task text is a private file (the closed placeholder list has no prompt); `--file` takes
     # a list, so it comes last and the one-line message first (run --help of both)
     return (b.path, *head.argv[1:], MESSAGE, head.output_flag, head.output_format,
