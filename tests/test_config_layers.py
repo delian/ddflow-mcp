@@ -73,9 +73,20 @@ def test_a_dropped_non_string_entry_is_stringified_not_raised():
     """`docs.extract` is `list[dict]`: a dropped dict entry must be NAMED, never a
     `TypeError` from joining it (rubber_duck finding on the first revision)."""
     cfg = Config()
+    cfg.sources["docs.extract"] = "file"
     cfg._note_dropped("docs.extract", [{"kind": "flags"}, {"kind": "tools"}], [], "local")
     note = " ".join(cfg.dropped_members)
     assert "kind" in note, note
+
+
+def test_overriding_a_non_empty_default_is_not_a_drop(tmp_path):
+    """`dedupe.kinds` defaults to every kind; the file layer narrowing it is a legitimate
+    visible override of the packaged default, NOT a silent loosening of a config layer, so
+    it must not be recorded (roborev medium on the first revision)."""
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text('[dedupe]\nkinds = ["bug", "task"]\n')
+    cfg = Config.load(tmp_path)
+    assert cfg.dropped_members == [], cfg.dropped_members
 
 
 def test_a_changed_dropped_set_is_said_again(tmp_path, capsys):

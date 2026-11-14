@@ -88,15 +88,16 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     return value
 
 
-def _dropped_list_entries(below: Any, value: Any) -> list[str] | None:
+def _dropped_list_entries(below: Any, value: Any) -> list[Any] | None:
     """Entries ``value`` (a later layer's list) dropped that ``below`` (the accumulated,
     higher layer's list) held: the entries whose set the lower layer replaced out of
     existence (D-config-layer-order: lists replace). ``None`` when there is no list
     replacement or nothing was dropped. Duplicates are dropped (``==``-based, so the
-    elements need not be hashable)."""
+    elements need not be hashable, and they are not always strings: `docs.extract` is
+    `list[dict]`)."""
     if not isinstance(below, list) or not isinstance(value, list) or not below:
         return None
-    dropped: list[str] = []
+    dropped: list[Any] = []
     for entry in below:
         if entry in dropped or entry in value:
             continue
@@ -450,16 +451,24 @@ class Config(_SectionFields):
             self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
 
     def _note_dropped(self, key: str, below: Any, value: Any, source: str) -> None:
-        """Record that ``source`` (a later layer) replaced ``key``'s list and dropped entries
-        ``below`` (the accumulated, higher layer's list) held, when the two differ
-        (D-config-layer-order: lists replace). The note names the dropped entries and the
-        layer that had set them, for `_warn_dropped` and `doctor` (r-tighten-only)."""
-        if dropped := _dropped_list_entries(below, value):
-            self.dropped_members.append(
-                f"{key}: the {source} layer replaced the list and dropped "
-                f"{', '.join(str(e) for e in dropped)} "
-                f"(set by the {self.sources.get(key, 'default')} layer)"
-            )
+        """Record that ``source`` (a later config LAYER) replaced ``key``'s list and dropped
+        entries ``below`` (the accumulated, higher config layer's list) held, when the two
+        differ (D-config-layer-order: lists replace). The note names the dropped entries and
+        the layer that had set them, for `_warn_dropped` and `doctor` (r-tighten-only).
+
+        The packaged default is a BASELINE a project legitimately overrides, so it is not a
+        "layer" whose list a later config file may silently loosen: only a drop of what a
+        real config layer (file/local/env) had set is noted (roborev medium)."""
+        earlier = self.sources.get(key, "default")
+        if earlier == "default" or (
+            dropped := _dropped_list_entries(below, value)
+        ) is None:
+            return
+        self.dropped_members.append(
+            f"{key}: the {source} layer replaced the list and dropped "
+            f"{', '.join(str(e) for e in dropped)} "
+            f"(set by the {earlier} layer)"
+        )
 
     def _apply_export_tables(
         self, values: dict[str, Any], soft: Callable[[str], bool], source: str
