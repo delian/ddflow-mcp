@@ -115,7 +115,7 @@ def excl_worker(args):
                 won += 1
             else:
                 tmp = os.path.join(root, f".t-{os.getpid()}-{i}")
-                os.close(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+                os.close(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
                 try:
                     os.link(tmp, target)
                 except FileExistsError:
