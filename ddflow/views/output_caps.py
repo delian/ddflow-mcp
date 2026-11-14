@@ -139,10 +139,11 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
     return info
 
 
-def _quote_arg(value: str) -> str:
-    """`value` for a footer CLI command: one starting with ``-`` is single-quoted, so a pasted
-    command is not read as a flag (B-next-paging-drops-filters)."""
-    return "'" + value + "'" if value.startswith("-") else shlex.quote(value)
+def _flag_arg(flag: str, value: str) -> str:
+    """A ``--flag <value>`` footer fragment: a dash-leading value uses ``--flag=value`` (argparse
+    reads the leading dash as the value, not another option), and ``shlex.quote`` escapes
+    embedded quotes and spaces (B-next-paging-drops-filters)."""
+    return f"{flag}={shlex.quote(value)}" if value.startswith("-") else f"{flag} {shlex.quote(value)}"
 
 
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
@@ -151,9 +152,8 @@ def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     is `next` listing one state: the calls it names keep the state, and its `items` list pages.
     A non-lane ``next`` narrowed with its own flags carries them in the token, so a cut
     list's page footer names the SAME filtered list (B-next-paging-drops-filters)."""
-    base, _, rest = command.partition(" --state ")
-    if rest:
-        return _state_entry(base, rest)
+    if command.startswith("next --state "):
+        return _state_entry("next", command[len("next --state ") :])
     if command.startswith("next --lane "):
         return _lane_entry(command)
     if command.startswith("next "):
@@ -168,17 +168,17 @@ def _state_entry(base: str, rest: str) -> tuple[str, str, tuple[str, str] | None
     """The ``next --state S`` footer: keep the state and its kind/phase/tag selection."""
     cli, tool, _narrow, _paged = COMMANDS[base]
     state, kind, phase, only, tags = _split_state(rest)
-    c_args, t_args = [f"--state {_quote_arg(state)}"], [f"state={shlex.quote(state)}"]
+    c_args, t_args = [_flag_arg("--state", state)], [f"state={shlex.quote(state)}"]
     for flag, val in (("kind", kind), ("phase", phase)):
         if val:
-            c_args.append(f"--{flag} {_quote_arg(val)}")
+            c_args.append(_flag_arg(f"--{flag}", val))
             t_args.append(f"{flag}={shlex.quote(val)}")
     if only:
         c_args.append("--phase-only")
         t_args.append("phase_only=true")
     if tags:
         for t in tags:
-            c_args.append(f"--tag {_quote_arg(t)}")
+            c_args.append(_flag_arg("--tag", t))
         t_args.append("tag=" + ",".join(tags))
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", None, "items"
 
@@ -187,10 +187,10 @@ def _lane_entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """The ``next --lane L`` footer: keep the lane, kind and phase (its answer pages no list)."""
     cli, tool, narrow, _paged = COMMANDS["next"]
     lane, kind, phase, only = _split_lane(command[len("next --lane ") :])
-    c_args, t_args = [f"--lane {_quote_arg(lane)}"], [f"lane={shlex.quote(lane)}"]
+    c_args, t_args = [_flag_arg("--lane", lane)], [f"lane={shlex.quote(lane)}"]
     for flag, val in (("kind", kind), ("phase", phase)):
         if val:
-            c_args.append(f"--{flag} {_quote_arg(val)}")
+            c_args.append(_flag_arg(f"--{flag}", val))
             t_args.append(f"{flag}={shlex.quote(val)}")
     if only:
         c_args.append("--phase-only")
@@ -207,17 +207,17 @@ def _plain_next_entry(command: str) -> tuple[str, str, tuple[str, str] | None, s
         return None
     c_args, t_args = [], []
     if kind:
-        c_args.append(f"--kind {_quote_arg(kind)}")
+        c_args.append(_flag_arg("--kind", kind))
         t_args.append(f"kind={shlex.quote(kind)}")
     if phase:
-        c_args.append(f"--phase {_quote_arg(phase)}")
+        c_args.append(_flag_arg("--phase", phase))
         t_args.append(f"phase={shlex.quote(phase)}")
     if only:
         c_args.append("--phase-only")
         t_args.append("phase_only=true")
     if tags:
         for t in tags:
-            c_args.append(f"--tag {_quote_arg(t)}")
+            c_args.append(_flag_arg("--tag", t))
         t_args.append("tag=" + ",".join(tags))
     return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, paged
 

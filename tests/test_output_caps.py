@@ -500,10 +500,10 @@ def test_next_page_footer_names_the_same_filtered_list(repo, monkeypatch):
 
 
 def test_next_page_footer_quotes_a_dash_leading_value_and_a_lane_text_tag(repo, monkeypatch):
-    """A dash-leading tag would be read as a flag, and a tag containing ` --lane ` would be
-    re-read as a lane command: both must survive as `--tag` values (rubber_duck findings)."""
+    """A dash-leading tag must use the ``--flag=value`` form (argparse reads a bare leading
+    dash as an option), and a tag containing ` --lane ` must not be re-read as a lane command."""
     dash = _nonlane_footer(monkeypatch, repo, {"tag": ["-wave:2"]})
-    assert dash["cursor_cli"] == "ddflow next --tag '-wave:2' --cursor 50"
+    assert dash["cursor_cli"] == "ddflow next --tag=-wave:2 --cursor 50"
     lane_text = _nonlane_footer(monkeypatch, repo, {"tag": ["a --lane b"]})
     assert lane_text["cursor_cli"] == "ddflow next --tag 'a --lane b' --cursor 50"
 
