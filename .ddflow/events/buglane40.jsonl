@@ -5,3 +5,4 @@
 {"agent":"buglane40","data":{},"id":"ea4a8402524f73c49f9f25ecc","kind":"item.started","lamport":199233,"schema":1,"subject":"fix-B93e00ef048","ts":"2026-11-14T10:34:12.369445Z"}
 {"agent":"buglane40","data":{"at":1794652631.6290724,"holder":"buglane40"},"id":"e1542d7860b18f05504ec5ea3","kind":"lease.renewed","lamport":199254,"schema":1,"subject":"fix-B93e00ef048","ts":"2026-11-14T10:37:11.854405Z"}
 {"agent":"buglane40","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e179315900e9c892d3918c2d7","kind":"cadence.ran","lamport":199255,"schema":1,"subject":"recall_recheck:fix-B93e00ef048","ts":"2026-11-14T10:37:17.387125Z"}
+{"agent":"buglane40","data":{"gate":"unit_tests"},"id":"ea74e268faa1576bfc35b93f6","kind":"gate.started","lamport":199259,"schema":1,"subject":"fix-B93e00ef048","ts":"2026-11-14T10:37:59.729313Z"}
