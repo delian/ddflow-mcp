@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: the rendering of the descriptor's [headless] template for fixed inputs; a snapshot of what ddflow would launch, not a capture of a run of kilo (its flags were read from --help)",
+    "version": "unversioned"
+  },
+  "inputs": {
+    "model": "m1",
+    "session": "s1",
+    "cwd": "/w"
+  },
+  "expect": [
+    "kilo",
+    "run",
+    "--model",
+    "m1",
+    "--session",
+    "s1",
+    "--auto",
+    "--format",
+    "json"
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: invented lines in the shape of `kilo run --format json` events that SW-live-smoke read live on kilo 7.8.18 (ddflow/services/lanes/opencode.py STREAM_RULES); no model was called to produce this file; replace with a live recording",
+    "version": "unversioned"
+  },
+  "rules": [
+    {
+      "when": {
+        "path": "type",
+        "equals": "step_start"
+      },
+      "emit": "started",
+      "fields": {
+        "session": "sessionID"
+      }
+    },
+    {
+      "when": {
+        "path": "type",
+        "equals": "tool_use"
+      },
+      "emit": "tool",
+      "fields": {
+        "name": "part.tool",
+        "action": "part.state.input.action",
+        "error": "part.state.error",
+        "output": "part.state.output",
+        "status": "part.state.status"
+      }
+    },
+    {
+      "when": {
+        "path": "type",
+        "equals": "step_finish"
+      },
+      "emit": "usage",
+      "fields": {
+        "tokens": "part.tokens.total",
+        "cost": "part.cost"
+      }
+    },
+    {
+      "when": {
+        "path": "type",
+        "equals": "error"
+      },
+      "emit": "error",
+      "fields": {
+        "message": "error.data.message"
+      }
+    }
+  ],
+  "lines": [
+    {
+      "type": "step_start",
+      "sessionID": "ses-1"
+    },
+    {
+      "type": "tool_use",
+      "part": {
+        "tool": "bash",
+        "state": {
+          "input": {
+            "action": "x"
+          },
+          "output": "ok",
+          "status": "completed"
+        }
+      }
+    },
+    {
+      "type": "text",
+      "part": {
+        "text": "hi"
+      }
+    },
+    {
+      "type": "step_finish",
+      "part": {
+        "tokens": {
+          "total": 12
+        },
+        "cost": 0.5
+      }
+    }
+  ],
+  "exit_code": 0,
+  "expect": {
+    "events": [
+      [
+        "started",
+        {
+          "session": "ses-1"
+        }
+      ],
+      [
+        "tool",
+        {
+          "name": "bash",
+          "action": "x",
+          "output": "ok",
+          "status": "completed"
+        }
+      ],
+      [
+        "usage",
+        {
+          "tokens": 12,
+          "cost": 0.5
+        }
+      ]
+    ],
+    "skipped": 1,
+    "state": "exited"
+  }
+}

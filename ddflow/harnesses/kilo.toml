@@ -62,9 +62,132 @@ wait = "background process + ddflow wait"
 persist = "kilo memory (orchestrator_wave:<scope>)"
 stop = "question tool / operator approval"
 
+[detect]
+process_names = ["kilo"]
+client_names = ["kilo"]
+
+[headless]
+argv = ["kilo", "run"]
+model_flag = "--model"
+effort_flag = "--variant"
+output_flag = "--format"
+output_format = "json"
+resume_flag = "--session"
+autonomy = "auto"
+
+[autonomy]
+profiles = { auto = "--auto" }
+
+[acp]
+command = "kilo acp"
+cwd_flag = "--cwd"
+
+[facts."detect.process_names"]
+s = "verified"
+src = "probe: which kilo; kilo --version -> 7.8.27"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo --version"
+by = "read-only probe, lane-xa-headless-facts"
+note = "binary name kilo, installed at ~/.local/bin/kilo"
+
+[facts."detect.client_names"]
+s = "documented"
+src = "docs/ddflow/research/mcp-client-matrix.md (clientInfo kilo/7.8.12, VERIFIED there)"
+d = "2026-11-14"
+ver = "7.8.12"
+note = "read at an initialize handshake by an earlier probe; not re-read on 7.8.27"
+
+[facts."headless.argv"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "kilo run [message..]; the message is positional. The lane also passes --dir <worktree> (directory to run in) and --file <task file> (--file takes a list, so it comes last): ddflow/services/lanes/opencode.py argv_for adds both, the descriptor has no field for them"
+
+[facts."headless.model_flag"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "-m, --model provider/model"
+
+[facts."headless.effort_flag"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--variant: provider-specific reasoning effort (high, max, minimal)"
+
+[facts."headless.output_flag"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--format default|json"
+
+[facts."headless.output_format"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "json = raw JSON events; the event line shapes were read live on 7.8.18 by SW-live-smoke (opencode.py STREAM_RULES), not re-run here"
+
+[facts."headless.resume_flag"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "-s, --session <id>; -c, --continue takes the last session; --fork copies it"
+
+[facts."autonomy.profiles"]
+s = "verified"
+src = "probe: kilo run --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo run --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--auto: auto-approve permissions that are not explicitly denied (the help says dangerous)"
+
+[facts."acp.command"]
+s = "verified"
+src = "probe: kilo acp --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo acp --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "start ACP (Agent Client Protocol) server"
+
+[facts."acp.cwd_flag"]
+s = "verified"
+src = "probe: kilo acp --help"
+d = "2026-11-14"
+ver = "7.8.27"
+probe = "kilo acp --help"
+by = "read-only probe, lane-xa-headless-facts"
+note = "--cwd working directory, default /tmp; --port, --hostname, --cors also listed"
+
 [verified]
-date = "2026-10-09"
+date = "2026-11-14"
 sources = ["https://github.com/Kilo-Org/kilocode"]
 record = "R-hx-kilo"
-probe = "kilo --version -> 7.2.20; kilo mcp --help; kilo agent --help; kilo debug paths"
-
+probe = "kilo --version -> 7.8.27; kilo --help; kilo run --help; kilo acp --help; kilo mcp --help; kilo debug --help (read-only, 2026-11-14)"
+unverified = [
+  "[headless] max_turns_flag: kilo run --help lists no turn cap, so none is set; whether a hidden one exists was not run",
+  "[headless] exit codes of a run (success, error, permission denied); probe: kilo run --format json --auto -m <provider/model> \"say ok\"; echo $? (one model call)",
+  "[headless] mcp_flag: kilo run --help has no MCP flag; MCP servers come from the config file (kilo.json, `mcp` key); probe: kilo debug config",
+  "[detect] env: no environment variable that only a running kilo sets was read",
+  "[acp] whether kilo acp speaks ACP on stdio or on the --port it lists (it starts a server, so a person runs it); probe: kilo acp --port 0 < /dev/null",
+]

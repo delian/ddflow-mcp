@@ -208,6 +208,24 @@ turn_flag = "--max-turns"       # the turn cap flag
 exit_codes = "0"                # comma list of accepted exit codes
 ```
 
+### Headless, detect, autonomy and acp facts: the evidence rule
+
+A `[headless]`, `[detect]`, `[autonomy]` or `[acp]` value is data; its provenance is a
+`[facts."<section>.<key>"]` overlay with `s`, `src`, `d` and, for a probed fact, `ver`
+(the tool version it was read on) and `probe` (the read-only command that re-reads it).
+`verified` means it was read on a machine that has the tool, by a read-only probe only
+(`--version`, `--help`, a subcommand's help, listing config): no model call, no login, no
+network, no session. `documented` is a value read from a vendor page or an earlier recorded
+probe that was not repeated. Whatever needs a model run stays `unverified` and goes in
+`[verified].unverified` as `probe: <the exact command a person would run>`, with the cost
+stated; a flag that a tool's `--help` does not list is left out, never guessed. A section the
+agent has no native form of says `none = true` (claude has no ACP server: `[acp] none = true`);
+kilo fills `[acp]` with `command` and `cwd_flag`. `kilo` and `opencode` share one run command:
+the lane (`ddflow/services/lanes/opencode.py`, `argv_for`) reads its run command, model and
+output flags and `--auto` profile from the descriptor; only `--dir` and `--file` stay in code.
+`ddflow harness test <id>` grades `headless` by counting its facts read against unverified.
+The shipped claude and kilo facts were read on claude 2.1.323 and kilo 7.8.27 (2026-11-14).
+
 `scripts/ci/agent-smoke plan` lists the commands and runs nothing; `agent-smoke run <agent>
 --live` starts the REAL agent in a throwaway project (`agent.smoke` records the verdict). It
 asserts only on the event log: the MCP tool was called, a claim exists under a distinct
