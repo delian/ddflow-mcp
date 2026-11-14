@@ -92,7 +92,21 @@ def test_required_gates_stay_stated_once_in_the_gates_section():
 
 
 def test_the_file_stays_under_the_size_limit():
-    assert PACKAGED_DEFAULTS.stat().st_size < Config().quality.max_file_bytes
+    size = PACKAGED_DEFAULTS.stat().st_size
+    limit = Config().quality.max_file_bytes
+    assert size < limit
+
+
+def test_the_size_limit_assert_renders_no_config_repr():
+    """B82787201d0: ci's "new offender in an already-red test" compares the assertion text, so
+    a failure reason that embeds `Config()`'s dataclass repr reads as a NEW failure whenever a
+    knob is added. The size-limit assert must name only its operands' locals, so its reason is
+    two ints, never a Config repr."""
+    import inspect
+
+    src = inspect.getsource(test_the_file_stays_under_the_size_limit)
+    assert_line = next(line for line in src.splitlines() if "assert" in line)
+    assert "Config()" not in assert_line, assert_line
 
 
 @pytest.mark.parametrize("damage", [b"\xff\xfe not utf-8", b""], ids=["bytes", "empty"])
