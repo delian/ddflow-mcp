@@ -72,7 +72,7 @@ a value) of the secret-shaped variables in the gate's evidence (`env_secret_mode
 and `ddflow doctor` notes them; `on` removes them from every gate and CI child; `off` does neither.
 `[gates].secret_name_patterns` says which names match (default `_API_KEY`, `_TOKEN`, `_SECRET`,
 `_PASSWORD`, `_PASSWD`; a variable whose name contains one, compared case-blind), and
-`[gates].keep_env` (`[ci].keep_env` for CI) preserves one a gate needs (a gate that runs `ddflow review` lists its reviewer key variable there; `[ci].keep_env` applies to a bare `ddflow ci run`, while the `ci` gate's command is built from `[gates].keep_env` and its evidence names what that command saw); the environment variable of a knob (`DDFLOW_GATES_SCRUB_SECRET_NAMES`) never matches. Four ways to set it:
+`[gates].keep_env` (`[ci].keep_env` for CI) preserves one a gate needs (a gate that runs `ddflow review` lists its reviewer key variable there; `[ci].keep_env` applies to a bare `ddflow ci run`, while the `ci` gate's command is built from `[gates].keep_env` and its evidence names what that command saw). Names in `keep_env` and `scrub_env` are exact (environment variables are case-sensitive; only the patterns match case-blind), and a variable a gate declares itself (`env` in its definition, or a one-off `--env`) is the project's own choice: it is neither scrubbed nor named, and the evidence names the AMBIENT variables the command inherited; the environment variable of a knob (`DDFLOW_GATES_SCRUB_SECRET_NAMES`) never matches. Four ways to set it:
 
 - the file: `[gates]` `scrub_secret_names = "on"` in `.ddflow/config.toml` (or `.ddflow/local/config.toml` for this machine);
 - the CLI: `ddflow config --set gates.scrub_secret_names on`; per run, `DDFLOW_GATES_SCRUB_SECRET_NAMES=on`;
