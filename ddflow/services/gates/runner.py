@@ -24,7 +24,7 @@ from .. import tree_bin as TB
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
-from ..gateenv import child_env
+from ..gateenv import child_env, env_evidence
 from ..perf import testtimes
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
@@ -408,6 +408,8 @@ def run_command_gate(
         return "unavailable", _unavailable_evidence(gdef, p)
     out = p.output
     ev = _run_evidence(gdef, cwd, p, out, command, auto, lock_wait)
+    # The secret-shaped variable NAMES the command saw or lost (never values), and the mode.
+    ev.update(env_evidence(conf))
     if keep_output is not None:
         # The full output the digest is over, so the digest can be checked. A log that
         # cannot be written is said so in the evidence; it does not change the outcome.

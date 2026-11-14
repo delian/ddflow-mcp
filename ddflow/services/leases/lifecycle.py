@@ -457,7 +457,10 @@ def foreign_guard(
 
 
 def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
-    """Record that a lease has expired. Idempotent: folding two expiries is one.
+    """Record that a lease has expired. Idempotent: a lease whose expiry is already
+    recorded gets no second event and the call returns False (WF-lease-expired-once).
+    The check is made under the lock, on the state the append is decided on, so two
+    concurrent sweeps cannot both record it.
 
     Carries the worktree forward, because expiry is exactly when someone needs to know
     where the crashed agent's uncommitted work is.
@@ -469,6 +472,7 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
         "lease.expired",
         mine=False,
         holder="",
+        refuse=lambda _state, it: bool(it.lease and it.lease.expired_at),
         payload=lambda lease: (
             owner.update(holder=lease.holder)
             or {

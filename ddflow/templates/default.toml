@@ -242,6 +242,8 @@ baseline_red_rate_warn = 10
 baseline_red_notify_to = "coordinator"
 scrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"]
 keep_env = []
+scrub_secret_names = "warn"
+secret_name_patterns = ["_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD"]
 standards_wait_s = 900
 
 [govern]
@@ -518,6 +520,8 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+status_fix_tasks_in_headline = false
+status_completed_shown = 12
 json_envelope = false
 
 [perf_metrics]
@@ -786,6 +790,8 @@ w_fit = 2.0
 w_cost = 1.0
 w_rework = 1.5
 w_queue = 0.5
+w_headroom = 1.0
+headroom_floor_usd = 0.0
 fit_margin = 0.1
 cost_ref_usd = 1.0
 rework_ref = 1.0

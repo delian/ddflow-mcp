@@ -4,10 +4,10 @@
 As of {{ as_of }}.
 {% endif %}
 
-- Tasks: {{ tasks_done }}/{{ tasks_total }} done {{ tasks_done | bar(tasks_total, 20) }} across {{ phases_total }} phases ({{ phases_done }} complete).
-{% if task_counts %}
-- By state: {% for c in task_counts %}{{ c.n }} {{ c.state }}{% if not loop.last %}, {% endif %}{% endfor %}.
-{% endif %}
+- Tasks: {{ definition }} across {{ phases_total }} phases ({{ phases_done }} complete).
+{% for line in totals %}
+- {{ line }}.
+{% endfor %}
 - Agent-hours: {{ agent_hours }}.
 - Open bugs: {{ open_bugs }} of {{ bugs_total }}.
 - Decisions in force: {{ decisions }}. Lessons: {{ lessons }}.
