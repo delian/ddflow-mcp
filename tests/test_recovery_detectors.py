@@ -93,7 +93,9 @@ class TestMergeInterrupted:
     def test_merging_takes_precedence_over_landed_unlogged(self):
         """A mid-flight merge beats a landed-unlogged tag: the fix is the mid-flight answer
         (abort/conclude), NEVER the landed-unlogged 'record merge and complete' advice."""
-        m = H.MergeHang("T1", "a", tree="/wt", merging=True, landed_unlogged=True, head="x", base="y")
+        m = H.MergeHang(
+            "T1", "a", tree="/wt", merging=True, landed_unlogged=True, head="x", base="y"
+        )
         found = H.inspect([], [], [], [], 0.0, _limits(), [], merges=[m])
         (f,) = [f for f in found if f.kind == "merge_interrupted"]
         assert f.evidence["merging"] is True

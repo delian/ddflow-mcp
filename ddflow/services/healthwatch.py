@@ -345,7 +345,9 @@ def _merges(repo: Path, st, cfg, now: float, alive: Alive | None = None) -> list
             continue  # holder alive (lapsed_alive): it is resolving the merge, not interrupted
         wt = W.load_path(repo, it.worktree) if it.worktree else None
         if wt is not None and wt.exists() and W.merging(wt) is True:
-            out.append(H.MergeHang(i, it.lease.holder if it.lease else "(none)", str(wt), merging=True))
+            out.append(
+                H.MergeHang(i, it.lease.holder if it.lease else "(none)", str(wt), merging=True)
+            )
     return out
 
 
