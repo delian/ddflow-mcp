@@ -238,7 +238,7 @@ def test_an_unreadable_layer_fails_closed(log, tmp_path, repo):
             pytest.skip("file permissions do not apply to this user")
         assert not H.chat_t3(cfg)
     finally:
-        os.chmod(bad, 0o644)
+        os.chmod(bad, 0o600)
 
 
 def test_a_t2_route_text_is_the_t2_one(log, cfg):
