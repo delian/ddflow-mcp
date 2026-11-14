@@ -120,7 +120,7 @@ def test_a_user_dir_inside_the_project_is_refused(proj, monkeypatch):
 
 def test_a_store_others_can_write_is_refused(proj, monkeypatch):
     token = _token(proj, monkeypatch)
-    os.chmod(AU.store_path(proj), 0o666)
+    os.chmod(AU.store_path(proj), 0o620)
     with pytest.raises(AU.AuthRefused, match="permissions"):
         AU.verify(proj, Config(), token)
 
