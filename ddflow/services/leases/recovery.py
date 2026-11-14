@@ -552,11 +552,19 @@ def sweep(log: EventLog, cfg: Config, repo: Path, *, apply: bool = False) -> lis
     """Report recoverable state; with ``apply``, record expiry for the UNSALVAGEABLE
     ones only. Salvageable trees are never touched automatically, whatever the policy —
     the knob controls convenience, not safety."""
-    found = scan(log, cfg, repo)
+    state = _fold(log)
+    found = scan(log, cfg, repo, state=state)
     if apply:
         for rec in found:
             # `is False` NOT `not ...` -- None means "could not measure" and must never
             # be swept. `not None` is True, which is how unknown became clean.
             if rec.kind == "expired_lease" and rec.salvageable is False:
+                # The fold keeps an expired lease on its item so recovery still reports
+                # it; recording its expiry again every pass wrote 333 of 350 lease.expired
+                # events as repeats (WF-lease-expired-once). One expiry per lease: a later
+                # lease on the item starts with no `expired_at`.
+                lease = state.items[rec.item].lease
+                if lease is not None and lease.expired_at:
+                    continue
                 expire(log, rec.item, reason=f"swept: {rec.advice}")
     return found
