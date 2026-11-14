@@ -21,6 +21,7 @@ from ..services.approvals import class_states as APCS
 from ..services.approvals import consume as CN
 from ..services.approvals.canon import Canon
 from ._base import _load
+from .guard_launch import would_run as _would_run
 
 
 def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the door's flags
@@ -119,6 +120,12 @@ def _foreign_import_refusal() -> O.Outcome | None:
     except Exception:
         return None
     if foreign is None:
+        return None
+    # The command guard RUNS the caller's own tree (and a deliberate outside launch): its
+    # transcript commands then import the caller's own code, so they would pin the real
+    # output, never the guard's refusal (Bc28808f9c3). Only a foreign import the guard
+    # would REFUSE must refuse regenerate.
+    if _would_run(foreign):
         return None
     return O.refused(
         "pins",
