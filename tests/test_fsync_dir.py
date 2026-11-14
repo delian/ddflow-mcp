@@ -33,7 +33,7 @@ def _record_dir_fsyncs(monkeypatch):
     dir_fds: set[int] = set()
     synced: list[bool] = []
 
-    def open_(path, flags, mode=0o777, *a, **k):
+    def open_(path, flags, mode=0o600, *a, **k):
         fd = real_open(path, flags, mode, *a, **k)
         if os.path.isdir(path):
             dir_fds.add(fd)
