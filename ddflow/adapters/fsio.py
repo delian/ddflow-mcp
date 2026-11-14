@@ -341,7 +341,7 @@ def file_lock(
     lock = Path(lock)
     if create:
         lock.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(lock, (os.O_CREAT if create else 0) | os.O_RDWR, 0o644)
+    fd = os.open(lock, (os.O_CREAT if create else 0) | os.O_RDWR, 0o600)
     try:
         if timeout_s is None:
             fcntl.flock(fd, fcntl.LOCK_EX)
