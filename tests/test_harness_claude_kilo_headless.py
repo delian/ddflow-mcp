@@ -117,8 +117,11 @@ def test_a_verified_fact_names_the_probe_and_the_tool_version(h):
         assert node.get("ver"), (h.id, key, "a verified fact names the version it was read on")
         assert node.get("probe"), (h.id, key, "and the read-only command that re-reads it")
         words = node["probe"].split()
-        assert "--version" in words or "--help" in words or words[0] == "env", (
-            h.id, key, "a verified fact's probe is read-only: --version, --help or the env listing",
+        # read-only: the tool's own --version or --help as the LAST word of a two or three word
+        # command, or the one environment listing piped to grep; never a bare run or env <cmd>
+        env_listing = node["probe"].startswith("env | grep ^")
+        assert env_listing or (words[-1] in ("--version", "--help") and len(words) <= 3), (
+            h.id, key, node["probe"], "a verified fact's probe must be read-only",
         )  # fmt: skip
 
 
