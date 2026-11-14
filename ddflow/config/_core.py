@@ -13,7 +13,7 @@ from ..config_sections import SECTION_MODULES  # noqa: F401 -- imports every sec
 from ..config_sections._docs import KNOB_DOCS, RENAMED, SECTION_CLASSES
 from ..config_sections._layers import layer_path, read_toml
 from ..config_sections.export import _export_table_problem, export_table_keys
-from ..config_sections.schedule import SIGNALS, merge_signals
+from ..config_sections.schedule import ORDER_PIN, SIGNALS, merge_pin, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
 from ._decls import (
@@ -86,6 +86,17 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     if key == "session.context_budget" and isinstance(value, dict):
         return {**below, **value}
     return value
+
+
+def _merge_layer(key: str, below: Any, value: Any) -> Any:
+    """``value`` (one layer's) over ``below``, for the knobs whose layers merge: the signal
+    marks mark by mark (`merge_signals`), the order pin tighten-only (`merge_pin`), the
+    budget tables."""
+    if key == SIGNALS and isinstance(value, dict):
+        value = merge_signals(below, value)
+    elif key == ORDER_PIN and isinstance(value, list):
+        value = merge_pin(list(below), value)
+    return _merge_budget_table(key, below, value)
 
 
 def _dropped_list_entries(below: Any, value: Any) -> list[Any] | None:
@@ -377,10 +388,7 @@ class Config(_SectionFields):
             if why := _operator_only_refusal(sec, knob, key):
                 raise InvalidValue(why)
         written = value  # what THIS layer says, before any merge: what a note names
-        if key == SIGNALS and isinstance(value, dict):
-            # merged over the layers below, mark by mark (`merge_signals`)
-            value = merge_signals(getattr(target, knob), value)
-        value = _merge_budget_table(key, getattr(target, knob), value)
+        value = _merge_layer(key, getattr(target, knob), value)
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
