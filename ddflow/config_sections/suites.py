@@ -69,6 +69,15 @@ class SuitesConfig:
         doc="How many of the newest measured runs of one kind (its gate and scope) the predicted cost is the median of. At least 1.",
         check=int_at_least(1),
     )
+    failed_first: bool = knob(
+        True,
+        doc="Whether a `ddflow ci run` runs an item's previously failing tests first. The ids come from the item's last failed `ci` and `unit_tests` gate records (plus the tests of the files the diff touches); they are handed to the project's pytest as a plugin, so a test that is still broken is reported in seconds instead of at the end of the run (1005 failed ci runs ran to the end, about 275 hours). The evidence of the run then carries `ran_failed_first` and `first_failure_at_s` in `ci_scope`. A missing ids file is the ordinary order. `ddflow ci failed-first` shows the ids a run would put first. false: the ordinary order, nothing recorded.",
+    )
+    failed_first_max_ids: int = knob(
+        50,
+        doc="The most previously failing test ids a run puts first (`failed_first`): the first ones of the item's last failed `ci` run, then of its last failed `unit_tests` run. 0 puts none first. At least 0.",
+        check=int_at_least(0),
+    )
     class_patterns: dict[str, list[str]] = knob(
         factory=lambda: {
             "red_main": ["fix-Bmain-red", "main-red", "red-main"],

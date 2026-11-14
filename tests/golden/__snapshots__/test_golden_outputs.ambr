@@ -4650,6 +4650,20 @@
       suites.cost_runs = 20   [default]
           How many of the newest measured runs of one kind (its gate and scope) the
           predicted cost is the median of. At least 1.
+      suites.failed_first = True   [default]
+          Whether a `ddflow ci run` runs an item's previously failing tests first. The
+          ids come from the item's last failed `ci` and `unit_tests` gate records
+          (plus the tests of the files the diff touches); they are handed to the
+          project's pytest as a plugin, so a test that is still broken is reported in
+          seconds instead of at the end of the run (1005 failed ci runs ran to the
+          end, about 275 hours). The evidence of the run then carries
+          `ran_failed_first` and `first_failure_at_s` in `ci_scope`. A missing ids
+          file is the ordinary order. `ddflow ci failed-first` shows the ids a run
+          would put first. false: the ordinary order, nothing recorded.
+      suites.failed_first_max_ids = 50   [default]
+          The most previously failing test ids a run puts first (`failed_first`): the
+          first ones of the item's last failed `ci` run, then of its last failed
+          `unit_tests` run. 0 puts none first. At least 0.
       suites.class_patterns = {'red_main': ['fix-Bmain-red', 'main-red', 'red-main'], 'integrator': ['merge[ _-]?queue', 'queue run', 'integrator'], 'phase': ['^P-', 'phase[ _-]?(close|suite)'], 'baseline': ['baseline']}   [default]
           How a suite run's class is read from its holder label when its caller names
           none: regular expressions per class (red_main, integrator, phase, baseline;
