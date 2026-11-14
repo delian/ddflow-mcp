@@ -194,7 +194,7 @@ def _append_line(path: Path, line: str) -> None:
     call, and another writer's line may land between the two; either way the damaged
     line is seen by the next sample, which rewrites the file -- at most the samples on
     that line are lost, never the ring."""
-    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     try:
         _write_all(fd, line.encode("utf-8"))
     finally:
@@ -202,13 +202,13 @@ def _append_line(path: Path, line: str) -> None:
 
 
 def _mode(path: Path) -> int:
-    """The ring's current mode, so a rewrite keeps it (0o644 when there is none yet).
+    """The ring's current mode, so a rewrite keeps it (0o600 when there is none yet).
     Read from the file, never by flipping the umask: that is process-wide, and an MCP
     server has other threads creating files."""
     try:
         return path.stat().st_mode & 0o777
     except OSError:
-        return 0o644
+        return 0o600
 
 
 def _replace(path: Path, body: str) -> None:
