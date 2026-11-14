@@ -876,8 +876,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=231dd0213175 -->
-<details><summary>All 753 knobs across 70 sections</summary>
+<!-- ddflow:begin README/knobs sha=57531c0214c2 -->
+<details><summary>All 755 knobs across 70 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1022,6 +1022,8 @@ long default is left to `ddflow config --explain`.
 | `export.redact` | `true` |  |
 | `export.max_bytes` | `60000` |  |
 | `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
+| `export.security_contact` | `""` |  |
+| `export.security_response_days` | `0` |  |
 | `export.tables` | `{}` |  |
 | `fasttrack.tiny_cold_max_source_lines` | `10` |  |
 | `flow.model` | `"trunk"` | `trunk` \| `gitflow` |

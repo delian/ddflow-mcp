@@ -5,7 +5,8 @@ Redaction
     ``services.redact_report`` over the RENDERED body, before it is truncated, framed or
     digested, so the header digest and ``--check`` both cover the redacted bytes. The names
     redacted as words are ``[upstream].redact_extra`` when that section exists; the project's
-    own name is NOT one (it is the project's own public document). Secrets use the
+    own name is NOT one (it is the project's own public document), and neither is
+    ``[export].security_contact``, which the operator publishes on purpose. Secrets use the
     session patterns of the loaded config. The header says what happened:
     ``redacted=N redacted-kinds=ipv4:1,path:2`` or ``redacted=off``.
 
@@ -21,6 +22,7 @@ Fencing
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -31,13 +33,33 @@ from ..redact_report import Redacted, names_for, redactor  # noqa: F401 -- names
 _MAX_AUTHORS = 5
 
 
-def redact_text(text: str, cfg: Config) -> Redacted:
+def redact_text(text: str, cfg: Config, *, exempt_contact: bool = False) -> Redacted:
     """``text`` with secrets, private addresses, hosts and home paths removed.
 
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
-    project's own and stays; absolute home paths still go.
+    project's own and stays; absolute home paths still go. ``exempt_contact`` (the export render
+    path only, never a search or a viewer) leaves ``[export].security_contact`` readable.
     """
-    return redactor("export", cfg).text(text)
+    red = redactor("export", cfg)
+    # the contact as the security document writes it (the one shared definition)
+    export = getattr(cfg, "export", None)
+    keep = export.security_contact_text() if exempt_contact and export is not None else ""
+    if not keep or keep not in text:
+        return red.text(text)
+    # the operator's published reporting contact is the one text redaction leaves alone, where
+    # it stands on its own: inside a longer address or word it is part of that text, and stays
+    # subject to redaction with it
+    parts = [red.text(part) for part in _standing_alone(keep).split(text)]
+    counts: dict[str, int] = {}
+    for part in parts:
+        for kind, n in part.counts.items():
+            counts[kind] = counts.get(kind, 0) + n
+    return Redacted(keep.join(part.text for part in parts), counts)
+
+
+def _standing_alone(contact: str) -> re.Pattern[str]:
+    """``contact`` where it is not part of a longer address, host or word."""
+    return re.compile(rf"(?<![\w@.+%-]){re.escape(contact)}(?!\.?[\w@-])")
 
 
 def redaction_attrs(counts: Mapping[str, int] | None) -> dict[str, str]:
