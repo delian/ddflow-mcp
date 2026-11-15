@@ -420,8 +420,10 @@ def test_toml_remove_keeps_comments_and_reports_whether_the_key_was_there() -> N
     out, was = TC.remove(text, "log.zzz")
 
     assert was is True and out == "# top\n[log]\nkeep = 2\n"
-    assert TC.remove(out, "log.zzz") == (out, False)
-    assert TC.remove(out, "nope.zzz") == (out, False)
+    removed_again = TC.remove(out, "log.zzz")
+    assert removed_again == (out, False)
+    missing_key = TC.remove(out, "nope.zzz")
+    assert missing_key == (out, False)
 
 
 def test_two_backups_in_one_clock_tick_get_their_own_directories(
