@@ -113,7 +113,8 @@ def test_the_clock_reads_past_a_non_monotone_tail(tmp_path: Path):
     with log.shard.open("a") as fh:
         fh.write(stray.to_json() + "\n")
     fresh = L.EventLog(tmp_path, "sameid")
-    assert fresh.append("task.added", "T9", {"title": "t"}).lamport == 5
+    appended = fresh.append("task.added", "T9", {"title": "t"})
+    assert appended.lamport == 5
 
 
 def test_doctor_names_a_shard_whose_clock_goes_backwards(two_clones):
