@@ -36,7 +36,9 @@ W5H = quota.Window("5h", 100, "percent")
 
 
 def test_a_window_reports_used_fraction_reset_and_source():
-    (e,) = Q.evaluate(profile(W5H), [reading(value=40.0)], NOW)
+    ev = Q.evaluate(profile(W5H), [reading(value=40.0)], NOW)
+    assert len(ev) == 1
+    e = ev[0]
     assert (e.used, e.fraction, e.resets_at, e.stale) == (40.0, 0.4, RESET, False)
     assert e.source == "claude.cache"
 
