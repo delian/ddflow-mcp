@@ -473,7 +473,8 @@ def test_removing_an_entry_and_taking_it_never_both_succeed(proj):
     here.mkdir(parents=True, exist_ok=True)
     entry, _ = MQ.add(proj, "T1", agent="a", keep_history=5)
     assert MQ.take(proj, entry).state == MQ.RUNNING
-    assert MQ.remove(proj, "T1") is None  # being landed: refused, not unlinked
+    removed_t1 = MQ.remove(proj, "T1")
+    assert removed_t1 is None  # being landed: refused, not unlinked
     assert MQ.get(proj, "T1").state == MQ.RUNNING
     MQ.finish(proj, entry, MQ.PARKED, reason="x")
     second, _ = MQ.add(proj, "T2", agent="a", keep_history=5)
