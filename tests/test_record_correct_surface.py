@@ -207,7 +207,10 @@ def test_the_new_text_is_redacted_before_it_is_written(proj):
     )
     assert code == 0, (out, err)
     assert SECRET not in _state(proj).bugs["B1"].summary
-    assert not any(SECRET in line for f in (proj / ".ddflow").rglob("*.jsonl") for line in open(f))
+    secret_in_logs = any(
+        SECRET in line for f in (proj / ".ddflow").rglob("*.jsonl") for line in open(f)
+    )
+    assert not secret_in_logs
 
 
 def test_an_unknown_field_or_record_is_refused_naming_the_nearest_verb(proj):
