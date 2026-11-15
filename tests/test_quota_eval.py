@@ -56,7 +56,9 @@ def test_unlimited_and_unknown_never_pause(p):
 
 
 def test_an_unmeasured_window_has_no_fraction_and_does_not_pause():
-    (e,) = Q.evaluate(profile(W5H), [], NOW)
+    ev = Q.evaluate(profile(W5H), [], NOW)
+    assert len(ev) == 1
+    e = ev[0]
     assert e.fraction is None and e.stale and e.reason
     assert Q.decide((e,), 0.5, NOW, 60).action == "run"
 
