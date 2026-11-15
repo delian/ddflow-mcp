@@ -275,7 +275,8 @@ def test_the_log_writes_a_kind_at_its_current_version(tmp_path, monkeypatch) -> 
     assert "v" not in log.append("phase.added", "P1", {"title": "t"}).data
     monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
     monkeypatch.setitem(U.UPCASTERS, ("phase.added", 1), lambda k, d: (k, dict(d)))
-    assert log.append("phase.added", "P2", {"title": "t"}).data["v"] == 2
+    evt = log.append("phase.added", "P2", {"title": "t"})
+    assert evt.data["v"] == 2
     st = fold(log.read_all())
     assert {"P1", "P2"} <= set(st.items)
 
