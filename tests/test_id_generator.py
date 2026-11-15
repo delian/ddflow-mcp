@@ -254,7 +254,8 @@ def test_a_key_taken_meanwhile_is_minted_afresh() -> None:
     assert (again.id, again.key) == (first.id, "BUG-2")
     plain = ids.make(Config(), "bug", hash_parts=("x",))
     calls = []
-    assert ids.confirm(Config(), "bug", plain, used=lambda: calls.append(1) or {}) == plain
+    confirmed = ids.confirm(Config(), "bug", plain, used=lambda: calls.append(1) or {})
+    assert confirmed == plain
     assert calls == []  # no key to check: the log is not even read
 
 
