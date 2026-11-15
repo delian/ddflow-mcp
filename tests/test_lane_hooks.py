@@ -259,7 +259,9 @@ def test_review_findings_hold(tree, tmp_path):
     d = json.loads(m.read_text())
     d["files"].insert(0, str(victim))  # first: a partial cleanup would delete the rest
     m.write_text(json.dumps(d))
-    assert "refused" in LH.remove(home) and victim.exists()
+    remove_result = LH.remove(home)
+    assert "refused" in remove_result
+    assert victim.exists()
     assert not (home / LH.DIR_NAME).exists()  # the legitimate files went, the victim stayed
     # a tracked hook path is refused (relative pathspec, absolute home under the repo)
     h2 = repo / ".ddflow" / "h2"
