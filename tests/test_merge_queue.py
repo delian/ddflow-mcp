@@ -477,7 +477,8 @@ def test_removing_an_entry_and_taking_it_never_both_succeed(proj):
     assert MQ.get(proj, "T1").state == MQ.RUNNING
     MQ.finish(proj, entry, MQ.PARKED, reason="x")
     second, _ = MQ.add(proj, "T2", agent="a", keep_history=5)
-    assert MQ.remove(proj, "T2") is not None
+    removed = MQ.remove(proj, "T2")
+    assert removed is not None
     assert MQ.take(proj, second) is None  # removed after the integrator looked: not resurrected
     assert MQ.get(proj, "T2") is None
 
