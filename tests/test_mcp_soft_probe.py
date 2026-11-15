@@ -296,7 +296,10 @@ def test_a_pipelined_tools_list_is_logged_before_the_notification(tmp_path):
     c.p.stdin.flush()
     c.read_until(90)
     c.read_until(91)
-    assert _analyze()(c.close())["list_changed"] == "ignores"
+    analyze = _analyze()
+    closed_log = c.close()
+    result = analyze(closed_log)
+    assert result["list_changed"] == "ignores"
 
 
 def test_delay_without_a_value_prints_usage_and_exits_2(tmp_path):
