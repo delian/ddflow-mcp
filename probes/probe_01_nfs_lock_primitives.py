@@ -119,6 +119,8 @@ def excl_worker(args):
                 try:
                     os.link(tmp, target)
                 except FileExistsError:
+                    # Expected under contention: another worker already created `target`.
+                    # This worker did not win this round; continue to nlink-based winner check.
                     pass
                 if os.stat(tmp).st_nlink == 2:
                     won += 1  # authoritative on NFS
