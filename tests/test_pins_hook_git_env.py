@@ -62,5 +62,6 @@ def test_recipe_child_with_hook_git_env_leaves_the_scratch_repo_untouched(
     )
     r = PINS.Recipe("p", ("x",), (sys.executable, "-c", code), (sys.executable, "-c", code))
     PINS._run(work, r.regen, r, 60, write=True)
-    assert subprocess.check_output(["git", "-C", str(scratch), "reflog"]) == before
+    after = subprocess.check_output(["git", "-C", str(scratch), "reflog"])
+    assert after == before
     assert (work / ".git").is_dir()
