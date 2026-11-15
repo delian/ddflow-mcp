@@ -164,7 +164,9 @@ def test_no_notification_sent_is_unknown_not_ignores(tmp_path):
     c = Client(tmp_path)
     c.call("initialize", {"protocolVersion": "2025-06-18"})
     c.call("tools/list")
-    assert _analyze()(c.close())["list_changed"] == "unknown"
+    log = c.close()
+    row = _analyze()(log)
+    assert row["list_changed"] == "unknown"
 
 
 def test_an_empty_log_is_unknown():
