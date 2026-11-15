@@ -175,7 +175,8 @@ def test_a_delta_that_does_not_stand_keeps_the_phase_open():
 def test_a_pass_that_recorded_no_sha_cannot_be_revalidated():
     events, st = _phase(None)
     called = []
-    assert PS.missing(events, st, "P1", stands=lambda sha: called.append(sha) or "x") != ""
+    missing = PS.missing(events, st, "P1", stands=lambda sha: called.append(sha) or "x")
+    assert missing != ""
     assert called == []
 
 
