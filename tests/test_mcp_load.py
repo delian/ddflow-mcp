@@ -357,6 +357,8 @@ def test_readers_are_not_blocked_by_writers(repo):
     with ctx.Pool(processes=LOAD_AGENTS) as pool:
         writers = pool.map_async(_writer, [j for j in jobs if len(j) == 3])
         readers = pool.map_async(_reader, [j for j in jobs if len(j) == 2])
+        w = []
+        r = []
         try:
             w = writers.get(timeout=LOAD_TIMEOUT_S)
             r = readers.get(timeout=LOAD_TIMEOUT_S)
