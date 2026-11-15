@@ -123,8 +123,10 @@ def test_an_undeclared_subclass_is_still_bad_arguments_on_mcp(repo, monkeypatch)
     malformed call, not a bug."""
     import json
 
+    reply = None
     try:
         json.loads("{")
     except json.JSONDecodeError as exc:
         reply = _call_raising(repo, monkeypatch, exc)
+    assert reply is not None
     assert "bad arguments:" in _text(reply)
