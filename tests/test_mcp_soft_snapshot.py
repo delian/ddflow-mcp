@@ -213,7 +213,8 @@ def test_write_then_read_round_trips(tmp_path):
 
     repo = _git(tmp_path / "r")
     srv = _server(repo)
-    assert ifacesnap.write(srv, instructions="x") is True
+    wrote = ifacesnap.write(srv, instructions="x")
+    assert wrote is True
     got = S.read(repo)
     assert got == ifacesnap.build(srv, instructions="x") | {"written_at": got["written_at"]}
     assert (repo / ".ddflow" / "local" / ".gitignore").read_text().strip().endswith("*")
