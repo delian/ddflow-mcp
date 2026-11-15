@@ -91,7 +91,8 @@ def _cold_replay(root: Path) -> list[Event]:
 def test_new_folds_what_the_old_release_folded(release: tuple[str, Path]) -> None:
     version, root = release
     expected = json.loads((RELEASES / version / "expected.json").read_text(encoding="utf-8"))
-    assert expected.pop("version") == version
+    expected_version = expected.pop("version")
+    assert expected_version == version
     found = {d.split(":", 1)[0]: d for d in differences(expected, project(root))}
     declared = {path for v, path in FOLD_FIXES if v == version}
     assert {p: d for p, d in found.items() if p not in declared} == {}
